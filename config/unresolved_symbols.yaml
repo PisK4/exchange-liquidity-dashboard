@@ -1,0 +1,3 @@
+items:
+  - platform: lighter
+    issue: REST orderbook URL and market id semantics need official confirmation; V1 reports unsupported instead of fabricating data.

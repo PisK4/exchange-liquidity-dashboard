@@ -1,0 +1,11 @@
+endpoints:
+  edgeX: https://pro.edgex.exchange
+  binance: https://fapi.binance.com/fapi/v1/depth
+  okx: https://www.okx.com/api/v5/market/books
+  bybit: https://api.bybit.com/v5/market/orderbook
+  bitget: https://api.bitget.com/api/v2/mix/market/orderbook
+  bingx: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+  mexc: https://contract.mexc.com/api/v1/contract/depth
+  gate: https://api.gateio.ws/api/v4/futures/usdt/order_book
+  hyperliquid: https://api.hyperliquid.xyz/info
+  lighter: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks

@@ -1,0 +1,7 @@
+FROM node:20-alpine
+
+WORKDIR /app
+COPY backend/bin/dashboard /app/dashboard
+COPY config/ /config/
+EXPOSE 8080
+CMD ["/app/dashboard", "--role=all", "--addr=:8080"]

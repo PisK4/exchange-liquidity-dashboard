@@ -1,0 +1,15 @@
+collection_interval: 5m
+http_timeout: 12s
+lighter_ws_url: wss://mainnet.zklighter.elliot.ai/stream?readonly=true
+lighter_stale_after: 15s
+display_fallback_window: 30m
+depth_tiers: [0.0005, 0.001, 0.01, 0.02]
+slippage_buckets_usd: [50000, 100000, 500000, 1000000]
+volume_discounts:
+  mexc: 0.4
+  gate: 0.5
+history:
+  enabled_windows: [24h]
+  disabled_windows:
+    7d: insufficient_history
+    30d: insufficient_history

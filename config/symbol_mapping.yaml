@@ -1,0 +1,16 @@
+# Source of truth for V1 quick launch. Backend reads this file at startup and
+# expands each display symbol across the configured platform list.
+symbols:
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+    market_surface: perp
+    instrument_kind: canonical
+  - display_symbol: ETH-USDT (perp)
+    canonical: ETH
+    market_surface: perp
+    instrument_kind: canonical
+  - display_symbol: SOL-USDT (perp)
+    canonical: SOL
+    market_surface: perp
+    instrument_kind: canonical
+platforms: [edgeX, binance, okx, bybit, bitget, bingx, mexc, gate, hyperliquid, lighter]

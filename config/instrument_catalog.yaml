@@ -1,0 +1,357 @@
+# instrument_catalog.yaml
+# DO NOT edit api_symbol / contract_id / market_id / contract_size /
+# quanto_multiplier by hand. Regenerate via: cd backend && make catalog
+# Front-end URLs (frontend_url) and url_verified flag MAY be edited by hand
+# after clicking through each link to confirm the trading pair exists.
+schema_version: 1
+generated_at: 2026-05-20T00:00:00Z
+generated_by: bootstrap (Step 1 scaffold; replace with build-catalog output in Step 3)
+
+# canonical_whitelist 是 symbol_mapping.yaml 的镜像，作为人审快照。
+# Runtime 仍然以 symbol_mapping.yaml 为 source-of-truth；这里只是审计用。
+canonical_whitelist:
+  - canonical: BTC
+    market_surface: perp
+    quote: USDT
+    confidence: confirmed
+  - canonical: ETH
+    market_surface: perp
+    quote: USDT
+    confidence: confirmed
+  - canonical: SOL
+    market_surface: perp
+    quote: USDT
+    confidence: confirmed
+
+platforms:
+  binance:
+    BTC:
+      api_symbol: BTCUSDT
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 1000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/BTCUSDT
+      url_verified: false
+    ETH:
+      api_symbol: ETHUSDT
+      base_asset: ETH
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 1000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/ETHUSDT
+      url_verified: false
+    SOL:
+      api_symbol: SOLUSDT
+      base_asset: SOL
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 1000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/SOLUSDT
+      url_verified: false
+
+  okx:
+    BTC:
+      api_symbol: BTC-USDT-SWAP
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 800
+      source_endpoint: https://www.okx.com/api/v5/market/books
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/btc-usdt-swap
+      url_verified: false
+    ETH:
+      api_symbol: ETH-USDT-SWAP
+      base_asset: ETH
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 800
+      source_endpoint: https://www.okx.com/api/v5/market/books
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/eth-usdt-swap
+      url_verified: false
+    SOL:
+      api_symbol: SOL-USDT-SWAP
+      base_asset: SOL
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 800
+      source_endpoint: https://www.okx.com/api/v5/market/books
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/sol-usdt-swap
+      url_verified: false
+
+  bybit:
+    BTC:
+      api_symbol: BTCUSDT
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 1000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/BTCUSDT
+      url_verified: false
+    ETH:
+      api_symbol: ETHUSDT
+      base_asset: ETH
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 1000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/ETHUSDT
+      url_verified: false
+    SOL:
+      api_symbol: SOLUSDT
+      base_asset: SOL
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 1000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/SOLUSDT
+      url_verified: false
+
+  bitget:
+    BTC:
+      api_symbol: BTCUSDT
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/BTCUSDT
+      url_verified: false
+    ETH:
+      api_symbol: ETHUSDT
+      base_asset: ETH
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/ETHUSDT
+      url_verified: false
+    SOL:
+      api_symbol: SOLUSDT
+      base_asset: SOL
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/SOLUSDT
+      url_verified: false
+
+  bingx:
+    BTC:
+      api_symbol: BTC-USDT
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: 1
+      frontend_url: https://bingx.com/zh-cn/perpetual/BTC-USDT/
+      url_verified: false
+    ETH:
+      api_symbol: ETH-USDT
+      base_asset: ETH
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: 1
+      frontend_url: https://bingx.com/zh-cn/perpetual/ETH-USDT/
+      url_verified: false
+    SOL:
+      api_symbol: SOL-USDT
+      base_asset: SOL
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: 1
+      frontend_url: https://bingx.com/zh-cn/perpetual/SOL-USDT/
+      url_verified: false
+
+  mexc:
+    BTC:
+      api_symbol: BTC_USDT
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.0001
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: 0
+      frontend_url: https://www.mexc.com/futures/BTC_USDT
+      url_verified: false
+    ETH:
+      api_symbol: ETH_USDT
+      base_asset: ETH
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.01
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: 0
+      frontend_url: https://www.mexc.com/futures/ETH_USDT
+      url_verified: false
+    SOL:
+      api_symbol: SOL_USDT
+      base_asset: SOL
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.1
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: 0
+      frontend_url: https://www.mexc.com/futures/SOL_USDT
+      url_verified: false
+
+  gate:
+    BTC:
+      api_symbol: BTC_USDT
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.0001
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/BTC_USDT
+      url_verified: false
+    ETH:
+      api_symbol: ETH_USDT
+      base_asset: ETH
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.01
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/ETH_USDT
+      url_verified: false
+    SOL:
+      api_symbol: SOL_USDT
+      base_asset: SOL
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 1
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/SOL_USDT
+      url_verified: false
+
+  hyperliquid:
+    BTC:
+      api_symbol: BTC
+      base_asset: BTC
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 40
+      source_endpoint: https://api.hyperliquid.xyz/info
+      catalog_status: live
+      frontend_url: https://app.hyperliquid.xyz/trade/BTC
+      url_verified: false
+    ETH:
+      api_symbol: ETH
+      base_asset: ETH
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 40
+      source_endpoint: https://api.hyperliquid.xyz/info
+      catalog_status: live
+      frontend_url: https://app.hyperliquid.xyz/trade/ETH
+      url_verified: false
+    SOL:
+      api_symbol: SOL
+      base_asset: SOL
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 40
+      source_endpoint: https://api.hyperliquid.xyz/info
+      catalog_status: live
+      frontend_url: https://app.hyperliquid.xyz/trade/SOL
+      url_verified: false
+
+  edgeX:
+    BTC:
+      api_symbol: BTC-USDT
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000001"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/trade/BTC-USDT
+      url_verified: false
+    ETH:
+      api_symbol: ETH-USDT
+      base_asset: ETH
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000002"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/trade/ETH-USDT
+      url_verified: false
+    SOL:
+      api_symbol: SOL-USDT
+      base_asset: SOL
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000003"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/trade/SOL-USDT
+      url_verified: false
+
+  lighter:
+    BTC:
+      api_symbol: BTC
+      base_asset: BTC
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 1
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/BTC
+      url_verified: false
+    ETH:
+      api_symbol: ETH
+      base_asset: ETH
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 0
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/ETH
+      url_verified: false
+    SOL:
+      api_symbol: SOL
+      base_asset: SOL
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 2
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/SOL
+      url_verified: false

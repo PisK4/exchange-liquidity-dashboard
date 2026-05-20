@@ -1,0 +1,40 @@
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: edgex_dashboard
+    ports:
+      - "3306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  backend:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.backend
+    command: ["/app/dashboard", "--role=all", "--addr=:8080"]
+    environment:
+      DASHBOARD_MYSQL_DSN: root:root@tcp(mysql:3306)/edgex_dashboard?parseTime=true
+    ports:
+      - "8080:8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile.web
+      args:
+        NEXT_PUBLIC_API_BASE: http://backend:8080
+    environment:
+      SERVER_API_BASE: http://backend:8080
+      NEXT_PUBLIC_API_BASE: http://127.0.0.1:8080
+    ports:
+      - "3001:3000"
+    depends_on:
+      - backend
