@@ -13,6 +13,7 @@ import (
 	"edgex-dashboard/backend/internal/api"
 	"edgex-dashboard/backend/internal/collector"
 	"edgex-dashboard/backend/internal/config"
+	"edgex-dashboard/backend/internal/marketdata/coingecko"
 )
 
 func main() {
@@ -73,6 +74,19 @@ func main() {
 				}
 			}()
 		}
+		if cfg.Runtime.CoinGecko.Enabled {
+			if cgCollector, err := buildCoinGeckoCollector(cfg, store); err != nil {
+				log.Printf("coingecko collector disabled: %v", err)
+			} else {
+				if *runOnce {
+					if err := cgCollector.CollectOnce(ctx); err != nil {
+						log.Printf("coingecko initial collection failed: %v", err)
+					}
+				} else {
+					go cgCollector.Run(ctx)
+				}
+			}
+		}
 	}
 
 	if *role == "collector" && *runOnce {
@@ -88,6 +102,31 @@ func main() {
 	if err := http.ListenAndServe(*addr, server.Routes()); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// buildCoinGeckoCollector wires the CoinGecko client + mapping using the
+// runtime config. The API key is sourced from the environment variable
+// named by cfg.APIKeyEnv (default COINGECKO_DEMO_API_KEY); leaving it
+// unset is allowed (the public endpoint still works at lower QPS).
+func buildCoinGeckoCollector(cfg config.Config, store *collector.Store) (*collector.CoinGeckoCollector, error) {
+	cgCfg := cfg.Runtime.CoinGecko
+	apiKey := ""
+	if cgCfg.APIKeyEnv != "" {
+		apiKey = os.Getenv(cgCfg.APIKeyEnv)
+	}
+	client, err := coingecko.New(coingecko.Config{
+		BaseURL:        cgCfg.BaseURL,
+		APIKey:         apiKey,
+		Proxy:          cgCfg.Proxy,
+		RequestTimeout: cgCfg.RequestTimeout,
+	})
+	if err != nil {
+		return nil, err
+	}
+	mapping := coingecko.NewMapping(cgCfg.ExchangeID, cgCfg.MarketName)
+	log.Printf("coingecko collector wired (interval=%s, base=%s, proxy=%q, exchanges=%d)",
+		cgCfg.PullInterval, cgCfg.BaseURL, cgCfg.Proxy, len(cgCfg.ExchangeID))
+	return collector.NewCoinGeckoCollector(cgCfg, store, client, mapping), nil
 }
 
 func waitForLighter(ctx context.Context, provider *adapter.LighterWSProvider) {
