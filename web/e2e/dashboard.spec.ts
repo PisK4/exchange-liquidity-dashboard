@@ -14,3 +14,22 @@ for (const path of ['/', '/liquidity', '/quality', '/share', '/top30']) {
     expect(errors).toEqual([]);
   });
 }
+
+test('monitor depth curves render Chart.js canvases with hover detail tooltips', async ({ page }) => {
+  const errors: string[] = [];
+  page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+
+  await page.goto('/');
+
+  const depthCharts = page.locator('canvas[data-chart-library="chartjs-depth-line"]');
+  await expect(depthCharts).toHaveCount(3);
+  await expect(depthCharts.nth(0)).toHaveAttribute('aria-label', '买盘深度曲线 BID');
+  await expect(depthCharts.nth(1)).toHaveAttribute('aria-label', '卖盘深度曲线 ASK');
+  await expect(depthCharts.nth(2)).toHaveAttribute('aria-label', '合计深度曲线 BID + ASK');
+
+  await depthCharts.first().hover({ position: { x: 180, y: 90 } });
+  const tooltip = page.locator('[data-testid="chartjs-depth-tooltip"]').first();
+  await expect(tooltip).toBeVisible();
+  await expect(tooltip).toContainText(/@ ±(0\.05|0\.1|1|2)%/);
+  expect(errors).toEqual([]);
+});

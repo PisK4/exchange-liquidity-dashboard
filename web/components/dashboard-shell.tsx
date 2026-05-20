@@ -1,7 +1,8 @@
 import Link from 'next/link';
 import { AutoRefresh } from '@/components/auto-refresh';
-import { BarChart, LineChart } from '@/components/chart-primitives';
+import { BarChart } from '@/components/chart-primitives';
 import { DashboardControls, PillGroup } from '@/components/dashboard-controls';
+import { LineChart } from '@/components/line-chart';
 import { PlatformCell } from '@/components/platform-cell';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
@@ -52,7 +53,14 @@ function tierSeries(rows: PlatformRow[], side: 'bid_usd' | 'ask_usd' | 'total_us
       const depth = row.depth_by_tier?.[tier];
       return isDisplayableStatus(tierStatus(row, tier)) && typeof depth?.[side] === 'number' ? depth[side] / 1_000_000 : undefined;
     }),
+    statuses: tierLabels.map(tier => tierStatus(row, tier)),
+    sources: tierLabels.map(tier => depthSourceLabel(row.depth_by_tier?.[tier]) || undefined),
   }));
+}
+
+function displayTierLabel(tier: string) {
+  const value = Number.parseFloat(tier);
+  return Number.isFinite(value) ? `±${value}%` : `±${tier}`;
 }
 
 function tierStatus(row: PlatformRow, tier: string) {
@@ -153,9 +161,9 @@ function LiquidityTab({ data, query, tier, symbol }: { data: DashboardData; quer
           <div className="big-number">{bp(data.liquidity.kpis?.edgex_spread_bp)}</div>
           <div className="subline">24h share {pct(data.liquidity.kpis?.edgex_24h_share_pct)}</div>
         </section>
-        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">买盘深度曲线 BID</span></div><LineChart labels={tierLabels.map(t => `±${t}`)} series={tierSeries(rows, 'bid_usd')} /></section>
-        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">卖盘深度曲线 ASK</span></div><LineChart labels={tierLabels.map(t => `±${t}`)} series={tierSeries(rows, 'ask_usd')} /></section>
-        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">合计深度曲线 BID + ASK</span></div><LineChart labels={tierLabels.map(t => `±${t}`)} series={tierSeries(rows, 'total_usd')} /></section>
+        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">买盘深度曲线 BID</span></div><LineChart ariaLabel="买盘深度曲线 BID" labels={tierLabels.map(displayTierLabel)} series={tierSeries(rows, 'bid_usd')} /></section>
+        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">卖盘深度曲线 ASK</span></div><LineChart ariaLabel="卖盘深度曲线 ASK" labels={tierLabels.map(displayTierLabel)} series={tierSeries(rows, 'ask_usd')} /></section>
+        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">合计深度曲线 BID + ASK</span></div><LineChart ariaLabel="合计深度曲线 BID + ASK" labels={tierLabels.map(displayTierLabel)} series={tierSeries(rows, 'total_usd')} /></section>
         <section className="panel span-24">
           <div className="panel-head"><span className="panel-title">深度明细 · 平台 × 档位 (M USD)</span><span className="panel-sub">· 合计深度 vs 竞品中位数 / 排名</span></div>
           <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num">0.05% BID</th><th className="num">0.05% ASK</th><th className="num">0.1% BID</th><th className="num">0.1% ASK</th><th className="num">1% BID</th><th className="num">1% ASK</th><th className="num">2% BID</th><th className="num">2% ASK</th><th className="num">±0.1% 合计</th><th className="num">vs 中位数</th><th className="num">排名</th><th>状态</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><DepthCell row={row} tier="0.05%" side="bid_usd" /><DepthCell row={row} tier="0.05%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="bid_usd" /><DepthCell row={row} tier="0.10%" side="ask_usd" /><DepthCell row={row} tier="1.00%" side="bid_usd" /><DepthCell row={row} tier="1.00%" side="ask_usd" /><DepthCell row={row} tier="2.00%" side="bid_usd" /><DepthCell row={row} tier="2.00%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="total_usd" /><td className="num">{ratio(row.vs_median_by_tier?.['0.10%'])}</td><td className="num">{row.rank_0_1 || '—'}</td><td><StatusBadge status={row.depth_status} reason={row.partial_reason} /> <span className="muted">{row.depth_status_label}</span></td></tr>)}</tbody></table></div>
