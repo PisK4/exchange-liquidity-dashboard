@@ -1,5 +1,5 @@
 const palette: Record<string, string> = {
-  edgeX: '#ff8800',
+  edgeX: '#6ccf8e',
   binance: '#f3ba2f',
   okx: '#4f8cff',
   bybit: '#ffd166',
