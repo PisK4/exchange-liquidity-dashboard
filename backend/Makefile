@@ -1,8 +1,10 @@
-.PHONY: test run smoke-api smoke-adapters swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci
+.PHONY: test run smoke-api smoke-adapters smoke-coingecko swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci
 
 PORT ?= 18080
 SYMBOL ?= BTC-USDT
 MYSQL_DSN ?= root:root@tcp(127.0.0.1:3306)/edgex_dashboard
+COINGECKO_API_KEY_ENV ?= COINGECKO_DEMO_API_KEY
+COINGECKO_PROXY ?=
 
 test:
 	go test ./...
@@ -38,17 +40,30 @@ smoke-api:
 smoke-adapters:
 	LIVE_ADAPTER_SMOKE=1 go test ./internal/adapter -run TestLiveAdapterSmoke -count=1 -v -args -symbol=$(SYMBOL)
 
+# Hit the live CoinGecko /derivatives endpoint once and dump a triage table:
+# how many tickers came back, how many platforms got mapped, and the top
+# 5 24h volume entries per recognised platform. Honors COINGECKO_PROXY (set
+# this to e.g. http://127.0.0.1:7897 when CoinGecko is not reachable from
+# the calling environment) and COINGECKO_API_KEY_ENV (defaults to the same
+# COINGECKO_DEMO_API_KEY env var the dashboard collector reads).
+smoke-coingecko:
+	COINGECKO_PROXY="$(COINGECKO_PROXY)" \
+	COINGECKO_API_KEY_ENV="$(COINGECKO_API_KEY_ENV)" \
+	go run ./cmd/coingecko-smoke
+
 swagger:
 	mkdir -p docs
 	cp docs/openapi.json docs/swagger.json
 
 migrate-up:
-	@echo "Apply backend/migrations/000001_init_schema.up.sql to MySQL DSN: $(MYSQL_DSN)"
+	@echo "Apply backend/migrations/*.up.sql to MySQL DSN: $(MYSQL_DSN)"
 	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000001_init_schema.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000002_coingecko.up.sql"
 
 migrate-down:
-	@echo "Apply backend/migrations/000001_init_schema.down.sql to MySQL DSN: $(MYSQL_DSN)"
-	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000001_init_schema.down.sql"
+	@echo "Apply backend/migrations/*.down.sql to MySQL DSN: $(MYSQL_DSN)"
+	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000002_coingecko.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000001_init_schema.down.sql"
 
 # Regenerate config/instrument_catalog.yaml + backend/docs/raw-instruments/*.
 # Run monthly (or any time an exchange ships a catalog change). Must be run
