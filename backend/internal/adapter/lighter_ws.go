@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,6 +27,7 @@ type LighterBookProvider interface {
 
 type LighterWSProvider struct {
 	url        string
+	proxy      string
 	staleAfter time.Duration
 
 	mu    sync.RWMutex
@@ -63,13 +66,22 @@ type lighterWSLevel struct {
 }
 
 func NewLighterWSProvider(url string, staleAfter time.Duration) *LighterWSProvider {
+	return NewLighterWSProviderWithProxy(url, staleAfter, "")
+}
+
+// NewLighterWSProviderWithProxy is the proxy-aware constructor. proxy may
+// be empty (direct connection) or an http(s)/socks5 URL pointing at a
+// forward proxy that can reach the Lighter WS endpoint. Same rationale as
+// adapter.NewWithLighterAndProxy: required when the container runtime
+// itself cannot dial Lighter directly.
+func NewLighterWSProviderWithProxy(url string, staleAfter time.Duration, proxy string) *LighterWSProvider {
 	if url == "" {
 		url = defaultLighterWSURL
 	}
 	if staleAfter <= 0 {
 		staleAfter = 15 * time.Second
 	}
-	return &LighterWSProvider{url: url, staleAfter: staleAfter, books: map[int]*lighterBookState{}}
+	return &LighterWSProvider{url: url, proxy: proxy, staleAfter: staleAfter, books: map[int]*lighterBookState{}}
 }
 
 func (p *LighterWSProvider) Run(ctx context.Context, marketIDs []int) {
@@ -127,6 +139,11 @@ func (p *LighterWSProvider) ReadyCount(marketIDs []int) int {
 
 func (p *LighterWSProvider) runOnce(ctx context.Context, marketIDs []int) error {
 	dialer := websocket.Dialer{HandshakeTimeout: 15 * time.Second}
+	if p.proxy != "" {
+		if parsed, err := url.Parse(p.proxy); err == nil && parsed.Scheme != "" && parsed.Host != "" {
+			dialer.Proxy = http.ProxyURL(parsed)
+		}
+	}
 	conn, _, err := dialer.DialContext(ctx, p.url, nil)
 	if err != nil {
 		return err

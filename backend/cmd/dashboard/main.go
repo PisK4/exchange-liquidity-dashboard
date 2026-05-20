@@ -52,7 +52,7 @@ func main() {
 		go store.WatchCatalog(ctx, catalogPath, *catalogReloadInterval)
 		log.Printf("watching %s for frontend metadata hot reload (interval=%s)", catalogPath, *catalogReloadInterval)
 	}
-	lighterProvider := adapter.NewLighterWSProvider(cfg.Runtime.LighterWSURL, cfg.Runtime.LighterStaleAfter)
+	lighterProvider := adapter.NewLighterWSProviderWithProxy(cfg.Runtime.LighterWSURL, cfg.Runtime.LighterStaleAfter, cfg.Runtime.ExchangeProxy)
 	go lighterProvider.Run(ctx, adapter.LighterMarketIDs())
 	waitForLighter(ctx, lighterProvider)
 	c := collector.NewCollectorWithLighter(cfg, store, lighterProvider)
