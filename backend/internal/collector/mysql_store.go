@@ -21,8 +21,9 @@ CREATE TABLE IF NOT EXISTS t_orderbook_snapshot (id BIGINT AUTO_INCREMENT PRIMAR
 CREATE TABLE IF NOT EXISTS t_book_quality_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, spread_bp DECIMAL(18,8), imbalance_pct DECIMAL(18,8));
 CREATE TABLE IF NOT EXISTS t_symbol_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), error_message TEXT);
 CREATE TABLE IF NOT EXISTS t_platform_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), discount DECIMAL(10,4));
-CREATE TABLE IF NOT EXISTS t_top30_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, symbol VARCHAR(96) NOT NULL, rank_no INT NOT NULL, volume_24h_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL);
-CREATE TABLE IF NOT EXISTS t_daily_volume_aggregate (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), day DATE NOT NULL, volume_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL);
+CREATE TABLE IF NOT EXISTS t_top30_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, symbol VARCHAR(96) NOT NULL, rank_no INT NOT NULL, volume_24h_usd DECIMAL(28,8), volume_7d_usd DECIMAL(28,8) NULL, delta_7d_pct DECIMAL(10,4) NULL, coverage_count INT NULL, edgex_listed TINYINT(1) NULL, suggested_action VARCHAR(64) NULL, data_source VARCHAR(16) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NULL, status VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL);
+CREATE TABLE IF NOT EXISTS t_daily_volume_aggregate (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), day DATE NOT NULL, volume_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, data_source VARCHAR(16) NOT NULL DEFAULT 'native', source_endpoint VARCHAR(255) NULL, snapshot_ts TIMESTAMP NULL, UNIQUE KEY uk_day_platform_symbol_source (day, platform, display_symbol, data_source));
+CREATE TABLE IF NOT EXISTS t_coingecko_platform_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,2), open_interest_usd DECIMAL(28,2), data_source VARCHAR(16) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NOT NULL, status VARCHAR(32) NOT NULL, INDEX idx_cg_platform_ts (platform, snapshot_ts));
 CREATE TABLE IF NOT EXISTS t_collection_run (id BIGINT AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, started_at TIMESTAMP NOT NULL, completed_at TIMESTAMP, success_count INT, failed_count INT);
 CREATE TABLE IF NOT EXISTS t_collection_status (id BIGINT AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), collector VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), status VARCHAR(32) NOT NULL, error_message TEXT, snapshot_ts TIMESTAMP NOT NULL, latency_ms BIGINT NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS t_runtime_config (id BIGINT AUTO_INCREMENT PRIMARY KEY, config_key VARCHAR(96) NOT NULL UNIQUE, config_value TEXT NOT NULL, updated_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
@@ -105,6 +106,138 @@ func (s *Store) persistVolume(ctx context.Context, row domain.VolumeSnapshot) er
 	}
 	_, err := db.ExecContext(ctx, `INSERT INTO t_symbol_volume_snapshot (platform, display_symbol, snapshot_ts, volume_24h_usd, status, source_endpoint, error_message) VALUES (?, ?, ?, ?, ?, ?, ?)`, row.Platform, row.DisplaySymbol, row.SnapshotTS, row.Volume24HUSD, row.Status, row.SourceEndpoint, nullString(row.Error))
 	return err
+}
+
+func (s *Store) persistCoinGeckoPlatformVolume(ctx context.Context, row domain.PlatformVolumeAggregate) error {
+	db := s.db
+	if db == nil {
+		return nil
+	}
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO t_coingecko_platform_volume_snapshot
+		   (platform, snapshot_ts, volume_24h_usd, open_interest_usd, data_source, source_endpoint, status)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		row.Platform, row.SnapshotTS, row.Volume24HUSD, row.OpenInterestUSD,
+		defaultString(row.DataSource, domain.DataSourceCoinGecko),
+		row.SourceEndpoint, row.Status,
+	)
+	return err
+}
+
+// persistDailyVolumeAggregate UPSERTs by (day, platform, display_symbol,
+// data_source) so successive calls within the same UTC day overwrite the
+// latest value. display_symbol participates in the unique key as NULL for
+// platform-level rows, which MySQL treats as distinct per row; we work
+// around this by emulating UPSERT with an INSERT...ON DUPLICATE KEY UPDATE
+// guarded by a per-row delete when display_symbol is NULL.
+func (s *Store) persistDailyVolumeAggregate(ctx context.Context, row domain.DailyVolumeAggregate) error {
+	db := s.db
+	if db == nil {
+		return nil
+	}
+	source := defaultString(row.DataSource, domain.DataSourceNative)
+	if row.DisplaySymbol == "" {
+		if _, err := db.ExecContext(ctx,
+			`DELETE FROM t_daily_volume_aggregate
+			   WHERE day = ? AND platform = ? AND display_symbol IS NULL AND data_source = ?`,
+			row.Day, row.Platform, source,
+		); err != nil {
+			return err
+		}
+		_, err := db.ExecContext(ctx,
+			`INSERT INTO t_daily_volume_aggregate
+			   (platform, display_symbol, day, volume_usd, status, data_source, source_endpoint, snapshot_ts)
+			 VALUES (?, NULL, ?, ?, ?, ?, ?, ?)`,
+			row.Platform, row.Day, row.Volume24HUSD, row.Status, source, nullString(row.SourceEndpoint), nullTimePtr(row.SnapshotTS),
+		)
+		return err
+	}
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO t_daily_volume_aggregate
+		   (platform, display_symbol, day, volume_usd, status, data_source, source_endpoint, snapshot_ts)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   volume_usd = VALUES(volume_usd),
+		   status = VALUES(status),
+		   source_endpoint = VALUES(source_endpoint),
+		   snapshot_ts = VALUES(snapshot_ts)`,
+		row.Platform, row.DisplaySymbol, row.Day, row.Volume24HUSD, row.Status, source, nullString(row.SourceEndpoint), nullTimePtr(row.SnapshotTS),
+	)
+	return err
+}
+
+func (s *Store) persistTop30(ctx context.Context, platform string, rows []domain.Top30Row) error {
+	db := s.db
+	if db == nil {
+		return nil
+	}
+	if len(rows) == 0 {
+		return nil
+	}
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM t_top30_snapshot WHERE platform = ? AND snapshot_ts < DATE_SUB(NOW(), INTERVAL 30 DAY)`,
+		platform,
+	); err != nil {
+		return err
+	}
+	stmt, err := tx.PrepareContext(ctx,
+		`INSERT INTO t_top30_snapshot
+		   (platform, symbol, rank_no, volume_24h_usd, volume_7d_usd, delta_7d_pct, coverage_count, edgex_listed, suggested_action, data_source, source_endpoint, status, snapshot_ts)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	)
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+	for _, row := range rows {
+		var v7d, d7d sql.NullFloat64
+		if row.Volume7DUSD != nil {
+			v7d = sql.NullFloat64{Float64: *row.Volume7DUSD, Valid: true}
+		}
+		if row.Delta7DPct != nil {
+			d7d = sql.NullFloat64{Float64: *row.Delta7DPct, Valid: true}
+		}
+		if _, err := stmt.ExecContext(ctx,
+			platform, row.Symbol, row.Rank, row.Volume24HUSD,
+			v7d, d7d,
+			nullInt(row.CoverageCount),
+			boolToTinyInt(row.EdgexListed),
+			nullString(row.Action),
+			defaultString(row.DataSource, domain.DataSourceCoinGecko),
+			nullString(row.SourceEndpoint),
+			row.Status,
+			row.SnapshotTS,
+		); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func boolToTinyInt(b bool) sql.NullInt64 {
+	if !b {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: 1, Valid: true}
+}
+
+func defaultString(value, fallback string) string {
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func nullTimePtr(t time.Time) sql.NullTime {
+	if t.IsZero() {
+		return sql.NullTime{}
+	}
+	return sql.NullTime{Time: t, Valid: true}
 }
 
 func (s *Store) persistStatus(ctx context.Context, rows []domain.CollectionStatus, run RunSummary) error {
@@ -200,6 +333,114 @@ func (s *Store) LoadLatestFromDB(ctx context.Context) error {
 			return err
 		}
 		s.SaveVolume(row)
+	}
+	if err := s.loadCoinGeckoPlatformVolumes(ctx, db); err != nil {
+		return err
+	}
+	if err := s.loadDailyVolumeAggregates(ctx, db); err != nil {
+		return err
+	}
+	if err := s.loadTop30(ctx, db); err != nil {
+		return err
+	}
+	return rows.Err()
+}
+
+func (s *Store) loadCoinGeckoPlatformVolumes(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx,
+		`SELECT platform, snapshot_ts, COALESCE(volume_24h_usd,0), COALESCE(open_interest_usd,0),
+		        COALESCE(data_source,''), COALESCE(source_endpoint,''), COALESCE(status,'')
+		 FROM t_coingecko_platform_volume_snapshot s
+		 WHERE id IN (SELECT MAX(id) FROM t_coingecko_platform_volume_snapshot GROUP BY platform)`,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	batch := []domain.PlatformVolumeAggregate{}
+	for rows.Next() {
+		var row domain.PlatformVolumeAggregate
+		if err := rows.Scan(&row.Platform, &row.SnapshotTS, &row.Volume24HUSD, &row.OpenInterestUSD, &row.DataSource, &row.SourceEndpoint, &row.Status); err != nil {
+			return err
+		}
+		batch = append(batch, row)
+	}
+	if len(batch) > 0 {
+		s.SaveCoinGeckoPlatformVolumes(batch)
+	}
+	return rows.Err()
+}
+
+func (s *Store) loadDailyVolumeAggregates(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx,
+		`SELECT platform, COALESCE(display_symbol,'') AS display_symbol, day,
+		        COALESCE(volume_usd,0), COALESCE(status,''),
+		        COALESCE(data_source,'native'), COALESCE(source_endpoint,'')
+		 FROM t_daily_volume_aggregate
+		 WHERE day >= DATE_SUB(UTC_DATE(), INTERVAL 60 DAY)`,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	batch := []domain.DailyVolumeAggregate{}
+	for rows.Next() {
+		var row domain.DailyVolumeAggregate
+		if err := rows.Scan(&row.Platform, &row.DisplaySymbol, &row.Day, &row.Volume24HUSD, &row.Status, &row.DataSource, &row.SourceEndpoint); err != nil {
+			return err
+		}
+		batch = append(batch, row)
+	}
+	if len(batch) > 0 {
+		s.SaveDailyVolumeAggregates(batch)
+	}
+	return rows.Err()
+}
+
+func (s *Store) loadTop30(ctx context.Context, db *sql.DB) error {
+	rows, err := db.QueryContext(ctx,
+		`SELECT platform, symbol, rank_no, COALESCE(volume_24h_usd,0), volume_7d_usd, delta_7d_pct,
+		        COALESCE(coverage_count,0), COALESCE(edgex_listed,0), COALESCE(suggested_action,''),
+		        COALESCE(data_source,''), COALESCE(source_endpoint,''), COALESCE(status,''),
+		        snapshot_ts
+		 FROM t_top30_snapshot s
+		 WHERE (platform, snapshot_ts) IN (SELECT platform, MAX(snapshot_ts) FROM t_top30_snapshot GROUP BY platform)
+		 ORDER BY platform, rank_no`,
+	)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	byPlatform := map[string][]domain.Top30Row{}
+	for rows.Next() {
+		var (
+			row    domain.Top30Row
+			v7d    sql.NullFloat64
+			d7d    sql.NullFloat64
+			listed int
+		)
+		if err := rows.Scan(&row.Platform, &row.Symbol, &row.Rank, &row.Volume24HUSD, &v7d, &d7d, &row.CoverageCount, &listed, &row.Action, &row.DataSource, &row.SourceEndpoint, &row.Status, &row.SnapshotTS); err != nil {
+			return err
+		}
+		if v7d.Valid {
+			val := v7d.Float64
+			row.Volume7DUSD = &val
+			row.Volume7DStatus = domain.StatusComplete
+		} else {
+			row.Volume7DStatus = domain.StatusInsufficientHistory
+		}
+		if d7d.Valid {
+			val := d7d.Float64
+			row.Delta7DPct = &val
+			row.Delta7DStatus = domain.StatusComplete
+		} else {
+			row.Delta7DStatus = domain.StatusInsufficientHistory
+		}
+		row.EdgexListed = listed != 0
+		byPlatform[row.Platform] = append(byPlatform[row.Platform], row)
+	}
+	for platform, list := range byPlatform {
+		s.SaveTop30(platform, list)
 	}
 	return rows.Err()
 }

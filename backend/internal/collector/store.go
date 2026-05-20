@@ -22,6 +22,25 @@ type Store struct {
 	status          []domain.CollectionStatus
 	run             RunSummary
 	db              *sql.DB
+
+	// CoinGecko-only path (R3: strictly segregated from native volumes map).
+	// cgPlatformVolumes holds the latest /derivatives 24h aggregate per
+	// competitor platform; Share(24h) reads this map for the 9 competitors
+	// and never merges it with `volumes`.
+	cgPlatformVolumes map[string]domain.PlatformVolumeAggregate
+
+	// Daily rollups for 7d/30d windows. Each map value is sorted ascending
+	// by Day. dailyPlatformVolumes keys on platform; dailySymbolVolumes
+	// keys on "platform|display_symbol" for symbol-level KPIs.
+	dailyPlatformVolumes map[string][]domain.DailyVolumeAggregate
+	dailySymbolVolumes   map[string][]domain.DailyVolumeAggregate
+
+	// Top30 ranking per platform, refreshed on every CoinGecko collector
+	// run. Top30 returns the slice as-is once filled; empty slice keeps the
+	// existing "unsupported" fallback.
+	top30ByPlatform map[string][]domain.Top30Row
+
+	cgLastPullTS time.Time
 }
 
 type RunSummary struct {
@@ -33,7 +52,16 @@ type RunSummary struct {
 }
 
 func NewStore(cfg config.Config) *Store {
-	return &Store{cfg: cfg, platforms: map[string]domain.PlatformSnapshot{}, platformHistory: map[string][]domain.PlatformSnapshot{}, volumes: map[string]domain.VolumeSnapshot{}}
+	return &Store{
+		cfg:                  cfg,
+		platforms:            map[string]domain.PlatformSnapshot{},
+		platformHistory:      map[string][]domain.PlatformSnapshot{},
+		volumes:              map[string]domain.VolumeSnapshot{},
+		cgPlatformVolumes:    map[string]domain.PlatformVolumeAggregate{},
+		dailyPlatformVolumes: map[string][]domain.DailyVolumeAggregate{},
+		dailySymbolVolumes:   map[string][]domain.DailyVolumeAggregate{},
+		top30ByPlatform:      map[string][]domain.Top30Row{},
+	}
 }
 
 func key(platform, symbol string) string { return platform + "|" + symbol }
@@ -59,6 +87,107 @@ func (s *Store) SaveVolume(row domain.VolumeSnapshot) {
 	s.mu.Unlock()
 	if err := s.persistVolume(context.Background(), row); err != nil {
 		log.Printf("persist volume snapshot: %v", err)
+	}
+	// Mirror native volume into daily aggregates for edgeX so 7d/30d can
+	// accumulate without depending on a CoinGecko collector run for edgeX
+	// (CoinGecko does not cover edgeX). Other platforms continue to be
+	// rolled up by the CoinGecko path.
+	if row.Platform == "edgeX" && row.Status == domain.StatusComplete && row.Volume24HUSD > 0 {
+		daily := domain.DailyVolumeAggregate{
+			Day:            startOfUTCDay(row.SnapshotTS),
+			Platform:       row.Platform,
+			DisplaySymbol:  row.DisplaySymbol,
+			Volume24HUSD:   row.Volume24HUSD,
+			DataSource:     domain.DataSourceNative,
+			SourceEndpoint: row.SourceEndpoint,
+			Status:         domain.StatusComplete,
+			SnapshotTS:     row.SnapshotTS,
+		}
+		s.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{daily})
+	}
+}
+
+// SaveCoinGeckoPlatformVolumes records the latest CoinGecko-sourced 24h
+// volume per competitor platform. The store keeps this map strictly separate
+// from `volumes` so Share(24h) for the 9 competitors never reads native
+// per-symbol numbers (R3: prevents Lighter / Hyperliquid double-counting).
+func (s *Store) SaveCoinGeckoPlatformVolumes(rows []domain.PlatformVolumeAggregate) {
+	if len(rows) == 0 {
+		return
+	}
+	s.mu.Lock()
+	for _, row := range rows {
+		if row.Platform == "" {
+			continue
+		}
+		if row.DataSource == "" {
+			row.DataSource = domain.DataSourceCoinGecko
+		}
+		s.cgPlatformVolumes[row.Platform] = row
+		if row.SnapshotTS.After(s.cgLastPullTS) {
+			s.cgLastPullTS = row.SnapshotTS
+		}
+	}
+	s.mu.Unlock()
+	for _, row := range rows {
+		if row.Platform == "" {
+			continue
+		}
+		if err := s.persistCoinGeckoPlatformVolume(context.Background(), row); err != nil {
+			log.Printf("persist coingecko platform volume: %v", err)
+		}
+	}
+}
+
+// SaveDailyVolumeAggregates inserts or replaces per-day rollups. Volume24HUSD
+// is always raw USD; AdjustedVolume() is applied only at query time so
+// MEXC×0.4 / Gate×0.5 discounts cannot accidentally leak into stored values.
+func (s *Store) SaveDailyVolumeAggregates(rows []domain.DailyVolumeAggregate) {
+	if len(rows) == 0 {
+		return
+	}
+	s.mu.Lock()
+	for _, row := range rows {
+		if row.Platform == "" {
+			continue
+		}
+		if row.DataSource == "" {
+			row.DataSource = domain.DataSourceNative
+		}
+		row.Day = startOfUTCDay(row.Day)
+		if row.DisplaySymbol == "" {
+			s.dailyPlatformVolumes[row.Platform] = mergeDailyAggregate(s.dailyPlatformVolumes[row.Platform], row)
+		} else {
+			k := key(row.Platform, row.DisplaySymbol)
+			s.dailySymbolVolumes[k] = mergeDailyAggregate(s.dailySymbolVolumes[k], row)
+		}
+	}
+	s.mu.Unlock()
+	for _, row := range rows {
+		if row.Platform == "" {
+			continue
+		}
+		row.Day = startOfUTCDay(row.Day)
+		if err := s.persistDailyVolumeAggregate(context.Background(), row); err != nil {
+			log.Printf("persist daily volume aggregate: %v", err)
+		}
+	}
+}
+
+// SaveTop30 replaces the cached Top30 ranking for the given (platform) key.
+// CoinGecko delivers all rows in a single response, so callers pass the full
+// slice for one platform at a time.
+func (s *Store) SaveTop30(platform string, rows []domain.Top30Row) {
+	if platform == "" {
+		return
+	}
+	dup := make([]domain.Top30Row, len(rows))
+	copy(dup, rows)
+	s.mu.Lock()
+	s.top30ByPlatform[platform] = dup
+	s.mu.Unlock()
+	if err := s.persistTop30(context.Background(), platform, dup); err != nil {
+		log.Printf("persist top30: %v", err)
 	}
 }
 
@@ -105,7 +234,7 @@ func (s *Store) Coverage() map[string]any {
 }
 
 func (s *Store) DashboardMeta() map[string]any {
-	return map[string]any{
+	out := map[string]any{
 		"tabs":                 []string{"monitor", "quality", "share", "top30"},
 		"platforms":            s.cfg.Platforms,
 		"symbols":              s.Symbols(),
@@ -115,6 +244,37 @@ func (s *Store) DashboardMeta() map[string]any {
 		"refresh_interval_sec": int(s.cfg.Runtime.CollectionInterval.Seconds()),
 		"volume_discounts":     s.cfg.Runtime.VolumeDiscounts,
 	}
+	cg := s.cfg.Runtime.CoinGecko
+	if cg.Enabled {
+		s.mu.RLock()
+		lastPull := s.cgLastPullTS
+		s.mu.RUnlock()
+		ids := make([]string, 0, len(cg.ExchangeID))
+		for _, id := range cg.ExchangeID {
+			if id != "" {
+				ids = append(ids, id)
+			}
+		}
+		names := make([]string, 0, len(cg.MarketName))
+		for _, n := range cg.MarketName {
+			if n != "" {
+				names = append(names, n)
+			}
+		}
+		sort.Strings(ids)
+		sort.Strings(names)
+		meta := map[string]any{
+			"enabled":       true,
+			"exchange_ids":  ids,
+			"market_names":  names,
+			"pull_interval": cg.PullInterval.String(),
+		}
+		if !lastPull.IsZero() {
+			meta["last_pull_ts"] = lastPull
+		}
+		out["data_sources"] = map[string]any{"coingecko": meta}
+	}
+	return out
 }
 
 func (s *Store) Liquidity(symbol string) map[string]any {
@@ -133,7 +293,13 @@ func (s *Store) Liquidity(symbol string) map[string]any {
 	}
 	medians := competitorMedianByTier(rows)
 	rows = enrichLiquidityRows(rows, medians)
-	return map[string]any{"symbol": symbol, "snapshot_ts": latestTS(rows), "rows": rows, "competitor_median_by_tier": medians, "kpis": liquidityKPIs(rows, medians, s.volumes, symbol)}
+	return map[string]any{
+		"symbol":                    symbol,
+		"snapshot_ts":               latestTS(rows),
+		"rows":                      rows,
+		"competitor_median_by_tier": medians,
+		"kpis":                      s.liquidityKPIsLocked(rows, medians, symbol),
+	}
 }
 
 func (s *Store) Quality(symbol string) map[string]any {
@@ -160,40 +326,100 @@ func (s *Store) Share(window string) map[string]any {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if window != "24h" {
-		return map[string]any{"window": window, "status": domain.StatusUnsupported, "reason": "historical platform share is not implemented yet", "rows": []any{}, "snapshot_ts": time.Now().UTC(), "trend": map[string]any{"status": domain.StatusUnsupported}}
-	}
-	rawByPlatform := map[string]float64{}
-	byPlatform := map[string]float64{}
-	statusByPlatform := map[string]string{}
-	for _, v := range s.volumes {
-		statusByPlatform[v.Platform] = mergeVolumeStatus(statusByPlatform[v.Platform], v.Status)
-		if v.Status == domain.StatusComplete {
-			rawByPlatform[v.Platform] += v.Volume24HUSD
-			byPlatform[v.Platform] += indicators.AdjustedVolume(v.Platform, v.Volume24HUSD)
+	switch window {
+	case "24h":
+		return s.share24hLocked()
+	case "7d":
+		return s.shareHistoricalLocked("7d", 7)
+	case "30d":
+		return s.shareHistoricalLocked("30d", 30)
+	default:
+		return map[string]any{
+			"window":      window,
+			"status":      domain.StatusUnsupported,
+			"reason":      "unsupported window",
+			"rows":        []any{},
+			"snapshot_ts": time.Now().UTC(),
+			"trend":       map[string]any{"status": domain.StatusUnsupported},
 		}
 	}
+}
+
+// share24hLocked implements R3: 9 competitors always come from CoinGecko
+// (s.cgPlatformVolumes), edgeX always comes from native (s.volumes). The two
+// maps are never merged, so Lighter / Hyperliquid native data cannot
+// double-count against CoinGecko aggregates.
+func (s *Store) share24hLocked() map[string]any {
+	now := time.Now().UTC()
+	rawByPlatform := map[string]float64{}
+	adjustedByPlatform := map[string]float64{}
+	statusByPlatform := map[string]string{}
+	sourceByPlatform := map[string]string{}
+	snapshotTSByPlatform := map[string]time.Time{}
+
+	// edgeX: aggregate every native symbol volume that completed.
+	for _, v := range s.volumes {
+		if v.Platform != "edgeX" {
+			continue
+		}
+		if v.Status == domain.StatusComplete {
+			rawByPlatform[v.Platform] += v.Volume24HUSD
+			adjustedByPlatform[v.Platform] += indicators.AdjustedVolume(v.Platform, v.Volume24HUSD)
+		}
+		statusByPlatform[v.Platform] = mergeVolumeStatus(statusByPlatform[v.Platform], v.Status)
+		sourceByPlatform[v.Platform] = domain.DataSourceNative
+		if v.SnapshotTS.After(snapshotTSByPlatform[v.Platform]) {
+			snapshotTSByPlatform[v.Platform] = v.SnapshotTS
+		}
+	}
+
+	// 9 competitors: take only the CoinGecko aggregate, never the native
+	// per-symbol fallback.
+	for _, p := range s.cfg.Platforms {
+		if p == "edgeX" {
+			continue
+		}
+		agg, ok := s.cgPlatformVolumes[p]
+		if !ok {
+			statusByPlatform[p] = domain.StatusStale
+			continue
+		}
+		statusByPlatform[p] = agg.Status
+		sourceByPlatform[p] = domain.DataSourceCoinGecko
+		if agg.SnapshotTS.After(snapshotTSByPlatform[p]) {
+			snapshotTSByPlatform[p] = agg.SnapshotTS
+		}
+		if agg.Status == domain.StatusComplete && agg.Volume24HUSD > 0 {
+			rawByPlatform[p] = agg.Volume24HUSD
+			adjustedByPlatform[p] = indicators.AdjustedVolume(p, agg.Volume24HUSD)
+		}
+	}
+
 	var denom float64
-	for _, v := range byPlatform {
+	for _, v := range adjustedByPlatform {
 		denom += v
 	}
+
 	rows := []map[string]any{}
 	for _, p := range s.cfg.Platforms {
-		raw := rawByPlatform[p]
-		adjusted := byPlatform[p]
 		status := statusByPlatform[p]
 		if status == "" {
 			status = domain.StatusStale
 		}
-		share := 0.0
-		if denom > 0 {
-			share = adjusted / denom * 100
+		row := map[string]any{
+			"platform":    p,
+			"discount":    discount(p),
+			"status":      status,
+			"data_source": sourceByPlatform[p],
 		}
-		row := map[string]any{"platform": p, "discount": discount(p), "status": status}
 		if status == domain.StatusComplete {
-			row["raw_volume_usd"] = raw
-			row["adjusted_volume_usd"] = adjusted
-			row["adjusted_volume_24h_usd"] = adjusted
+			share := 0.0
+			if denom > 0 {
+				share = adjustedByPlatform[p] / denom * 100
+			}
+			row["raw_volume_usd"] = rawByPlatform[p]
+			row["adjusted_volume_usd"] = adjustedByPlatform[p]
+			row["adjusted_volume_24h_usd"] = adjustedByPlatform[p]
 			row["share_pct"] = share
 			row["denominator_pct"] = share
 		}
@@ -205,12 +431,255 @@ func (s *Store) Share(window string) map[string]any {
 	for i := range rows {
 		rows[i]["rank"] = i + 1
 	}
+
+	historyStatus := s.historicalShareStatusLocked()
 	kpis := map[string]any{
-		"edgex_share_pct":        shareForAdjusted(byPlatform["edgeX"], denom),
+		"edgex_share_pct":        shareForAdjusted(adjustedByPlatform["edgeX"], denom),
 		"edgex_total_volume_usd": rawByPlatform["edgeX"],
 		"denominator_usd":        denom,
 	}
-	return map[string]any{"window": "24h", "snapshot_ts": time.Now().UTC(), "denominator_usd": denom, "rows": rows, "kpis": kpis, "history": map[string]string{"7d": domain.StatusUnsupported, "30d": domain.StatusUnsupported}, "trend": map[string]any{"status": domain.StatusUnsupported}}
+	trend := s.shareTrendLocked(30)
+	return map[string]any{
+		"window":          "24h",
+		"snapshot_ts":     now,
+		"denominator_usd": denom,
+		"rows":            rows,
+		"kpis":            kpis,
+		"history":         historyStatus,
+		"trend":           trend,
+	}
+}
+
+// shareHistoricalLocked covers 7d / 30d. It reads from
+// dailyPlatformVolumes, applies R6 status semantics (insufficient_history,
+// partial, complete), and folds in MEXC×0.4 / Gate×0.5 discounts only at
+// query time per R5.
+func (s *Store) shareHistoricalLocked(window string, days int) map[string]any {
+	now := time.Now().UTC()
+	cutoff := startOfUTCDay(now).AddDate(0, 0, -(days - 1))
+
+	rawByPlatform := map[string]float64{}
+	adjustedByPlatform := map[string]float64{}
+	statusByPlatform := map[string]string{}
+	daysCovered := map[string]int{}
+	sourceByPlatform := map[string]string{}
+
+	for _, p := range s.cfg.Platforms {
+		rows := s.dailyPlatformVolumes[p]
+		if len(rows) == 0 {
+			statusByPlatform[p] = domain.StatusInsufficientHistory
+			continue
+		}
+		seen := 0
+		for _, r := range rows {
+			if r.Day.Before(cutoff) {
+				continue
+			}
+			if r.Status != domain.StatusComplete || r.Volume24HUSD <= 0 {
+				continue
+			}
+			rawByPlatform[p] += r.Volume24HUSD
+			adjustedByPlatform[p] += indicators.AdjustedVolume(p, r.Volume24HUSD)
+			seen++
+			if r.DataSource != "" {
+				sourceByPlatform[p] = r.DataSource
+			}
+		}
+		daysCovered[p] = seen
+		switch {
+		case seen == 0:
+			statusByPlatform[p] = domain.StatusInsufficientHistory
+		case seen < days:
+			statusByPlatform[p] = domain.StatusPartial
+		default:
+			statusByPlatform[p] = domain.StatusComplete
+		}
+	}
+
+	var denom float64
+	completeCount := 0
+	for p, status := range statusByPlatform {
+		if status == domain.StatusComplete {
+			denom += adjustedByPlatform[p]
+			completeCount++
+		}
+	}
+
+	rows := []map[string]any{}
+	for _, p := range s.cfg.Platforms {
+		status := statusByPlatform[p]
+		row := map[string]any{
+			"platform":    p,
+			"discount":    discount(p),
+			"status":      status,
+			"data_source": sourceByPlatform[p],
+			"days_seen":   daysCovered[p],
+			"days_window": days,
+		}
+		if status == domain.StatusComplete {
+			share := 0.0
+			if denom > 0 {
+				share = adjustedByPlatform[p] / denom * 100
+			}
+			row["raw_volume_usd"] = rawByPlatform[p]
+			row["adjusted_volume_usd"] = adjustedByPlatform[p]
+			row["adjusted_volume_total_usd"] = adjustedByPlatform[p]
+			row["share_pct"] = share
+			row["denominator_pct"] = share
+		}
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		return numeric(rows[i]["adjusted_volume_usd"]) > numeric(rows[j]["adjusted_volume_usd"])
+	})
+	for i := range rows {
+		rows[i]["rank"] = i + 1
+	}
+
+	insufficientCount := 0
+	for _, status := range statusByPlatform {
+		if status == domain.StatusInsufficientHistory {
+			insufficientCount++
+		}
+	}
+	overall := domain.StatusPartial
+	switch {
+	case insufficientCount == len(s.cfg.Platforms):
+		overall = domain.StatusInsufficientHistory
+	case completeCount == len(s.cfg.Platforms):
+		overall = domain.StatusComplete
+	}
+
+	kpis := map[string]any{
+		"edgex_share_pct":        shareForAdjusted(adjustedByPlatform["edgeX"], denom),
+		"edgex_total_volume_usd": rawByPlatform["edgeX"],
+		"denominator_usd":        denom,
+	}
+	trend := s.shareTrendLocked(days)
+	return map[string]any{
+		"window":          window,
+		"status":          overall,
+		"snapshot_ts":     now,
+		"denominator_usd": denom,
+		"rows":            rows,
+		"kpis":            kpis,
+		"trend":           trend,
+	}
+}
+
+// historicalShareStatusLocked returns one status code per historical window
+// so the 24h response can hint at whether 7d/30d data is ready.
+func (s *Store) historicalShareStatusLocked() map[string]string {
+	out := map[string]string{}
+	for _, w := range []struct {
+		key  string
+		days int
+	}{{"7d", 7}, {"30d", 30}} {
+		complete := 0
+		insufficient := 0
+		for _, p := range s.cfg.Platforms {
+			seen := s.daysSeenLocked(p, w.days)
+			switch {
+			case seen >= w.days:
+				complete++
+			case seen == 0:
+				insufficient++
+			}
+		}
+		switch {
+		case complete == len(s.cfg.Platforms):
+			out[w.key] = domain.StatusComplete
+		case insufficient == len(s.cfg.Platforms):
+			out[w.key] = domain.StatusInsufficientHistory
+		default:
+			out[w.key] = domain.StatusPartial
+		}
+	}
+	return out
+}
+
+func (s *Store) daysSeenLocked(platform string, days int) int {
+	cutoff := startOfUTCDay(time.Now().UTC()).AddDate(0, 0, -(days - 1))
+	seen := 0
+	for _, r := range s.dailyPlatformVolumes[platform] {
+		if r.Day.Before(cutoff) {
+			continue
+		}
+		if r.Status == domain.StatusComplete && r.Volume24HUSD > 0 {
+			seen++
+		}
+	}
+	return seen
+}
+
+// shareTrendLocked emits up to `days` data points for the edgeX share over
+// time. Returns status=insufficient_history when no daily rollups exist for
+// edgeX at all, status=partial when some days are missing, status=complete
+// when all `days` are populated.
+func (s *Store) shareTrendLocked(days int) map[string]any {
+	now := time.Now().UTC()
+	if days <= 0 {
+		days = 30
+	}
+	start := startOfUTCDay(now).AddDate(0, 0, -(days - 1))
+	type bucket struct {
+		denomAdjusted float64
+		edgexAdjusted float64
+		denomRaw      float64
+		edgexRaw      float64
+		platformsSeen map[string]struct{}
+	}
+	byDay := map[time.Time]*bucket{}
+	for _, p := range s.cfg.Platforms {
+		for _, r := range s.dailyPlatformVolumes[p] {
+			if r.Day.Before(start) {
+				continue
+			}
+			if r.Status != domain.StatusComplete || r.Volume24HUSD <= 0 {
+				continue
+			}
+			b, ok := byDay[r.Day]
+			if !ok {
+				b = &bucket{platformsSeen: map[string]struct{}{}}
+				byDay[r.Day] = b
+			}
+			adj := indicators.AdjustedVolume(p, r.Volume24HUSD)
+			b.denomAdjusted += adj
+			b.denomRaw += r.Volume24HUSD
+			if p == "edgeX" {
+				b.edgexAdjusted += adj
+				b.edgexRaw += r.Volume24HUSD
+			}
+			b.platformsSeen[p] = struct{}{}
+		}
+	}
+	if len(byDay) == 0 {
+		return map[string]any{"status": domain.StatusInsufficientHistory, "points": []any{}}
+	}
+
+	points := []map[string]any{}
+	for d := start; !d.After(startOfUTCDay(now)); d = d.AddDate(0, 0, 1) {
+		b, ok := byDay[d]
+		if !ok {
+			continue
+		}
+		share := 0.0
+		if b.denomAdjusted > 0 {
+			share = b.edgexAdjusted / b.denomAdjusted * 100
+		}
+		points = append(points, map[string]any{
+			"day":               d.Format("2006-01-02"),
+			"edgex_share_pct":   share,
+			"denominator_usd":   b.denomAdjusted,
+			"edgex_volume_usd":  b.edgexRaw,
+			"platforms_covered": len(b.platformsSeen),
+		})
+	}
+	status := domain.StatusComplete
+	if len(points) < days {
+		status = domain.StatusPartial
+	}
+	return map[string]any{"status": status, "points": points}
 }
 
 func (s *Store) Top30(surface, platform string) map[string]any {
@@ -222,9 +691,26 @@ func (s *Store) Top30(surface, platform string) map[string]any {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
+	rows, ok := s.top30ByPlatform[platform]
 	now := time.Now().UTC()
-	rows := []domain.Top30Row{}
-	return map[string]any{"surface": surface, "platform": platform, "snapshot_ts": now, "status": domain.StatusUnsupported, "rows": rows}
+	if !ok || len(rows) == 0 {
+		return map[string]any{
+			"surface":     surface,
+			"platform":    platform,
+			"snapshot_ts": now,
+			"status":      domain.StatusUnsupported,
+			"rows":        []domain.Top30Row{},
+		}
+	}
+	out := make([]domain.Top30Row, len(rows))
+	copy(out, rows)
+	return map[string]any{
+		"surface":     surface,
+		"platform":    platform,
+		"snapshot_ts": latestTop30TS(out),
+		"status":      domain.StatusComplete,
+		"rows":        out,
+	}
 }
 
 func (s *Store) displayPlatformSnapshotLocked(platform, symbol string) (domain.PlatformSnapshot, bool) {
@@ -292,16 +778,21 @@ func latestTS(rows []domain.PlatformSnapshot) time.Time {
 	return t
 }
 
-func liquidityKPIs(rows []domain.PlatformSnapshot, medians map[string]float64, volumes map[string]domain.VolumeSnapshot, symbol string) map[string]any {
+// liquidityKPIsLocked builds the per-symbol KPIs for the Liquidity tab. The
+// caller already holds s.mu (RLock).
+func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians map[string]float64, symbol string) map[string]any {
 	var edge domain.PlatformSnapshot
 	for _, r := range rows {
 		if r.Platform == "edgeX" {
 			edge = r
 		}
 	}
+	// 24h symbol-level share continues to use native volumes per symbol
+	// because CoinGecko's /derivatives ticker is platform-level, not
+	// per-symbol; mixing the two would conflate denominators.
 	share := 0.0
 	denom := 0.0
-	for _, v := range volumes {
+	for _, v := range s.volumes {
 		if v.DisplaySymbol == symbol && v.Status == domain.StatusComplete {
 			adj := indicators.AdjustedVolume(v.Platform, v.Volume24HUSD)
 			denom += adj
@@ -313,6 +804,7 @@ func liquidityKPIs(rows []domain.PlatformSnapshot, medians map[string]float64, v
 	if denom > 0 {
 		share = share / denom * 100
 	}
+	share7d, sharePctWoW := s.symbolShareKPIsLocked(symbol)
 	return map[string]any{
 		"edgex_depth_by_tier":       edge.DepthByTier,
 		"edgex_vs_median_by_tier":   edge.VsMedianByTier,
@@ -320,9 +812,62 @@ func liquidityKPIs(rows []domain.PlatformSnapshot, medians map[string]float64, v
 		"edgex_spread_bp":           edge.SpreadBP,
 		"edgex_spread_10m_status":   domain.StatusUnsupported,
 		"edgex_24h_share_pct":       share,
-		"symbol_share_7d_status":    domain.StatusUnsupported,
-		"symbol_share_wow_status":   domain.StatusUnsupported,
+		"symbol_share_7d_status":    share7d,
+		"symbol_share_wow_status":   sharePctWoW,
 	}
+}
+
+// symbolShareKPIsLocked computes the R6 status string for the 7d and
+// week-over-week symbol-level share KPIs. Returns the status only; the
+// numeric value is still TODO once symbol-level daily aggregates are
+// populated by the CoinGecko collector.
+func (s *Store) symbolShareKPIsLocked(symbol string) (string, string) {
+	if symbol == "" {
+		return domain.StatusInsufficientHistory, domain.StatusInsufficientHistory
+	}
+	// 7d window
+	cutoff7 := startOfUTCDay(time.Now().UTC()).AddDate(0, 0, -6)
+	seen7 := 0
+	for _, p := range s.cfg.Platforms {
+		k := key(p, symbol)
+		for _, r := range s.dailySymbolVolumes[k] {
+			if r.Day.Before(cutoff7) {
+				continue
+			}
+			if r.Status == domain.StatusComplete && r.Volume24HUSD > 0 {
+				seen7++
+				break
+			}
+		}
+	}
+	status7d := domain.StatusInsufficientHistory
+	if seen7 >= len(s.cfg.Platforms) {
+		status7d = domain.StatusComplete
+	} else if seen7 > 0 {
+		status7d = domain.StatusPartial
+	}
+	// 14d window for WoW
+	cutoff14 := startOfUTCDay(time.Now().UTC()).AddDate(0, 0, -13)
+	seen14 := 0
+	for _, p := range s.cfg.Platforms {
+		k := key(p, symbol)
+		for _, r := range s.dailySymbolVolumes[k] {
+			if r.Day.Before(cutoff14) {
+				continue
+			}
+			if r.Status == domain.StatusComplete && r.Volume24HUSD > 0 {
+				seen14++
+				break
+			}
+		}
+	}
+	statusWoW := domain.StatusInsufficientHistory
+	if seen14 >= len(s.cfg.Platforms) {
+		statusWoW = domain.StatusComplete
+	} else if seen14 > 0 {
+		statusWoW = domain.StatusPartial
+	}
+	return status7d, statusWoW
 }
 
 func competitorMedianByTier(rows []domain.PlatformSnapshot) map[string]float64 {
@@ -501,4 +1046,41 @@ func discount(platform string) float64 {
 		return 0.5
 	}
 	return 1
+}
+
+// startOfUTCDay snaps a timestamp down to 00:00:00 UTC of the same calendar
+// day. Used to key daily rollups by date rather than instant.
+func startOfUTCDay(t time.Time) time.Time {
+	utc := t.UTC()
+	return time.Date(utc.Year(), utc.Month(), utc.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// mergeDailyAggregate inserts or replaces a row in a daily-rollup slice. The
+// slice stays sorted ascending by Day. When the same (Day, DataSource) pair
+// already exists the latest row wins; rows from a different DataSource are
+// kept as separate entries so callers can distinguish coingecko vs native
+// roll-ups even when both sides land on the same day.
+func mergeDailyAggregate(rows []domain.DailyVolumeAggregate, row domain.DailyVolumeAggregate) []domain.DailyVolumeAggregate {
+	for i, existing := range rows {
+		if existing.Day.Equal(row.Day) && existing.DataSource == row.DataSource && existing.DisplaySymbol == row.DisplaySymbol {
+			rows[i] = row
+			return rows
+		}
+	}
+	rows = append(rows, row)
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Day.Before(rows[j].Day) })
+	return rows
+}
+
+func latestTop30TS(rows []domain.Top30Row) time.Time {
+	var t time.Time
+	for _, r := range rows {
+		if r.SnapshotTS.After(t) {
+			t = r.SnapshotTS
+		}
+	}
+	if t.IsZero() {
+		return time.Now().UTC()
+	}
+	return t
 }

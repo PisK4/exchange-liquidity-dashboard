@@ -267,8 +267,11 @@ func TestLiquidityComputesCompetitorMedianRankAndUnsupportedHistory(t *testing.T
 
 	got := store.Liquidity("BTC-USDT (perp)")
 	kpis := got["kpis"].(map[string]any)
-	if kpis["symbol_share_7d_status"] != domain.StatusUnsupported {
-		t.Fatalf("expected unsupported 7d symbol share, got %+v", kpis)
+	if kpis["symbol_share_7d_status"] != domain.StatusInsufficientHistory {
+		t.Fatalf("expected insufficient_history 7d symbol share, got %+v", kpis)
+	}
+	if kpis["symbol_share_wow_status"] != domain.StatusInsufficientHistory {
+		t.Fatalf("expected insufficient_history WoW symbol share, got %+v", kpis)
 	}
 	medians := got["competitor_median_by_tier"].(map[string]float64)
 	if medians["0.10%"] != 150 {
@@ -444,41 +447,54 @@ func TestLiquidityWithoutCompetitorMedianDoesNotReportHealthy(t *testing.T) {
 	}
 }
 
-func TestShareReturnsFormalFieldsAndUnsupportedHistory(t *testing.T) {
+func TestShareReturnsFormalFieldsAndInsufficientHistory(t *testing.T) {
 	cfg := config.Default()
 	cfg.Platforms = []string{"edgeX", "mexc", "gate", "binance"}
 	store := NewStore(cfg)
 	now := time.Now().UTC()
-	for _, vol := range []domain.VolumeSnapshot{
-		{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete},
-		{Platform: "mexc", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete},
-		{Platform: "gate", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete},
-		{Platform: "binance", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete},
-	} {
-		store.SaveVolume(vol)
-	}
+	// edgeX: native volumes path (CoinGecko has no edgeX coverage).
+	store.SaveVolume(domain.VolumeSnapshot{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete, SourceEndpoint: "edgex"})
+	// 9 competitors: feed via CoinGecko aggregates so Share(24h) uses the
+	// dedicated cgPlatformVolumes map.
+	store.SaveCoinGeckoPlatformVolumes([]domain.PlatformVolumeAggregate{
+		{Platform: "mexc", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceCoinGecko},
+		{Platform: "gate", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceCoinGecko},
+		{Platform: "binance", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceCoinGecko},
+	})
 
 	got := store.Share("24h")
 	kpis := got["kpis"].(map[string]any)
 	if kpis["edgex_total_volume_usd"].(float64) != 100 {
 		t.Fatalf("expected raw edgeX total volume, got %+v", kpis)
 	}
+	// edgeX(100) + mexc(40) + gate(50) + binance(100) = 290 adjusted
 	if got["denominator_usd"].(float64) != 290 {
-		t.Fatalf("expected adjusted denominator, got %+v", got)
+		t.Fatalf("expected adjusted denominator 290, got %+v", got)
 	}
 	rows := got["rows"].([]map[string]any)
-	var mexc map[string]any
+	var mexc, edge map[string]any
 	for _, row := range rows {
-		if row["platform"] == "mexc" {
+		switch row["platform"] {
+		case "mexc":
 			mexc = row
+		case "edgeX":
+			edge = row
 		}
 	}
 	if mexc["raw_volume_usd"].(float64) != 100 || mexc["adjusted_volume_usd"].(float64) != 40 {
 		t.Fatalf("expected raw and adjusted MEXC volumes, got %+v", mexc)
 	}
+	if mexc["data_source"] != domain.DataSourceCoinGecko {
+		t.Fatalf("expected MEXC data_source=coingecko, got %+v", mexc)
+	}
+	if edge["data_source"] != domain.DataSourceNative {
+		t.Fatalf("expected edgeX data_source=native, got %+v", edge)
+	}
 
 	historical := store.Share("7d")
-	if historical["status"] != domain.StatusUnsupported {
-		t.Fatalf("expected unsupported historical share, got %+v", historical)
+	// Only one UTC day of data has been written, so a 7-day window must be
+	// reported as insufficient_history (R6) rather than unsupported.
+	if historical["status"] != domain.StatusInsufficientHistory {
+		t.Fatalf("expected insufficient_history historical share, got %+v", historical)
 	}
 }
