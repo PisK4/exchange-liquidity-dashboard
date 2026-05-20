@@ -1,0 +1,258 @@
+package collector
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log"
+	"sort"
+	"strings"
+	"time"
+
+	"edgex-dashboard/backend/internal/config"
+	"edgex-dashboard/backend/internal/domain"
+	"edgex-dashboard/backend/internal/marketdata/coingecko"
+)
+
+// CoinGeckoCollector polls CoinGecko's /derivatives endpoint on a fixed
+// cadence and writes platform-level 24h volumes, daily UPSERT rollups, and
+// per-platform Top30 rankings into the Store.
+//
+// Lifecycle:
+//   - One CoinGeckoCollector is constructed per process from the runtime
+//     CoinGeckoConfig.
+//   - Collector.Run starts the loop; it blocks until ctx is cancelled.
+//   - CollectOnce can also be invoked synchronously (e.g. by tests or a
+//     manual smoke target).
+//
+// Concurrency: the collector itself runs single-threaded; the Store APIs it
+// calls are responsible for their own locking.
+type CoinGeckoCollector struct {
+	cfg     config.CoinGeckoConfig
+	client  *coingecko.Client
+	mapping *coingecko.Mapping
+	cache   *coingecko.TickerCache
+	store   *Store
+}
+
+// NewCoinGeckoCollector constructs a collector. client may be nil if the
+// caller wants to swap in a test double via SetClient.
+func NewCoinGeckoCollector(cfg config.CoinGeckoConfig, store *Store, client *coingecko.Client, mapping *coingecko.Mapping) *CoinGeckoCollector {
+	return &CoinGeckoCollector{
+		cfg:     cfg,
+		client:  client,
+		mapping: mapping,
+		cache:   coingecko.NewTickerCache(cfg.CacheTTL),
+		store:   store,
+	}
+}
+
+// Run starts the periodic /derivatives pull loop until ctx is cancelled.
+// First poll executes immediately so the dashboard surfaces data on boot
+// rather than after one full PullInterval.
+func (c *CoinGeckoCollector) Run(ctx context.Context) {
+	interval := c.cfg.PullInterval
+	if interval <= 0 {
+		interval = 15 * time.Minute
+	}
+	if err := c.CollectOnce(ctx); err != nil {
+		log.Printf("coingecko: initial collection failed: %v", err)
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if err := c.CollectOnce(ctx); err != nil {
+				log.Printf("coingecko: periodic collection failed: %v", err)
+			}
+		}
+	}
+}
+
+// CollectOnce performs a single end-to-end pipeline step: fetch tickers,
+// derive platform-level + Top30 + daily rollups, and persist them.
+func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
+	if c.client == nil {
+		return errors.New("coingecko: client not initialised")
+	}
+	if c.mapping == nil {
+		return errors.New("coingecko: mapping not initialised")
+	}
+
+	now := time.Now().UTC()
+	tickers, endpoint, cached, err := c.fetchTickers(ctx, now)
+	if err != nil {
+		c.store.RecordCoinGeckoPullFailure(now, err)
+		return err
+	}
+	if cached {
+		log.Printf("coingecko: serving cached /derivatives snapshot (%d tickers)", len(tickers))
+	}
+
+	// 1) Bucket every relevant ticker per (platform, displaySymbol). For
+	//    each platform we keep the highest 24h volume ticker per display
+	//    symbol — CoinGecko sometimes lists the same pair multiple times
+	//    (e.g. BTCUSDT and BTC-USDT-PERP) so picking the deepest one
+	//    matches the operator's mental model of "the canonical perp".
+	byPlatformSymbol := map[string]map[string]coingecko.Ticker{}
+	unknownMarkets := map[string]int{}
+	for _, t := range tickers {
+		platform, ok := c.mapping.PlatformByMarketName(t.Market)
+		if !ok {
+			unknownMarkets[strings.TrimSpace(t.Market)]++
+			continue
+		}
+		display := coingecko.NormaliseSymbol(t.Symbol)
+		if display == "" {
+			continue
+		}
+		bucket, ok := byPlatformSymbol[platform]
+		if !ok {
+			bucket = map[string]coingecko.Ticker{}
+			byPlatformSymbol[platform] = bucket
+		}
+		current, exists := bucket[display]
+		if !exists || t.Volume24HUSD() > current.Volume24HUSD() {
+			bucket[display] = t
+		}
+	}
+	if len(unknownMarkets) > 0 {
+		c.logUnknownMarketsOnce(unknownMarkets)
+	}
+
+	// 2) Platform-level 24h aggregates: sum of best-per-symbol volumes,
+	//    rolled into one row per platform. We also stash today's daily
+	//    UPSERT (one platform-level row keyed by UTC day).
+	platforms := sortedKeys(byPlatformSymbol)
+	platformAggs := make([]domain.PlatformVolumeAggregate, 0, len(platforms))
+	dailyRows := make([]domain.DailyVolumeAggregate, 0, len(platforms))
+	day := startOfUTCDay(now)
+	for _, platform := range platforms {
+		symbols := byPlatformSymbol[platform]
+		var (
+			totalVol float64
+			totalOI  float64
+		)
+		for _, t := range symbols {
+			totalVol += t.Volume24HUSD()
+			totalOI += t.OpenInterestUSD()
+		}
+		platformAggs = append(platformAggs, domain.PlatformVolumeAggregate{
+			Platform:        platform,
+			SnapshotTS:      now,
+			Volume24HUSD:    totalVol,
+			OpenInterestUSD: totalOI,
+			DataSource:      domain.DataSourceCoinGecko,
+			SourceEndpoint:  endpoint,
+			Status:          domain.StatusComplete,
+		})
+		dailyRows = append(dailyRows, domain.DailyVolumeAggregate{
+			Platform:       platform,
+			Day:            day,
+			Volume24HUSD:   totalVol,
+			Status:         domain.StatusComplete,
+			DataSource:     domain.DataSourceCoinGecko,
+			SourceEndpoint: endpoint,
+			SnapshotTS:     now,
+		})
+	}
+	c.store.SaveCoinGeckoPlatformVolumes(platformAggs)
+	c.store.SaveDailyVolumeAggregates(dailyRows)
+
+	// 3) Top30 per platform: sort the best-per-symbol bucket by 24h volume
+	//    descending, take the top 30 rows. Volume7D / Delta7D start as
+	//    insufficient_history; future pipeline stages can populate them by
+	//    walking dailySymbolVolumes once 7d of history accumulates.
+	for _, platform := range platforms {
+		rows := make([]domain.Top30Row, 0, 30)
+		ranked := flattenByVolume(byPlatformSymbol[platform])
+		limit := len(ranked)
+		if limit > 30 {
+			limit = 30
+		}
+		for i := 0; i < limit; i++ {
+			t := ranked[i]
+			rows = append(rows, domain.Top30Row{
+				Rank:           i + 1,
+				Platform:       platform,
+				Symbol:         coingecko.NormaliseSymbol(t.Symbol),
+				Volume24HUSD:   t.Volume24HUSD(),
+				Volume7DStatus: domain.StatusInsufficientHistory,
+				Delta7DStatus:  domain.StatusInsufficientHistory,
+				DataSource:     domain.DataSourceCoinGecko,
+				SourceEndpoint: endpoint,
+				Status:         domain.StatusComplete,
+				SnapshotTS:     now,
+			})
+		}
+		if len(rows) > 0 {
+			c.store.SaveTop30(platform, rows)
+		}
+	}
+
+	c.store.RecordCoinGeckoPullSuccess(now)
+	return nil
+}
+
+// fetchTickers returns either a fresh /derivatives response or the cached
+// one if a previous call landed within TTL. cached==true is informational
+// and only used for log output.
+func (c *CoinGeckoCollector) fetchTickers(ctx context.Context, now time.Time) ([]coingecko.Ticker, string, bool, error) {
+	if cached, endpoint, ok := c.cache.Get(now); ok {
+		return cached, endpoint, true, nil
+	}
+	tickers, endpoint, err := c.client.FetchDerivatives(ctx)
+	if err != nil {
+		return nil, endpoint, false, err
+	}
+	c.cache.Put(now, tickers, endpoint)
+	return tickers, endpoint, false, nil
+}
+
+// logUnknownMarketsOnce logs CoinGecko market_name values we couldn't map to
+// any internal platform; capped to the 5 most-seen entries so a noisy
+// upstream doesn't drown out other log output.
+func (c *CoinGeckoCollector) logUnknownMarketsOnce(counts map[string]int) {
+	if len(counts) == 0 {
+		return
+	}
+	type entry struct {
+		name  string
+		count int
+	}
+	entries := make([]entry, 0, len(counts))
+	for name, count := range counts {
+		entries = append(entries, entry{name: name, count: count})
+	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].count > entries[j].count })
+	top := entries
+	if len(top) > 5 {
+		top = top[:5]
+	}
+	parts := make([]string, 0, len(top))
+	for _, e := range top {
+		parts = append(parts, fmt.Sprintf("%q×%d", e.name, e.count))
+	}
+	log.Printf("coingecko: %d unmapped markets ignored (sample: %s)", len(counts), strings.Join(parts, ", "))
+}
+
+func flattenByVolume(bucket map[string]coingecko.Ticker) []coingecko.Ticker {
+	out := make([]coingecko.Ticker, 0, len(bucket))
+	for _, t := range bucket {
+		out = append(out, t)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Volume24HUSD() > out[j].Volume24HUSD() })
+	return out
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
