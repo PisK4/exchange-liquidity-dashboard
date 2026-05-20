@@ -39,8 +39,16 @@ make catalog            # full refresh (requires network to all 10 exchanges)
 ```
 
 This fetches every endpoint live, rewrites every `<platform>-<market>/<YYYY-MM-DD>.json`,
-and regenerates `config/instrument_catalog.yaml`. The catalog YAML is the
-runtime source-of-truth; raw dumps are the audit trail.
+and regenerates two yaml files in `config/`:
+
+- `instrument_catalog.yaml` — canonical BTC/ETH/SOL per-platform fields
+  consumed by the depth adapters.
+- `listed_universe.yaml` — per-platform union of all listed base assets
+  (perp + spot), consumed by the CoinGecko collector at runtime to fill the
+  "edgeX 已上线?" column on the Top30 tab. Stale or absent universe entries
+  collapse that column back to "否" with no badge.
+
+The catalog YAML is the runtime source-of-truth; raw dumps are the audit trail.
 
 If you only have partial network access (e.g. you can reach Gate/Hyperliquid/Lighter
 but Binance is blocked), use the `--raw-only` mode to refresh raw dumps without

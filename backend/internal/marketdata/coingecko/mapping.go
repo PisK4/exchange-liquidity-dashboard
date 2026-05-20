@@ -135,15 +135,56 @@ func (m *Mapping) MarketNames() []string {
 	return out
 }
 
-// NormaliseSymbol converts a CoinGecko ticker symbol (e.g. "BTCUSDT" or
-// "BTC-USDT") to the canonical display symbol used by edgex-dashboard
-// ("BTC-USDT (perp)"). Symbols not recognised as a perp pair are returned
-// unchanged so callers can still log them for triage.
+// venueSymbolSuffixes are exchange-specific decorations that CoinGecko
+// passes through verbatim in /derivatives tickers[].symbol. They have to be
+// stripped before quote-suffix detection or else the same logical perp on
+// different venues normalises to different strings, which would silently
+// break the Top30 cross-platform coverage tabulation (e.g. OKX returns
+// "BTC-USDT-SWAP" while Bitget returns "BTCUSDT_UMCBL" — both are the BTC
+// USDT perp and must collapse to "BTC-USDT (perp)").
+var venueSymbolSuffixes = []string{
+	"-SWAP",  // OKX perp / swap
+	"-PERP",  // generic / Hyperliquid (some flavors)
+	"_PERP",  // generic
+	"_UMCBL", // Bitget V1 USDT-margined linear
+	"_DMCBL", // Bitget V1 coin-margined inverse
+	"_CMCBL", // Bitget V1 USDC-margined linear
+	"_SUSDT", // Bitget legacy
+	"_SUSDC", // Bitget legacy
+}
+
+// NormaliseSymbol converts a CoinGecko ticker symbol from any of the 9
+// competitor venues (e.g. "BTCUSDT", "BTC-USDT", "BTC-USDT-SWAP",
+// "BTCUSDT_UMCBL", "BTC_USDT") into the canonical display symbol used by
+// edgex-dashboard ("BTC-USDT (perp)"). Symbols not recognised as a perp pair
+// are returned unchanged so callers can still log them for triage.
+//
+// Convergence sequence:
+//  1. uppercase + trim
+//  2. strip a single venue-specific suffix (e.g. "-SWAP", "_UMCBL")
+//  3. collapse "_" separators (MEXC / Gate / Lighter use "BTC_USDT" form)
+//  4. peel the quote (USDT / USDC / USD) off the end and emit the canonical
+//     "BASE-QUOTE (perp)" form
+//
+// Each step is intentionally idempotent so re-feeding a normalised string
+// returns it unchanged.
 func NormaliseSymbol(raw string) string {
-	s := strings.ToUpper(strings.TrimSpace(raw))
-	if s == "" {
+	trimmed := strings.TrimSpace(raw)
+	if trimmed == "" {
 		return ""
 	}
+	if strings.HasSuffix(strings.ToLower(trimmed), " (perp)") {
+		head := trimmed[:len(trimmed)-len(" (perp)")]
+		return strings.ToUpper(head) + " (perp)"
+	}
+	s := strings.ToUpper(trimmed)
+	for _, suffix := range venueSymbolSuffixes {
+		if strings.HasSuffix(s, suffix) {
+			s = strings.TrimSuffix(s, suffix)
+			break
+		}
+	}
+	s = strings.ReplaceAll(s, "_", "")
 	switch {
 	case strings.HasSuffix(s, "USDT"):
 		base := strings.TrimSuffix(s, "USDT")

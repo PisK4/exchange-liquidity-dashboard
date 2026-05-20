@@ -31,15 +31,16 @@ import (
 )
 
 type cliFlags struct {
-	whitelistPath string
-	catalogPath   string
-	rawDir        string
-	dryRun        bool
-	diffAgainst   string
-	timeout       time.Duration
-	platforms     string
-	allowPartial  bool
-	rawOnly       bool
+	whitelistPath      string
+	catalogPath        string
+	listedUniversePath string
+	rawDir             string
+	dryRun             bool
+	diffAgainst        string
+	timeout            time.Duration
+	platforms          string
+	allowPartial       bool
+	rawOnly            bool
 }
 
 func main() {
@@ -53,6 +54,7 @@ func run() error {
 	var f cliFlags
 	flag.StringVar(&f.whitelistPath, "whitelist", "../config/symbol_mapping.yaml", "path to symbol_mapping.yaml (canonical whitelist)")
 	flag.StringVar(&f.catalogPath, "output", "../config/instrument_catalog.yaml", "path to write instrument_catalog.yaml")
+	flag.StringVar(&f.listedUniversePath, "listed-universe-output", "../config/listed_universe.yaml", "path to write per-platform base-asset universe yaml (consumed by the dashboard collector at runtime)")
 	flag.StringVar(&f.rawDir, "raw-dir", "docs/raw-instruments", "directory to write per-market raw json dumps under")
 	flag.BoolVar(&f.dryRun, "dry-run", false, "do not write files; print summary to stdout (and diff if --diff-against)")
 	flag.StringVar(&f.diffAgainst, "diff-against", "", "in dry-run, exit non-zero if generated catalog differs from this file")
@@ -92,6 +94,7 @@ func run() error {
 	}
 
 	catalog := buildCatalog(now, wl, results)
+	listedUniverse := buildListedUniverse(now, results)
 
 	if f.dryRun {
 		buf, err := yaml.Marshal(catalog)
@@ -161,6 +164,11 @@ func run() error {
 	}
 	fmt.Printf("wrote %s (%d platforms, %d entries)\n",
 		f.catalogPath, len(catalog.Platforms), countCatalogEntries(catalog))
+	if err := writeListedUniverseYAML(f.listedUniversePath, listedUniverse); err != nil {
+		return fmt.Errorf("write listed universe: %w", err)
+	}
+	fmt.Printf("wrote %s (%d platforms, %d base assets total)\n",
+		f.listedUniversePath, len(listedUniverse.Platforms), countListedBases(listedUniverse))
 	if len(errs) > 0 {
 		fmt.Fprintln(os.Stderr, "warnings (catalog written with --allow-partial):")
 		for _, e := range errs {
@@ -423,6 +431,103 @@ func countCatalogEntries(cat config.Catalog) int {
 		n += len(m)
 	}
 	return n
+}
+
+// buildListedUniverse aggregates the union of base assets each platform
+// reports across all of its market_types in `results`. The output is the
+// runtime payload consumed by the dashboard collector to answer "edgeX 已上线?"
+// without re-hitting the meta API every cycle.
+//
+// Status fields like "TRADING"/"DELISTED" are honoured: anything that is not
+// blank and not equivalent to a "trading" state is skipped so a delisted
+// instrument does not keep edgeX flagged as "listed". When the instrument
+// dump leaves status empty (e.g. some exchanges omit it on perp), we keep the
+// base — better a false positive than a false negative for an active perp.
+func buildListedUniverse(now time.Time, results map[string]adapter.CatalogResult) config.ListedUniverse {
+	out := config.ListedUniverse{
+		SchemaVersion: 1,
+		GeneratedAt:   now.Format(time.RFC3339),
+		GeneratedBy:   "backend/scripts/build-catalog",
+		Platforms:     map[string]config.ListedPlatform{},
+	}
+	for platform, res := range results {
+		seen := map[string]struct{}{}
+		for _, market := range res.Markets {
+			for _, inst := range market.Instruments {
+				if !isListedStatus(inst.Status) {
+					continue
+				}
+				base := strings.ToUpper(strings.TrimSpace(inst.BaseAsset))
+				if base == "" {
+					continue
+				}
+				seen[base] = struct{}{}
+			}
+		}
+		if len(seen) == 0 {
+			continue
+		}
+		bases := make([]string, 0, len(seen))
+		for b := range seen {
+			bases = append(bases, b)
+		}
+		sort.Strings(bases)
+		out.Platforms[platform] = config.ListedPlatform{BaseAssets: bases}
+	}
+	return out
+}
+
+// isListedStatus accepts anything that smells like an active trading state.
+// "" is permissive because not every exchange dump tags status; we'd rather
+// over-include here than silently drop perp pairs that have no status field.
+func isListedStatus(s string) bool {
+	switch strings.ToUpper(strings.TrimSpace(s)) {
+	case "", "TRADING", "LIVE", "OPEN", "NORMAL", "ENABLED", "ACTIVE", "1", "TRUE":
+		return true
+	}
+	return false
+}
+
+func countListedBases(u config.ListedUniverse) int {
+	n := 0
+	for _, p := range u.Platforms {
+		n += len(p.BaseAssets)
+	}
+	return n
+}
+
+func writeListedUniverseYAML(path string, u config.ListedUniverse) error {
+	tmp, err := os.CreateTemp(filepath.Dir(path), ".listed_universe.*.yaml")
+	if err != nil {
+		return err
+	}
+	defer func() {
+		tmp.Close()
+		os.Remove(tmp.Name())
+	}()
+	header := "# listed_universe.yaml\n" +
+		"# Per-platform union of base assets currently listed across all market\n" +
+		"# types (perp + spot). Regenerate via: cd backend && make catalog.\n" +
+		"# Consumed at runtime by the CoinGecko collector to fill the\n" +
+		"# \"edgeX 已上线?\" column on the Top30 tab.\n"
+	if _, err := io.WriteString(tmp, header); err != nil {
+		return err
+	}
+	enc := yaml.NewEncoder(tmp)
+	enc.SetIndent(2)
+	if err := enc.Encode(u); err != nil {
+		return err
+	}
+	if err := enc.Close(); err != nil {
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(tmp.Name(), path)
 }
 
 // compareYAMLIgnoringTimestamp returns (humanReadableDiff, equal) — equality

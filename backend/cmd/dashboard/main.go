@@ -56,6 +56,7 @@ func main() {
 	go lighterProvider.Run(ctx, adapter.LighterMarketIDs())
 	waitForLighter(ctx, lighterProvider)
 	c := collector.NewCollectorWithLighter(cfg, store, lighterProvider)
+	backfiller := collector.NewSymbolBackfiller(cfg, store, lighterProvider)
 
 	if *role == "collector" || *role == "all" {
 		if err := c.CollectOnce(ctx); err != nil {
@@ -71,11 +72,27 @@ func main() {
 					}
 				}
 			}()
+			backfiller.Run(ctx, 14)
+		} else {
+			if err := backfiller.RunOnce(ctx, 14); err != nil {
+				log.Printf("symbol-volume backfill run-once completed with errors: %v", err)
+			}
 		}
 		if cfg.Runtime.CoinGecko.Enabled {
 			if cgCollector, err := buildCoinGeckoCollector(cfg, store); err != nil {
 				log.Printf("coingecko collector disabled: %v", err)
 			} else {
+				universePath := filepath.Join(*configDir, "listed_universe.yaml")
+				universe, uErr := config.LoadListedUniverse(universePath)
+				if uErr != nil {
+					log.Printf("listed_universe load failed (%s): %v; Top30 'edgeX 已上线?' column will fall back to false", universePath, uErr)
+				} else if !universe.Loaded() {
+					log.Printf("listed_universe.yaml not found at %s; Top30 'edgeX 已上线?' column will fall back to false until `make catalog`", universePath)
+				} else {
+					log.Printf("listed_universe.yaml loaded (%d platforms, edgeX bases=%d)",
+						len(universe.Platforms), len(universe.BaseAssets("edgeX")))
+				}
+				cgCollector.SetListedUniverse(universe)
 				if *runOnce {
 					if err := cgCollector.CollectOnce(ctx); err != nil {
 						log.Printf("coingecko initial collection failed: %v", err)

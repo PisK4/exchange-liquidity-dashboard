@@ -28,11 +28,12 @@ import (
 // Concurrency: the collector itself runs single-threaded; the Store APIs it
 // calls are responsible for their own locking.
 type CoinGeckoCollector struct {
-	cfg     config.CoinGeckoConfig
-	client  *coingecko.Client
-	mapping *coingecko.Mapping
-	cache   *coingecko.TickerCache
-	store   *Store
+	cfg      config.CoinGeckoConfig
+	client   *coingecko.Client
+	mapping  *coingecko.Mapping
+	cache    *coingecko.TickerCache
+	store    *Store
+	universe *config.ListedUniverse
 }
 
 // NewCoinGeckoCollector constructs a collector. client may be nil if the
@@ -45,6 +46,34 @@ func NewCoinGeckoCollector(cfg config.CoinGeckoConfig, store *Store, client *coi
 		cache:   coingecko.NewTickerCache(cfg.CacheTTL),
 		store:   store,
 	}
+}
+
+// configuredDisplaySymbols returns the set of V1 display symbols configured
+// in symbol_mapping.yaml so the CoinGecko collector can write per-symbol
+// daily aggregates only for symbols the operator cares about. The map value
+// is unused; emptiness implies "no V1 symbols configured, skip per-symbol
+// rows". The store keeps its symbol slice immutable post-construction so
+// this snapshot is safe to read without locks.
+func (c *CoinGeckoCollector) configuredDisplaySymbols() map[string]struct{} {
+	out := map[string]struct{}{}
+	if c.store == nil {
+		return out
+	}
+	for _, sub := range c.store.cfg.Symbols {
+		if sub.DisplaySymbol == "" {
+			continue
+		}
+		out[sub.DisplaySymbol] = struct{}{}
+	}
+	return out
+}
+
+// SetListedUniverse attaches the per-platform base-asset universe used to
+// resolve the "edgeX 已上线?" column on the Top30 tab. Passing a nil or
+// unloaded universe leaves the existing rows untouched (legacy "否" UI).
+// Safe to call before CollectOnce; subsequent calls overwrite.
+func (c *CoinGeckoCollector) SetListedUniverse(u *config.ListedUniverse) {
+	c.universe = u
 }
 
 // Run starts the periodic /derivatives pull loop until ctx is cancelled.
@@ -163,10 +192,49 @@ func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
 	c.store.SaveCoinGeckoPlatformVolumes(platformAggs)
 	c.store.SaveDailyVolumeAggregates(dailyRows)
 
+	// 2b) Per-symbol daily aggregates for the V1 configured display
+	//     symbols (BTC/ETH/SOL perp). Each (platform, display_symbol) is
+	//     UPSERTed once per UTC day; the in-memory mergeDailyAggregate
+	//     dedup keeps the latest-observed value for the day, which lets
+	//     symbolShare7dLocked compute 单币种 7d 市占率 once we have at
+	//     least one day per platform. Only configured symbols are written
+	//     so /derivatives chatter cannot pollute the per-symbol map.
+	configuredSymbols := c.configuredDisplaySymbols()
+	if len(configuredSymbols) > 0 {
+		symbolRows := make([]domain.DailyVolumeAggregate, 0, len(platforms)*len(configuredSymbols))
+		for _, platform := range platforms {
+			symbols := byPlatformSymbol[platform]
+			for display := range configuredSymbols {
+				t, ok := symbols[display]
+				if !ok {
+					continue
+				}
+				vol := t.Volume24HUSD()
+				if vol <= 0 {
+					continue
+				}
+				symbolRows = append(symbolRows, domain.DailyVolumeAggregate{
+					Platform:       platform,
+					DisplaySymbol:  display,
+					Day:            day,
+					Volume24HUSD:   vol,
+					Status:         domain.StatusComplete,
+					DataSource:     domain.DataSourceCoinGecko,
+					SourceEndpoint: endpoint,
+					SnapshotTS:     now,
+				})
+			}
+		}
+		if len(symbolRows) > 0 {
+			c.store.SaveDailyVolumeAggregates(symbolRows)
+		}
+	}
+
 	// 3) Top30 per platform: sort the best-per-symbol bucket by 24h volume
 	//    descending, take the top 30 rows. Volume7D / Delta7D start as
 	//    insufficient_history; future pipeline stages can populate them by
 	//    walking dailySymbolVolumes once 7d of history accumulates.
+	top30ByPlatform := make(map[string][]domain.Top30Row, len(platforms))
 	for _, platform := range platforms {
 		rows := make([]domain.Top30Row, 0, 30)
 		ranked := flattenByVolume(byPlatformSymbol[platform])
@@ -190,12 +258,112 @@ func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
 			})
 		}
 		if len(rows) > 0 {
-			c.store.SaveTop30(platform, rows)
+			top30ByPlatform[platform] = rows
 		}
+	}
+
+	// 4) Cross-platform enrichment: derive `edgex_listed`, `competitor_top30
+	//    _coverage` and `suggested_action` for every row. Coverage is the
+	//    count of competitor (non-edgeX) platforms whose Top30 contains the
+	//    exact normalised symbol; the demo UI fixes the denominator at 9 so
+	//    we leave the divisor to the front-end. EdgeX listing is base-asset
+	//    only (BTC vs BTC-USD/USDT/USDC etc all collapse to the same base).
+	coverage := buildCompetitorCoverage(top30ByPlatform)
+	enrichTop30Rows(top30ByPlatform, coverage, c.universe)
+	for platform, rows := range top30ByPlatform {
+		c.store.SaveTop30(platform, rows)
 	}
 
 	c.store.RecordCoinGeckoPullSuccess(now)
 	return nil
+}
+
+// buildCompetitorCoverage counts, for every full normalised symbol observed
+// in any non-edgeX platform's Top30 ranking, how many such platforms had it.
+// edgeX is excluded so the count matches the demo's "9 家竞品 Top30 覆盖"
+// semantics regardless of whether edgeX Top30 is populated this round.
+func buildCompetitorCoverage(top30ByPlatform map[string][]domain.Top30Row) map[string]int {
+	out := map[string]int{}
+	for platform, rows := range top30ByPlatform {
+		if platform == "edgeX" {
+			continue
+		}
+		for _, r := range rows {
+			out[r.Symbol]++
+		}
+	}
+	return out
+}
+
+// enrichTop30Rows mutates the passed Top30 rows in place: it stamps each row
+// with edgeX listing status (base-asset match against the universe),
+// competitor Top30 coverage count, and a suggested operator action derived
+// from those two signals. When the universe is unloaded the listing columns
+// stay on their zero values so the UI keeps showing legacy "否".
+func enrichTop30Rows(top30ByPlatform map[string][]domain.Top30Row, coverage map[string]int, universe *config.ListedUniverse) {
+	listingLoaded := universe.Loaded()
+	for platform, rows := range top30ByPlatform {
+		for i := range rows {
+			cov := coverage[rows[i].Symbol]
+			rows[i].CoverageCount = cov
+			rows[i].CoverageStatus = domain.StatusComplete
+
+			listed := false
+			if listingLoaded {
+				listed = universe.IsListed("edgeX", baseAssetFromSymbol(rows[i].Symbol))
+				rows[i].EdgexListed = listed
+				rows[i].ListedStatus = domain.StatusComplete
+			}
+
+			action, actionStatus := deriveSuggestedAction(platform, listed, cov, listingLoaded)
+			rows[i].Action = action
+			rows[i].ActionStatus = actionStatus
+		}
+		top30ByPlatform[platform] = rows
+	}
+}
+
+// baseAssetFromSymbol extracts the canonical base ticker from a CoinGecko
+// normalised symbol such as "BTC-USDT (perp)" → "BTC". Symbols without a "-"
+// or a trailing " (...)" suffix are returned uppercased unchanged so unusual
+// shapes (e.g. "1000PEPE") still round-trip cleanly into the universe lookup.
+func baseAssetFromSymbol(s string) string {
+	s = strings.TrimSpace(s)
+	if idx := strings.Index(s, " "); idx >= 0 {
+		s = s[:idx]
+	}
+	if idx := strings.Index(s, "-"); idx >= 0 {
+		s = s[:idx]
+	}
+	return strings.ToUpper(s)
+}
+
+// deriveSuggestedAction mirrors the badge ladder in the source demo HTML
+// (architecture/方案设计/EdgeX运营/原需求/edgeX · 流动性 & 深度监控面板 (Demo)(3).html
+// renderTop30). The edgeX self-tab is excluded because "建议动作" against
+// edgeX's own Top30 is operationally meaningless. The action is left blank
+// (with status=insufficient_history) when the listing universe is missing
+// because "保持/上架" decisions hinge on knowing whether edgeX lists the
+// symbol.
+func deriveSuggestedAction(platform string, listed bool, coverage int, listingLoaded bool) (string, string) {
+	if platform == "edgeX" {
+		return "", ""
+	}
+	if !listingLoaded {
+		return "", domain.StatusInsufficientHistory
+	}
+	switch {
+	case listed && coverage >= 6:
+		return "考虑拉新活动", domain.StatusComplete
+	case listed:
+		return "保持", domain.StatusComplete
+	case coverage >= 7:
+		return "优先上架", domain.StatusComplete
+	case coverage >= 5:
+		return "评估上架", domain.StatusComplete
+	default:
+		return "观望", domain.StatusComplete
+	}
 }
 
 // fetchTickers returns either a fresh /derivatives response or the cached

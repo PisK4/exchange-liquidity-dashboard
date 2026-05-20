@@ -30,10 +30,14 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile.web
       args:
-        NEXT_PUBLIC_API_BASE: http://backend:8080
+        # NEXT_PUBLIC_* is inlined into the client JS bundle at build time;
+        # it must be a URL the end-user's browser can reach, not a Docker
+        # network hostname. The host publishes backend on 127.0.0.1:8080.
+        NEXT_PUBLIC_API_BASE: http://127.0.0.1:8080
     environment:
+      # Used only by Next.js SSR inside the container; can stay on the
+      # Docker internal network hostname.
       SERVER_API_BASE: http://backend:8080
-      NEXT_PUBLIC_API_BASE: http://127.0.0.1:8080
     ports:
       - "3001:3000"
     depends_on:

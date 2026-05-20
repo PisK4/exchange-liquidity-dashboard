@@ -936,70 +936,179 @@ func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians map[
 	if denom > 0 {
 		share = share / denom * 100
 	}
-	share7d, sharePctWoW := s.symbolShareKPIsLocked(symbol)
-	return map[string]any{
+	share7dPct, share7dStatus, shareWoWStatus := s.symbolShare7dLocked(symbol)
+	spread10mBp, spread10mStatus := s.edgexSpread10mLocked(symbol)
+	out := map[string]any{
 		"edgex_depth_by_tier":       edge.DepthByTier,
 		"edgex_vs_median_by_tier":   edge.VsMedianByTier,
 		"competitor_median_by_tier": medians,
 		"edgex_spread_bp":           edge.SpreadBP,
-		"edgex_spread_10m_status":   domain.StatusUnsupported,
+		"edgex_spread_10m_status":   spread10mStatus,
 		"edgex_24h_share_pct":       share,
-		"symbol_share_7d_status":    share7d,
-		"symbol_share_wow_status":   sharePctWoW,
+		"symbol_share_7d_status":    share7dStatus,
+		"symbol_share_wow_status":   shareWoWStatus,
 	}
+	if share7dStatus == domain.StatusComplete || share7dStatus == domain.StatusPartial {
+		out["symbol_share_7d_pct"] = share7dPct
+	}
+	if spread10mStatus == domain.StatusComplete || spread10mStatus == domain.StatusPartial {
+		out["edgex_spread_10m_bp"] = spread10mBp
+	}
+	return out
 }
 
-// symbolShareKPIsLocked computes the R6 status string for the 7d and
-// week-over-week symbol-level share KPIs. Returns the status only; the
-// numeric value is still TODO once symbol-level daily aggregates are
-// populated by the CoinGecko collector.
-func (s *Store) symbolShareKPIsLocked(symbol string) (string, string) {
+// symbolShare7dLocked computes the 单币种 7d 市占率 KPI:
+//
+//	share = Σ(7d edgeX adjusted vol for symbol) / Σ(7d Σ platform adjusted vol for symbol) × 100
+//
+// MEXC×0.4 / Gate×0.5 discounts apply only to volume/share per AGENTS.md;
+// the denominator includes edgeX itself per the V2 PRD (D-10a). Status:
+//   - complete: every platform has ≥ 7 daily rows in the [now-6d, now] UTC
+//     window (denominator fully covered)
+//   - partial:  ≥ 1 day observed across at least one platform but the
+//     window is not fully covered
+//   - insufficient_history: no per-symbol daily rows at all
+//
+// The WoW status is reported separately (14d coverage check). When the
+// status is insufficient_history the numeric share is meaningless and
+// callers should suppress it from the API surface; partial / complete carry
+// a usable best-effort number.
+func (s *Store) symbolShare7dLocked(symbol string) (float64, string, string) {
 	if symbol == "" {
-		return domain.StatusInsufficientHistory, domain.StatusInsufficientHistory
+		return 0, domain.StatusInsufficientHistory, domain.StatusInsufficientHistory
 	}
-	// 7d window
-	cutoff7 := startOfUTCDay(time.Now().UTC()).AddDate(0, 0, -6)
-	seen7 := 0
+	if len(s.cfg.Platforms) == 0 {
+		return 0, domain.StatusInsufficientHistory, domain.StatusInsufficientHistory
+	}
+	today := startOfUTCDay(time.Now().UTC())
+	cutoff7 := today.AddDate(0, 0, -6)
+	cutoff14 := today.AddDate(0, 0, -13)
+	prevWindowEnd := today.AddDate(0, 0, -7)
+	prevWindowStart := today.AddDate(0, 0, -13)
+
+	var edgexAdj7d, denomAdj7d float64
+	totalDays7 := 0
+	platformsWithAny7 := 0
+	platformsFullyCovered7 := 0
+
+	platformsWithAny14 := 0
+	platformsFullyCovered14 := 0
+	platformsFullyCoveredPrev := 0
+
 	for _, p := range s.cfg.Platforms {
-		k := key(p, symbol)
-		for _, r := range s.dailySymbolVolumes[k] {
-			if r.Day.Before(cutoff7) {
+		rows := s.dailySymbolVolumes[key(p, symbol)]
+		daysIn7 := 0
+		daysIn14 := 0
+		daysInPrev := 0
+		for _, r := range rows {
+			if r.Status != domain.StatusComplete || r.Volume24HUSD <= 0 {
 				continue
 			}
-			if r.Status == domain.StatusComplete && r.Volume24HUSD > 0 {
-				seen7++
-				break
+			if !r.Day.Before(cutoff7) && !r.Day.After(today) {
+				adj := indicators.AdjustedVolume(p, r.Volume24HUSD)
+				denomAdj7d += adj
+				if p == "edgeX" {
+					edgexAdj7d += adj
+				}
+				daysIn7++
+				totalDays7++
+			}
+			if !r.Day.Before(cutoff14) && !r.Day.After(today) {
+				daysIn14++
+			}
+			if !r.Day.Before(prevWindowStart) && !r.Day.After(prevWindowEnd) {
+				daysInPrev++
 			}
 		}
+		if daysIn7 > 0 {
+			platformsWithAny7++
+		}
+		if daysIn7 >= 7 {
+			platformsFullyCovered7++
+		}
+		if daysIn14 > 0 {
+			platformsWithAny14++
+		}
+		if daysIn14 >= 14 {
+			platformsFullyCovered14++
+		}
+		if daysInPrev >= 7 {
+			platformsFullyCoveredPrev++
+		}
 	}
+
+	platforms := len(s.cfg.Platforms)
 	status7d := domain.StatusInsufficientHistory
-	if seen7 >= len(s.cfg.Platforms) {
+	switch {
+	case totalDays7 == 0:
+		status7d = domain.StatusInsufficientHistory
+	case platformsFullyCovered7 == platforms:
 		status7d = domain.StatusComplete
-	} else if seen7 > 0 {
+	default:
 		status7d = domain.StatusPartial
 	}
-	// 14d window for WoW
-	cutoff14 := startOfUTCDay(time.Now().UTC()).AddDate(0, 0, -13)
-	seen14 := 0
-	for _, p := range s.cfg.Platforms {
-		k := key(p, symbol)
-		for _, r := range s.dailySymbolVolumes[k] {
-			if r.Day.Before(cutoff14) {
-				continue
-			}
-			if r.Status == domain.StatusComplete && r.Volume24HUSD > 0 {
-				seen14++
-				break
-			}
-		}
+	share7d := 0.0
+	if denomAdj7d > 0 {
+		share7d = edgexAdj7d / denomAdj7d * 100
 	}
+
 	statusWoW := domain.StatusInsufficientHistory
-	if seen14 >= len(s.cfg.Platforms) {
+	switch {
+	case platformsWithAny14 == 0:
+		statusWoW = domain.StatusInsufficientHistory
+	case platformsFullyCovered14 == platforms && platformsFullyCoveredPrev == platforms:
 		statusWoW = domain.StatusComplete
-	} else if seen14 > 0 {
+	default:
 		statusWoW = domain.StatusPartial
 	}
-	return status7d, statusWoW
+	_ = platformsWithAny7
+	return share7d, status7d, statusWoW
+}
+
+// edgexSpread10mLocked returns the 10-minute mean of edgeX SpreadBP samples
+// for `symbol`. Samples come from platformHistory entries written by every
+// collection cycle; only displayable, positive-spread snapshots are
+// considered. Status:
+//   - complete: ≥ 2 valid samples in the window
+//   - partial:  exactly 1 valid sample (the mean is the sample itself)
+//   - insufficient_history: 0 valid samples (no edgeX history or all stale)
+//
+// The 5min default collection_interval yields 2–3 samples per 10min window
+// which is enough for a smoothed reading; a higher-frequency edgeX-only
+// sampler is tracked as a follow-up.
+func (s *Store) edgexSpread10mLocked(symbol string) (float64, string) {
+	if symbol == "" {
+		return 0, domain.StatusInsufficientHistory
+	}
+	history := s.platformHistory[key("edgeX", symbol)]
+	if len(history) == 0 {
+		return 0, domain.StatusInsufficientHistory
+	}
+	cutoff := time.Now().UTC().Add(-10 * time.Minute)
+	var sum float64
+	count := 0
+	for i := len(history) - 1; i >= 0; i-- {
+		row := history[i]
+		if row.SnapshotTS.Before(cutoff) {
+			break
+		}
+		if !isDisplayableSnapshot(row) {
+			continue
+		}
+		if row.SpreadBP <= 0 {
+			continue
+		}
+		sum += row.SpreadBP
+		count++
+	}
+	if count == 0 {
+		return 0, domain.StatusInsufficientHistory
+	}
+	avg := sum / float64(count)
+	if count == 1 {
+		return avg, domain.StatusPartial
+	}
+	return avg, domain.StatusComplete
 }
 
 func competitorMedianByTier(rows []domain.PlatformSnapshot) map[string]float64 {
@@ -1209,12 +1318,16 @@ func mergeDailyAggregate(rows []domain.DailyVolumeAggregate, row domain.DailyVol
 
 // dataSourcePriority ranks the daily-aggregate data sources from most to
 // least trustworthy. A live coingecko or native row always wins over a
-// backfill row landing on the same day.
+// backfill row landing on the same day; among backfill sources, the per-symbol
+// native_backfill (exchange kline) outranks the platform-only
+// coingecko_backfill (exchange volume_chart).
 func dataSourcePriority(src string) int {
 	switch src {
 	case domain.DataSourceNative:
-		return 3
+		return 4
 	case domain.DataSourceCoinGecko:
+		return 3
+	case domain.DataSourceNativeBackfill:
 		return 2
 	case domain.DataSourceCoinGeckoBackfill:
 		return 1

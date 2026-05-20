@@ -31,6 +31,7 @@ const (
 	DataSourceCoinGecko         = "coingecko"
 	DataSourceCoinGeckoBackfill = "coingecko_backfill"
 	DataSourceNative            = "native"
+	DataSourceNativeBackfill    = "native_backfill"
 )
 
 type SymbolSub struct {

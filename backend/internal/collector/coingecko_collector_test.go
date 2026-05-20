@@ -143,6 +143,55 @@ func TestCoinGeckoCollectorEmitsDailyUPSERT(t *testing.T) {
 	}
 }
 
+// TestCoinGeckoCollectorWritesPerSymbolDailyAggregates pins the new
+// 2b path (single-symbol 7d 市占率 backing data): for every configured V1
+// display_symbol observed in /derivatives we expect a per-(platform,
+// display_symbol) daily row landing in dailySymbolVolumes. The platform-
+// level dailyPlatformVolumes path is unchanged and must still get its row.
+func TestCoinGeckoCollectorWritesPerSymbolDailyAggregates(t *testing.T) {
+	col, store, srv := newTestCoinGeckoCollector(t)
+	defer srv.Close()
+	if err := col.CollectOnce(context.Background()); err != nil {
+		t.Fatalf("CollectOnce: %v", err)
+	}
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	// Binance/MEXC are part of the configured platforms and the payload
+	// references both BTC and ETH symbols; we expect dailySymbolVolumes
+	// to hold a row for each present (platform, display_symbol) pair with
+	// the deduped best-per-symbol volume.
+	cases := []struct {
+		platform string
+		symbol   string
+		want     float64
+	}{
+		{"binance", "BTC-USDT (perp)", 1000},
+		{"binance", "ETH-USDT (perp)", 800},
+		{"mexc", "BTC-USDT (perp)", 600},
+		{"mexc", "ETH-USDT (perp)", 400},
+		{"lighter", "BTC-USDT (perp)", 300},
+	}
+	for _, c := range cases {
+		rows := store.dailySymbolVolumes[key(c.platform, c.symbol)]
+		if len(rows) != 1 {
+			t.Fatalf("%s %s expected 1 daily row, got %d", c.platform, c.symbol, len(rows))
+		}
+		if rows[0].Volume24HUSD != c.want {
+			t.Fatalf("%s %s expected vol %v, got %v", c.platform, c.symbol, c.want, rows[0].Volume24HUSD)
+		}
+		if rows[0].DataSource != domain.DataSourceCoinGecko {
+			t.Fatalf("%s %s expected data_source=coingecko, got %s", c.platform, c.symbol, rows[0].DataSource)
+		}
+	}
+	// SOL is configured but not present in the payload — there must be no
+	// row for any (platform, SOL-USDT (perp)) pair.
+	for _, p := range []string{"binance", "mexc", "lighter"} {
+		if rows := store.dailySymbolVolumes[key(p, "SOL-USDT (perp)")]; len(rows) != 0 {
+			t.Fatalf("%s SOL must have no per-symbol row, got %+v", p, rows)
+		}
+	}
+}
+
 func TestCoinGeckoCollectorAdvancesLastPullTS(t *testing.T) {
 	col, store, srv := newTestCoinGeckoCollector(t)
 	defer srv.Close()
@@ -365,6 +414,121 @@ func TestBackfillVolumeHistoryClampsDaysRange(t *testing.T) {
 	if err := col.BackfillVolumeHistory(context.Background(), 365); err != nil {
 		t.Fatalf("BackfillVolumeHistory with overflow days should not error: %v", err)
 	}
+}
+
+func TestCoinGeckoCollectorEnrichesEdgexListedAndCoverage(t *testing.T) {
+	col, store, srv := newTestCoinGeckoCollector(t)
+	defer srv.Close()
+	col.SetListedUniverse(config.NewListedUniverseFromMap(map[string][]string{
+		// edgeX lists BTC only — ETH must come back as not listed.
+		"edgeX": {"BTC"},
+	}))
+	if err := col.CollectOnce(context.Background()); err != nil {
+		t.Fatalf("CollectOnce: %v", err)
+	}
+
+	binance := store.Top30("perp", "binance")["rows"].([]domain.Top30Row)
+	if len(binance) != 2 {
+		t.Fatalf("binance top30 should have 2 rows, got %d", len(binance))
+	}
+	btc, eth := pickBySymbol(binance, "BTC-USDT (perp)"), pickBySymbol(binance, "ETH-USDT (perp)")
+	if !btc.EdgexListed || btc.ListedStatus != domain.StatusComplete {
+		t.Fatalf("BTC row should be listed=true/complete, got %+v", btc)
+	}
+	if eth.EdgexListed || eth.ListedStatus != domain.StatusComplete {
+		t.Fatalf("ETH row should be listed=false/complete, got %+v", eth)
+	}
+	// Coverage: BTC-USDT in binance(self)+mexc+lighter = 3 competitor Top30s.
+	if btc.CoverageCount != 3 || btc.CoverageStatus != domain.StatusComplete {
+		t.Fatalf("BTC coverage expected 3/complete, got count=%d status=%q", btc.CoverageCount, btc.CoverageStatus)
+	}
+	if eth.CoverageCount != 2 || eth.CoverageStatus != domain.StatusComplete {
+		t.Fatalf("ETH coverage expected 2/complete, got count=%d status=%q", eth.CoverageCount, eth.CoverageStatus)
+	}
+	// Listed + cov=3 falls below 6 → "保持". ETH unlisted + cov=2 < 5 → "观望".
+	if btc.Action != "保持" {
+		t.Fatalf("BTC action expected 保持, got %q", btc.Action)
+	}
+	if eth.Action != "观望" {
+		t.Fatalf("ETH action expected 观望, got %q", eth.Action)
+	}
+}
+
+func TestCoinGeckoCollectorWithoutUniverseLeavesListingBlank(t *testing.T) {
+	col, store, srv := newTestCoinGeckoCollector(t)
+	defer srv.Close()
+	// no SetListedUniverse → universe stays nil
+	if err := col.CollectOnce(context.Background()); err != nil {
+		t.Fatalf("CollectOnce: %v", err)
+	}
+	rows := store.Top30("perp", "binance")["rows"].([]domain.Top30Row)
+	for _, r := range rows {
+		if r.EdgexListed {
+			t.Fatalf("EdgexListed must stay false when universe missing, got %+v", r)
+		}
+		if r.ListedStatus != "" {
+			t.Fatalf("ListedStatus must stay blank when universe missing, got %q", r.ListedStatus)
+		}
+		if r.ActionStatus != domain.StatusInsufficientHistory {
+			t.Fatalf("Action status must be insufficient_history without universe, got %q", r.ActionStatus)
+		}
+		// Coverage is still populated because it doesn't depend on universe.
+		if r.CoverageStatus != domain.StatusComplete {
+			t.Fatalf("CoverageStatus must be complete even without universe, got %q", r.CoverageStatus)
+		}
+	}
+}
+
+func TestBaseAssetFromSymbol(t *testing.T) {
+	cases := map[string]string{
+		"BTC-USDT (perp)":      "BTC",
+		"eth-usdc (perp)":      "ETH",
+		"1000PEPE-USDT (perp)": "1000PEPE",
+		"SOL":                  "SOL",
+		"":                     "",
+		"  BTC-USDT (perp)  ":  "BTC",
+	}
+	for in, want := range cases {
+		if got := baseAssetFromSymbol(in); got != want {
+			t.Fatalf("baseAssetFromSymbol(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestDeriveSuggestedActionLadder(t *testing.T) {
+	tests := []struct {
+		platform   string
+		listed     bool
+		cov        int
+		loaded     bool
+		wantAction string
+		wantStatus string
+	}{
+		{"binance", true, 7, true, "考虑拉新活动", domain.StatusComplete},
+		{"binance", true, 6, true, "考虑拉新活动", domain.StatusComplete},
+		{"binance", true, 5, true, "保持", domain.StatusComplete},
+		{"binance", true, 0, true, "保持", domain.StatusComplete},
+		{"binance", false, 7, true, "优先上架", domain.StatusComplete},
+		{"binance", false, 5, true, "评估上架", domain.StatusComplete},
+		{"binance", false, 4, true, "观望", domain.StatusComplete},
+		{"edgeX", true, 7, true, "", ""},                                   // edgeX tab gets no action
+		{"binance", false, 7, false, "", domain.StatusInsufficientHistory}, // universe missing
+	}
+	for _, tc := range tests {
+		gotAction, gotStatus := deriveSuggestedAction(tc.platform, tc.listed, tc.cov, tc.loaded)
+		if gotAction != tc.wantAction || gotStatus != tc.wantStatus {
+			t.Fatalf("deriveSuggestedAction(%+v) = (%q,%q), want (%q,%q)", tc, gotAction, gotStatus, tc.wantAction, tc.wantStatus)
+		}
+	}
+}
+
+func pickBySymbol(rows []domain.Top30Row, sym string) domain.Top30Row {
+	for _, r := range rows {
+		if r.Symbol == sym {
+			return r
+		}
+	}
+	return domain.Top30Row{}
 }
 
 func TestNextDailyBackfillDelayAlwaysFuture(t *testing.T) {

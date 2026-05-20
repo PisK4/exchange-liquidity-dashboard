@@ -1,0 +1,94 @@
+# listed_universe.yaml
+# Per-platform union of base assets currently listed across all market
+# types (perp + spot). Regenerate via: cd backend && make catalog.
+# Consumed at runtime by the CoinGecko collector to fill the
+# "edgeX 已上线?" column on the Top30 tab.
+#
+# Bootstrap note: this initial revision only carries the edgeX section,
+# derived from the 2026-05-20 raw-instruments dumps (perp-v1 ∪ perp-v2 ∪
+# spot). Competitor sections will be filled in on the next monthly
+# `make catalog` run — they are optional for the Top30 column because
+# "竞品 Top30 覆盖" is computed from CoinGecko Top30 cross-tabulation,
+# not from this file.
+schema_version: 1
+generated_at: "2026-05-20T00:00:00Z"
+generated_by: bootstrap-from-raw-dumps
+platforms:
+  edgeX:
+    base_assets:
+      - 1000BONK
+      - 1000PEPE
+      - AAPL
+      - AAVE
+      - ADA
+      - AMD
+      - AMZN
+      - ARB
+      - ASTER
+      - ATOM
+      - AVGO
+      - BCH
+      - BNB
+      - BTC
+      - CAKE
+      - CFX
+      - CL
+      - COIN
+      - COPPER
+      - CRCL
+      - CRO
+      - CRV
+      - DOGE
+      - DOT
+      - EDGE
+      - ENA
+      - ETC
+      - ETH
+      - FARTCOIN
+      - FIL
+      - GOOG
+      - HOOD
+      - HYPE
+      - IAU
+      - ICP
+      - INTC
+      - KAITO
+      - LINK
+      - LIT
+      - LTC
+      - MARU
+      - META
+      - MON
+      - MSFT
+      - MSTR
+      - NATGAS
+      - NVDA
+      - OKB
+      - ONDO
+      - OP
+      - PAXG
+      - PENDLE
+      - PLTR
+      - PUMP
+      - QQQ
+      - SILVER
+      - SLV
+      - SOL
+      - SPY
+      - SUI
+      - TAO
+      - TON
+      - TRUMP
+      - TRX
+      - TSLA
+      - UNI
+      - VIRTUAL
+      - WLD
+      - WLFI
+      - XAG
+      - XAU
+      - XAUT
+      - XLM
+      - XMR
+      - XRP
+      - ZEC

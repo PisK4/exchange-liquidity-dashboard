@@ -138,19 +138,38 @@ func (s *Store) persistDailyVolumeAggregate(ctx context.Context, row domain.Dail
 	}
 	source := defaultString(row.DataSource, domain.DataSourceNative)
 
-	// Backfill rows yield to any live row already covering the same slot.
-	if source == domain.DataSourceCoinGeckoBackfill {
-		hasLive, err := s.hasLiveDailyRow(ctx, db, row)
+	// Backfill rows yield to any higher-priority row already covering the
+	// same slot; live rows evict every lower-priority backfill row.
+	switch source {
+	case domain.DataSourceCoinGeckoBackfill:
+		has, err := s.hasHigherPriorityDailyRow(ctx, db, row, []string{
+			domain.DataSourceNative, domain.DataSourceCoinGecko, domain.DataSourceNativeBackfill,
+		})
 		if err != nil {
 			return err
 		}
-		if hasLive {
+		if has {
 			return nil
 		}
-	} else {
-		// Live rows clear out any stale backfill row for the same slot so
-		// the share aggregation cannot double-count after reload.
-		if err := s.deleteBackfillDailyRow(ctx, db, row); err != nil {
+	case domain.DataSourceNativeBackfill:
+		has, err := s.hasHigherPriorityDailyRow(ctx, db, row, []string{
+			domain.DataSourceNative, domain.DataSourceCoinGecko,
+		})
+		if err != nil {
+			return err
+		}
+		if has {
+			return nil
+		}
+		if err := s.deleteDailyRowsBySource(ctx, db, row, []string{
+			domain.DataSourceCoinGeckoBackfill,
+		}); err != nil {
+			return err
+		}
+	default:
+		if err := s.deleteDailyRowsBySource(ctx, db, row, []string{
+			domain.DataSourceCoinGeckoBackfill, domain.DataSourceNativeBackfill,
+		}); err != nil {
 			return err
 		}
 	}
@@ -185,49 +204,61 @@ func (s *Store) persistDailyVolumeAggregate(ctx context.Context, row domain.Dail
 	return err
 }
 
-// hasLiveDailyRow reports whether a coingecko or native row already exists
-// for the (day, platform, display_symbol) slot of `row`. Used to short-circuit
-// backfill writes.
-func (s *Store) hasLiveDailyRow(ctx context.Context, db *sql.DB, row domain.DailyVolumeAggregate) (bool, error) {
+// hasHigherPriorityDailyRow reports whether a row from any of the given
+// data sources already covers the same (day, platform, display_symbol) slot
+// as `row`. Used by lower-priority writers (backfill paths) to short-circuit
+// inserts that would be shadowed by a more trusted source anyway.
+func (s *Store) hasHigherPriorityDailyRow(ctx context.Context, db *sql.DB, row domain.DailyVolumeAggregate, sources []string) (bool, error) {
+	if len(sources) == 0 {
+		return false, nil
+	}
+	placeholders, args := buildInClauseArgs(sources)
 	var n int
 	if row.DisplaySymbol == "" {
-		err := db.QueryRowContext(ctx,
-			`SELECT COUNT(*) FROM t_daily_volume_aggregate
+		query := `SELECT COUNT(*) FROM t_daily_volume_aggregate
 			   WHERE day = ? AND platform = ? AND display_symbol IS NULL
-			     AND data_source IN (?, ?)`,
-			row.Day, row.Platform, domain.DataSourceCoinGecko, domain.DataSourceNative,
-		).Scan(&n)
+			     AND data_source IN (` + placeholders + `)`
+		err := db.QueryRowContext(ctx, query, append([]any{row.Day, row.Platform}, args...)...).Scan(&n)
 		return n > 0, err
 	}
-	err := db.QueryRowContext(ctx,
-		`SELECT COUNT(*) FROM t_daily_volume_aggregate
+	query := `SELECT COUNT(*) FROM t_daily_volume_aggregate
 		   WHERE day = ? AND platform = ? AND display_symbol = ?
-		     AND data_source IN (?, ?)`,
-		row.Day, row.Platform, row.DisplaySymbol, domain.DataSourceCoinGecko, domain.DataSourceNative,
-	).Scan(&n)
+		     AND data_source IN (` + placeholders + `)`
+	err := db.QueryRowContext(ctx, query, append([]any{row.Day, row.Platform, row.DisplaySymbol}, args...)...).Scan(&n)
 	return n > 0, err
 }
 
-// deleteBackfillDailyRow removes any coingecko_backfill row for the same
-// (day, platform, display_symbol) slot as `row`. Invoked when a fresh
-// coingecko / native row arrives so the live row stands alone.
-func (s *Store) deleteBackfillDailyRow(ctx context.Context, db *sql.DB, row domain.DailyVolumeAggregate) error {
+// deleteDailyRowsBySource removes any row whose data_source falls into the
+// given list for the same (day, platform, display_symbol) slot as `row`.
+// Invoked when a higher-priority writer lands so the lower-priority rows
+// don't shadow the in-memory dedup on reload-from-MySQL.
+func (s *Store) deleteDailyRowsBySource(ctx context.Context, db *sql.DB, row domain.DailyVolumeAggregate, sources []string) error {
+	if len(sources) == 0 {
+		return nil
+	}
+	placeholders, args := buildInClauseArgs(sources)
 	if row.DisplaySymbol == "" {
-		_, err := db.ExecContext(ctx,
-			`DELETE FROM t_daily_volume_aggregate
+		query := `DELETE FROM t_daily_volume_aggregate
 			   WHERE day = ? AND platform = ? AND display_symbol IS NULL
-			     AND data_source = ?`,
-			row.Day, row.Platform, domain.DataSourceCoinGeckoBackfill,
-		)
+			     AND data_source IN (` + placeholders + `)`
+		_, err := db.ExecContext(ctx, query, append([]any{row.Day, row.Platform}, args...)...)
 		return err
 	}
-	_, err := db.ExecContext(ctx,
-		`DELETE FROM t_daily_volume_aggregate
+	query := `DELETE FROM t_daily_volume_aggregate
 		   WHERE day = ? AND platform = ? AND display_symbol = ?
-		     AND data_source = ?`,
-		row.Day, row.Platform, row.DisplaySymbol, domain.DataSourceCoinGeckoBackfill,
-	)
+		     AND data_source IN (` + placeholders + `)`
+	_, err := db.ExecContext(ctx, query, append([]any{row.Day, row.Platform, row.DisplaySymbol}, args...)...)
 	return err
+}
+
+func buildInClauseArgs(values []string) (string, []any) {
+	placeholders := strings.Repeat("?,", len(values))
+	placeholders = strings.TrimRight(placeholders, ",")
+	args := make([]any, 0, len(values))
+	for _, v := range values {
+		args = append(args, v)
+	}
+	return placeholders, args
 }
 
 func (s *Store) persistTop30(ctx context.Context, platform string, rows []domain.Top30Row) error {

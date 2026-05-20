@@ -123,8 +123,10 @@ export type LiquiditySnapshot = {
     edgex_depth_by_tier?: Record<string, DepthTierMetrics>;
     edgex_vs_median_by_tier?: Record<string, number>;
     edgex_spread_bp?: number;
+    edgex_spread_10m_bp?: number;
     edgex_spread_10m_status?: ApiStatus;
     edgex_24h_share_pct?: number;
+    symbol_share_7d_pct?: number;
     symbol_share_7d_status?: ApiStatus;
     symbol_share_wow_status?: ApiStatus;
   };

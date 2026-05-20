@@ -6,7 +6,7 @@ import { PlatformCell, platformDisplayName } from '@/components/platform-cell';
 import { ShareTrendChart, type ShareTrendPoint } from '@/components/share-trend-chart';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
-import { bp, money, moneyM, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Snapshot } from '@/lib/api/client';
+import { bp, money, moneyM, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
 
 type Query = Record<string, string | undefined>;
 
@@ -216,12 +216,16 @@ function LiquidityTab({ data, query, tier, symbol }: { data: DashboardData; quer
         </section>
         <section className="panel span-6 row-h-sm">
           <div className="panel-head"><span className="panel-title">当前交易对 7d 市占率</span><span className="panel-tag">单币种</span></div>
-          <div className="big-number muted">—</div>
+          {typeof data.liquidity.kpis?.symbol_share_7d_pct === 'number'
+            ? <div className="big-number">{pct(data.liquidity.kpis.symbol_share_7d_pct)}</div>
+            : <div className="big-number muted">—</div>}
           <StatusBadge status={data.liquidity.kpis?.symbol_share_7d_status ?? 'unsupported'} />
         </section>
         <section className="panel span-6 row-h-sm">
           <div className="panel-head"><span className="panel-title">edgeX spread (10min 均值)</span><span className="panel-tag">盘口</span></div>
-          <div className="big-number muted">—</div>
+          {typeof data.liquidity.kpis?.edgex_spread_10m_bp === 'number'
+            ? <div className="big-number">{bp(data.liquidity.kpis.edgex_spread_10m_bp)}</div>
+            : <div className="big-number muted">—</div>}
           <StatusBadge status={data.liquidity.kpis?.edgex_spread_10m_status ?? 'unsupported'} />
         </section>
         <section className="panel span-6 row-h-sm">
@@ -342,6 +346,33 @@ function ShareTab({ data, query }: { data: ShareSnapshot; query: Query }) {
   );
 }
 
+const COMPETITOR_TOTAL = 9;
+
+function isResolvedStatus(status: string | undefined): boolean {
+  return !status || status === 'complete';
+}
+
+function renderListedCell(row: Top30Row) {
+  if (row.edgex_listed_status && !isResolvedStatus(row.edgex_listed_status)) {
+    return <StatusBadge status={row.edgex_listed_status} />;
+  }
+  return row.edgex_listed ? '是' : '否';
+}
+
+function renderCoverageCell(row: Top30Row) {
+  if (row.competitor_top30_coverage_status && !isResolvedStatus(row.competitor_top30_coverage_status)) {
+    return <StatusBadge status={row.competitor_top30_coverage_status} />;
+  }
+  return `${row.competitor_top30_coverage ?? 0} / ${COMPETITOR_TOTAL}`;
+}
+
+function renderActionCell(row: Top30Row) {
+  if (row.suggested_action_status && !isResolvedStatus(row.suggested_action_status)) {
+    return <StatusBadge status={row.suggested_action_status} />;
+  }
+  return row.suggested_action ?? '';
+}
+
 function Top30Tab({ data, query, platform }: { data: Top30Snapshot; query: Query; platform: string }) {
   const platforms = ['binance', 'okx', 'bybit', 'bitget', 'mexc', 'gate', 'bingx', 'hyperliquid', 'lighter', 'edgeX'];
   return (
@@ -349,7 +380,7 @@ function Top30Tab({ data, query, platform }: { data: Top30Snapshot; query: Query
       <section className="panel">
         <div className="panel-head"><span className="panel-title">各平台 Top30 成交量</span><PillGroup items={platforms} active={platform} query={{ ...query, tab: 'top30' }} param="platform" /></div>
         {data.status === 'unsupported' ? <StatusEmptyState status="unsupported" message={data.platform === 'edgeX' ? 'not implemented' : '尚未返回该平台 Top30 排行，等待下一次拉取'} /> : null}
-        <div className="table-wrap"><table className="tbl"><thead><tr><th className="num">#</th><th>Symbol</th><th className="num">24h Vol</th><th className="num">7d Vol</th><th className="num">7d Δ</th><th className="num">edgeX 已上线?</th><th className="num">竞品 Top30 覆盖</th><th>建议动作</th></tr></thead><tbody>{data.rows.map(row => <tr key={`${row.rank}-${row.symbol}`}><td className="num">{row.rank}</td><td>{row.symbol}</td><td className="num">{row.status === 'unsupported' ? '—' : money(row.volume_24h_usd)}</td><td className="num">{typeof row.volume_7d_usd === 'number' ? money(row.volume_7d_usd) : <StatusBadge status={row.volume_7d_status ?? 'unsupported'} />}</td><td className="num">{typeof row.delta_7d_pct === 'number' ? pct(row.delta_7d_pct) : <StatusBadge status={row.delta_7d_status ?? 'unsupported'} />}</td><td className="num">{row.edgex_listed_status ? <StatusBadge status={row.edgex_listed_status} /> : row.edgex_listed ? '是' : '否'}</td><td className="num">{row.competitor_top30_coverage_status ? <StatusBadge status={row.competitor_top30_coverage_status} /> : row.competitor_top30_coverage}</td><td>{row.suggested_action_status ? <StatusBadge status={row.suggested_action_status} /> : row.suggested_action}</td></tr>)}</tbody></table></div>
+        <div className="table-wrap"><table className="tbl"><thead><tr><th className="num">#</th><th>Symbol</th><th className="num">24h Vol</th><th className="num">7d Vol</th><th className="num">7d Δ</th><th className="num">edgeX 已上线?</th><th className="num">竞品 Top30 覆盖</th><th>建议动作</th></tr></thead><tbody>{data.rows.map(row => <tr key={`${row.rank}-${row.symbol}`}><td className="num">{row.rank}</td><td>{row.symbol}</td><td className="num">{row.status === 'unsupported' ? '—' : money(row.volume_24h_usd)}</td><td className="num">{typeof row.volume_7d_usd === 'number' ? money(row.volume_7d_usd) : <StatusBadge status={row.volume_7d_status ?? 'unsupported'} />}</td><td className="num">{typeof row.delta_7d_pct === 'number' ? pct(row.delta_7d_pct) : <StatusBadge status={row.delta_7d_status ?? 'unsupported'} />}</td><td className="num">{renderListedCell(row)}</td><td className="num">{renderCoverageCell(row)}</td><td>{renderActionCell(row)}</td></tr>)}</tbody></table></div>
       </section>
     </div>
   );

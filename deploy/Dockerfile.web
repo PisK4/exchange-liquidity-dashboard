@@ -8,6 +8,10 @@ FROM node:20-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY web/ ./
+# NEXT_PUBLIC_* values are inlined into the client bundle by `next build`,
+# so this ARG must hold the URL the user's browser will hit, not a Docker
+# network alias. Setting NEXT_PUBLIC_API_BASE at container runtime has no
+# effect on the already-built client JS.
 ARG NEXT_PUBLIC_API_BASE=http://localhost:8080
 ENV NEXT_PUBLIC_API_BASE=$NEXT_PUBLIC_API_BASE
 RUN npm run build

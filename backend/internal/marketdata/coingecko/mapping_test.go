@@ -146,6 +146,7 @@ func TestNormaliseSymbol(t *testing.T) {
 		in   string
 		want string
 	}{
+		// Plain shapes.
 		{"BTCUSDT", "BTC-USDT (perp)"},
 		{"ETH-USDT", "ETH-USDT (perp)"},
 		{"sol-usdt", "SOL-USDT (perp)"},
@@ -153,10 +154,44 @@ func TestNormaliseSymbol(t *testing.T) {
 		{"ETHUSDC", "ETH-USDC (perp)"},
 		{"WEIRD", "WEIRD"},
 		{"", ""},
+		// OKX shapes — "-SWAP" suffix must collapse.
+		{"BTC-USDT-SWAP", "BTC-USDT (perp)"},
+		{"ETH-USDC-SWAP", "ETH-USDC (perp)"},
+		// Bitget shapes — "_UMCBL"/"_DMCBL"/"_CMCBL" suffixes must collapse.
+		{"BTCUSDT_UMCBL", "BTC-USDT (perp)"},
+		{"BTCUSD_DMCBL", "BTC-USD (perp)"},
+		{"BTCUSDC_CMCBL", "BTC-USDC (perp)"},
+		// MEXC / Gate / Lighter shapes — "_" between base and quote must drop.
+		{"BTC_USDT", "BTC-USDT (perp)"},
+		{"ETH_USDC", "ETH-USDC (perp)"},
+		{"1000PEPE_USDT", "1000PEPE-USDT (perp)"},
+		// Idempotent: running normaliser on an already-normalised string
+		// returns the same value so retries from history merge cleanly.
+		{"BTC-USDT (perp)", "BTC-USDT (perp)"},
 	}
 	for _, c := range cases {
 		if got := NormaliseSymbol(c.in); got != c.want {
 			t.Fatalf("NormaliseSymbol(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestNormaliseSymbolConvergesAcrossNineVenues(t *testing.T) {
+	// All nine of these forms describe the SAME BTC USDT perp; if any of
+	// them diverge from "BTC-USDT (perp)" the Top30 coverage column will
+	// under-count the symbol's competitor reach (regression guard for the
+	// 2026-05-20 cov=3/9 bug).
+	rawForms := []string{
+		"BTCUSDT",       // binance / bybit (compact)
+		"BTC-USDT",      // bingx
+		"BTC-USDT-SWAP", // okx
+		"BTCUSDT_UMCBL", // bitget V1 USDT-M
+		"BTC_USDT",      // mexc / gate / lighter
+	}
+	const want = "BTC-USDT (perp)"
+	for _, raw := range rawForms {
+		if got := NormaliseSymbol(raw); got != want {
+			t.Fatalf("NormaliseSymbol(%q) = %q, want %q", raw, got, want)
 		}
 	}
 }
