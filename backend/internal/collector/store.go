@@ -4,8 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"os"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"edgex-dashboard/backend/internal/config"
@@ -22,6 +24,17 @@ type Store struct {
 	status          []domain.CollectionStatus
 	run             RunSummary
 	db              *sql.DB
+
+	// liveSymbols holds the symbol slice consumed by the API surface
+	// (Symbols / SymbolMappings / Coverage). It starts as a copy of
+	// cfg.Symbols and is hot-swapped by ReloadCatalogFrontendMeta when
+	// instrument_catalog.yaml changes on disk. Only display-side metadata
+	// (FrontendURL / URLVerified / CatalogStatus) is hot-reloaded; the
+	// collector keeps reading the immutable cfg.Symbols snapshot it
+	// captured at construction so adapter-critical fields (api_symbol,
+	// contract_id, market_id, contract_size, quanto_multiplier,
+	// api_level_cap) cannot change mid-cycle.
+	liveSymbols atomic.Pointer[[]domain.SymbolSub]
 
 	// CoinGecko-only path (R3: strictly segregated from native volumes map).
 	// cgPlatformVolumes holds the latest /derivatives 24h aggregate per
@@ -52,7 +65,7 @@ type RunSummary struct {
 }
 
 func NewStore(cfg config.Config) *Store {
-	return &Store{
+	s := &Store{
 		cfg:                  cfg,
 		platforms:            map[string]domain.PlatformSnapshot{},
 		platformHistory:      map[string][]domain.PlatformSnapshot{},
@@ -61,6 +74,106 @@ func NewStore(cfg config.Config) *Store {
 		dailyPlatformVolumes: map[string][]domain.DailyVolumeAggregate{},
 		dailySymbolVolumes:   map[string][]domain.DailyVolumeAggregate{},
 		top30ByPlatform:      map[string][]domain.Top30Row{},
+	}
+	initial := append([]domain.SymbolSub(nil), cfg.Symbols...)
+	s.liveSymbols.Store(&initial)
+	return s
+}
+
+// symbolSnapshot returns the slice currently published to the API surface.
+// Callers must treat the returned slice as read-only; it is shared with all
+// future readers until the next ReloadCatalogFrontendMeta swap.
+func (s *Store) symbolSnapshot() []domain.SymbolSub {
+	if p := s.liveSymbols.Load(); p != nil {
+		return *p
+	}
+	return s.cfg.Symbols
+}
+
+// ReloadCatalogFrontendMeta rebuilds the live symbol slice from the
+// immutable cfg.Symbols base and overwrites only the display-side metadata
+// fields (FrontendURL / URLVerified / CatalogStatus) from cat. Other catalog
+// fields are intentionally ignored: changing api_symbol / contract_id /
+// market_id / contract_size / quanto_multiplier / api_level_cap mid-process
+// would silently desync the running collector and its persisted rows. Such
+// fields still require a full restart. Returns the number of symbols
+// touched (entries that had at least one of the three metadata fields
+// changed compared to the current live slice).
+func (s *Store) ReloadCatalogFrontendMeta(cat config.Catalog) int {
+	base := append([]domain.SymbolSub(nil), s.cfg.Symbols...)
+	if len(cat.Platforms) > 0 {
+		for i := range base {
+			platform := cat.Platforms[base[i].Platform]
+			if platform == nil {
+				continue
+			}
+			entry, ok := platform[base[i].Canonical]
+			if !ok {
+				continue
+			}
+			base[i].FrontendURL = entry.FrontendURL
+			base[i].URLVerified = entry.URLVerified
+			base[i].CatalogStatus = entry.CatalogStatus
+		}
+	}
+	previous := s.symbolSnapshot()
+	changed := 0
+	if len(previous) == len(base) {
+		for i := range base {
+			if base[i].FrontendURL != previous[i].FrontendURL ||
+				base[i].URLVerified != previous[i].URLVerified ||
+				base[i].CatalogStatus != previous[i].CatalogStatus {
+				changed++
+			}
+		}
+	} else {
+		changed = len(base)
+	}
+	s.liveSymbols.Store(&base)
+	return changed
+}
+
+// WatchCatalog polls the catalog yaml mtime every `interval` and applies a
+// hot-reload of frontend metadata whenever the file changes. The first
+// observed mtime is recorded but not treated as a change so a freshly
+// booted process does not log a spurious reload. The watcher exits when
+// ctx is done; transient stat / parse errors are logged and the loop
+// continues so a half-saved editor write does not kill the watcher.
+func (s *Store) WatchCatalog(ctx context.Context, path string, interval time.Duration) {
+	if interval <= 0 {
+		interval = 2 * time.Second
+	}
+	var lastMtime int64
+	if fi, err := os.Stat(path); err == nil {
+		lastMtime = fi.ModTime().UnixNano()
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			fi, err := os.Stat(path)
+			if err != nil {
+				if !os.IsNotExist(err) {
+					log.Printf("instrument_catalog.yaml stat: %v", err)
+				}
+				continue
+			}
+			mt := fi.ModTime().UnixNano()
+			if mt == lastMtime {
+				continue
+			}
+			lastMtime = mt
+			cat, err := config.LoadCatalog(path)
+			if err != nil {
+				log.Printf("instrument_catalog.yaml reload failed: %v", err)
+				continue
+			}
+			changed := s.ReloadCatalogFrontendMeta(cat)
+			log.Printf("instrument_catalog.yaml reloaded (%d symbol metadata updates)", changed)
+		}
 	}
 }
 
@@ -204,7 +317,7 @@ func (s *Store) SaveStatus(rows []domain.CollectionStatus, run RunSummary) {
 func (s *Store) Symbols() []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, sub := range s.cfg.Symbols {
+	for _, sub := range s.symbolSnapshot() {
 		if !seen[sub.DisplaySymbol] {
 			seen[sub.DisplaySymbol] = true
 			out = append(out, sub.DisplaySymbol)
@@ -215,14 +328,14 @@ func (s *Store) Symbols() []string {
 }
 
 func (s *Store) SymbolMappings() []domain.SymbolSub {
-	return append([]domain.SymbolSub(nil), s.cfg.Symbols...)
+	return append([]domain.SymbolSub(nil), s.symbolSnapshot()...)
 }
 
 func (s *Store) Coverage() map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rows := []map[string]any{}
-	for _, sub := range s.cfg.Symbols {
+	for _, sub := range s.symbolSnapshot() {
 		p, ok := s.platforms[key(sub.Platform, sub.DisplaySymbol)]
 		status := domain.StatusStale
 		if ok {

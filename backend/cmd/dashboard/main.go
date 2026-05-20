@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"edgex-dashboard/backend/internal/adapter"
@@ -19,9 +20,11 @@ func main() {
 	role := flag.String("role", "all", "role: api, collector, or all")
 	runOnce := flag.Bool("run-once", false, "run one collection cycle at startup")
 	mysqlDSN := flag.String("mysql-dsn", os.Getenv("DASHBOARD_MYSQL_DSN"), "optional MySQL DSN, for example root:root@tcp(127.0.0.1:3306)/edgex_dashboard?parseTime=true")
+	configDir := flag.String("config-dir", "../config", "directory containing dashboard yaml configs")
+	catalogReloadInterval := flag.Duration("catalog-reload-interval", 2*time.Second, "polling interval for instrument_catalog.yaml hot reload; 0 disables the watcher")
 	flag.Parse()
 
-	cfg, err := config.Load("../config")
+	cfg, err := config.Load(*configDir)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
@@ -45,6 +48,11 @@ func main() {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	if *catalogReloadInterval > 0 {
+		catalogPath := filepath.Join(*configDir, "instrument_catalog.yaml")
+		go store.WatchCatalog(ctx, catalogPath, *catalogReloadInterval)
+		log.Printf("watching %s for frontend metadata hot reload (interval=%s)", catalogPath, *catalogReloadInterval)
+	}
 	lighterProvider := adapter.NewLighterWSProvider(cfg.Runtime.LighterWSURL, cfg.Runtime.LighterStaleAfter)
 	go lighterProvider.Run(ctx, adapter.LighterMarketIDs())
 	waitForLighter(ctx, lighterProvider)
