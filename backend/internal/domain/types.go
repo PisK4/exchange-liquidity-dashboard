@@ -3,19 +3,22 @@ package domain
 import "time"
 
 const (
-	StatusComplete            = "complete"
-	StatusPartial             = "partial"
-	StatusAggregatedOrderbook = "aggregated_orderbook"
-	StatusWSLimitedDepth      = "ws_limited_depth"
-	StatusStale               = "stale"
-	StatusUnsupported         = "unsupported"
-	StatusError               = "error"
+	StatusComplete             = "complete"
+	StatusPartial              = "partial"
+	StatusAggregatedOrderbook  = "aggregated_orderbook"
+	StatusWSLimitedDepth       = "ws_limited_depth"
+	StatusStale                = "stale"
+	StatusUnsupported          = "unsupported"
+	StatusError                = "error"
+	StatusInsufficientHistory  = "insufficient_history"
+
+	// HistoryInsufficient is a legacy alias kept for backwards compatibility.
+	// New code should prefer StatusInsufficientHistory.
+	HistoryInsufficient = StatusInsufficientHistory
 
 	ReasonAPILevelCap = "api_level_cap"
 	ReasonSparseBook  = "sparse_book"
 	ReasonUnknown     = "unknown"
-
-	HistoryInsufficient = "insufficient_history"
 
 	FreshnessLive    = "live"
 	FreshnessDelayed = "delayed"
@@ -24,6 +27,9 @@ const (
 	SourceAggregatedOrderbook = "aggregated_orderbook"
 	SourceWSLocalBook         = "ws_local_book"
 	SourceWSLimitedDepth      = "ws_limited_depth"
+
+	DataSourceCoinGecko = "coingecko"
+	DataSourceNative    = "native"
 )
 
 type SymbolSub struct {
@@ -149,6 +155,8 @@ type Top30Row struct {
 	Platform       string    `json:"platform"`
 	Symbol         string    `json:"symbol"`
 	Volume24HUSD   float64   `json:"volume_24h_usd"`
+	Volume7DUSD    *float64  `json:"volume_7d_usd,omitempty"`
+	Delta7DPct     *float64  `json:"delta_7d_pct,omitempty"`
 	Volume7DStatus string    `json:"volume_7d_status"`
 	Delta7DStatus  string    `json:"delta_7d_status"`
 	EdgexListed    bool      `json:"edgex_listed"`
@@ -160,7 +168,47 @@ type Top30Row struct {
 	SnapshotTS     time.Time `json:"snapshot_ts"`
 	SourceEndpoint string    `json:"source_endpoint"`
 	Status         string    `json:"status"`
+	DataSource     string    `json:"data_source,omitempty"`
 	Error          string    `json:"error,omitempty"`
+}
+
+// PlatformVolumeAggregate captures one platform-level 24h volume / OI reading
+// for use in the Share(24h) view. SnapshotTS is the time at which the upstream
+// source produced this aggregate.
+type PlatformVolumeAggregate struct {
+	Platform        string    `json:"platform"`
+	SnapshotTS      time.Time `json:"snapshot_ts"`
+	Volume24HUSD    float64   `json:"volume_24h_usd"`
+	OpenInterestUSD float64   `json:"open_interest_usd,omitempty"`
+	DataSource      string    `json:"data_source"`
+	SourceEndpoint  string    `json:"source_endpoint,omitempty"`
+	Status          string    `json:"status"`
+}
+
+// DailyVolumeAggregate is one row of per-day platform (and optionally per-symbol)
+// 24h volume, used to build 7d/30d windows for Share() and Top30. Volume24HUSD is
+// always stored as raw USD; MEXC×0.4 / Gate×0.5 discounts are applied only at
+// query time via indicators.AdjustedVolume().
+type DailyVolumeAggregate struct {
+	Day            time.Time `json:"day"`
+	Platform       string    `json:"platform"`
+	DisplaySymbol  string    `json:"display_symbol,omitempty"`
+	Volume24HUSD   float64   `json:"volume_24h_usd"`
+	DataSource     string    `json:"data_source"`
+	SourceEndpoint string    `json:"source_endpoint,omitempty"`
+	Status         string    `json:"status"`
+	SnapshotTS     time.Time `json:"snapshot_ts,omitempty"`
+}
+
+// DerivativesPlatformMeta carries the two-tier mapping required by the
+// CoinGecko derivatives endpoints: exchange_id is used for
+// /derivatives/exchanges/{id} requests, while market_name is the display name
+// emitted as tickers[].market in the /derivatives response and is used to
+// filter the global response down to our 9 target competitors.
+type DerivativesPlatformMeta struct {
+	Platform   string `json:"platform"`
+	ExchangeID string `json:"exchange_id"`
+	MarketName string `json:"market_name"`
 }
 
 type CollectionStatus struct {
