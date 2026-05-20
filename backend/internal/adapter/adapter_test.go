@@ -1,13 +1,30 @@
 package adapter
 
 import (
+	"context"
 	"errors"
+	"io"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"edgex-dashboard/backend/internal/domain"
 )
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+func jsonResponse(body string) *http.Response {
+	return &http.Response{
+		StatusCode: http.StatusOK,
+		Body:       io.NopCloser(strings.NewReader(body)),
+		Header:     make(http.Header),
+	}
+}
 
 func TestClassifyDepthMarksSparseBookPartialWhenTwoPercentNotCovered(t *testing.T) {
 	book := domain.OrderBookSnapshot{
@@ -117,6 +134,93 @@ func TestTierDepthMetricsSelectsAggregatedGateBookForDeepTier(t *testing.T) {
 	got := TierDepthMetrics(book, 0.02)
 	if got.DepthStatus != domain.StatusAggregatedOrderbook || got.SourceID != "gate_agg_10" || got.DepthSource != domain.SourceAggregatedOrderbook {
 		t.Fatalf("expected deep tier to use aggregated gate book, got %+v", got)
+	}
+}
+
+func TestFetchOKXUsesBooksFullLimit5000(t *testing.T) {
+	var gotURL string
+	a := RESTAdapter{Platform: "okx", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		gotURL = req.URL.String()
+		return jsonResponse(`{"data":[{"bids":[["99","1"]],"asks":[["101","1"]]}]}`), nil
+	})}, MaxAttempts: 1}
+
+	_, err := a.FetchOrderBook(context.Background(), domain.SymbolSub{DisplaySymbol: "BTC-USDT (perp)", APISymbol: "BTC-USDT-SWAP", APILevelCap: 800})
+	if err != nil {
+		t.Fatalf("FetchOrderBook: %v", err)
+	}
+	if !strings.Contains(gotURL, "/api/v5/market/books-full") || !strings.Contains(gotURL, "sz=5000") {
+		t.Fatalf("expected OKX books-full sz=5000, got %s", gotURL)
+	}
+}
+
+func TestFetchBybitUsesLimit1000(t *testing.T) {
+	var gotURL string
+	a := RESTAdapter{Platform: "bybit", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		gotURL = req.URL.String()
+		return jsonResponse(`{"result":{"b":[["99","1"]],"a":[["101","1"]]}}`), nil
+	})}, MaxAttempts: 1}
+
+	_, err := a.FetchOrderBook(context.Background(), domain.SymbolSub{DisplaySymbol: "BTC-USDT (perp)", APISymbol: "BTCUSDT", APILevelCap: 1000})
+	if err != nil {
+		t.Fatalf("FetchOrderBook: %v", err)
+	}
+	if !strings.Contains(gotURL, "limit=1000") {
+		t.Fatalf("expected Bybit limit=1000, got %s", gotURL)
+	}
+}
+
+func TestFetchBingXUsesAPISymbol(t *testing.T) {
+	var gotURL string
+	a := RESTAdapter{Platform: "bingx", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		gotURL = req.URL.String()
+		return jsonResponse(`{"data":{"bids":[["99","1"]],"asks":[["101","1"]]}}`), nil
+	})}, MaxAttempts: 1}
+
+	_, err := a.FetchOrderBook(context.Background(), domain.SymbolSub{DisplaySymbol: "BTC/USDT wrong", APISymbol: "BTC-USDT"})
+	if err != nil {
+		t.Fatalf("FetchOrderBook: %v", err)
+	}
+	if !strings.Contains(gotURL, "symbol=BTC-USDT") {
+		t.Fatalf("expected BingX request to use APISymbol, got %s", gotURL)
+	}
+}
+
+func TestFetchGateAddsAggregatedIntervalBook(t *testing.T) {
+	var urls []string
+	a := RESTAdapter{Platform: "gate", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		urls = append(urls, req.URL.String())
+		return jsonResponse(`{"bids":[{"p":"99","s":"1"}],"asks":[{"p":"101","s":"1"}]}`), nil
+	})}, MaxAttempts: 1}
+
+	book, err := a.FetchOrderBook(context.Background(), domain.SymbolSub{Canonical: "BTC", DisplaySymbol: "BTC-USDT (perp)", APISymbol: "BTC_USDT", QuantoMultiplier: 0.0001})
+	if err != nil {
+		t.Fatalf("FetchOrderBook: %v", err)
+	}
+	if _, ok := book.SourceBooks["gate_agg_10"]; !ok {
+		t.Fatalf("expected gate_agg_10 source book, got %+v", book.SourceBooks)
+	}
+	if len(urls) != 2 || !strings.Contains(urls[1], "interval=10") {
+		t.Fatalf("expected raw and interval=10 requests, got %+v", urls)
+	}
+}
+
+func TestFetchHyperliquidAddsAggregatedSigFigBook(t *testing.T) {
+	var bodies []string
+	a := RESTAdapter{Platform: "hyperliquid", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		data, _ := io.ReadAll(req.Body)
+		bodies = append(bodies, string(data))
+		return jsonResponse(`{"levels":[[{"px":"99","sz":"1"}],[{"px":"101","sz":"1"}]]}`), nil
+	})}, MaxAttempts: 1}
+
+	book, err := a.FetchOrderBook(context.Background(), domain.SymbolSub{DisplaySymbol: "BTC-USDT (perp)", APISymbol: "BTC"})
+	if err != nil {
+		t.Fatalf("FetchOrderBook: %v", err)
+	}
+	if _, ok := book.SourceBooks["hyperliquid_agg_3"]; !ok {
+		t.Fatalf("expected hyperliquid_agg_3 source book, got %+v", book.SourceBooks)
+	}
+	if len(bodies) != 2 || !strings.Contains(bodies[1], `"nSigFigs":3`) {
+		t.Fatalf("expected raw and nSigFigs=3 requests, got %+v", bodies)
 	}
 }
 

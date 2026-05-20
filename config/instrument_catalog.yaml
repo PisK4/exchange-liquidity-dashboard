@@ -30,7 +30,7 @@ platforms:
       base_asset: BTC
       quote_asset: USDT
       settle_asset: USDT
-      api_level_cap: 1000
+      api_level_cap: 2000
       source_endpoint: https://fapi.binance.com/fapi/v1/depth
       catalog_status: TRADING
       frontend_url: https://www.binance.com/zh-CN/futures/BTCUSDT
@@ -40,7 +40,7 @@ platforms:
       base_asset: ETH
       quote_asset: USDT
       settle_asset: USDT
-      api_level_cap: 1000
+      api_level_cap: 2000
       source_endpoint: https://fapi.binance.com/fapi/v1/depth
       catalog_status: TRADING
       frontend_url: https://www.binance.com/zh-CN/futures/ETHUSDT
@@ -50,7 +50,7 @@ platforms:
       base_asset: SOL
       quote_asset: USDT
       settle_asset: USDT
-      api_level_cap: 1000
+      api_level_cap: 2000
       source_endpoint: https://fapi.binance.com/fapi/v1/depth
       catalog_status: TRADING
       frontend_url: https://www.binance.com/zh-CN/futures/SOLUSDT
@@ -62,8 +62,8 @@ platforms:
       base_asset: BTC
       quote_asset: USDT
       settle_asset: USDT
-      api_level_cap: 800
-      source_endpoint: https://www.okx.com/api/v5/market/books
+      api_level_cap: 10000
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
       catalog_status: live
       frontend_url: https://www.okx.com/trade-swap/btc-usdt-swap
       url_verified: false
@@ -72,8 +72,8 @@ platforms:
       base_asset: ETH
       quote_asset: USDT
       settle_asset: USDT
-      api_level_cap: 800
-      source_endpoint: https://www.okx.com/api/v5/market/books
+      api_level_cap: 10000
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
       catalog_status: live
       frontend_url: https://www.okx.com/trade-swap/eth-usdt-swap
       url_verified: false
@@ -82,8 +82,8 @@ platforms:
       base_asset: SOL
       quote_asset: USDT
       settle_asset: USDT
-      api_level_cap: 800
-      source_endpoint: https://www.okx.com/api/v5/market/books
+      api_level_cap: 10000
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
       catalog_status: live
       frontend_url: https://www.okx.com/trade-swap/sol-usdt-swap
       url_verified: false
@@ -94,7 +94,7 @@ platforms:
       base_asset: BTC
       quote_asset: USDT
       settle_asset: USDT
-      api_level_cap: 1000
+      api_level_cap: 2000
       source_endpoint: https://api.bybit.com/v5/market/orderbook
       catalog_status: Trading
       frontend_url: https://www.bybit.com/trade/usdt/BTCUSDT
@@ -104,7 +104,7 @@ platforms:
       base_asset: ETH
       quote_asset: USDT
       settle_asset: USDT
-      api_level_cap: 1000
+      api_level_cap: 2000
       source_endpoint: https://api.bybit.com/v5/market/orderbook
       catalog_status: Trading
       frontend_url: https://www.bybit.com/trade/usdt/ETHUSDT
@@ -114,7 +114,7 @@ platforms:
       base_asset: SOL
       quote_asset: USDT
       settle_asset: USDT
-      api_level_cap: 1000
+      api_level_cap: 2000
       source_endpoint: https://api.bybit.com/v5/market/orderbook
       catalog_status: Trading
       frontend_url: https://www.bybit.com/trade/usdt/SOLUSDT

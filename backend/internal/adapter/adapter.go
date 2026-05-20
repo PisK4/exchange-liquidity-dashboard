@@ -43,6 +43,9 @@ func (a RESTAdapter) Name() string { return a.Platform }
 func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (domain.OrderBookSnapshot, error) {
 	start := time.Now()
 	cap := sub.APILevelCap
+	if recommended := apiLevelCap(a.Platform); recommended > cap {
+		cap = recommended
+	}
 	if cap == 0 {
 		cap = apiLevelCap(a.Platform)
 	}
@@ -87,7 +90,22 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 	}
 	book.Bids = bids
 	book.Asks = asks
-	return finalizeBook(book, defaultSourceID(a.Platform), defaultDepthSource(a.Platform), sub.SourceEndpoint), nil
+	book = finalizeBook(book, defaultSourceID(a.Platform), defaultDepthSource(a.Platform), sub.SourceEndpoint)
+	switch a.Platform {
+	case "gate":
+		if view, viewErr := a.fetchGateAggregatedView(ctx, sub); viewErr == nil {
+			book.SourceBooks[view.SourceID] = view
+		}
+	case "hyperliquid":
+		if view, viewErr := a.fetchHyperliquidAggregatedView(ctx, sub); viewErr == nil {
+			book.SourceBooks[view.SourceID] = view
+		}
+	case "bitget":
+		if view, viewErr := a.fetchBitgetMergeDepthView(ctx, sub); viewErr == nil {
+			book.SourceBooks[view.SourceID] = view
+		}
+	}
+	return book, nil
 }
 
 func (a RESTAdapter) FetchTicker(ctx context.Context, sub domain.SymbolSub) (domain.VolumeSnapshot, error) {
@@ -221,7 +239,7 @@ func (a RESTAdapter) fetchOKX(ctx context.Context, sub domain.SymbolSub) ([]doma
 	var resp struct {
 		Data []struct{ Bids, Asks [][]string }
 	}
-	url := "https://www.okx.com/api/v5/market/books?sz=400&instId=" + sub.APISymbol
+	url := "https://www.okx.com/api/v5/market/books-full?sz=5000&instId=" + sub.APISymbol
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return nil, nil, err
 	}
@@ -233,7 +251,7 @@ func (a RESTAdapter) fetchOKX(ctx context.Context, sub domain.SymbolSub) ([]doma
 
 func (a RESTAdapter) fetchBybit(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
 	var resp struct{ Result struct{ B, A [][]string } }
-	url := "https://api.bybit.com/v5/market/orderbook?category=linear&limit=500&symbol=" + sub.APISymbol
+	url := "https://api.bybit.com/v5/market/orderbook?category=linear&limit=1000&symbol=" + sub.APISymbol
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return nil, nil, err
 	}
@@ -251,11 +269,31 @@ func (a RESTAdapter) fetchBitget(ctx context.Context, sub domain.SymbolSub) ([]d
 	return parseStringLevels(resp.Data.Bids), parseStringLevels(resp.Data.Asks), nil
 }
 
+func (a RESTAdapter) fetchBitgetMergeDepthView(ctx context.Context, sub domain.SymbolSub) (domain.BookView, error) {
+	var resp struct {
+		Data struct{ Bids, Asks [][]string }
+	}
+	url := "https://api.bitget.com/api/v2/mix/market/merge-depth?productType=USDT-FUTURES&precision=scale0&limit=100&symbol=" + sub.APISymbol
+	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
+		return domain.BookView{}, err
+	}
+	return domain.BookView{
+		SourceID:          "bitget_merge_depth",
+		Source:            domain.SourceAggregatedOrderbook,
+		SourceEndpoint:    url,
+		Bids:              parseStringLevels(resp.Data.Bids),
+		Asks:              parseStringLevels(resp.Data.Asks),
+		SnapshotTS:        time.Now().UTC(),
+		APILevelCap:       200,
+		AggregationParams: map[string]string{"precision": "scale0", "limit": "100"},
+	}, nil
+}
+
 func (a RESTAdapter) fetchBingX(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
 	var resp struct {
 		Data struct{ Bids, Asks [][]any }
 	}
-	url := "https://open-api.bingx.com/openApi/swap/v2/quote/depth?limit=1000&symbol=" + strings.TrimSuffix(sub.DisplaySymbol, " (perp)")
+	url := "https://open-api.bingx.com/openApi/swap/v2/quote/depth?limit=1000&symbol=" + sub.APISymbol
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return nil, nil, err
 	}
@@ -308,6 +346,10 @@ func (a RESTAdapter) fetchEdgeX(ctx context.Context, sub domain.SymbolSub) ([]do
 }
 
 func (a RESTAdapter) fetchGate(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
+	return a.fetchGateLevels(ctx, sub, "")
+}
+
+func (a RESTAdapter) fetchGateLevels(ctx context.Context, sub domain.SymbolSub, interval string) ([]domain.Level, []domain.Level, error) {
 	var resp struct{ Bids, Asks []struct{ P, S any } }
 	if sub.QuantoMultiplier <= 0 {
 		return nil, nil, fmt.Errorf("gate %s: quanto_multiplier missing from catalog (run `make catalog`)", sub.Canonical)
@@ -317,14 +359,47 @@ func (a RESTAdapter) fetchGate(ctx context.Context, sub domain.SymbolSub) ([]dom
 		contract = strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
 	}
 	url := "https://api.gateio.ws/api/v4/futures/usdt/order_book?limit=200&with_id=true&contract=" + contract
+	if interval != "" {
+		url += "&interval=" + interval
+	}
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return nil, nil, err
 	}
 	return multiplySize(parseGateLevels(resp.Bids), sub.QuantoMultiplier), multiplySize(parseGateLevels(resp.Asks), sub.QuantoMultiplier), nil
 }
 
+func (a RESTAdapter) fetchGateAggregatedView(ctx context.Context, sub domain.SymbolSub) (domain.BookView, error) {
+	bids, asks, err := a.fetchGateLevels(ctx, sub, "10")
+	if err != nil {
+		return domain.BookView{}, err
+	}
+	contract := sub.APISymbol
+	if contract == "" {
+		contract = strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
+	}
+	url := "https://api.gateio.ws/api/v4/futures/usdt/order_book?limit=200&with_id=true&contract=" + contract + "&interval=10"
+	return domain.BookView{
+		SourceID:          "gate_agg_10",
+		Source:            domain.SourceAggregatedOrderbook,
+		SourceEndpoint:    url,
+		Bids:              bids,
+		Asks:              asks,
+		SnapshotTS:        time.Now().UTC(),
+		APILevelCap:       400,
+		AggregationParams: map[string]string{"interval": "10"},
+	}, nil
+}
+
 func (a RESTAdapter) fetchHyperliquid(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
-	body, _ := json.Marshal(map[string]any{"type": "l2Book", "coin": sub.APISymbol})
+	return a.fetchHyperliquidLevels(ctx, sub, 0)
+}
+
+func (a RESTAdapter) fetchHyperliquidLevels(ctx context.Context, sub domain.SymbolSub, sigFigs int) ([]domain.Level, []domain.Level, error) {
+	payload := map[string]any{"type": "l2Book", "coin": sub.APISymbol}
+	if sigFigs > 0 {
+		payload["nSigFigs"] = sigFigs
+	}
+	body, _ := json.Marshal(payload)
 	var resp struct {
 		Levels [][]map[string]any `json:"levels"`
 	}
@@ -335,6 +410,23 @@ func (a RESTAdapter) fetchHyperliquid(ctx context.Context, sub domain.SymbolSub)
 		return nil, nil, errors.New("empty hyperliquid levels")
 	}
 	return parseMapLevels(resp.Levels[0]), parseMapLevels(resp.Levels[1]), nil
+}
+
+func (a RESTAdapter) fetchHyperliquidAggregatedView(ctx context.Context, sub domain.SymbolSub) (domain.BookView, error) {
+	bids, asks, err := a.fetchHyperliquidLevels(ctx, sub, 3)
+	if err != nil {
+		return domain.BookView{}, err
+	}
+	return domain.BookView{
+		SourceID:          "hyperliquid_agg_3",
+		Source:            domain.SourceAggregatedOrderbook,
+		SourceEndpoint:    "https://api.hyperliquid.xyz/info",
+		Bids:              bids,
+		Asks:              asks,
+		SnapshotTS:        time.Now().UTC(),
+		APILevelCap:       40,
+		AggregationParams: map[string]string{"nSigFigs": "3"},
+	}, nil
 }
 
 func (a RESTAdapter) fetchLighter(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
@@ -422,7 +514,7 @@ func (a RESTAdapter) fetchBingXVolume(ctx context.Context, sub domain.SymbolSub)
 			LastPrice   string `json:"lastPrice"`
 		}
 	}
-	url := "https://open-api.bingx.com/openApi/swap/v2/quote/ticker?symbol=" + strings.TrimSuffix(sub.DisplaySymbol, " (perp)")
+	url := "https://open-api.bingx.com/openApi/swap/v2/quote/ticker?symbol=" + sub.APISymbol
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return 0, err
 	}
@@ -443,7 +535,10 @@ func (a RESTAdapter) fetchMEXCVolume(ctx context.Context, sub domain.SymbolSub) 
 			Amount24 any `json:"amount24"`
 		}
 	}
-	contract := strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
+	contract := sub.APISymbol
+	if contract == "" {
+		contract = strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
+	}
 	if err := a.fetchJSON(ctx, http.MethodGet, "https://contract.mexc.com/api/v1/contract/ticker?symbol="+contract, nil, &resp); err != nil {
 		return 0, err
 	}
@@ -482,7 +577,10 @@ func (a RESTAdapter) fetchGateVolume(ctx context.Context, sub domain.SymbolSub) 
 	var resp []struct {
 		Volume24HQuote string `json:"volume_24h_quote"`
 	}
-	contract := strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
+	contract := sub.APISymbol
+	if contract == "" {
+		contract = strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
+	}
 	if err := a.fetchJSON(ctx, http.MethodGet, "https://api.gateio.ws/api/v4/futures/usdt/tickers?contract="+contract, nil, &resp); err != nil {
 		return 0, err
 	}

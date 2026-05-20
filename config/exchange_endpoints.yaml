@@ -1,7 +1,7 @@
 endpoints:
   edgeX: https://pro.edgex.exchange
   binance: https://fapi.binance.com/fapi/v1/depth
-  okx: https://www.okx.com/api/v5/market/books
+  okx: https://www.okx.com/api/v5/market/books-full
   bybit: https://api.bybit.com/v5/market/orderbook
   bitget: https://api.bitget.com/api/v2/mix/market/orderbook
   bingx: https://open-api.bingx.com/openApi/swap/v2/quote/depth
