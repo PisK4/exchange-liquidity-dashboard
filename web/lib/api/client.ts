@@ -59,7 +59,7 @@ export type PlatformRow = {
   mid_price?: number;
   spread_bp?: number;
   imbalance_pct?: number;
-  depth_by_tier: Record<string, { bid_usd: number; ask_usd: number; total_usd: number }>;
+  depth_by_tier: Record<string, DepthTierMetrics>;
   vs_median_by_tier?: Record<string, number>;
   rank_0_1?: number;
   depth_status_label?: string;
@@ -67,6 +67,25 @@ export type PlatformRow = {
   sell_slippage_bp: Record<string, number>;
   worst_slippage_bp?: Record<string, number>;
   verdict?: string;
+};
+
+export type DepthTierMetrics = {
+  bid_usd: number;
+  ask_usd: number;
+  total_usd: number;
+  depth_status?: ApiStatus;
+  partial_reason?: string;
+  depth_source?: string;
+  source_id?: string;
+  source_endpoint?: string;
+  levels_returned?: number;
+  bid_levels_returned?: number;
+  ask_levels_returned?: number;
+  api_level_cap?: number;
+  farthest_bid_pct?: number;
+  farthest_ask_pct?: number;
+  farthest_distance_pct?: number;
+  aggregation_params?: Record<string, string>;
 };
 
 export type DashboardMeta = {
@@ -86,7 +105,7 @@ export type LiquiditySnapshot = {
   rows: PlatformRow[];
   competitor_median_by_tier?: Record<string, number>;
   kpis?: {
-    edgex_depth_by_tier?: Record<string, { bid_usd: number; ask_usd: number; total_usd: number }>;
+    edgex_depth_by_tier?: Record<string, DepthTierMetrics>;
     edgex_vs_median_by_tier?: Record<string, number>;
     edgex_spread_bp?: number;
     edgex_spread_10m_status?: ApiStatus;

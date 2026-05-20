@@ -5,7 +5,7 @@ import { DashboardControls, PillGroup } from '@/components/dashboard-controls';
 import { PlatformCell } from '@/components/platform-cell';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
-import { bp, money, moneyM, pct, ratio, type DashboardMeta, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Snapshot } from '@/lib/api/client';
+import { bp, money, moneyM, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Snapshot } from '@/lib/api/client';
 
 type Query = Record<string, string | undefined>;
 
@@ -48,8 +48,39 @@ function snapshotTime(data: DashboardData, tab: string) {
 function tierSeries(rows: PlatformRow[], side: 'bid_usd' | 'ask_usd' | 'total_usd') {
   return rows.map(row => ({
     label: row.platform,
-    values: tierLabels.map(tier => isDisplayableStatus(row.depth_status) && typeof row.depth_by_tier?.[tier]?.[side] === 'number' ? row.depth_by_tier[tier][side] / 1_000_000 : undefined),
+    values: tierLabels.map(tier => {
+      const depth = row.depth_by_tier?.[tier];
+      return isDisplayableStatus(tierStatus(row, tier)) && typeof depth?.[side] === 'number' ? depth[side] / 1_000_000 : undefined;
+    }),
   }));
+}
+
+function tierStatus(row: PlatformRow, tier: string) {
+  return row.depth_by_tier?.[tier]?.depth_status ?? row.depth_status;
+}
+
+function tierReason(row: PlatformRow, tier: string) {
+  const depth = row.depth_by_tier?.[tier];
+  return depth?.partial_reason ?? (depth?.depth_status ? undefined : row.partial_reason);
+}
+
+function depthSourceLabel(depth?: DepthTierMetrics) {
+  if (!depth) return '';
+  const source = depth.source_id || depth.depth_source;
+  if (!source) return '';
+  return depth.depth_status === 'partial' ? `${source} · lower-bound` : source;
+}
+
+function DepthCell({ row, tier, side }: { row: PlatformRow; tier: string; side: 'bid_usd' | 'ask_usd' | 'total_usd' }) {
+  const depth = row.depth_by_tier?.[tier];
+  const source = depthSourceLabel(depth);
+  return (
+    <td className="num">
+      <div>{moneyM(depth?.[side])}</div>
+      <div><StatusBadge status={tierStatus(row, tier)} reason={tierReason(row, tier)} /></div>
+      {source ? <div className="muted">{source}</div> : null}
+    </td>
+  );
 }
 
 export function DashboardShell({ query, data }: { query: Query; data: DashboardData }) {
@@ -128,7 +159,7 @@ function LiquidityTab({ data, query, tier, symbol }: { data: DashboardData; quer
         <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">合计深度曲线 BID + ASK</span></div><LineChart labels={tierLabels.map(t => `±${t}`)} series={tierSeries(rows, 'total_usd')} /></section>
         <section className="panel span-24">
           <div className="panel-head"><span className="panel-title">深度明细 · 平台 × 档位 (M USD)</span><span className="panel-sub">· 合计深度 vs 竞品中位数 / 排名</span></div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num">0.05% BID</th><th className="num">0.05% ASK</th><th className="num">0.1% BID</th><th className="num">0.1% ASK</th><th className="num">1% BID</th><th className="num">1% ASK</th><th className="num">2% BID</th><th className="num">2% ASK</th><th className="num">±0.1% 合计</th><th className="num">vs 中位数</th><th className="num">排名</th><th>状态</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><td className="num">{moneyM(row.depth_by_tier?.['0.05%']?.bid_usd)}</td><td className="num">{moneyM(row.depth_by_tier?.['0.05%']?.ask_usd)}</td><td className="num">{moneyM(row.depth_by_tier?.['0.10%']?.bid_usd)}</td><td className="num">{moneyM(row.depth_by_tier?.['0.10%']?.ask_usd)}</td><td className="num">{moneyM(row.depth_by_tier?.['1.00%']?.bid_usd)}</td><td className="num">{moneyM(row.depth_by_tier?.['1.00%']?.ask_usd)}</td><td className="num">{moneyM(row.depth_by_tier?.['2.00%']?.bid_usd)}</td><td className="num">{moneyM(row.depth_by_tier?.['2.00%']?.ask_usd)}</td><td className="num">{moneyM(row.depth_by_tier?.['0.10%']?.total_usd)}</td><td className="num">{ratio(row.vs_median_by_tier?.['0.10%'])}</td><td className="num">{row.rank_0_1 || '—'}</td><td><StatusBadge status={row.depth_status} reason={row.partial_reason} /> <span className="muted">{row.depth_status_label}</span></td></tr>)}</tbody></table></div>
+          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num">0.05% BID</th><th className="num">0.05% ASK</th><th className="num">0.1% BID</th><th className="num">0.1% ASK</th><th className="num">1% BID</th><th className="num">1% ASK</th><th className="num">2% BID</th><th className="num">2% ASK</th><th className="num">±0.1% 合计</th><th className="num">vs 中位数</th><th className="num">排名</th><th>状态</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><DepthCell row={row} tier="0.05%" side="bid_usd" /><DepthCell row={row} tier="0.05%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="bid_usd" /><DepthCell row={row} tier="0.10%" side="ask_usd" /><DepthCell row={row} tier="1.00%" side="bid_usd" /><DepthCell row={row} tier="1.00%" side="ask_usd" /><DepthCell row={row} tier="2.00%" side="bid_usd" /><DepthCell row={row} tier="2.00%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="total_usd" /><td className="num">{ratio(row.vs_median_by_tier?.['0.10%'])}</td><td className="num">{row.rank_0_1 || '—'}</td><td><StatusBadge status={row.depth_status} reason={row.partial_reason} /> <span className="muted">{row.depth_status_label}</span></td></tr>)}</tbody></table></div>
         </section>
       </div>
     </div>
