@@ -119,9 +119,11 @@ func gateURL(marketType, apiSymbol string) (string, bool) {
 
 func edgexURL(marketType, base, quote string) (string, bool) {
 	pair := base + "-" + quote
+	// Pro front-end uses a slugged display symbol (e.g. BTCUSD) under /en-US/trade.
+	proSymbol := base + "USD"
 	switch marketType {
 	case "perp-v1":
-		return "https://pro.edgex.exchange/trade/" + pair, true
+		return "https://pro.edgex.exchange/en-US/trade/" + proSymbol, true
 	case "perp-v2":
 		return "https://edgex-prod-v2.edgex.exchange/trade/" + pair, true
 	case "spot":

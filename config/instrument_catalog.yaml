@@ -296,8 +296,8 @@ platforms:
       contract_id: "10000001"
       source_endpoint: https://pro.edgex.exchange
       catalog_status: TRADING
-      frontend_url: https://pro.edgex.exchange/trade/BTC-USDT
-      url_verified: false
+      frontend_url: https://pro.edgex.exchange/en-US/trade/BTCUSD
+      url_verified: true
     ETH:
       api_symbol: ETH-USDT
       base_asset: ETH
@@ -307,8 +307,8 @@ platforms:
       contract_id: "10000002"
       source_endpoint: https://pro.edgex.exchange
       catalog_status: TRADING
-      frontend_url: https://pro.edgex.exchange/trade/ETH-USDT
-      url_verified: false
+      frontend_url: https://pro.edgex.exchange/en-US/trade/ETHUSD
+      url_verified: true
     SOL:
       api_symbol: SOL-USDT
       base_asset: SOL
@@ -318,8 +318,8 @@ platforms:
       contract_id: "10000003"
       source_endpoint: https://pro.edgex.exchange
       catalog_status: TRADING
-      frontend_url: https://pro.edgex.exchange/trade/SOL-USDT
-      url_verified: false
+      frontend_url: https://pro.edgex.exchange/en-US/trade/SOLUSD
+      url_verified: true
 
   lighter:
     BTC:
