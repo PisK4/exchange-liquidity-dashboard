@@ -3,7 +3,8 @@ import { AutoRefresh } from '@/components/auto-refresh';
 import { BarChart } from '@/components/chart-primitives';
 import { DashboardControls, PillGroup } from '@/components/dashboard-controls';
 import { LineChart } from '@/components/line-chart';
-import { PlatformCell } from '@/components/platform-cell';
+import { PlatformCell, platformDisplayName } from '@/components/platform-cell';
+import { ShareTrendChart, type ShareTrendPoint } from '@/components/share-trend-chart';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { bp, money, moneyM, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Snapshot } from '@/lib/api/client';
@@ -27,6 +28,12 @@ const tabs = [
 ] as const;
 
 const tierLabels = ['0.05%', '0.10%', '1.00%', '2.00%'];
+const edgexAccent = '#6ccf8e';
+const shareWindowItems = [
+  { label: '日 (24h)', value: '24h' },
+  { label: '周 (7d)', value: '7d' },
+  { label: '月 (30d)', value: '30d' },
+];
 
 function withQuery(query: Query, patch: Query) {
   const params = new URLSearchParams();
@@ -61,6 +68,71 @@ function tierSeries(rows: PlatformRow[], side: 'bid_usd' | 'ask_usd' | 'total_us
 function displayTierLabel(tier: string) {
   const value = Number.parseFloat(tier);
   return Number.isFinite(value) ? `±${value}%` : `±${tier}`;
+}
+
+function WindowPills({ active, query }: { active: string; query: Query }) {
+  return (
+    <span className="pill-group" aria-label="市占率统计窗口">
+      {shareWindowItems.map(item => (
+        <Link className={`pill ${item.value === active ? 'active' : ''}`} href={withQuery(query, { tab: 'share', window: item.value })} key={item.value}>
+          {item.label}
+        </Link>
+      ))}
+    </span>
+  );
+}
+
+function moneyInMillions(value?: number) {
+  return typeof value === 'number' ? Math.round(value / 1_000_000).toLocaleString('en-US') : '—';
+}
+
+function signedPct(value?: number) {
+  if (typeof value !== 'number') return '—';
+  return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
+}
+
+function spreadUSD(row: PlatformRow, spreadBp?: number) {
+  return typeof spreadBp === 'number' && typeof row.mid_price === 'number' ? row.mid_price * spreadBp / 10_000 : undefined;
+}
+
+function slippageUSD(bucket: string, slippageBp?: number) {
+  const amount = Number(bucket);
+  return typeof slippageBp === 'number' && Number.isFinite(amount) ? amount * slippageBp / 10_000 : undefined;
+}
+
+function spreadUSDLabel(rowByPlatform: Map<string, PlatformRow>, label: string, spreadBp?: number) {
+  const row = rowByPlatform.get(label);
+  return usdLabel(row ? spreadUSD(row, spreadBp) : undefined);
+}
+
+function usdLabel(value?: number, digits = 2) {
+  return typeof value === 'number' ? `$${value.toFixed(digits)}` : '$—';
+}
+
+function bucketLabel(bucket: string) {
+  const amount = Number(bucket);
+  if (!Number.isFinite(amount)) return bucket;
+  if (amount >= 1_000_000) return `${amount / 1_000_000}M USD`;
+  return `${amount / 1_000}K USD`;
+}
+
+function SlippagePills({ buckets, active, query }: { buckets: string[]; active: string; query: Query }) {
+  return (
+    <span className="pill-group" aria-label="滑点档位">
+      {buckets.map(item => (
+        <Link className={`pill ${item === active ? 'active' : ''}`} href={withQuery(query, { tab: 'quality', bucket: item })} key={item}>
+          {bucketLabel(item)}
+        </Link>
+      ))}
+    </span>
+  );
+}
+
+function VerdictBadge({ verdict }: { verdict?: string }) {
+  if (verdict === 'unsupported') return <StatusBadge status="unsupported" />;
+  const label = verdict === 'healthy' || verdict === '健康' ? '健康' : verdict === 'watch' || verdict === '关注' ? '关注' : verdict === 'poor' || verdict === '较差' ? '较差' : verdict || '—';
+  const cls = label === '健康' ? 'b-ok' : label === '关注' ? 'b-warn' : label === '较差' ? 'b-bad' : 'b-mute';
+  return <span className={`badge ${cls}`}>{label}</span>;
 }
 
 function tierStatus(row: PlatformRow, tier: string) {
@@ -173,17 +245,41 @@ function LiquidityTab({ data, query, tier, symbol }: { data: DashboardData; quer
 
 function QualityTab({ data, query, bucket, symbol }: { data: DashboardData; query: Query; bucket: string; symbol: string }) {
   const rows = data.quality.rows ?? [];
+  const rowByPlatform = new Map(rows.map(row => [row.platform, row]));
   const buckets = (data.quality.slippage_buckets_usd ?? [50_000, 100_000, 500_000, 1_000_000]).map(String);
   return (
     <div className="page-content active">
       <div className="section-bar"><span>3.5 · <b>盘口质量</b></span><div className="line" /><span>Spread · Imbalance · 模拟下单滑点</span></div>
       <div className="grid">
-        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">Spread (bp)</span></div><BarChart rows={rows.map(row => ({ label: row.platform, value: isDisplayableStatus(row.depth_status) ? row.spread_bp : undefined, status: row.depth_status }))} format={value => `${(value ?? 0).toFixed(2)}`} /></section>
-        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">模拟下单滑点 (bp)</span><PillGroup items={buckets} active={bucket} query={{ ...query, tab: 'quality' }} param="bucket" /></div><BarChart rows={rows.map(row => ({ label: row.platform, value: isDisplayableStatus(row.depth_status) ? row.worst_slippage_bp?.[bucket] : undefined, status: row.depth_status }))} format={value => `${(value ?? 0).toFixed(2)}`} /></section>
-        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">Bid/Ask Imbalance (%)</span></div><BarChart rows={rows.map(row => ({ label: row.platform, value: isDisplayableStatus(row.depth_status) && typeof row.imbalance_pct === 'number' ? Math.abs(row.imbalance_pct) : undefined, status: row.depth_status }))} format={value => `${(value ?? 0).toFixed(2)}%`} /></section>
+        <section className="panel span-8 row-h-md">
+          <div className="panel-head"><span className="panel-title">Spread (bp)</span><span className="panel-sub">· 买一/卖一相对价差</span></div>
+          <BarChart
+            rows={rows.map(row => ({ label: row.platform, value: isDisplayableStatus(row.depth_status) ? row.spread_bp : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : '#5794f2' }))}
+            sort="asc"
+            format={(value, row) => `${(value ?? 0).toFixed(2)} bp · ${spreadUSDLabel(rowByPlatform, row.label, value)}`}
+          />
+        </section>
+        <section className="panel span-8 row-h-md">
+          <div className="panel-head"><span className="panel-title">模拟下单滑点 (bp)</span><span className="panel-sub">· 相对中间价</span><div className="panel-actions"><SlippagePills buckets={buckets} active={bucket} query={query} /></div></div>
+          <div className="note">档位 <b>可配置</b>: 在运营后台 <code>config.slippage_buckets</code> 维护, 默认 [50K / 100K / 500K / 1M] USD。</div>
+          <BarChart
+            rows={rows.map(row => ({ label: row.platform, value: isDisplayableStatus(row.depth_status) ? row.worst_slippage_bp?.[bucket] : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : '#73bf69' }))}
+            sort="asc"
+            format={value => `${(value ?? 0).toFixed(2)} bp · ${usdLabel(slippageUSD(bucket, value), 0)}`}
+          />
+        </section>
+        <section className="panel span-8 row-h-md">
+          <div className="panel-head"><span className="panel-title">Bid/Ask Imbalance (%)</span><span className="panel-sub">· (BID深度-ASK深度)/合计</span></div>
+          <div className="note">正值=买侧偏厚, 负值=卖侧偏厚, |值| &gt; 30% 视为单边报价偏离健康区间。</div>
+          <BarChart
+            signed
+            rows={rows.map(row => ({ label: row.platform, value: isDisplayableStatus(row.depth_status) ? row.imbalance_pct : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : Math.abs(row.imbalance_pct ?? 0) > 30 ? '#f2495c' : '#5794f2' }))}
+            format={value => signedPct(value)}
+          />
+        </section>
         <section className="panel span-24">
-          <div className="panel-head"><span className="panel-title">盘口质量明细</span><span className="panel-sub">· 每行=一个平台</span></div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num">Spread (bp)</th><th className="num">Mid 价格</th><th className="num">Imbalance (%)</th><th className="num">滑点 50K</th><th className="num">滑点 100K</th><th className="num">滑点 500K</th><th className="num">滑点 1M</th><th>盘口结论</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><td className="num">{bp(row.spread_bp)}</td><td className="num">{money(row.mid_price)}</td><td className="num">{typeof row.imbalance_pct === 'number' ? row.imbalance_pct.toFixed(2) : '—'}</td><td className="num">{bp(row.worst_slippage_bp?.['50000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['100000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['500000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['1000000'])}</td><td>{row.verdict === 'unsupported' ? <StatusBadge status="unsupported" /> : row.verdict}</td></tr>)}</tbody></table></div>
+          <div className="panel-head"><span className="panel-title">盘口质量明细</span><span className="panel-sub">· 每行=一个平台</span><span className="panel-tag muted">CSV 可导</span></div>
+          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num">Spread (bp)</th><th className="num">Mid 价格</th><th className="num">Imbalance (%)</th><th className="num">滑点 50K (bp)</th><th className="num">滑点 100K (bp)</th><th className="num">滑点 500K (bp)</th><th className="num">滑点 1M (bp)</th><th>盘口结论</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><td className="num">{bp(row.spread_bp)}</td><td className="num">{money(row.mid_price)}</td><td className="num">{signedPct(row.imbalance_pct)}</td><td className="num">{bp(row.worst_slippage_bp?.['50000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['100000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['500000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['1000000'])}</td><td><VerdictBadge verdict={row.verdict} /></td></tr>)}</tbody></table></div>
         </section>
       </div>
     </div>
@@ -196,17 +292,54 @@ function ShareTab({ data, query }: { data: ShareSnapshot; query: Query }) {
     <div className="page-content active">
       <div className="section-bar"><span>3.4 · <b>edgeX 平台总交易量市占率</b></span><div className="line" /><span>全平台 perp 合计 · mexc×0.4, gate×0.5</span></div>
       <section className="panel">
-        <div className="panel-head"><span className="panel-title">edgeX 平台总交易量市占率明细表</span><PillGroup items={['24h', '7d', '30d']} active={activeWindow} query={{ ...query, tab: 'share' }} param="window" /></div>
+        <div className="panel-head">
+          <span className="panel-title">edgeX 平台总交易量市占率明细表</span>
+          <span className="panel-sub">· 切换口径查看 share + 各平台贡献 · 数据=全平台所有 perp 合计成交量</span>
+          <div className="panel-actions"><span className="panel-tag muted">CSV 可导</span><WindowPills active={activeWindow} query={query} /></div>
+        </div>
         {data.status === 'unsupported' ? <StatusEmptyState status="unsupported" message={data.reason ?? '当前统计窗口尚未实现'} /> : <>
-          <div className="share-kpis">
-            <div><span>当前 edgeX share</span><b>{pct(data.kpis?.edgex_share_pct)}</b></div>
+          <div className="share-kpi-strip">
+            <div className="share-primary"><span>当前 edgeX share {activeWindow}</span><b>{pct(data.kpis?.edgex_share_pct)}</b></div>
             <div><span>edgeX 平台总成交量</span><b>{money(data.kpis?.edgex_total_volume_usd)}</b></div>
-            <div><span>分母合计</span><b>{money(data.kpis?.denominator_usd ?? data.denominator_usd)}</b></div>
+            <div><span>分母合计 (含 edgeX, mexc×0.4, gate×0.5)</span><b>{money(data.kpis?.denominator_usd ?? data.denominator_usd)}</b></div>
+            <p className="share-kpi-note">
+              数据=全平台所有 perp 合计成交量;<br />
+              其他平台原始 vol 与折算后 vol 区别仅作用于 mexc / gate;<br />
+              edgeX 自身也计入分母。
+            </p>
           </div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>#</th><th>平台</th><th className="num">原始成交量</th><th className="num">折算系数</th><th className="num">折算后成交量</th><th className="num">在分母中占比</th><th>状态</th></tr></thead><tbody>{data.rows.map(row => <tr key={row.platform}><td>{row.rank ?? '—'}</td><td>{row.platform}</td><td className="num">{money(row.raw_volume_usd)}</td><td className="num">{row.discount ?? '—'}</td><td className="num">{money(row.adjusted_volume_usd ?? row.adjusted_volume_24h_usd)}</td><td className="num">{pct(row.denominator_pct ?? row.share_pct)}</td><td><StatusBadge status={row.status} />{typeof row.days_seen === 'number' && typeof row.days_window === 'number' && row.days_window > 0 ? <span className="muted"> {row.days_seen}/{row.days_window}d</span> : null}</td></tr>)}</tbody></table></div>
+          <div className="table-wrap"><table className="tbl"><thead><tr><th>#</th><th>平台</th><th className="num">原始成交量 (M USD)</th><th className="num">折算系数</th><th className="num">折算后 (M USD)</th><th className="num">在分母中占比</th><th>占比可视化</th></tr></thead><tbody>{data.rows.map(row => {
+            const share = row.denominator_pct ?? row.share_pct;
+            const discount = row.discount ?? 1;
+            return (
+              <tr key={row.platform}>
+                <td>{row.rank ?? '—'}</td>
+                <td><span className={row.platform === 'edgeX' ? 'platform-self' : undefined}>{platformDisplayName(row.platform)}</span></td>
+                <td className="num">{moneyInMillions(row.raw_volume_usd)}</td>
+                <td className="num">{discount < 1 ? <span className="badge b-warn">×{discount}</span> : <span className="muted">—</span>}</td>
+                <td className="num"><b>{moneyInMillions(row.adjusted_volume_usd ?? row.adjusted_volume_24h_usd)}</b></td>
+                <td className="num">{pct(share)}</td>
+                <td>
+                  <div className="share-ratio-track" data-testid="share-ratio-bar" aria-label={`${row.platform} denominator share ${pct(share)}`}>
+                    <div className="share-ratio-fill" style={{ width: `${Math.min(Math.max(share ?? 0, 0) * 1.5, 100)}%`, background: row.platform === 'edgeX' ? edgexAccent : '#5794f2' }} />
+                  </div>
+                </td>
+              </tr>
+            );
+          })}</tbody></table></div>
         </>}
       </section>
-      <section className="panel row-h-md"><div className="panel-head"><span className="panel-title">平台总市占率时序 (近 30d)</span><span className="panel-sub">· 三口径滚动叠加</span></div><StatusEmptyState status={data.trend?.status ?? 'unsupported'} message="历史时序聚合数据不足" /></section>
+      <section className="panel row-h-md">
+        <div className="panel-head"><span className="panel-title">平台总市占率时序 (近 30d)</span><span className="panel-sub">· edgeX 每日 share</span></div>
+        {(() => {
+          const points = (data.trend?.points ?? []) as ShareTrendPoint[];
+          const status = data.trend?.status ?? 'unsupported';
+          if (!points.length) {
+            return <StatusEmptyState status={status} message="历史时序聚合数据不足" />;
+          }
+          return <ShareTrendChart ariaLabel="edgeX 每日市占率时序 (近 30 天)" points={points} />;
+        })()}
+      </section>
     </div>
   );
 }
