@@ -201,23 +201,12 @@ func (s *Store) SaveVolume(row domain.VolumeSnapshot) {
 	if err := s.persistVolume(context.Background(), row); err != nil {
 		log.Printf("persist volume snapshot: %v", err)
 	}
-	// Mirror native volume into daily aggregates for edgeX so 7d/30d can
-	// accumulate without depending on a CoinGecko collector run for edgeX
-	// (CoinGecko does not cover edgeX). Other platforms continue to be
-	// rolled up by the CoinGecko path.
-	if row.Platform == "edgeX" && row.Status == domain.StatusComplete && row.Volume24HUSD > 0 {
-		daily := domain.DailyVolumeAggregate{
-			Day:            startOfUTCDay(row.SnapshotTS),
-			Platform:       row.Platform,
-			DisplaySymbol:  row.DisplaySymbol,
-			Volume24HUSD:   row.Volume24HUSD,
-			DataSource:     domain.DataSourceNative,
-			SourceEndpoint: row.SourceEndpoint,
-			Status:         domain.StatusComplete,
-			SnapshotTS:     row.SnapshotTS,
-		}
-		s.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{daily})
-	}
+	// edgeX platform-level Share KPIs are sourced exclusively from
+	// CoinGecko now (see share24hLocked / shareHistoricalLocked); we no
+	// longer mirror per-symbol native volume into dailyPlatformVolumes.
+	// The native ticker is still persisted to s.volumes above for the
+	// per-symbol Liquidity tab, where CoinGecko's platform-level
+	// aggregate cannot be decomposed.
 }
 
 // SaveCoinGeckoPlatformVolumes records the latest CoinGecko-sourced 24h
@@ -458,9 +447,10 @@ func (s *Store) Share(window string) map[string]any {
 	}
 }
 
-// share24hLocked implements R3: 9 competitors always come from CoinGecko
-// (s.cgPlatformVolumes), edgeX always comes from native (s.volumes). The two
-// maps are never merged, so Lighter / Hyperliquid native data cannot
+// share24hLocked implements R3: every platform — edgeX and the 9
+// competitors alike — sources its 24h volume from CoinGecko
+// (s.cgPlatformVolumes). The native per-symbol map (s.volumes) is never
+// merged in, so Lighter / Hyperliquid / edgeX native data cannot
 // double-count against CoinGecko aggregates.
 func (s *Store) share24hLocked() map[string]any {
 	now := time.Now().UTC()
@@ -470,28 +460,7 @@ func (s *Store) share24hLocked() map[string]any {
 	sourceByPlatform := map[string]string{}
 	snapshotTSByPlatform := map[string]time.Time{}
 
-	// edgeX: aggregate every native symbol volume that completed.
-	for _, v := range s.volumes {
-		if v.Platform != "edgeX" {
-			continue
-		}
-		if v.Status == domain.StatusComplete {
-			rawByPlatform[v.Platform] += v.Volume24HUSD
-			adjustedByPlatform[v.Platform] += indicators.AdjustedVolume(v.Platform, v.Volume24HUSD)
-		}
-		statusByPlatform[v.Platform] = mergeVolumeStatus(statusByPlatform[v.Platform], v.Status)
-		sourceByPlatform[v.Platform] = domain.DataSourceNative
-		if v.SnapshotTS.After(snapshotTSByPlatform[v.Platform]) {
-			snapshotTSByPlatform[v.Platform] = v.SnapshotTS
-		}
-	}
-
-	// 9 competitors: take only the CoinGecko aggregate, never the native
-	// per-symbol fallback.
 	for _, p := range s.cfg.Platforms {
-		if p == "edgeX" {
-			continue
-		}
 		agg, ok := s.cgPlatformVolumes[p]
 		if !ok {
 			statusByPlatform[p] = domain.StatusStale

@@ -30,6 +30,7 @@ coingecko:
   cache_ttl: 5m
   request_timeout: 30s
   exchange_id:
+    edgeX: edgex
     binance: binance_futures
     okx: okex_swap
     bybit: bybit
@@ -40,6 +41,7 @@ coingecko:
     hyperliquid: hyperliquid
     lighter: lighter
   market_name:
+    edgeX: "edgeX"
     binance: "Binance (Futures)"
     okx: "OKX (Futures)"
     bybit: "Bybit (Futures)"

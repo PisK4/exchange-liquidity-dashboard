@@ -452,11 +452,12 @@ func TestShareReturnsFormalFieldsAndInsufficientHistory(t *testing.T) {
 	cfg.Platforms = []string{"edgeX", "mexc", "gate", "binance"}
 	store := NewStore(cfg)
 	now := time.Now().UTC()
-	// edgeX: native volumes path (CoinGecko has no edgeX coverage).
-	store.SaveVolume(domain.VolumeSnapshot{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete, SourceEndpoint: "edgex"})
-	// 9 competitors: feed via CoinGecko aggregates so Share(24h) uses the
-	// dedicated cgPlatformVolumes map.
+	// edgeX is now also sourced from CoinGecko (same as the 9
+	// competitors); native ticker writes still happen for the Liquidity
+	// tab but they must not feed Share(24h) anymore.
+	store.SaveVolume(domain.VolumeSnapshot{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: now, Volume24HUSD: 999, Status: domain.StatusComplete, SourceEndpoint: "edgex"})
 	store.SaveCoinGeckoPlatformVolumes([]domain.PlatformVolumeAggregate{
+		{Platform: "edgeX", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceCoinGecko},
 		{Platform: "mexc", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceCoinGecko},
 		{Platform: "gate", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceCoinGecko},
 		{Platform: "binance", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceCoinGecko},
@@ -487,8 +488,8 @@ func TestShareReturnsFormalFieldsAndInsufficientHistory(t *testing.T) {
 	if mexc["data_source"] != domain.DataSourceCoinGecko {
 		t.Fatalf("expected MEXC data_source=coingecko, got %+v", mexc)
 	}
-	if edge["data_source"] != domain.DataSourceNative {
-		t.Fatalf("expected edgeX data_source=native, got %+v", edge)
+	if edge["data_source"] != domain.DataSourceCoinGecko {
+		t.Fatalf("expected edgeX data_source=coingecko, got %+v", edge)
 	}
 
 	historical := store.Share("7d")

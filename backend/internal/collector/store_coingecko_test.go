@@ -24,15 +24,16 @@ func TestShareDoesNotDoubleCountWhenBothSourcesPresent(t *testing.T) {
 	store := newCoinGeckoStore(t)
 	now := time.Now().UTC()
 
+	// Native ticker writes (edgeX BTC perp + lighter BTC perp) must be
+	// IGNORED by Share(24h) now that every platform reads exclusively
+	// from CoinGecko (R3 + edgeX migration).
 	store.SaveVolume(domain.VolumeSnapshot{
 		Platform:      "edgeX",
 		DisplaySymbol: "BTC-USDT (perp)",
 		SnapshotTS:    now,
-		Volume24HUSD:  100,
+		Volume24HUSD:  9999, // would leak in if the native fallback survived
 		Status:        domain.StatusComplete,
 	})
-	// Native Lighter ticker writes here, but Share(24h) for Lighter must
-	// IGNORE this row when CoinGecko data is present (R3).
 	store.SaveVolume(domain.VolumeSnapshot{
 		Platform:      "lighter",
 		DisplaySymbol: "BTC-USDT (perp)",
@@ -41,6 +42,7 @@ func TestShareDoesNotDoubleCountWhenBothSourcesPresent(t *testing.T) {
 		Status:        domain.StatusComplete,
 	})
 	store.SaveCoinGeckoPlatformVolumes([]domain.PlatformVolumeAggregate{
+		{Platform: "edgeX", SnapshotTS: now, Volume24HUSD: 100, Status: domain.StatusComplete},
 		{Platform: "binance", SnapshotTS: now, Volume24HUSD: 1000, Status: domain.StatusComplete},
 		{Platform: "lighter", SnapshotTS: now, Volume24HUSD: 200, Status: domain.StatusComplete},
 	})
@@ -70,20 +72,20 @@ func TestShareDoesNotDoubleCountWhenBothSourcesPresent(t *testing.T) {
 	}
 
 	edge := rowByPlatform["edgeX"]
-	if edge["raw_volume_usd"].(float64) != 100 || edge["data_source"] != domain.DataSourceNative {
-		t.Fatalf("expected edgeX raw=100, data_source=native; got %+v", edge)
+	if edge["raw_volume_usd"].(float64) != 100 || edge["data_source"] != domain.DataSourceCoinGecko {
+		t.Fatalf("expected edgeX raw=100, data_source=coingecko; got %+v", edge)
 	}
 }
 
-func TestShareUsesCoinGeckoFor9CompetitorsExclusively(t *testing.T) {
+func TestShareUsesCoinGeckoForAllPlatformsExclusively(t *testing.T) {
 	cfg := config.Default()
 	cfg.Platforms = []string{"edgeX", "binance", "okx"}
 	store := NewStore(cfg)
 	now := time.Now().UTC()
-	store.SaveVolume(domain.VolumeSnapshot{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: now, Volume24HUSD: 200, Status: domain.StatusComplete})
-	// Binance / OKX intentionally NOT written via SaveVolume - only via
-	// CoinGecko. The legacy native fallback must not bleed in.
+	// Native edgeX ticker — must be ignored by 24h Share.
+	store.SaveVolume(domain.VolumeSnapshot{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: now, Volume24HUSD: 999, Status: domain.StatusComplete})
 	store.SaveCoinGeckoPlatformVolumes([]domain.PlatformVolumeAggregate{
+		{Platform: "edgeX", SnapshotTS: now, Volume24HUSD: 200, Status: domain.StatusComplete},
 		{Platform: "binance", SnapshotTS: now, Volume24HUSD: 5000, Status: domain.StatusComplete},
 		{Platform: "okx", SnapshotTS: now, Volume24HUSD: 4000, Status: domain.StatusComplete},
 	})
@@ -313,30 +315,23 @@ func TestDailyAggregateLiveBlocksBackfillReplay(t *testing.T) {
 	}
 }
 
-func TestSaveVolumeMirrorsEdgexIntoDailyAggregate(t *testing.T) {
+// TestSaveVolumeDoesNotMirrorEdgexIntoDailyAggregate is the inverse of the
+// pre-migration TestSaveVolumeMirrorsEdgexIntoDailyAggregate guard. After
+// switching edgeX to the CoinGecko path, native ticker writes must stay
+// confined to s.volumes and must never produce daily rows.
+func TestSaveVolumeDoesNotMirrorEdgexIntoDailyAggregate(t *testing.T) {
 	cfg := config.Default()
 	cfg.Platforms = []string{"edgeX"}
 	store := NewStore(cfg)
 	today := startOfUTCDay(time.Now().UTC())
 	store.SaveVolume(domain.VolumeSnapshot{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: today.Add(2 * time.Hour), Volume24HUSD: 12345, Status: domain.StatusComplete})
-	store.SaveVolume(domain.VolumeSnapshot{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", SnapshotTS: today.Add(3 * time.Hour), Volume24HUSD: 67890, Status: domain.StatusComplete})
 
 	store.mu.RLock()
 	defer store.mu.RUnlock()
-	rows := store.dailyPlatformVolumes["edgeX"]
-	// edgeX is reported as platform-level (DisplaySymbol filled but stored
-	// under symbol map keyed by display symbol). We assert at least one
-	// entry landed in the symbol-keyed map for edgeX/BTC-USDT.
-	k := key("edgeX", "BTC-USDT (perp)")
-	symRows := store.dailySymbolVolumes[k]
-	if len(symRows) == 0 {
-		t.Fatalf("expected daily symbol aggregate to be created for edgeX")
+	if rows := store.dailyPlatformVolumes["edgeX"]; len(rows) != 0 {
+		t.Fatalf("edgeX native volume must not leak into dailyPlatformVolumes, got %+v", rows)
 	}
-	if symRows[len(symRows)-1].Volume24HUSD != 67890 {
-		t.Fatalf("expected last writer wins (67890), got %+v", symRows[len(symRows)-1])
+	if rows := store.dailySymbolVolumes[key("edgeX", "BTC-USDT (perp)")]; len(rows) != 0 {
+		t.Fatalf("edgeX native volume must not leak into dailySymbolVolumes, got %+v", rows)
 	}
-	// Platform-level map intentionally empty for edgeX because SaveVolume
-	// only emits a symbol-level row; CoinGecko populates platform-level
-	// daily rollups for the 9 competitors.
-	_ = rows
 }
