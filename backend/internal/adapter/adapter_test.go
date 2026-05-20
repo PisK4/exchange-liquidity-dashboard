@@ -41,40 +41,17 @@ func TestClassifyDepthMarksCompleteWhenTwoPercentIsCovered(t *testing.T) {
 	}
 }
 
-func TestParseMEXCContractDetailsAcceptsObjectAndArray(t *testing.T) {
-	objectRaw := []byte(`{"symbol":"BTC_USDT","contractSize":0.0001}`)
-	objectItems, err := parseMEXCContractDetails(objectRaw)
+func TestEdgeXContractIDReturnsCatalogValue(t *testing.T) {
+	sub := domain.SymbolSub{Canonical: "BTC", ContractID: "10000001"}
+	got, err := edgeXContractID(sub)
 	if err != nil {
-		t.Fatalf("parse object: %v", err)
+		t.Fatalf("err: %v", err)
 	}
-	if len(objectItems) != 1 || objectItems[0].Symbol != "BTC_USDT" || objectItems[0].ContractSize != 0.0001 {
-		t.Fatalf("unexpected object parse result: %+v", objectItems)
+	if got != "10000001" {
+		t.Fatalf("got %q, want 10000001", got)
 	}
-
-	arrayRaw := []byte(`[{"symbol":"ETH_USDT","contractSize":0.01}]`)
-	arrayItems, err := parseMEXCContractDetails(arrayRaw)
-	if err != nil {
-		t.Fatalf("parse array: %v", err)
-	}
-	if len(arrayItems) != 1 || arrayItems[0].Symbol != "ETH_USDT" || arrayItems[0].ContractSize != 0.01 {
-		t.Fatalf("unexpected array parse result: %+v", arrayItems)
-	}
-}
-
-func TestEdgeXContractIDMapsConfiguredSymbols(t *testing.T) {
-	cases := map[string]string{
-		"BTC-USDT (perp)": "10000001",
-		"ETH-USDT (perp)": "10000002",
-		"SOL-USDT (perp)": "10000003",
-	}
-	for display, want := range cases {
-		got, err := edgeXContractID(domain.SymbolSub{DisplaySymbol: display})
-		if err != nil {
-			t.Fatalf("%s: %v", display, err)
-		}
-		if got != want {
-			t.Fatalf("%s: expected %s, got %s", display, want, got)
-		}
+	if _, err := edgeXContractID(domain.SymbolSub{Canonical: "DOGE"}); err == nil {
+		t.Fatal("expected error when ContractID empty")
 	}
 }
 
@@ -108,20 +85,17 @@ func TestShouldRetryTransientFailures(t *testing.T) {
 	}
 }
 
-func TestLighterMarketIDMapsConfiguredSymbols(t *testing.T) {
-	cases := map[string]int{
-		"BTC-USDT (perp)": 1,
-		"ETH-USDT (perp)": 0,
-		"SOL-USDT (perp)": 2,
+func TestLighterMarketIDReturnsCatalogValue(t *testing.T) {
+	zero := 0
+	one := 1
+	if got, _ := lighterMarketID(domain.SymbolSub{MarketID: &zero}); got != 0 {
+		t.Fatalf("expected market_id=0, got %d", got)
 	}
-	for display, want := range cases {
-		got, err := lighterMarketID(domain.SymbolSub{DisplaySymbol: display})
-		if err != nil {
-			t.Fatalf("%s: %v", display, err)
-		}
-		if got != want {
-			t.Fatalf("%s: expected %d, got %d", display, want, got)
-		}
+	if got, _ := lighterMarketID(domain.SymbolSub{MarketID: &one}); got != 1 {
+		t.Fatalf("expected market_id=1, got %d", got)
+	}
+	if _, err := lighterMarketID(domain.SymbolSub{Canonical: "DOGE"}); err == nil {
+		t.Fatal("expected error when MarketID nil")
 	}
 }
 

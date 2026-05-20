@@ -1,6 +1,49 @@
 export type ApiStatus = 'complete' | 'partial' | 'aggregated_orderbook' | 'ws_limited_depth' | 'stale' | 'unsupported' | 'error' | 'insufficient_history';
 export type DataFreshness = 'live' | 'delayed';
 
+export type SymbolMapping = {
+  display_symbol: string;
+  canonical: string;
+  market_surface: string;
+  instrument_kind: string;
+  platform: string;
+  api_symbol: string;
+  base_asset: string;
+  quote_asset: string;
+  settle_asset: string;
+  source_endpoint: string;
+  contract_id?: string;
+  market_id?: number;
+  contract_size?: number;
+  quanto_multiplier?: number;
+  api_level_cap?: number;
+  frontend_url?: string;
+  url_verified?: boolean;
+  catalog_status?: string;
+};
+
+export type SymbolsResponse = {
+  symbols: string[];
+  mappings: SymbolMapping[];
+};
+
+export type FrontendURLLookup = (platform: string, displaySymbol: string) => string | undefined;
+
+export async function getFrontendURLLookup(): Promise<FrontendURLLookup> {
+  try {
+    const data = await getJSON<SymbolsResponse>('/api/symbols');
+    const idx = new Map<string, string>();
+    for (const m of data.mappings ?? []) {
+      if (m.frontend_url) {
+        idx.set(`${m.platform}::${m.display_symbol}`, m.frontend_url);
+      }
+    }
+    return (platform: string, displaySymbol: string) => idx.get(`${platform}::${displaySymbol}`);
+  } catch {
+    return () => undefined;
+  }
+}
+
 export type PlatformRow = {
   platform: string;
   display_symbol: string;

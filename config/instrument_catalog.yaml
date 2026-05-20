@@ -34,7 +34,7 @@ platforms:
       source_endpoint: https://fapi.binance.com/fapi/v1/depth
       catalog_status: TRADING
       frontend_url: https://www.binance.com/zh-CN/futures/BTCUSDT
-      url_verified: false
+      url_verified: true
     ETH:
       api_symbol: ETHUSDT
       base_asset: ETH
@@ -44,7 +44,7 @@ platforms:
       source_endpoint: https://fapi.binance.com/fapi/v1/depth
       catalog_status: TRADING
       frontend_url: https://www.binance.com/zh-CN/futures/ETHUSDT
-      url_verified: false
+      url_verified: true
     SOL:
       api_symbol: SOLUSDT
       base_asset: SOL
@@ -54,7 +54,7 @@ platforms:
       source_endpoint: https://fapi.binance.com/fapi/v1/depth
       catalog_status: TRADING
       frontend_url: https://www.binance.com/zh-CN/futures/SOLUSDT
-      url_verified: false
+      url_verified: true
 
   okx:
     BTC:

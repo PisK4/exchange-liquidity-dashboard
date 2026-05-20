@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"edgex-dashboard/backend/internal/domain"
@@ -53,9 +52,66 @@ func Load(configDir string) (Config, error) {
 		return Config{}, err
 	}
 	cfg.Runtime = runtimeCfg
+
+	cat, err := LoadCatalog(filepath.Join(configDir, "instrument_catalog.yaml"))
+	if err != nil {
+		return Config{}, err
+	}
+	if len(cat.Platforms) > 0 {
+		applyCatalogOverlay(cfg.Symbols, cat)
+	}
 	return cfg, nil
 }
 
+// applyCatalogOverlay populates per-(platform, canonical) catalog fields onto
+// each SymbolSub in place. Entries missing from catalog are silently left as
+// produced by expandSymbols / Default — the consuming adapter will error at
+// fetch time if a required field (contract_id, market_id, contract_size,
+// quanto_multiplier) is missing.
+func applyCatalogOverlay(subs []domain.SymbolSub, cat Catalog) {
+	if len(cat.Platforms) == 0 {
+		return
+	}
+	for i := range subs {
+		platform := cat.Platforms[subs[i].Platform]
+		if platform == nil {
+			continue
+		}
+		entry, ok := platform[subs[i].Canonical]
+		if !ok {
+			continue
+		}
+		if entry.APISymbol != "" {
+			subs[i].APISymbol = entry.APISymbol
+		}
+		if entry.BaseAsset != "" {
+			subs[i].BaseAsset = entry.BaseAsset
+		}
+		if entry.QuoteAsset != "" {
+			subs[i].QuoteAsset = entry.QuoteAsset
+		}
+		if entry.SettleAsset != "" {
+			subs[i].SettleAsset = entry.SettleAsset
+		}
+		if entry.SourceEndpoint != "" {
+			subs[i].SourceEndpoint = entry.SourceEndpoint
+		}
+		subs[i].ContractID = entry.ContractID
+		subs[i].MarketID = entry.MarketID
+		subs[i].ContractSize = entry.ContractSize
+		subs[i].QuantoMultiplier = entry.QuantoMultiplier
+		subs[i].APILevelCap = entry.APILevelCap
+		subs[i].FrontendURL = entry.FrontendURL
+		subs[i].URLVerified = entry.URLVerified
+		subs[i].CatalogStatus = entry.CatalogStatus
+	}
+}
+
+// Default returns a minimal Config seed with platforms/symbols listed but no
+// per-platform-specific fields (api_symbol, contract_id, market_id, ...).
+// Those are populated by applyCatalogOverlay from config/instrument_catalog.yaml.
+// Tests that only need a SymbolSub skeleton can use Default(); production
+// callers always go through Load() which requires the catalog yaml.
 func Default() Config {
 	platforms := []string{"edgeX", "binance", "okx", "bybit", "bitget", "bingx", "mexc", "gate", "hyperliquid", "lighter"}
 	baseSymbols := []struct{ canonical, api string }{
@@ -73,7 +129,6 @@ func Default() Config {
 				MarketSurface:  "perp",
 				InstrumentKind: "canonical",
 				Platform:       p,
-				APISymbol:      apiSymbol(p, s.api),
 				BaseAsset:      s.canonical,
 				QuoteAsset:     "USDT",
 				SettleAsset:    "USDT",
@@ -95,28 +150,6 @@ func Default() Config {
 			SlippageBucketsUSD:    []float64{50_000, 100_000, 500_000, 1_000_000},
 			VolumeDiscounts:       map[string]float64{"mexc": 0.4, "gate": 0.5},
 		},
-	}
-}
-
-func apiSymbol(platform, symbol string) string {
-	s := strings.ReplaceAll(symbol, "-", "")
-	switch platform {
-	case "okx":
-		return symbol + "-SWAP"
-	case "bybit", "bitget":
-		return s
-	case "bingx":
-		return symbol
-	case "mexc", "gate":
-		return strings.ReplaceAll(symbol, "-", "_")
-	case "lighter":
-		return strings.TrimSuffix(symbol, "-USDT")
-	case "hyperliquid":
-		return strings.TrimSuffix(symbol, "-USDT")
-	case "edgeX":
-		return symbol
-	default:
-		return s
 	}
 }
 
@@ -289,7 +322,6 @@ func expandSymbols(symbols []symbolYAML, platforms []string, endpoints map[strin
 		if settle == "" {
 			settle = "USDT"
 		}
-		rawSymbol := strings.TrimSuffix(symbol.DisplaySymbol, " (perp)")
 		for _, platform := range platforms {
 			subs = append(subs, domain.SymbolSub{
 				DisplaySymbol:  symbol.DisplaySymbol,
@@ -297,7 +329,6 @@ func expandSymbols(symbols []symbolYAML, platforms []string, endpoints map[strin
 				MarketSurface:  valueOr(symbol.MarketSurface, "perp"),
 				InstrumentKind: valueOr(symbol.InstrumentKind, "canonical"),
 				Platform:       platform,
-				APISymbol:      apiSymbol(platform, rawSymbol),
 				BaseAsset:      base,
 				QuoteAsset:     quote,
 				SettleAsset:    settle,

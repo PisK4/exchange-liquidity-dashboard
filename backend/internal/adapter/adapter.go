@@ -42,12 +42,16 @@ func (a RESTAdapter) Name() string { return a.Platform }
 
 func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (domain.OrderBookSnapshot, error) {
 	start := time.Now()
+	cap := sub.APILevelCap
+	if cap == 0 {
+		cap = apiLevelCap(a.Platform)
+	}
 	book := domain.OrderBookSnapshot{
 		Platform:       a.Platform,
 		DisplaySymbol:  sub.DisplaySymbol,
 		SourceEndpoint: sub.SourceEndpoint,
 		SnapshotTS:     time.Now().UTC(),
-		APILevelCap:    apiLevelCap(a.Platform),
+		APILevelCap:    cap,
 	}
 	var bids, asks []domain.Level
 	var err error
@@ -265,16 +269,18 @@ func (a RESTAdapter) fetchMEXC(ctx context.Context, sub domain.SymbolSub) ([]dom
 	var resp struct {
 		Data struct{ Bids, Asks [][]any }
 	}
-	contract := strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
-	contractSize, err := a.fetchMEXCContractSize(ctx, contract)
-	if err != nil {
-		return nil, nil, err
+	if sub.ContractSize <= 0 {
+		return nil, nil, fmt.Errorf("mexc %s: contract_size missing from catalog (run `make catalog`)", sub.Canonical)
+	}
+	contract := sub.APISymbol
+	if contract == "" {
+		contract = strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
 	}
 	url := "https://contract.mexc.com/api/v1/contract/depth/" + contract + "?limit=1000"
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return nil, nil, err
 	}
-	return multiplySize(parseAnyLevels(resp.Data.Bids), contractSize), multiplySize(parseAnyLevels(resp.Data.Asks), contractSize), nil
+	return multiplySize(parseAnyLevels(resp.Data.Bids), sub.ContractSize), multiplySize(parseAnyLevels(resp.Data.Asks), sub.ContractSize), nil
 }
 
 func (a RESTAdapter) fetchEdgeX(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
@@ -306,16 +312,18 @@ func (a RESTAdapter) fetchEdgeX(ctx context.Context, sub domain.SymbolSub) ([]do
 
 func (a RESTAdapter) fetchGate(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
 	var resp struct{ Bids, Asks []struct{ P, S any } }
-	contract := strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
-	multiplier, err := a.fetchGateQuantoMultiplier(ctx, contract)
-	if err != nil {
-		return nil, nil, err
+	if sub.QuantoMultiplier <= 0 {
+		return nil, nil, fmt.Errorf("gate %s: quanto_multiplier missing from catalog (run `make catalog`)", sub.Canonical)
+	}
+	contract := sub.APISymbol
+	if contract == "" {
+		contract = strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
 	}
 	url := "https://api.gateio.ws/api/v4/futures/usdt/order_book?limit=200&with_id=true&contract=" + contract
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return nil, nil, err
 	}
-	return multiplySize(parseGateLevels(resp.Bids), multiplier), multiplySize(parseGateLevels(resp.Asks), multiplier), nil
+	return multiplySize(parseGateLevels(resp.Bids), sub.QuantoMultiplier), multiplySize(parseGateLevels(resp.Asks), sub.QuantoMultiplier), nil
 }
 
 func (a RESTAdapter) fetchHyperliquid(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
@@ -540,75 +548,11 @@ func (a RESTAdapter) fetchLighterVolume(ctx context.Context, sub domain.SymbolSu
 	return 0, fmt.Errorf("lighter market %d volume not found", marketID)
 }
 
-func (a RESTAdapter) fetchMEXCContractSize(ctx context.Context, contract string) (float64, error) {
-	var resp struct {
-		Data json.RawMessage `json:"data"`
-	}
-	if err := a.fetchJSON(ctx, http.MethodGet, "https://contract.mexc.com/api/v1/contract/detail?symbol="+contract, nil, &resp); err != nil {
-		return 0, err
-	}
-	items, err := parseMEXCContractDetails(resp.Data)
-	if err != nil {
-		return 0, err
-	}
-	for _, item := range items {
-		if item.Symbol == contract && item.ContractSize > 0 {
-			return item.ContractSize, nil
-		}
-	}
-	return 0, fmt.Errorf("mexc contract size not found for %s", contract)
-}
-
-type mexcContractDetail struct {
-	Symbol       string  `json:"symbol"`
-	ContractSize float64 `json:"contractSize"`
-}
-
-func parseMEXCContractDetails(raw json.RawMessage) ([]mexcContractDetail, error) {
-	if len(raw) == 0 || string(raw) == "null" {
-		return nil, errors.New("empty mexc contract detail")
-	}
-	var items []mexcContractDetail
-	if err := json.Unmarshal(raw, &items); err == nil {
-		return items, nil
-	}
-	var item mexcContractDetail
-	if err := json.Unmarshal(raw, &item); err != nil {
-		return nil, err
-	}
-	return []mexcContractDetail{item}, nil
-}
-
-func (a RESTAdapter) fetchGateQuantoMultiplier(ctx context.Context, contract string) (float64, error) {
-	var resp struct {
-		QuantoMultiplier string `json:"quanto_multiplier"`
-	}
-	if err := a.fetchJSON(ctx, http.MethodGet, "https://api.gateio.ws/api/v4/futures/usdt/contracts/"+contract, nil, &resp); err != nil {
-		return 0, err
-	}
-	multiplier, err := strconv.ParseFloat(resp.QuantoMultiplier, 64)
-	if err != nil || multiplier <= 0 {
-		return 0, fmt.Errorf("invalid gate quanto_multiplier for %s", contract)
-	}
-	return multiplier, nil
-}
-
 func edgeXContractID(sub domain.SymbolSub) (string, error) {
-	symbol := strings.TrimSuffix(sub.DisplaySymbol, " (perp)")
-	canonical := strings.TrimSuffix(strings.ReplaceAll(symbol, "-", ""), "USDT")
-	if canonical == "" {
-		canonical = sub.Canonical
+	if sub.ContractID != "" {
+		return sub.ContractID, nil
 	}
-	switch canonical {
-	case "BTC":
-		return "10000001", nil
-	case "ETH":
-		return "10000002", nil
-	case "SOL":
-		return "10000003", nil
-	default:
-		return "", fmt.Errorf("edgex contract id not configured for %s", sub.DisplaySymbol)
-	}
+	return "", fmt.Errorf("edgex %s: contract_id missing from catalog (run `make catalog`)", sub.Canonical)
 }
 
 func parseEdgeXLevels(raw []struct {

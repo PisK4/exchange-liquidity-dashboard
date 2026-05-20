@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"edgex-dashboard/backend/internal/domain"
 )
 
 func TestLoadReadsYAMLSourceOfTruth(t *testing.T) {
@@ -30,6 +32,35 @@ slippage_buckets_usd: [25000, 75000]
 volume_discounts:
   binance: 0.9
   hyperliquid: 1.0
+`)
+	mustWrite(t, filepath.Join(dir, "instrument_catalog.yaml"), `
+schema_version: 1
+generated_at: "2026-05-20T00:00:00Z"
+generated_by: test
+canonical_whitelist:
+  - canonical: DOGE
+    market_surface: perp
+    quote: USDT
+    confidence: confirmed
+platforms:
+  binance:
+    DOGE:
+      api_symbol: DOGEUSDT
+      base_asset: DOGE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 1000
+      source_endpoint: https://example.invalid/binance-depth
+      url_verified: false
+  hyperliquid:
+    DOGE:
+      api_symbol: DOGE
+      base_asset: DOGE
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 40
+      source_endpoint: https://example.invalid/hyperliquid-info
+      url_verified: false
 `)
 
 	cfg, err := Load(dir)
@@ -124,5 +155,117 @@ func TestLoadCatalogMissingFile(t *testing.T) {
 	}
 	if cat.SchemaVersion != 0 || len(cat.Platforms) != 0 {
 		t.Fatalf("missing-file catalog should be zero value, got %+v", cat)
+	}
+}
+
+func TestApplyCatalogOverlayPopulatesPerPlatformFields(t *testing.T) {
+	subs := []domain.SymbolSub{
+		{Platform: "edgeX", Canonical: "BTC", APISymbol: "BTC-USDT", DisplaySymbol: "BTC-USDT (perp)"},
+		{Platform: "lighter", Canonical: "ETH", APISymbol: "ETH", DisplaySymbol: "ETH-USDT (perp)"},
+		{Platform: "mexc", Canonical: "SOL", APISymbol: "SOL_USDT", DisplaySymbol: "SOL-USDT (perp)"},
+		{Platform: "binance", Canonical: "DOGE", APISymbol: "DOGEUSDT", DisplaySymbol: "DOGE-USDT (perp)"},
+	}
+	zero := 0
+	cat := Catalog{
+		Platforms: map[string]map[string]CatalogSymbol{
+			"edgeX": {
+				"BTC": {APISymbol: "BTC-USDT", BaseAsset: "BTC", QuoteAsset: "USDT", SettleAsset: "USDT", ContractID: "10000001", APILevelCap: 400, FrontendURL: "https://pro.edgex.exchange/trade/BTC-USDT"},
+			},
+			"lighter": {
+				"ETH": {APISymbol: "ETH", BaseAsset: "ETH", QuoteAsset: "USDC", SettleAsset: "USDC", MarketID: &zero, APILevelCap: 0},
+			},
+			"mexc": {
+				"SOL": {APISymbol: "SOL_USDT", BaseAsset: "SOL", QuoteAsset: "USDT", SettleAsset: "USDT", ContractSize: 0.1, APILevelCap: 2000},
+			},
+		},
+	}
+	applyCatalogOverlay(subs, cat)
+
+	if got := subs[0]; got.ContractID != "10000001" || got.APILevelCap != 400 || got.FrontendURL == "" {
+		t.Fatalf("edgeX overlay missed: %+v", got)
+	}
+	if got := subs[1]; got.MarketID == nil || *got.MarketID != 0 || got.QuoteAsset != "USDC" {
+		t.Fatalf("lighter overlay missed: %+v", got)
+	}
+	if got := subs[2]; got.ContractSize != 0.1 || got.APILevelCap != 2000 {
+		t.Fatalf("mexc overlay missed: %+v", got)
+	}
+	if got := subs[3]; got.ContractID != "" || got.APILevelCap != 0 {
+		t.Fatalf("binance DOGE not in catalog should be untouched, got %+v", got)
+	}
+}
+
+func TestLoadAppliesCatalogWhenPresent(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
+symbols:
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+    market_surface: perp
+    instrument_kind: canonical
+platforms: [edgeX]
+`)
+	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), `
+endpoints:
+  edgeX: https://example.invalid/edgex
+`)
+	mustWrite(t, filepath.Join(dir, "instrument_catalog.yaml"), `
+schema_version: 1
+generated_at: "2026-05-20T00:00:00Z"
+generated_by: test
+canonical_whitelist:
+  - canonical: BTC
+    market_surface: perp
+    quote: USDT
+    confidence: confirmed
+platforms:
+  edgeX:
+    BTC:
+      api_symbol: BTC-USDT
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000001"
+      source_endpoint: https://example.invalid/edgex
+      frontend_url: https://pro.edgex.exchange/trade/BTC-USDT
+      url_verified: true
+`)
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load error = %v", err)
+	}
+	if len(cfg.Symbols) != 1 {
+		t.Fatalf("expected 1 symbol, got %d", len(cfg.Symbols))
+	}
+	sub := cfg.Symbols[0]
+	if sub.ContractID != "10000001" || sub.APILevelCap != 400 || sub.FrontendURL == "" || !sub.URLVerified {
+		t.Fatalf("catalog overlay missing: %+v", sub)
+	}
+}
+
+func TestLoadOKWhenCatalogMissing(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
+symbols:
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+    market_surface: perp
+    instrument_kind: canonical
+platforms: [edgeX]
+`)
+	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), `
+endpoints:
+  edgeX: https://example.invalid/edgex
+`)
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load error = %v", err)
+	}
+	if len(cfg.Symbols) != 1 {
+		t.Fatalf("expected 1 symbol, got %d", len(cfg.Symbols))
+	}
+	if got := cfg.Symbols[0]; got.ContractID != "" || got.APILevelCap != 0 {
+		t.Fatalf("missing catalog should not populate per-platform fields, got %+v", got)
 	}
 }

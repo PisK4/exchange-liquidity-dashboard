@@ -1,4 +1,4 @@
-.PHONY: test run smoke-api smoke-adapters swagger migrate-up migrate-down catalog catalog-diff
+.PHONY: test run smoke-api smoke-adapters swagger migrate-up migrate-down catalog catalog-diff lint ci
 
 PORT ?= 18080
 SYMBOL ?= BTC-USDT
@@ -6,6 +6,17 @@ MYSQL_DSN ?= root:root@tcp(127.0.0.1:3306)/edgex_dashboard
 
 test:
 	go test ./...
+
+lint:
+	@diff=$$(gofmt -l .); \
+	if [ -n "$$diff" ]; then \
+		echo "gofmt found issues in:"; \
+		echo "$$diff"; \
+		exit 1; \
+	fi
+	go vet ./...
+
+ci: lint test
 
 run:
 	go run ./cmd/dashboard --role=all --addr=:$${PORT:-$(PORT)}

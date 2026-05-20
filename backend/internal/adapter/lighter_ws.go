@@ -279,21 +279,10 @@ func lighterMarketIDFromChannel(channel string) (int, bool) {
 }
 
 func lighterMarketID(sub domain.SymbolSub) (int, error) {
-	symbol := strings.TrimSuffix(sub.DisplaySymbol, " (perp)")
-	canonical := strings.TrimSuffix(strings.ReplaceAll(symbol, "-", ""), "USDT")
-	if canonical == "" {
-		canonical = sub.Canonical
+	if sub.MarketID != nil {
+		return *sub.MarketID, nil
 	}
-	switch canonical {
-	case "BTC":
-		return 1, nil
-	case "ETH":
-		return 0, nil
-	case "SOL":
-		return 2, nil
-	default:
-		return 0, fmt.Errorf("lighter market id not configured for %s", sub.DisplaySymbol)
-	}
+	return 0, fmt.Errorf("lighter %s: market_id missing from catalog (run `make catalog`)", sub.Canonical)
 }
 
 func LighterMarketIDs() []int {

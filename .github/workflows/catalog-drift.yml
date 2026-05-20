@@ -1,0 +1,34 @@
+name: catalog-drift
+
+# Runs on demand (workflow_dispatch) and weekly at 03:00 UTC every Monday.
+# Hits all 10 exchange public catalog endpoints, so it needs outbound network
+# access. Failure means an upstream exchange listed/delisted a perp we care
+# about, or changed contract_size / quanto_multiplier — in either case the
+# committed instrument_catalog.yaml needs to be refreshed via `make catalog`.
+#
+# This is separate from `ci.yml` because exchange APIs can be flaky and we
+# don't want to fail every PR on transient drift.
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * 1'
+
+jobs:
+  catalog-diff:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - name: catalog-diff
+        run: make catalog-diff
+      - name: alert on drift
+        if: failure()
+        run: |
+          echo "::error::instrument_catalog.yaml has drifted from upstream exchanges."
+          echo "::error::Run \`cd backend && make catalog\` on a network that can reach all 10 exchanges and commit the result."
