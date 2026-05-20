@@ -85,8 +85,13 @@ type PlatformSnapshot struct {
 	SpreadBP             float64                 `json:"spread_bp,omitempty"`
 	Imbalance            float64                 `json:"imbalance_pct,omitempty"`
 	DepthByTier          map[string]DepthMetrics `json:"depth_by_tier"`
+	VsMedianByTier       map[string]float64      `json:"vs_median_by_tier,omitempty"`
+	Rank01               int                     `json:"rank_0_1,omitempty"`
+	DepthStatusLabel     string                  `json:"depth_status_label,omitempty"`
 	BuySlippageBP        map[string]float64      `json:"buy_slippage_bp"`
 	SellSlippageBP       map[string]float64      `json:"sell_slippage_bp"`
+	WorstSlippageBP      map[string]float64      `json:"worst_slippage_bp,omitempty"`
+	Verdict              string                  `json:"verdict,omitempty"`
 }
 
 type VolumeSnapshot struct {
@@ -106,7 +111,12 @@ type Top30Row struct {
 	Volume24HUSD   float64   `json:"volume_24h_usd"`
 	Volume7DStatus string    `json:"volume_7d_status"`
 	Delta7DStatus  string    `json:"delta_7d_status"`
+	EdgexListed    bool      `json:"edgex_listed"`
+	ListedStatus   string    `json:"edgex_listed_status,omitempty"`
+	CoverageCount  int       `json:"competitor_top30_coverage"`
+	CoverageStatus string    `json:"competitor_top30_coverage_status,omitempty"`
 	Action         string    `json:"suggested_action,omitempty"`
+	ActionStatus   string    `json:"suggested_action_status,omitempty"`
 	SnapshotTS     time.Time `json:"snapshot_ts"`
 	SourceEndpoint string    `json:"source_endpoint"`
 	Status         string    `json:"status"`

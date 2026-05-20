@@ -1,0 +1,1652 @@
+{
+  "code": "SUCCESS",
+  "data": {
+    "coinList": [
+      {
+        "assetId": "0x2ce625e94458d39dd0bf3b45a843544dd4a14b8169045a3a3d15aa564b936c5",
+        "coinId": "1000",
+        "coinName": "USDC",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/USDC.svg",
+        "resolution": "0xf4240",
+        "showStepSize": "0.0001",
+        "stepSize": "0.000001"
+      },
+      {
+        "assetId": null,
+        "coinId": "1001",
+        "coinName": "BTC",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/BTC.svg",
+        "resolution": null,
+        "showStepSize": "0.001",
+        "stepSize": "0.001"
+      },
+      {
+        "assetId": null,
+        "coinId": "1002",
+        "coinName": "ETH",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/ETH.svg",
+        "resolution": null,
+        "showStepSize": "0.01",
+        "stepSize": "0.01"
+      },
+      {
+        "assetId": null,
+        "coinId": "1003",
+        "coinName": "SOL",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/SOL.svg",
+        "resolution": null,
+        "showStepSize": "0.1",
+        "stepSize": "0.1"
+      },
+      {
+        "assetId": null,
+        "coinId": "1004",
+        "coinName": "EDGE",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/EDGE.svg",
+        "resolution": null,
+        "showStepSize": "0.1",
+        "stepSize": "0.1"
+      },
+      {
+        "assetId": null,
+        "coinId": "1005",
+        "coinName": "XAU",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/XAU.svg",
+        "resolution": null,
+        "showStepSize": "0.001",
+        "stepSize": "0.001"
+      },
+      {
+        "assetId": null,
+        "coinId": "1006",
+        "coinName": "XAG",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/XAG.svg",
+        "resolution": null,
+        "showStepSize": "0.01",
+        "stepSize": "0.01"
+      },
+      {
+        "assetId": null,
+        "coinId": "1007",
+        "coinName": "COPPER",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/COPPER.svg",
+        "resolution": null,
+        "showStepSize": "0.01",
+        "stepSize": "0.01"
+      },
+      {
+        "assetId": null,
+        "coinId": "1008",
+        "coinName": "CL",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/CL.svg",
+        "resolution": null,
+        "showStepSize": "0.01",
+        "stepSize": "0.01"
+      },
+      {
+        "assetId": null,
+        "coinId": "1009",
+        "coinName": "NATGAS",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/NATGAS.svg",
+        "resolution": null,
+        "showStepSize": "0.1",
+        "stepSize": "0.1"
+      },
+      {
+        "assetId": null,
+        "coinId": "1010",
+        "coinName": "SPY",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/SPY.svg",
+        "resolution": null,
+        "showStepSize": "0.001",
+        "stepSize": "0.001"
+      },
+      {
+        "assetId": null,
+        "coinId": "1011",
+        "coinName": "QQQ",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/QQQ.svg",
+        "resolution": null,
+        "showStepSize": "0.001",
+        "stepSize": "0.001"
+      },
+      {
+        "assetId": null,
+        "coinId": "1012",
+        "coinName": "AAPL",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/AAPL.svg",
+        "resolution": null,
+        "showStepSize": "0.01",
+        "stepSize": "0.01"
+      },
+      {
+        "assetId": null,
+        "coinId": "1013",
+        "coinName": "AMZN",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/AMZN.svg",
+        "resolution": null,
+        "showStepSize": "0.01",
+        "stepSize": "0.01"
+      },
+      {
+        "assetId": null,
+        "coinId": "1014",
+        "coinName": "MSTR",
+        "iconUrl": "https://static.edgex.exchange/icons/coin/MSTR.svg",
+        "resolution": null,
+        "showStepSize": "0.01",
+        "stepSize": "0.01"
+      }
+    ],
+    "contractList": [
+      {
+        "baseCoinId": "1001",
+        "contractId": "30000001",
+        "contractName": "BTCUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.1,1,5,10",
+        "displayHotIcon": true,
+        "displayMaxLeverage": "100",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.002",
+        "fundingMinRate": "-0.002",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": false,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "15",
+        "maxOrderBuyPriceRatio": "0.05",
+        "maxOrderSize": "20",
+        "maxPositionSize": "150",
+        "minOrderSellPriceRatio": "0.05",
+        "minOrderSize": "0.003",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "3",
+        "oraclePriceSignedAssetIds": [
+          "BTCUSD",
+          "BTCUSD",
+          "BTCUSD",
+          "BTCUSD",
+          "BTCUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb91C675E0c0Ecfd4c16f97B110376C3C224061d8",
+          "0xF024A9AA110798e5CD0d698FBA6523113Eaa7FB2",
+          "0x51aa9e9C781F85a2C0636A835EB80114c4553098",
+          "0xF2e72022EB19352f488526E835c4b17248Aa6c03",
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "10000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.005",
+            "maxLeverage": "100",
+            "positionValueUpperBound": "500000",
+            "risk": "21474836",
+            "tier": 1,
+            "upperBound": "2147483648000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0067",
+            "maxLeverage": "75",
+            "positionValueUpperBound": "2000000",
+            "risk": "28776280",
+            "tier": 2,
+            "upperBound": "8589934592000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.01",
+            "maxLeverage": "50",
+            "positionValueUpperBound": "5000000",
+            "risk": "42949672",
+            "tier": 3,
+            "upperBound": "21474836480000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.02",
+            "maxLeverage": "25",
+            "positionValueUpperBound": "20000000",
+            "risk": "85899345",
+            "tier": 4,
+            "upperBound": "85899345920000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "30000000",
+            "risk": "107374182",
+            "tier": 5,
+            "upperBound": "128849018880000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "40000000",
+            "risk": "214748364",
+            "tier": 6,
+            "upperBound": "171798691840000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "50000000",
+            "risk": "268435456",
+            "tier": 7,
+            "upperBound": "214748364800000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 8,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.001",
+        "syntheticAssetId": "0x425443322d31300000000000000000",
+        "tickSize": "0.1"
+      },
+      {
+        "baseCoinId": "1002",
+        "contractId": "30000002",
+        "contractName": "ETHUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.01,0.1,0.5,1",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "100",
+        "displayMinLeverage": "1",
+        "displayNewIcon": true,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.002",
+        "fundingMinRate": "-0.002",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": false,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "400",
+        "maxOrderBuyPriceRatio": "0.05",
+        "maxOrderSize": "600",
+        "maxPositionSize": "4000",
+        "minOrderSellPriceRatio": "0.05",
+        "minOrderSize": "0.1",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "3",
+        "oraclePriceSignedAssetIds": [
+          "ETHUSD",
+          "ETHUSD",
+          "ETHUSD",
+          "ETHUSD",
+          "ETHUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb91C675E0c0Ecfd4c16f97B110376C3C224061d8",
+          "0xF024A9AA110798e5CD0d698FBA6523113Eaa7FB2",
+          "0x51aa9e9C781F85a2C0636A835EB80114c4553098",
+          "0xF2e72022EB19352f488526E835c4b17248Aa6c03",
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "1000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.005",
+            "maxLeverage": "100",
+            "positionValueUpperBound": "500000",
+            "risk": "21474836",
+            "tier": 1,
+            "upperBound": "2147483648000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0067",
+            "maxLeverage": "75",
+            "positionValueUpperBound": "2000000",
+            "risk": "28776280",
+            "tier": 2,
+            "upperBound": "8589934592000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.01",
+            "maxLeverage": "50",
+            "positionValueUpperBound": "5000000",
+            "risk": "42949672",
+            "tier": 3,
+            "upperBound": "21474836480000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.02",
+            "maxLeverage": "25",
+            "positionValueUpperBound": "20000000",
+            "risk": "85899345",
+            "tier": 4,
+            "upperBound": "85899345920000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "30000000",
+            "risk": "107374182",
+            "tier": 5,
+            "upperBound": "128849018880000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "40000000",
+            "risk": "214748364",
+            "tier": 6,
+            "upperBound": "171798691840000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "50000000",
+            "risk": "268435456",
+            "tier": 7,
+            "upperBound": "214748364800000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 8,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.01",
+        "syntheticAssetId": "0x4554482d3900000000000000000000",
+        "tickSize": "0.01"
+      },
+      {
+        "baseCoinId": "1003",
+        "contractId": "30000003",
+        "contractName": "SOLUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.01,0.02,0.05,0.1",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "75",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.002",
+        "fundingMinRate": "-0.002",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": false,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "7000",
+        "maxOrderBuyPriceRatio": "0.05",
+        "maxOrderSize": "13000",
+        "maxPositionSize": "50000",
+        "minOrderSellPriceRatio": "0.05",
+        "minOrderSize": "2",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "3",
+        "oraclePriceSignedAssetIds": [
+          "SOLUSD",
+          "SOLUSD",
+          "SOLUSD",
+          "SOLUSD",
+          "SOLUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb91C675E0c0Ecfd4c16f97B110376C3C224061d8",
+          "0xF024A9AA110798e5CD0d698FBA6523113Eaa7FB2",
+          "0x51aa9e9C781F85a2C0636A835EB80114c4553098",
+          "0xF2e72022EB19352f488526E835c4b17248Aa6c03",
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "100000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.0067",
+            "maxLeverage": "75",
+            "positionValueUpperBound": "500000",
+            "risk": "28776280",
+            "tier": 1,
+            "upperBound": "2147483648000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.01",
+            "maxLeverage": "50",
+            "positionValueUpperBound": "1000000",
+            "risk": "42949672",
+            "tier": 2,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.02",
+            "maxLeverage": "25",
+            "positionValueUpperBound": "2000000",
+            "risk": "85899345",
+            "tier": 3,
+            "upperBound": "8589934592000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "5000000",
+            "risk": "107374182",
+            "tier": 4,
+            "upperBound": "21474836480000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "10000000",
+            "risk": "214748364",
+            "tier": 5,
+            "upperBound": "42949672960000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "20000000",
+            "risk": "268435456",
+            "tier": 6,
+            "upperBound": "85899345920000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 7,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.1",
+        "syntheticAssetId": "0x534f4c2d3800000000000000000000",
+        "tickSize": "0.01"
+      },
+      {
+        "baseCoinId": "1005",
+        "contractId": "30000005",
+        "contractName": "XAUUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.1,0.2,0.5,1",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "50",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.004",
+        "fundingMinRate": "-0.004",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": false,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "12",
+        "maxOrderBuyPriceRatio": "0.2",
+        "maxOrderSize": "24",
+        "maxPositionSize": "230",
+        "minOrderSellPriceRatio": "0.2",
+        "minOrderSize": "0.04",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "3",
+        "oraclePriceSignedAssetIds": [
+          "XAUUSD",
+          "XAUUSD",
+          "XAUUSD",
+          "XAUUSD",
+          "XAUUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb91C675E0c0Ecfd4c16f97B110376C3C224061d8",
+          "0xF024A9AA110798e5CD0d698FBA6523113Eaa7FB2",
+          "0x51aa9e9C781F85a2C0636A835EB80114c4553098",
+          "0xF2e72022EB19352f488526E835c4b17248Aa6c03",
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "10000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.01",
+            "maxLeverage": "50",
+            "positionValueUpperBound": "300000",
+            "risk": "42949672",
+            "tier": 1,
+            "upperBound": "1288490188800000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.02",
+            "maxLeverage": "25",
+            "positionValueUpperBound": "1000000",
+            "risk": "85899345",
+            "tier": 2,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "2000000",
+            "risk": "107374182",
+            "tier": 3,
+            "upperBound": "8589934592000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "5000000",
+            "risk": "214748364",
+            "tier": 4,
+            "upperBound": "21474836480000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "10000000",
+            "risk": "268435456",
+            "tier": 5,
+            "upperBound": "42949672960000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 6,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.001",
+        "syntheticAssetId": "0x584155542d31300000000000000000",
+        "tickSize": "0.1"
+      },
+      {
+        "baseCoinId": "1006",
+        "contractId": "30000006",
+        "contractName": "XAGUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.01,0.02,0.05,0.1",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "50",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.004",
+        "fundingMinRate": "-0.004",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": false,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "700",
+        "maxOrderBuyPriceRatio": "0.2",
+        "maxOrderSize": "1400",
+        "maxPositionSize": "10000",
+        "minOrderSellPriceRatio": "0.2",
+        "minOrderSize": "2",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "1",
+        "oraclePriceSignedAssetIds": [
+          "XAGUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "1000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.01",
+            "maxLeverage": "50",
+            "positionValueUpperBound": "300000",
+            "risk": "42949672",
+            "tier": 1,
+            "upperBound": "1288490188800000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.02",
+            "maxLeverage": "25",
+            "positionValueUpperBound": "1000000",
+            "risk": "85899345",
+            "tier": 2,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "2000000",
+            "risk": "107374182",
+            "tier": 3,
+            "upperBound": "8589934592000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "5000000",
+            "risk": "214748364",
+            "tier": 4,
+            "upperBound": "21474836480000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "10000000",
+            "risk": "268435456",
+            "tier": 5,
+            "upperBound": "42949672960000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 6,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.01",
+        "syntheticAssetId": "0x584147555344430000000000000000",
+        "tickSize": "0.01"
+      },
+      {
+        "baseCoinId": "1007",
+        "contractId": "30000007",
+        "contractName": "COPPERUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.001,0.002,0.005,0.01",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "20",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.004",
+        "fundingMinRate": "-0.004",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": false,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "4000",
+        "maxOrderBuyPriceRatio": "0.2",
+        "maxOrderSize": "8000",
+        "maxPositionSize": "34000",
+        "minOrderSellPriceRatio": "0.2",
+        "minOrderSize": "20",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "1",
+        "oraclePriceSignedAssetIds": [
+          "COPPERUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "1000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "200000",
+            "risk": "107374182",
+            "tier": 1,
+            "upperBound": "858993459200000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0333",
+            "maxLeverage": "15",
+            "positionValueUpperBound": "300000",
+            "risk": "143022410",
+            "tier": 2,
+            "upperBound": "1288490188800000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "500000",
+            "risk": "214748364",
+            "tier": 3,
+            "upperBound": "2147483648000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "1000000",
+            "risk": "268435456",
+            "tier": 4,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 5,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.01",
+        "syntheticAssetId": "0x434f50504552555344430000000000",
+        "tickSize": "0.001"
+      },
+      {
+        "baseCoinId": "1008",
+        "contractId": "30000008",
+        "contractName": "CLUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.001,0.002,0.005,0.01",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "50",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.004",
+        "fundingMinRate": "-0.004",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": false,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "500",
+        "maxOrderBuyPriceRatio": "0.2",
+        "maxOrderSize": "1000",
+        "maxPositionSize": "10000",
+        "minOrderSellPriceRatio": "0.2",
+        "minOrderSize": "2",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "1",
+        "oraclePriceSignedAssetIds": [
+          "CLUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "1000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.01",
+            "maxLeverage": "50",
+            "positionValueUpperBound": "300000",
+            "risk": "42949672",
+            "tier": 1,
+            "upperBound": "1288490188800000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.02",
+            "maxLeverage": "25",
+            "positionValueUpperBound": "1000000",
+            "risk": "85899345",
+            "tier": 2,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "2000000",
+            "risk": "107374182",
+            "tier": 3,
+            "upperBound": "8589934592000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "5000000",
+            "risk": "214748364",
+            "tier": 4,
+            "upperBound": "21474836480000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "10000000",
+            "risk": "268435456",
+            "tier": 5,
+            "upperBound": "42949672960000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 6,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.01",
+        "syntheticAssetId": "0x434c55534443000000000000000000",
+        "tickSize": "0.001"
+      },
+      {
+        "baseCoinId": "1009",
+        "contractId": "30000009",
+        "contractName": "NATGASUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.001,0.002,0.005,0.01",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "20",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.004",
+        "fundingMinRate": "-0.004",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": false,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "10000",
+        "maxOrderBuyPriceRatio": "0.2",
+        "maxOrderSize": "20000",
+        "maxPositionSize": "100000",
+        "minOrderSellPriceRatio": "0.2",
+        "minOrderSize": "60",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "1",
+        "oraclePriceSignedAssetIds": [
+          "NATGASUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "100000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "200000",
+            "risk": "107374182",
+            "tier": 1,
+            "upperBound": "858993459200000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0333",
+            "maxLeverage": "15",
+            "positionValueUpperBound": "300000",
+            "risk": "143022410",
+            "tier": 2,
+            "upperBound": "1288490188800000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "500000",
+            "risk": "214748364",
+            "tier": 3,
+            "upperBound": "2147483648000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "1000000",
+            "risk": "268435456",
+            "tier": 4,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 5,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.1",
+        "syntheticAssetId": "0x4e4154474153555344430000000000",
+        "tickSize": "0.001"
+      },
+      {
+        "baseCoinId": "1010",
+        "contractId": "30000010",
+        "contractName": "SPYUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.01,0.02,0.05,0.1",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "30",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.004",
+        "fundingMinRate": "-0.004",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": true,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "50",
+        "maxOrderBuyPriceRatio": "0.2",
+        "maxOrderSize": "100",
+        "maxPositionSize": "400",
+        "minOrderSellPriceRatio": "0.2",
+        "minOrderSize": "0.2",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "1",
+        "oraclePriceSignedAssetIds": [
+          "SPYUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "10000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.0167",
+            "maxLeverage": "30",
+            "positionValueUpperBound": "300000",
+            "risk": "71725953",
+            "tier": 1,
+            "upperBound": "1288490188800000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "500000",
+            "risk": "107374182",
+            "tier": 2,
+            "upperBound": "2147483648000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0333",
+            "maxLeverage": "15",
+            "positionValueUpperBound": "1000000",
+            "risk": "143022410",
+            "tier": 3,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "2000000",
+            "risk": "214748364",
+            "tier": 4,
+            "upperBound": "8589934592000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "5000000",
+            "risk": "268435456",
+            "tier": 5,
+            "upperBound": "21474836480000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 6,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.001",
+        "syntheticAssetId": "0x535059555344430000000000000000",
+        "tickSize": "0.01"
+      },
+      {
+        "baseCoinId": "1011",
+        "contractId": "30000011",
+        "contractName": "QQQUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.01,0.02,0.05,0.1",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "30",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.004",
+        "fundingMinRate": "-0.004",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": true,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "50",
+        "maxOrderBuyPriceRatio": "0.2",
+        "maxOrderSize": "100",
+        "maxPositionSize": "400",
+        "minOrderSellPriceRatio": "0.2",
+        "minOrderSize": "0.2",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "1",
+        "oraclePriceSignedAssetIds": [
+          "QQQUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "10000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.0167",
+            "maxLeverage": "30",
+            "positionValueUpperBound": "300000",
+            "risk": "71725953",
+            "tier": 1,
+            "upperBound": "1288490188800000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "500000",
+            "risk": "107374182",
+            "tier": 2,
+            "upperBound": "2147483648000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0333",
+            "maxLeverage": "15",
+            "positionValueUpperBound": "1000000",
+            "risk": "143022410",
+            "tier": 3,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "2000000",
+            "risk": "214748364",
+            "tier": 4,
+            "upperBound": "8589934592000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "5000000",
+            "risk": "268435456",
+            "tier": 5,
+            "upperBound": "21474836480000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 6,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.001",
+        "syntheticAssetId": "0x515151555344430000000000000000",
+        "tickSize": "0.01"
+      },
+      {
+        "baseCoinId": "1012",
+        "contractId": "30000012",
+        "contractName": "AAPLUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.01,0.02,0.05,0.1",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "20",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.004",
+        "fundingMinRate": "-0.004",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": true,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "50",
+        "maxOrderBuyPriceRatio": "0.2",
+        "maxOrderSize": "100",
+        "maxPositionSize": "700",
+        "minOrderSellPriceRatio": "0.2",
+        "minOrderSize": "0.4",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "1",
+        "oraclePriceSignedAssetIds": [
+          "AAPLUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "1000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "200000",
+            "risk": "107374182",
+            "tier": 1,
+            "upperBound": "858993459200000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0333",
+            "maxLeverage": "15",
+            "positionValueUpperBound": "300000",
+            "risk": "143022410",
+            "tier": 2,
+            "upperBound": "1288490188800000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "500000",
+            "risk": "214748364",
+            "tier": 3,
+            "upperBound": "2147483648000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "1000000",
+            "risk": "268435456",
+            "tier": 4,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 5,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.01",
+        "syntheticAssetId": "0x4141504c5553444300000000000000",
+        "tickSize": "0.01"
+      },
+      {
+        "baseCoinId": "1013",
+        "contractId": "30000013",
+        "contractName": "AMZNUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.01,0.02,0.05,0.1",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "20",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.004",
+        "fundingMinRate": "-0.004",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": true,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "55",
+        "maxOrderBuyPriceRatio": "0.2",
+        "maxOrderSize": "110",
+        "maxPositionSize": "800",
+        "minOrderSellPriceRatio": "0.2",
+        "minOrderSize": "0.5",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "1",
+        "oraclePriceSignedAssetIds": [
+          "AMZNUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "1000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "200000",
+            "risk": "107374182",
+            "tier": 1,
+            "upperBound": "858993459200000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0333",
+            "maxLeverage": "15",
+            "positionValueUpperBound": "300000",
+            "risk": "143022410",
+            "tier": 2,
+            "upperBound": "1288490188800000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "500000",
+            "risk": "214748364",
+            "tier": 3,
+            "upperBound": "2147483648000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "1000000",
+            "risk": "268435456",
+            "tier": 4,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 5,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.01",
+        "syntheticAssetId": "0x414d5a4e5553444300000000000000",
+        "tickSize": "0.01"
+      },
+      {
+        "baseCoinId": "1014",
+        "contractId": "30000014",
+        "contractName": "MSTRUSDC",
+        "defaultLeverage": "10",
+        "defaultMakerFeeRate": "0.00018",
+        "defaultTakerFeeRate": "0.00038",
+        "displayDigitMerge": "0.01,0.02,0.05,0.1",
+        "displayHotIcon": false,
+        "displayMaxLeverage": "20",
+        "displayMinLeverage": "1",
+        "displayNewIcon": false,
+        "enableDisplay": true,
+        "enableOpenPosition": true,
+        "enableTrade": true,
+        "fundingImpactMarginNotional": "10",
+        "fundingInterestRate": "0.0003",
+        "fundingMaxRate": "0.004",
+        "fundingMinRate": "-0.004",
+        "fundingQuoteImpactMarginNotional": "10",
+        "fundingRateIntervalMin": "240",
+        "isStock": true,
+        "liquidateFeeRate": "0.01",
+        "matchServerName": "edgex-match-server",
+        "maxMarketPositionSize": "85",
+        "maxOrderBuyPriceRatio": "0.2",
+        "maxOrderSize": "170",
+        "maxPositionSize": "1200",
+        "minOrderSellPriceRatio": "0.2",
+        "minOrderSize": "0.6",
+        "openSizeReduceRatio": "0.99",
+        "oraclePriceQuorum": "1",
+        "oraclePriceSignedAssetIds": [
+          "MSTRUSD"
+        ],
+        "oraclePriceSigners": [
+          "0xb50cbeba205ddb685db2497eaea07f31a18a53ad"
+        ],
+        "quoteCoinId": "1000",
+        "resolution": "1000000000",
+        "riskTierList": [
+          {
+            "maintenanceMarginRate": "0.025",
+            "maxLeverage": "20",
+            "positionValueUpperBound": "200000",
+            "risk": "107374182",
+            "tier": 1,
+            "upperBound": "858993459200000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0333",
+            "maxLeverage": "15",
+            "positionValueUpperBound": "300000",
+            "risk": "143022410",
+            "tier": 2,
+            "upperBound": "1288490188800000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.05",
+            "maxLeverage": "10",
+            "positionValueUpperBound": "500000",
+            "risk": "214748364",
+            "tier": 3,
+            "upperBound": "2147483648000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0625",
+            "maxLeverage": "8",
+            "positionValueUpperBound": "1000000",
+            "risk": "268435456",
+            "tier": 4,
+            "upperBound": "4294967296000000000000"
+          },
+          {
+            "maintenanceMarginRate": "0.0833",
+            "maxLeverage": "6",
+            "positionValueUpperBound": "79228162514264337593543",
+            "risk": "357770775",
+            "tier": 5,
+            "upperBound": "340282366920938463463374607431768211455"
+          }
+        ],
+        "stepSize": "0.01",
+        "syntheticAssetId": "0x4d5354525553444300000000000000",
+        "tickSize": "0.01"
+      }
+    ],
+    "global": {
+      "appEnv": "mainnet",
+      "appName": "edgeX",
+      "appOnlySignOn": "https://pro.edgex.exchange",
+      "chainId": "0xd0f",
+      "collateralCoinId": "1000",
+      "contractAddress": "0xeeb3fb05cca17745cbdf193a9b16537efb68fac8",
+      "fastWithdrawAccountId": "0",
+      "fastWithdrawAccountL2Key": "0x0",
+      "fastWithdrawMaxAmount": "0",
+      "fastWithdrawRegistryAddress": "0x0000000000000000000000000000000000000000",
+      "feeAccountId": "751487024678044377",
+      "fundingValidityPeriod": 86400,
+      "isolatedMarginSignPermission": "0x10",
+      "isolatedMarginSigner": "0x64895bC7F897b523399D2b73db0e382020a62Ecb",
+      "maintenanceReason": "",
+      "maxFundingRate": 12000,
+      "minTransferSize": "1",
+      "nativeChainId": "3343",
+      "perpVaultAddress": "0x48fc02c5bD34Af7086a5C70D4C59d18d10A557b5",
+      "poolAccountId": "0",
+      "poolAccountL2Key": "0x0",
+      "priceValidityPeriod": 86400,
+      "spotVaultAddress": "0x87E11A60e6FdDE29d86ce446aE06dDBc19D78E53",
+      "transferCoinId": "1000",
+      "transferLimitEnable": false,
+      "transferTokenAddress": "0x98d2919b9A214E6Fa5384AC81E6864bA686Ad74c",
+      "transferTokenDecimals": 6
+    },
+    "multiChain": {
+      "chainList": [
+        {
+          "appRpcUrl": "https://edge-mainnet.g.alchemy.com/v2/p7XZ9PmQlUFoTRxwIeB38",
+          "blockTime": "12",
+          "cctpDomain": "28",
+          "cctpMessageTransmitter": "0x5b61381Fc9e58E70EfC13a4A97516997019198ee",
+          "cctpMinFinalitythreshold": "1000",
+          "cctpResolvedMaxFee": "1.5",
+          "cctpTarget": null,
+          "cctpTokenMessenger": "0x98706A006bc632Df31CAdFCBD43F38887ce2ca5c",
+          "cctpVaultRelayer": "0x449ab3B7AAc57C2695E359f422365C726ED1ED0a",
+          "chain": "Edge",
+          "chainIconUrl": "https://static.edgex.exchange/icons/coin/EDGEX.png",
+          "chainId": "3343",
+          "gasToken": "ETH",
+          "loadingzoneAddress": "0x0000000000000000000000000000000000000000",
+          "rpcUrl": "https://edge-mainnet.g.alchemy.com/v2/p7XZ9PmQlUFoTRxwIeB38",
+          "tokenList": [
+            {
+              "coinId": "1000",
+              "decimals": "6",
+              "depositEnable": true,
+              "depositType": "NORMAL",
+              "iconUrl": "https://static.edgex.exchange/icons/coin/USDC.svg",
+              "minDepositSize": "10",
+              "minWithdrawSize": "2",
+              "token": "USDC",
+              "tokenAddress": "0x98d2919b9A214E6Fa5384AC81E6864bA686Ad74c",
+              "withdrawEnable": true,
+              "withdrawFeeRate": "0",
+              "withdrawMinFee": "1"
+            }
+          ],
+          "txConfirm": "10",
+          "vaultAddress": "0x4b1e12Fbee329d462eFCAe43E3fE52110C923717",
+          "webTxUrl": "https://edge-mainnet.explorer.alchemy.com/tx/"
+        },
+        {
+          "appRpcUrl": "https://eth-mainnet.g.alchemy.com/v2/p7XZ9PmQlUFoTRxwIeB38",
+          "blockTime": "12",
+          "cctpDomain": "0",
+          "cctpMessageTransmitter": "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+          "cctpMinFinalitythreshold": "1000",
+          "cctpResolvedMaxFee": "1",
+          "cctpTarget": null,
+          "cctpTokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+          "cctpVaultRelayer": "",
+          "chain": "Ethereum",
+          "chainIconUrl": "https://static.edgex.exchange/icons/logo/ethereum.svg",
+          "chainId": "1",
+          "gasToken": "ETH",
+          "loadingzoneAddress": "",
+          "rpcUrl": "https://eth-mainnet.g.alchemy.com/v2/p7XZ9PmQlUFoTRxwIeB38",
+          "tokenList": [
+            {
+              "coinId": "1000",
+              "decimals": "6",
+              "depositEnable": true,
+              "depositType": "CCTP",
+              "iconUrl": "https://static.edgex.exchange/icons/coin/USDC.svg",
+              "minDepositSize": "10",
+              "minWithdrawSize": "2",
+              "token": "USDC",
+              "tokenAddress": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+              "withdrawEnable": true,
+              "withdrawFeeRate": "0",
+              "withdrawMinFee": "1"
+            }
+          ],
+          "txConfirm": "10",
+          "vaultAddress": "",
+          "webTxUrl": "https://etherscan.io/tx/"
+        },
+        {
+          "appRpcUrl": "https://rpc.edgex.exchange/RMZZpeTnB6hjfcm8xNNyo6cKa9Zn4qgB/arbitrum",
+          "blockTime": "3",
+          "cctpDomain": "3",
+          "cctpMessageTransmitter": "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+          "cctpMinFinalitythreshold": "1000",
+          "cctpResolvedMaxFee": "1.3",
+          "cctpTarget": null,
+          "cctpTokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+          "cctpVaultRelayer": "",
+          "chain": "Arbitrum",
+          "chainIconUrl": "https://static.edgex.exchange/icons/logo/arbitrum.svg",
+          "chainId": "42161",
+          "gasToken": "ETH",
+          "loadingzoneAddress": "",
+          "rpcUrl": "https://rpc.edgex.exchange/RMZZpeTnB6hjfcm8xNNyo6cKa9Zn4qgB/arbitrum",
+          "tokenList": [
+            {
+              "coinId": "1000",
+              "decimals": "6",
+              "depositEnable": true,
+              "depositType": "CCTP",
+              "iconUrl": "https://static.edgex.exchange/icons/coin/USDC.svg",
+              "minDepositSize": "10",
+              "minWithdrawSize": "2",
+              "token": "USDC",
+              "tokenAddress": "0xaf88d065e77c8cC2239327C5EDb3A432268e5831",
+              "withdrawEnable": true,
+              "withdrawFeeRate": "0",
+              "withdrawMinFee": "1"
+            }
+          ],
+          "txConfirm": "10",
+          "vaultAddress": "",
+          "webTxUrl": "https://arbiscan.io/tx/"
+        },
+        {
+          "appRpcUrl": "https://base-mainnet.g.alchemy.com/v2/p7XZ9PmQlUFoTRxwIeB38",
+          "blockTime": "2",
+          "cctpDomain": "6",
+          "cctpMessageTransmitter": "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+          "cctpMinFinalitythreshold": "1000",
+          "cctpResolvedMaxFee": "1.3",
+          "cctpTarget": null,
+          "cctpTokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+          "cctpVaultRelayer": "",
+          "chain": "Base",
+          "chainIconUrl": "https://static.edgex.exchange/icons/logo/base.svg",
+          "chainId": "8453",
+          "gasToken": "ETH",
+          "loadingzoneAddress": "",
+          "rpcUrl": "https://base-mainnet.g.alchemy.com/v2/p7XZ9PmQlUFoTRxwIeB38",
+          "tokenList": [
+            {
+              "coinId": "1000",
+              "decimals": "6",
+              "depositEnable": true,
+              "depositType": "CCTP",
+              "iconUrl": "https://static.edgex.exchange/icons/coin/USDC.svg",
+              "minDepositSize": "10",
+              "minWithdrawSize": "2",
+              "token": "USDC",
+              "tokenAddress": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
+              "withdrawEnable": true,
+              "withdrawFeeRate": "0",
+              "withdrawMinFee": "1"
+            }
+          ],
+          "txConfirm": "10",
+          "vaultAddress": "",
+          "webTxUrl": "https://basescan.org/tx/"
+        },
+        {
+          "appRpcUrl": "https://opt-mainnet.g.alchemy.com/v2/p7XZ9PmQlUFoTRxwIeB38",
+          "blockTime": "2",
+          "cctpDomain": "2",
+          "cctpMessageTransmitter": "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+          "cctpMinFinalitythreshold": "1000",
+          "cctpResolvedMaxFee": "1.3",
+          "cctpTarget": null,
+          "cctpTokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+          "cctpVaultRelayer": "",
+          "chain": "Optimism",
+          "chainIconUrl": "https://static.edgex.exchange/icons/logo/optimism.svg",
+          "chainId": "10",
+          "gasToken": "ETH",
+          "loadingzoneAddress": "",
+          "rpcUrl": "https://opt-mainnet.g.alchemy.com/v2/p7XZ9PmQlUFoTRxwIeB38",
+          "tokenList": [
+            {
+              "coinId": "1000",
+              "decimals": "6",
+              "depositEnable": true,
+              "depositType": "CCTP",
+              "iconUrl": "https://static.edgex.exchange/icons/coin/USDC.svg",
+              "minDepositSize": "10",
+              "minWithdrawSize": "2",
+              "token": "USDC",
+              "tokenAddress": "0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85",
+              "withdrawEnable": true,
+              "withdrawFeeRate": "0",
+              "withdrawMinFee": "1"
+            }
+          ],
+          "txConfirm": "10",
+          "vaultAddress": "",
+          "webTxUrl": "https://optimistic.etherscan.io/tx/"
+        },
+        {
+          "appRpcUrl": "https://polygon-mainnet.g.alchemy.com/v2/p7XZ9PmQlUFoTRxwIeB38",
+          "blockTime": "2",
+          "cctpDomain": "7",
+          "cctpMessageTransmitter": "0x81D40F21F12A8F0E3252Bccb954D722d4c464B64",
+          "cctpMinFinalitythreshold": "1000",
+          "cctpResolvedMaxFee": "0",
+          "cctpTarget": null,
+          "cctpTokenMessenger": "0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d",
+          "cctpVaultRelayer": "",
+          "chain": "Polygon",
+          "chainIconUrl": "https://static.edgex.exchange/icons/logo/polygon.svg",
+          "chainId": "137",
+          "gasToken": "POL",
+          "loadingzoneAddress": "",
+          "rpcUrl": "https://polygon-mainnet.g.alchemy.com/v2/p7XZ9PmQlUFoTRxwIeB38",
+          "tokenList": [
+            {
+              "coinId": "1000",
+              "decimals": "6",
+              "depositEnable": true,
+              "depositType": "CCTP",
+              "iconUrl": "https://static.edgex.exchange/icons/coin/USDC.svg",
+              "minDepositSize": "10",
+              "minWithdrawSize": "2",
+              "token": "USDC",
+              "tokenAddress": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
+              "withdrawEnable": true,
+              "withdrawFeeRate": "0",
+              "withdrawMinFee": "1"
+            }
+          ],
+          "txConfirm": "10",
+          "vaultAddress": "",
+          "webTxUrl": "https://polygonscan.com/tx/"
+        }
+      ]
+    }
+  },
+  "errorParam": null,
+  "msg": null,
+  "requestTime": "1779253647655",
+  "responseTime": "1779253647655",
+  "traceId": "b46364cc48e75746ca1c6f4d1b537c0f"
+}

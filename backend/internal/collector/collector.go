@@ -94,7 +94,13 @@ func platformFromBook(book domain.OrderBookSnapshot, runtime config.Runtime) dom
 		return row
 	}
 	row.MidPrice = indicators.MidPrice(book)
-	row.SpreadBP = indicators.SpreadBP(book.Bids[0].Price, book.Asks[0].Price)
+	spread, ok := indicators.ValidSpreadBP(book.Bids[0].Price, book.Asks[0].Price)
+	if !ok {
+		row.DepthStatus = domain.StatusError
+		row.Error = "invalid orderbook: best bid must be lower than best ask"
+		return row
+	}
+	row.SpreadBP = spread
 	for _, tier := range runtime.DepthTiers {
 		label := fmt.Sprintf("%.2f%%", tier*100)
 		depth := indicators.DepthAtTier(book, tier)

@@ -497,7 +497,7 @@ func (a RESTAdapter) fetchMEXCInstruments(ctx context.Context, fetchedAt time.Ti
 			QuoteCoin    string  `json:"quoteCoin"`
 			SettleCoin   string  `json:"settleCoin"`
 			ContractSize float64 `json:"contractSize"`
-			IsHidden     int     `json:"isHidden"`
+			IsHidden     any     `json:"isHidden"`
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(contractRaw, &contractBody); err != nil {

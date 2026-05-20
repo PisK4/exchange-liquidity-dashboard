@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
 	"edgex-dashboard/backend/internal/collector"
 	"edgex-dashboard/backend/internal/config"
@@ -21,6 +20,7 @@ func NewServer(cfg config.Config, store *collector.Store) *Server {
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", s.health)
+	mux.HandleFunc("/api/dashboard/meta", s.dashboardMeta)
 	mux.HandleFunc("/api/symbols", s.symbols)
 	mux.HandleFunc("/api/symbols/coverage", s.coverage)
 	mux.HandleFunc("/api/snapshot/liquidity", s.liquidity)
@@ -38,6 +38,9 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 func (s *Server) symbols(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"symbols": s.store.Symbols(), "mappings": s.store.SymbolMappings()})
 }
+func (s *Server) dashboardMeta(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.store.DashboardMeta())
+}
 func (s *Server) coverage(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.store.Coverage()) }
 func (s *Server) liquidity(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.store.Liquidity(r.URL.Query().Get("symbol")))
@@ -49,7 +52,7 @@ func (s *Server) share(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.store.Share(r.URL.Query().Get("window")))
 }
 func (s *Server) top30(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.store.Top30(r.URL.Query().Get("surface"), strings.ToLower(r.URL.Query().Get("platform"))))
+	writeJSON(w, s.store.Top30(r.URL.Query().Get("surface"), r.URL.Query().Get("platform")))
 }
 func (s *Server) collectionStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.store.CollectionStatus())

@@ -11,3 +11,8 @@ coverage/
 backend/build-catalog
 .factory
 docs
+
+# Track raw instrument audit snapshots under backend/docs despite ignoring docs elsewhere.
+!backend/docs/
+!backend/docs/raw-instruments/
+!backend/docs/raw-instruments/**

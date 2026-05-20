@@ -23,14 +23,23 @@ func TestDepthAtTierAndSpread(t *testing.T) {
 
 func TestSlippage(t *testing.T) {
 	book := domain.OrderBookSnapshot{
-		Bids: []domain.Level{{Price: 100, Size: 1}, {Price: 99, Size: 2}},
+		Bids: []domain.Level{{Price: 99, Size: 1}, {Price: 98, Size: 2}},
 		Asks: []domain.Level{{Price: 101, Size: 1}, {Price: 102, Size: 2}},
 	}
-	if got := BuySlippageBP(book, 202); got <= 0 {
-		t.Fatalf("expected positive buy slippage, got %f", got)
+	if got := BuySlippageBP(book, 101); math.Abs(got-100) > 0.0001 {
+		t.Fatalf("expected buy slippage relative to mid, got %f", got)
 	}
-	if got := SellSlippageBP(book, 200); got <= 0 {
-		t.Fatalf("expected positive sell slippage, got %f", got)
+	if got := SellSlippageBP(book, 99); math.Abs(got-100) > 0.0001 {
+		t.Fatalf("expected sell slippage relative to mid, got %f", got)
+	}
+}
+
+func TestValidSpreadRejectsCrossedBook(t *testing.T) {
+	if _, ok := ValidSpreadBP(101, 99); ok {
+		t.Fatalf("crossed book must not be represented as a valid zero-spread book")
+	}
+	if got, ok := ValidSpreadBP(99, 101); !ok || math.Abs(got-200) > 0.0001 {
+		t.Fatalf("valid spread = %f ok=%v", got, ok)
 	}
 }
 

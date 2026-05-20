@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"log"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -105,6 +104,19 @@ func (s *Store) Coverage() map[string]any {
 	return map[string]any{"rows": rows, "snapshot_ts": time.Now().UTC()}
 }
 
+func (s *Store) DashboardMeta() map[string]any {
+	return map[string]any{
+		"tabs":                 []string{"monitor", "quality", "share", "top30"},
+		"platforms":            s.cfg.Platforms,
+		"symbols":              s.Symbols(),
+		"windows":              []string{"24h", "7d", "30d"},
+		"depth_tiers":          s.cfg.Runtime.DepthTiers,
+		"slippage_buckets_usd": s.cfg.Runtime.SlippageBucketsUSD,
+		"refresh_interval_sec": int(s.cfg.Runtime.CollectionInterval.Seconds()),
+		"volume_discounts":     s.cfg.Runtime.VolumeDiscounts,
+	}
+}
+
 func (s *Store) Liquidity(symbol string) map[string]any {
 	if symbol == "" {
 		symbol = "BTC-USDT (perp)"
@@ -119,7 +131,9 @@ func (s *Store) Liquidity(symbol string) map[string]any {
 			rows = append(rows, missingPlatform(p, symbol))
 		}
 	}
-	return map[string]any{"symbol": symbol, "snapshot_ts": latestTS(rows), "rows": rows, "kpis": liquidityKPIs(rows, s.volumes, symbol)}
+	medians := competitorMedianByTier(rows)
+	rows = enrichLiquidityRows(rows, medians)
+	return map[string]any{"symbol": symbol, "snapshot_ts": latestTS(rows), "rows": rows, "competitor_median_by_tier": medians, "kpis": liquidityKPIs(rows, medians, s.volumes, symbol)}
 }
 
 func (s *Store) Quality(symbol string) map[string]any {
@@ -136,6 +150,7 @@ func (s *Store) Quality(symbol string) map[string]any {
 			rows = append(rows, missingPlatform(p, symbol))
 		}
 	}
+	rows = enrichQualityRows(rows)
 	return map[string]any{"symbol": symbol, "snapshot_ts": latestTS(rows), "slippage_buckets_usd": s.cfg.Runtime.SlippageBucketsUSD, "rows": rows}
 }
 
@@ -146,11 +161,15 @@ func (s *Store) Share(window string) map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	if window != "24h" {
-		return map[string]any{"window": window, "status": domain.HistoryInsufficient, "rows": []any{}, "snapshot_ts": time.Now().UTC()}
+		return map[string]any{"window": window, "status": domain.StatusUnsupported, "reason": "historical platform share is not implemented yet", "rows": []any{}, "snapshot_ts": time.Now().UTC(), "trend": map[string]any{"status": domain.StatusUnsupported}}
 	}
+	rawByPlatform := map[string]float64{}
 	byPlatform := map[string]float64{}
+	statusByPlatform := map[string]string{}
 	for _, v := range s.volumes {
+		statusByPlatform[v.Platform] = mergeVolumeStatus(statusByPlatform[v.Platform], v.Status)
 		if v.Status == domain.StatusComplete {
+			rawByPlatform[v.Platform] += v.Volume24HUSD
 			byPlatform[v.Platform] += indicators.AdjustedVolume(v.Platform, v.Volume24HUSD)
 		}
 	}
@@ -160,17 +179,38 @@ func (s *Store) Share(window string) map[string]any {
 	}
 	rows := []map[string]any{}
 	for _, p := range s.cfg.Platforms {
+		raw := rawByPlatform[p]
 		adjusted := byPlatform[p]
+		status := statusByPlatform[p]
+		if status == "" {
+			status = domain.StatusStale
+		}
 		share := 0.0
 		if denom > 0 {
 			share = adjusted / denom * 100
 		}
-		rows = append(rows, map[string]any{"platform": p, "adjusted_volume_24h_usd": adjusted, "share_pct": share, "discount": discount(p), "status": statusForVolume(s.volumes, p)})
+		row := map[string]any{"platform": p, "discount": discount(p), "status": status}
+		if status == domain.StatusComplete {
+			row["raw_volume_usd"] = raw
+			row["adjusted_volume_usd"] = adjusted
+			row["adjusted_volume_24h_usd"] = adjusted
+			row["share_pct"] = share
+			row["denominator_pct"] = share
+		}
+		rows = append(rows, row)
 	}
 	sort.Slice(rows, func(i, j int) bool {
-		return rows[i]["adjusted_volume_24h_usd"].(float64) > rows[j]["adjusted_volume_24h_usd"].(float64)
+		return numeric(rows[i]["adjusted_volume_usd"]) > numeric(rows[j]["adjusted_volume_usd"])
 	})
-	return map[string]any{"window": "24h", "snapshot_ts": time.Now().UTC(), "denominator_usd": denom, "rows": rows, "history": map[string]string{"7d": domain.HistoryInsufficient, "30d": domain.HistoryInsufficient}}
+	for i := range rows {
+		rows[i]["rank"] = i + 1
+	}
+	kpis := map[string]any{
+		"edgex_share_pct":        shareForAdjusted(byPlatform["edgeX"], denom),
+		"edgex_total_volume_usd": rawByPlatform["edgeX"],
+		"denominator_usd":        denom,
+	}
+	return map[string]any{"window": "24h", "snapshot_ts": time.Now().UTC(), "denominator_usd": denom, "rows": rows, "kpis": kpis, "history": map[string]string{"7d": domain.StatusUnsupported, "30d": domain.StatusUnsupported}, "trend": map[string]any{"status": domain.StatusUnsupported}}
 }
 
 func (s *Store) Top30(surface, platform string) map[string]any {
@@ -184,10 +224,7 @@ func (s *Store) Top30(surface, platform string) map[string]any {
 	defer s.mu.RUnlock()
 	now := time.Now().UTC()
 	rows := []domain.Top30Row{}
-	for i, sym := range top30Symbols() {
-		rows = append(rows, domain.Top30Row{Rank: i + 1, Platform: platform, Symbol: sym, Volume7DStatus: domain.HistoryInsufficient, Delta7DStatus: domain.HistoryInsufficient, Action: "TODO(P1)", SnapshotTS: now, SourceEndpoint: "top30 adapter pending", Status: domain.StatusUnsupported, Error: "live exchange Top30 ranking is not implemented yet"})
-	}
-	return map[string]any{"surface": surface, "platform": platform, "snapshot_ts": now, "rows": rows}
+	return map[string]any{"surface": surface, "platform": platform, "snapshot_ts": now, "status": domain.StatusUnsupported, "rows": rows}
 }
 
 func (s *Store) displayPlatformSnapshotLocked(platform, symbol string) (domain.PlatformSnapshot, bool) {
@@ -255,7 +292,7 @@ func latestTS(rows []domain.PlatformSnapshot) time.Time {
 	return t
 }
 
-func liquidityKPIs(rows []domain.PlatformSnapshot, volumes map[string]domain.VolumeSnapshot, symbol string) map[string]any {
+func liquidityKPIs(rows []domain.PlatformSnapshot, medians map[string]float64, volumes map[string]domain.VolumeSnapshot, symbol string) map[string]any {
 	var edge domain.PlatformSnapshot
 	for _, r := range rows {
 		if r.Platform == "edgeX" {
@@ -276,16 +313,166 @@ func liquidityKPIs(rows []domain.PlatformSnapshot, volumes map[string]domain.Vol
 	if denom > 0 {
 		share = share / denom * 100
 	}
-	return map[string]any{"edgex_depth_by_tier": edge.DepthByTier, "edgex_spread_bp": edge.SpreadBP, "edgex_24h_share_pct": share}
+	return map[string]any{
+		"edgex_depth_by_tier":       edge.DepthByTier,
+		"edgex_vs_median_by_tier":   edge.VsMedianByTier,
+		"competitor_median_by_tier": medians,
+		"edgex_spread_bp":           edge.SpreadBP,
+		"edgex_spread_10m_status":   domain.StatusUnsupported,
+		"edgex_24h_share_pct":       share,
+		"symbol_share_7d_status":    domain.StatusUnsupported,
+		"symbol_share_wow_status":   domain.StatusUnsupported,
+	}
 }
 
-func statusForVolume(volumes map[string]domain.VolumeSnapshot, platform string) string {
-	for _, v := range volumes {
-		if v.Platform == platform {
-			return v.Status
+func competitorMedianByTier(rows []domain.PlatformSnapshot) map[string]float64 {
+	byTier := map[string][]float64{}
+	for _, row := range rows {
+		if row.Platform == "edgeX" || !isComparableDepth(row) {
+			continue
+		}
+		for tier, depth := range row.DepthByTier {
+			if depth.TotalUSD > 0 {
+				byTier[tier] = append(byTier[tier], depth.TotalUSD)
+			}
 		}
 	}
-	return domain.StatusStale
+	out := map[string]float64{}
+	for tier, values := range byTier {
+		out[tier] = median(values)
+	}
+	return out
+}
+
+func enrichLiquidityRows(rows []domain.PlatformSnapshot, medians map[string]float64) []domain.PlatformSnapshot {
+	ranked := append([]domain.PlatformSnapshot(nil), rows...)
+	sort.Slice(ranked, func(i, j int) bool {
+		return ranked[i].DepthByTier["0.10%"].TotalUSD > ranked[j].DepthByTier["0.10%"].TotalUSD
+	})
+	ranks := map[string]int{}
+	rank := 1
+	for _, row := range ranked {
+		if !isComparableDepth(row) || row.DepthByTier["0.10%"].TotalUSD <= 0 {
+			continue
+		}
+		ranks[row.Platform] = rank
+		rank++
+	}
+	out := append([]domain.PlatformSnapshot(nil), rows...)
+	for i := range out {
+		out[i].VsMedianByTier = map[string]float64{}
+		for tier, depth := range out[i].DepthByTier {
+			if medians[tier] > 0 && depth.TotalUSD > 0 && isComparableDepth(out[i]) {
+				out[i].VsMedianByTier[tier] = depth.TotalUSD / medians[tier]
+			}
+		}
+		out[i].Rank01 = ranks[out[i].Platform]
+		out[i].DepthStatusLabel = depthStatusLabel(out[i])
+	}
+	return out
+}
+
+func enrichQualityRows(rows []domain.PlatformSnapshot) []domain.PlatformSnapshot {
+	out := append([]domain.PlatformSnapshot(nil), rows...)
+	for i := range out {
+		out[i].WorstSlippageBP = map[string]float64{}
+		for bucket, buy := range out[i].BuySlippageBP {
+			sell := out[i].SellSlippageBP[bucket]
+			if buy >= sell {
+				out[i].WorstSlippageBP[bucket] = buy
+			} else {
+				out[i].WorstSlippageBP[bucket] = sell
+			}
+		}
+		out[i].Verdict = qualityVerdict(out[i])
+	}
+	return out
+}
+
+func isComparableDepth(row domain.PlatformSnapshot) bool {
+	switch row.DepthStatus {
+	case domain.StatusComplete, domain.StatusPartial, domain.StatusAggregatedOrderbook, domain.StatusWSLimitedDepth:
+		return true
+	default:
+		return false
+	}
+}
+
+func median(values []float64) float64 {
+	if len(values) == 0 {
+		return 0
+	}
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+	mid := len(sorted) / 2
+	if len(sorted)%2 == 1 {
+		return sorted[mid]
+	}
+	return (sorted[mid-1] + sorted[mid]) / 2
+}
+
+func depthStatusLabel(row domain.PlatformSnapshot) string {
+	if !isComparableDepth(row) {
+		return domain.StatusUnsupported
+	}
+	ratio, ok := row.VsMedianByTier["0.10%"]
+	if !ok || ratio <= 0 {
+		return domain.StatusUnsupported
+	}
+	if ratio < 0.5 {
+		return "深度落后"
+	}
+	if ratio < 0.8 {
+		return "偏弱"
+	}
+	return "达标"
+}
+
+func qualityVerdict(row domain.PlatformSnapshot) string {
+	if !isComparableDepth(row) || row.SpreadBP <= 0 {
+		return domain.StatusUnsupported
+	}
+	absImbalance := row.Imbalance
+	if absImbalance < 0 {
+		absImbalance = -absImbalance
+	}
+	if row.SpreadBP < 1 && absImbalance < 15 {
+		return "健康"
+	}
+	if row.SpreadBP < 1.5 || absImbalance < 25 {
+		return "关注"
+	}
+	return "较差"
+}
+
+func shareForAdjusted(adjusted, denom float64) float64 {
+	if denom <= 0 {
+		return 0
+	}
+	return adjusted / denom * 100
+}
+
+func mergeVolumeStatus(current, next string) string {
+	if next == domain.StatusComplete || current == domain.StatusComplete {
+		return domain.StatusComplete
+	}
+	if next == domain.StatusError || current == domain.StatusError {
+		return domain.StatusError
+	}
+	if next == domain.StatusUnsupported || current == domain.StatusUnsupported {
+		return domain.StatusUnsupported
+	}
+	if next != "" {
+		return next
+	}
+	return current
+}
+
+func numeric(value any) float64 {
+	if v, ok := value.(float64); ok {
+		return v
+	}
+	return 0
 }
 func discount(platform string) float64 {
 	if platform == "mexc" {
@@ -295,16 +482,4 @@ func discount(platform string) float64 {
 		return 0.5
 	}
 	return 1
-}
-func symbolBase(display string) string { return strings.TrimSuffix(display, " (perp)") }
-
-func top30Symbols() []string {
-	return []string{
-		"BTC-USDT", "ETH-USDT", "SOL-USDT", "XRP-USDT", "BNB-USDT",
-		"DOGE-USDT", "HYPE-USDT", "SUI-USDT", "LINK-USDT", "AVAX-USDT",
-		"TON-USDT", "ADA-USDT", "TRX-USDT", "PEPE-USDT", "WIF-USDT",
-		"BONK-USDT", "ENA-USDT", "JUP-USDT", "FARTCOIN-USDT", "LTC-USDT",
-		"BCH-USDT", "DOT-USDT", "NEAR-USDT", "APT-USDT", "ARB-USDT",
-		"OP-USDT", "INJ-USDT", "TIA-USDT", "SEI-USDT", "WLD-USDT",
-	}
 }

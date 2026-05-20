@@ -182,7 +182,7 @@ func (a RESTAdapter) doJSONRequest(ctx context.Context, method, url string, body
 		return nil, 0, err
 	}
 	defer resp.Body.Close()
-	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 64<<20))
 	if err != nil {
 		return nil, resp.StatusCode, err
 	}

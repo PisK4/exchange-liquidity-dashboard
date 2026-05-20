@@ -60,8 +60,99 @@ export type PlatformRow = {
   spread_bp?: number;
   imbalance_pct?: number;
   depth_by_tier: Record<string, { bid_usd: number; ask_usd: number; total_usd: number }>;
+  vs_median_by_tier?: Record<string, number>;
+  rank_0_1?: number;
+  depth_status_label?: string;
   buy_slippage_bp: Record<string, number>;
   sell_slippage_bp: Record<string, number>;
+  worst_slippage_bp?: Record<string, number>;
+  verdict?: string;
+};
+
+export type DashboardMeta = {
+  tabs: string[];
+  platforms: string[];
+  symbols: string[];
+  windows: string[];
+  depth_tiers: number[];
+  slippage_buckets_usd: number[];
+  refresh_interval_sec: number;
+  volume_discounts: Record<string, number>;
+};
+
+export type LiquiditySnapshot = {
+  symbol: string;
+  snapshot_ts: string;
+  rows: PlatformRow[];
+  competitor_median_by_tier?: Record<string, number>;
+  kpis?: {
+    edgex_depth_by_tier?: Record<string, { bid_usd: number; ask_usd: number; total_usd: number }>;
+    edgex_vs_median_by_tier?: Record<string, number>;
+    edgex_spread_bp?: number;
+    edgex_spread_10m_status?: ApiStatus;
+    edgex_24h_share_pct?: number;
+    symbol_share_7d_status?: ApiStatus;
+    symbol_share_wow_status?: ApiStatus;
+  };
+};
+
+export type QualitySnapshot = {
+  symbol: string;
+  snapshot_ts: string;
+  slippage_buckets_usd: number[];
+  rows: PlatformRow[];
+};
+
+export type ShareRow = {
+  rank?: number;
+  platform: string;
+  raw_volume_usd?: number;
+  adjusted_volume_usd?: number;
+  adjusted_volume_24h_usd?: number;
+  share_pct?: number;
+  denominator_pct?: number;
+  discount?: number;
+  status?: ApiStatus;
+};
+
+export type ShareSnapshot = {
+  window: string;
+  status?: ApiStatus;
+  reason?: string;
+  snapshot_ts: string;
+  denominator_usd?: number;
+  rows: ShareRow[];
+  kpis?: {
+    edgex_share_pct?: number;
+    edgex_total_volume_usd?: number;
+    denominator_usd?: number;
+  };
+  trend?: { status?: ApiStatus; points?: Array<Record<string, number | string>> };
+};
+
+export type Top30Row = {
+  rank: number;
+  platform: string;
+  symbol: string;
+  volume_24h_usd?: number;
+  volume_7d_status?: ApiStatus;
+  delta_7d_status?: ApiStatus;
+  edgex_listed?: boolean;
+  edgex_listed_status?: ApiStatus;
+  competitor_top30_coverage?: number;
+  competitor_top30_coverage_status?: ApiStatus;
+  suggested_action?: string;
+  suggested_action_status?: ApiStatus;
+  status?: ApiStatus;
+  error?: string;
+};
+
+export type Top30Snapshot = {
+  surface: string;
+  platform: string;
+  snapshot_ts: string;
+  status?: ApiStatus;
+  rows: Top30Row[];
 };
 
 const SERVER_API_BASE = process.env.SERVER_API_BASE ?? process.env.NEXT_PUBLIC_API_BASE ?? 'http://127.0.0.1:8080';
@@ -75,11 +166,17 @@ export async function getJSON<T>(path: string): Promise<T> {
 export const symbols = ['BTC-USDT (perp)', 'ETH-USDT (perp)', 'SOL-USDT (perp)'];
 
 export function money(value?: number) {
-  if (!value) return '-';
+  if (typeof value !== 'number') return '—';
+  if (value === 0) return '$0';
   if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
   if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
   return `$${value.toFixed(0)}`;
 }
 
-export function pct(value?: number) { return typeof value === 'number' ? `${value.toFixed(2)}%` : '-'; }
-export function bp(value?: number) { return typeof value === 'number' && value > 0 ? `${value.toFixed(2)} bp` : '-'; }
+export function moneyM(value?: number) {
+  return typeof value === 'number' ? `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)}M` : '—';
+}
+
+export function pct(value?: number) { return typeof value === 'number' ? `${value.toFixed(2)}%` : '—'; }
+export function bp(value?: number) { return typeof value === 'number' && value > 0 ? `${value.toFixed(2)} bp` : '—'; }
+export function ratio(value?: number) { return typeof value === 'number' && value > 0 ? `${value.toFixed(2)}×` : '—'; }
