@@ -8,6 +8,11 @@ import { colorFor, rgba } from '@/components/chart-colors';
 export type ShareTrendPoint = {
   day: string;
   edgex_share_pct?: number;
+  share_24h_pct?: number;
+  share_7d_pct?: number;
+  share_30d_pct?: number;
+  days_7d?: number;
+  days_30d?: number;
   edgex_volume_usd?: number;
   denominator_usd?: number;
   platforms_covered?: number;
@@ -17,6 +22,14 @@ type Props = {
   ariaLabel: string;
   points: ShareTrendPoint[];
 };
+
+const SHARE_24H_COLOR = '#5794f2';
+const SHARE_7D_COLOR = colorFor('edgeX');
+const SHARE_30D_COLOR = '#ff8800';
+
+function readNumber(value: number | undefined): number | null {
+  return typeof value === 'number' ? +value.toFixed(3) : null;
+}
 
 export function ShareTrendChart({ ariaLabel, points }: Props) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -29,8 +42,9 @@ export function ShareTrendChart({ ariaLabel, points }: Props) {
     chartRef.current?.destroy();
 
     const labels = points.map(p => p.day);
-    const shareSeries = points.map(p => (typeof p.edgex_share_pct === 'number' ? +p.edgex_share_pct.toFixed(3) : null));
-    const accent = colorFor('edgeX');
+    const series24h = points.map(p => readNumber(p.share_24h_pct ?? p.edgex_share_pct));
+    const series7d = points.map(p => readNumber(p.share_7d_pct));
+    const series30d = points.map(p => readNumber(p.share_30d_pct));
 
     const config: ChartConfiguration<'line', Array<number | null>, string> = {
       type: 'line',
@@ -38,17 +52,40 @@ export function ShareTrendChart({ ariaLabel, points }: Props) {
         labels,
         datasets: [
           {
-            label: 'edgeX daily share',
-            data: shareSeries,
-            borderColor: accent,
-            backgroundColor: rgba(accent, 0.18),
-            borderWidth: 2.4,
-            pointRadius: 2.5,
+            label: '24h share',
+            data: series24h,
+            borderColor: SHARE_24H_COLOR,
+            backgroundColor: rgba(SHARE_24H_COLOR, 0.08),
+            borderWidth: 1.6,
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            tension: 0.35,
+            fill: false,
+            spanGaps: false,
+          },
+          {
+            label: '7d share',
+            data: series7d,
+            borderColor: SHARE_7D_COLOR,
+            backgroundColor: rgba(SHARE_7D_COLOR, 0.22),
+            borderWidth: 2.5,
+            pointRadius: 0,
             pointHoverRadius: 4,
-            pointBackgroundColor: accent,
-            pointBorderColor: accent,
-            tension: 0.32,
+            tension: 0.35,
             fill: true,
+            spanGaps: false,
+          },
+          {
+            label: '30d share',
+            data: series30d,
+            borderColor: SHARE_30D_COLOR,
+            backgroundColor: rgba(SHARE_30D_COLOR, 0.06),
+            borderWidth: 1.6,
+            borderDash: [4, 4],
+            pointRadius: 0,
+            pointHoverRadius: 3,
+            tension: 0.35,
+            fill: false,
             spanGaps: false,
           },
         ],
@@ -67,7 +104,7 @@ export function ShareTrendChart({ ariaLabel, points }: Props) {
             grid: { color: '#2c3038' },
             ticks: {
               color: '#8e8f91',
-              callback: v => `${v}%`,
+              callback: value => `${Number(value).toFixed(1)}%`,
             },
           },
         },
@@ -84,9 +121,15 @@ export function ShareTrendChart({ ariaLabel, points }: Props) {
                 const v = ctx.parsed.y;
                 if (typeof v !== 'number') return '';
                 const point = points[ctx.dataIndex];
-                const covered = point?.platforms_covered;
-                const suffix = typeof covered === 'number' ? ` · ${covered}/10 平台` : '';
-                return `${ctx.dataset.label}: ${v.toFixed(3)}%${suffix}`;
+                let suffix = '';
+                if (ctx.dataset.label === '7d share' && typeof point?.days_7d === 'number') {
+                  suffix = ` · ${point.days_7d}/7d`;
+                } else if (ctx.dataset.label === '30d share' && typeof point?.days_30d === 'number') {
+                  suffix = ` · ${point.days_30d}/30d`;
+                } else if (ctx.dataset.label === '24h share' && typeof point?.platforms_covered === 'number') {
+                  suffix = ` · ${point.platforms_covered}/10 平台`;
+                }
+                return `${ctx.dataset.label}: ${v.toFixed(2)}%${suffix}`;
               },
             },
           },

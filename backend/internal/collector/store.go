@@ -695,15 +695,27 @@ func (s *Store) daysSeenLocked(platform string, days int) int {
 }
 
 // shareTrendLocked emits up to `days` data points for the edgeX share over
-// time. Returns status=insufficient_history when no daily rollups exist for
-// edgeX at all, status=partial when some days are missing, status=complete
-// when all `days` are populated.
+// time, each point carrying three rolling-window shares — the day itself
+// (24h), the trailing 7 days, and the trailing 30 days — so the Share tab
+// can draw the design's "三口径滚动叠加" comparison without spawning
+// extra API calls. Returns status=insufficient_history when no daily
+// rollups exist for edgeX at all, status=partial when some days are
+// missing inside the window, status=complete when all `days` are
+// populated.
 func (s *Store) shareTrendLocked(days int) map[string]any {
 	now := time.Now().UTC()
 	if days <= 0 {
 		days = 30
 	}
-	start := startOfUTCDay(now).AddDate(0, 0, -(days - 1))
+	// We need 29 days of look-back to support a 30d trailing window for
+	// the very first plotted point, so we fetch a wider raw range and
+	// only emit the last `days` points.
+	const trailingDays = 30
+	lookback := days + trailingDays - 1
+	rawStart := startOfUTCDay(now).AddDate(0, 0, -lookback)
+	plotStart := startOfUTCDay(now).AddDate(0, 0, -(days - 1))
+	today := startOfUTCDay(now)
+
 	type bucket struct {
 		denomAdjusted float64
 		edgexAdjusted float64
@@ -714,7 +726,7 @@ func (s *Store) shareTrendLocked(days int) map[string]any {
 	byDay := map[time.Time]*bucket{}
 	for _, p := range s.cfg.Platforms {
 		for _, r := range s.dailyPlatformVolumes[p] {
-			if r.Day.Before(start) {
+			if r.Day.Before(rawStart) {
 				continue
 			}
 			if r.Status != domain.StatusComplete || r.Volume24HUSD <= 0 {
@@ -739,26 +751,64 @@ func (s *Store) shareTrendLocked(days int) map[string]any {
 		return map[string]any{"status": domain.StatusInsufficientHistory, "points": []any{}}
 	}
 
+	// rolling sums a window of [end-window+1, end] inclusive and returns
+	// (edgeX_adjusted, denom_adjusted, days_seen). Days with no bucket
+	// are silently skipped — share% naturally degrades when coverage is
+	// partial.
+	rolling := func(end time.Time, window int) (float64, float64, int) {
+		var edgexAdj, denomAdj float64
+		days := 0
+		for i := 0; i < window; i++ {
+			d := end.AddDate(0, 0, -i)
+			b, ok := byDay[d]
+			if !ok {
+				continue
+			}
+			edgexAdj += b.edgexAdjusted
+			denomAdj += b.denomAdjusted
+			days++
+		}
+		return edgexAdj, denomAdj, days
+	}
+
 	points := []map[string]any{}
-	for d := start; !d.After(startOfUTCDay(now)); d = d.AddDate(0, 0, 1) {
+	plottedDays := 0
+	for d := plotStart; !d.After(today); d = d.AddDate(0, 0, 1) {
 		b, ok := byDay[d]
 		if !ok {
 			continue
 		}
-		share := 0.0
+		plottedDays++
+		share24h := 0.0
 		if b.denomAdjusted > 0 {
-			share = b.edgexAdjusted / b.denomAdjusted * 100
+			share24h = b.edgexAdjusted / b.denomAdjusted * 100
 		}
-		points = append(points, map[string]any{
+		share7d, days7d := 0.0, 0
+		if e7, n7, d7 := rolling(d, 7); n7 > 0 {
+			share7d = e7 / n7 * 100
+			days7d = d7
+		}
+		share30d, days30d := 0.0, 0
+		if e30, n30, d30 := rolling(d, 30); n30 > 0 {
+			share30d = e30 / n30 * 100
+			days30d = d30
+		}
+		point := map[string]any{
 			"day":               d.Format("2006-01-02"),
-			"edgex_share_pct":   share,
+			"edgex_share_pct":   share24h,
+			"share_24h_pct":     share24h,
+			"share_7d_pct":      share7d,
+			"share_30d_pct":     share30d,
+			"days_7d":           days7d,
+			"days_30d":          days30d,
 			"denominator_usd":   b.denomAdjusted,
 			"edgex_volume_usd":  b.edgexRaw,
 			"platforms_covered": len(b.platformsSeen),
-		})
+		}
+		points = append(points, point)
 	}
 	status := domain.StatusComplete
-	if len(points) < days {
+	if plottedDays < days {
 		status = domain.StatusPartial
 	}
 	return map[string]any{"status": status, "points": points}

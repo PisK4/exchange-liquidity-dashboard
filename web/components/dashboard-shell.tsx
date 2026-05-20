@@ -4,6 +4,7 @@ import { BarChart } from '@/components/chart-primitives';
 import { DashboardControls, PillGroup } from '@/components/dashboard-controls';
 import { LineChart } from '@/components/line-chart';
 import { PlatformCell, platformDisplayName } from '@/components/platform-cell';
+import { ShareTrendChart, type ShareTrendPoint } from '@/components/share-trend-chart';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { bp, money, moneyM, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Snapshot } from '@/lib/api/client';
@@ -328,7 +329,17 @@ function ShareTab({ data, query }: { data: ShareSnapshot; query: Query }) {
           })}</tbody></table></div>
         </>}
       </section>
-      <section className="panel row-h-md"><div className="panel-head"><span className="panel-title">平台总市占率时序 (近 30d)</span><span className="panel-sub">· 三口径滚动叠加</span></div><StatusEmptyState status={data.trend?.status ?? 'unsupported'} message="历史时序聚合数据不足" /></section>
+      <section className="panel row-h-md">
+        <div className="panel-head"><span className="panel-title">平台总市占率时序 (近 30d)</span><span className="panel-sub">· 三口径滚动叠加</span></div>
+        {(() => {
+          const points = (data.trend?.points ?? []) as ShareTrendPoint[];
+          const status = data.trend?.status ?? 'unsupported';
+          if (!points.length) {
+            return <StatusEmptyState status={status} message="历史时序聚合数据不足" />;
+          }
+          return <ShareTrendChart ariaLabel="edgeX 市占率时序 (近 30 天，24h / 7d / 30d 滚动)" points={points} />;
+        })()}
+      </section>
     </div>
   );
 }
