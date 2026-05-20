@@ -33,3 +33,11 @@ test('monitor depth curves render Chart.js canvases with hover detail tooltips',
   await expect(tooltip).toContainText(/@ ±(0\.05|0\.1|1|2)%/);
   expect(errors).toEqual([]);
 });
+
+test('depth detail table shows depth values without per-cell source labels', async ({ page }) => {
+  await page.goto('/');
+
+  const detailPanel = page.locator('section.panel').filter({ hasText: '深度明细 · 平台 × 档位 (M USD)' });
+  await expect(detailPanel).toBeVisible();
+  await expect(detailPanel.locator('td.num .muted')).toHaveCount(0);
+});

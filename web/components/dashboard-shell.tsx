@@ -81,11 +81,9 @@ function depthSourceLabel(depth?: DepthTierMetrics) {
 
 function DepthCell({ row, tier, side }: { row: PlatformRow; tier: string; side: 'bid_usd' | 'ask_usd' | 'total_usd' }) {
   const depth = row.depth_by_tier?.[tier];
-  const source = depthSourceLabel(depth);
   return (
     <td className="num">
       <div>{moneyM(depth?.[side])}</div>
-      {source ? <div className="muted">{source}</div> : null}
     </td>
   );
 }
