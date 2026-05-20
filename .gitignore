@@ -9,3 +9,5 @@ coverage/
 
 # Local generated binaries
 backend/build-catalog
+.factory
+docs
