@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { AutoRefresh } from '@/components/auto-refresh';
 import { BarChart } from '@/components/chart-primitives';
 import { DashboardControls, PillGroup } from '@/components/dashboard-controls';
 import { LineChart } from '@/components/line-chart';
@@ -171,7 +170,6 @@ export function DashboardShell({ query, data }: { query: Query; data: DashboardD
 
   return (
     <>
-      <AutoRefresh intervalMs={(data.meta.refresh_interval_sec || 30) * 1000} />
       <header className="topbar">
         <span className="logo">◆ edgeX</span>
         <span className="title">流动性 &amp; 深度监控面板</span>

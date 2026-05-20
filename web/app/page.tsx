@@ -1,5 +1,4 @@
-import { DashboardShell } from '@/components/dashboard-shell';
-import { getFrontendURLLookup, getJSON, type DashboardMeta, type LiquiditySnapshot, type QualitySnapshot, type ShareSnapshot, type Top30Snapshot } from '@/lib/api/client';
+import { DashboardClient } from '@/components/dashboard-client';
 
 export const dynamic = 'force-dynamic';
 
@@ -9,7 +8,7 @@ function scalar(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-export default async function Page({ searchParams }: { searchParams: SearchParams }) {
+export default function Page({ searchParams }: { searchParams: SearchParams }) {
   const tab = scalar(searchParams.tab) ?? 'monitor';
   const query = {
     tab,
@@ -21,15 +20,6 @@ export default async function Page({ searchParams }: { searchParams: SearchParam
     category: scalar(searchParams.category),
     coreOnly: scalar(searchParams.coreOnly),
   };
-  const symbolParam = encodeURIComponent(query.symbol);
-  const [meta, liquidity, quality, share, top30, lookup] = await Promise.all([
-    getJSON<DashboardMeta>('/api/dashboard/meta'),
-    getJSON<LiquiditySnapshot>(`/api/snapshot/liquidity?symbol=${symbolParam}&window=${query.window}`),
-    getJSON<QualitySnapshot>(`/api/snapshot/quality?symbol=${symbolParam}`),
-    getJSON<ShareSnapshot>(`/api/snapshot/share?window=${query.window}`),
-    getJSON<Top30Snapshot>(`/api/snapshot/top30?surface=perp&platform=${query.platform}`),
-    getFrontendURLLookup(),
-  ]);
 
-  return <DashboardShell query={query} data={{ meta, liquidity, quality, share, top30, lookup }} />;
+  return <DashboardClient query={query} />;
 }
