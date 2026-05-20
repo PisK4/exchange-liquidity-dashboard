@@ -88,6 +88,18 @@ export type DepthTierMetrics = {
   aggregation_params?: Record<string, string>;
 };
 
+export type CoinGeckoLineage = {
+  enabled: boolean;
+  exchange_ids?: string[];
+  market_names?: string[];
+  pull_interval?: string;
+  last_pull_ts?: string;
+};
+
+export type DataSources = {
+  coingecko?: CoinGeckoLineage;
+};
+
 export type DashboardMeta = {
   tabs: string[];
   platforms: string[];
@@ -97,6 +109,7 @@ export type DashboardMeta = {
   slippage_buckets_usd: number[];
   refresh_interval_sec: number;
   volume_discounts: Record<string, number>;
+  data_sources?: DataSources;
 };
 
 export type LiquiditySnapshot = {
@@ -132,6 +145,9 @@ export type ShareRow = {
   denominator_pct?: number;
   discount?: number;
   status?: ApiStatus;
+  data_source?: 'native' | 'coingecko' | string;
+  days_seen?: number;
+  days_window?: number;
 };
 
 export type ShareSnapshot = {
@@ -154,6 +170,8 @@ export type Top30Row = {
   platform: string;
   symbol: string;
   volume_24h_usd?: number;
+  volume_7d_usd?: number;
+  delta_7d_pct?: number;
   volume_7d_status?: ApiStatus;
   delta_7d_status?: ApiStatus;
   edgex_listed?: boolean;
@@ -163,6 +181,9 @@ export type Top30Row = {
   suggested_action?: string;
   suggested_action_status?: ApiStatus;
   status?: ApiStatus;
+  data_source?: 'native' | 'coingecko' | string;
+  source_endpoint?: string;
+  snapshot_ts?: string;
   error?: string;
 };
 
