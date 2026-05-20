@@ -3,14 +3,14 @@ package domain
 import "time"
 
 const (
-	StatusComplete             = "complete"
-	StatusPartial              = "partial"
-	StatusAggregatedOrderbook  = "aggregated_orderbook"
-	StatusWSLimitedDepth       = "ws_limited_depth"
-	StatusStale                = "stale"
-	StatusUnsupported          = "unsupported"
-	StatusError                = "error"
-	StatusInsufficientHistory  = "insufficient_history"
+	StatusComplete            = "complete"
+	StatusPartial             = "partial"
+	StatusAggregatedOrderbook = "aggregated_orderbook"
+	StatusWSLimitedDepth      = "ws_limited_depth"
+	StatusStale               = "stale"
+	StatusUnsupported         = "unsupported"
+	StatusError               = "error"
+	StatusInsufficientHistory = "insufficient_history"
 
 	// HistoryInsufficient is a legacy alias kept for backwards compatibility.
 	// New code should prefer StatusInsufficientHistory.

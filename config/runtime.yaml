@@ -13,3 +13,39 @@ history:
   disabled_windows:
     7d: insufficient_history
     30d: insufficient_history
+
+# CoinGecko derivatives ingestion (R1: no process-env proxy).
+# When enabled=true the dashboard will pull /derivatives?include_tickers=unexpired
+# every pull_interval and UPSERT the resulting per-platform 24h volumes plus a
+# per-day rollup into MySQL. proxy is read as a literal URL; if blank the
+# CoinGecko client goes direct. Do NOT set HTTPS_PROXY / HTTP_PROXY at the
+# process level — that would also route the 9 native exchange adapters through
+# the proxy and pollute their latency measurements.
+coingecko:
+  enabled: false
+  base_url: https://api.coingecko.com/api/v3
+  api_key_env: COINGECKO_DEMO_API_KEY
+  proxy: ""
+  pull_interval: 15m
+  cache_ttl: 5m
+  request_timeout: 30s
+  exchange_id:
+    binance: binance_futures
+    okx: okex_swap
+    bybit: bybit
+    bitget: bitget_futures
+    bingx: bingx_futures
+    mexc: mxc_futures
+    gate: gate_futures
+    hyperliquid: hyperliquid
+    lighter: lighter
+  market_name:
+    binance: "Binance (Futures)"
+    okx: "OKX (Futures)"
+    bybit: "Bybit (Futures)"
+    bitget: "Bitget Futures"
+    bingx: "BingX (Futures)"
+    mexc: "MEXC (Futures)"
+    gate: "Gate (Futures)"
+    hyperliquid: "Hyperliquid (Futures)"
+    lighter: "Lighter"

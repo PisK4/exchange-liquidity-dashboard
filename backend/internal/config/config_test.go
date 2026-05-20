@@ -90,6 +90,108 @@ platforms:
 	}
 }
 
+func TestLoadAppliesCoinGeckoOverrides(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
+symbols:
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+    market_surface: perp
+    instrument_kind: canonical
+platforms: [edgeX]
+`)
+	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), `
+endpoints:
+  edgeX: https://example.invalid/edgex
+`)
+	mustWrite(t, filepath.Join(dir, "runtime.yaml"), `
+coingecko:
+  enabled: true
+  base_url: https://example.invalid/cg/v3
+  api_key_env: TEST_CG_KEY
+  proxy: http://127.0.0.1:7897
+  pull_interval: 7m
+  cache_ttl: 90s
+  request_timeout: 12s
+  exchange_id:
+    binance: binance_futures
+    bybit: bybit
+  market_name:
+    binance: "Binance (Futures)"
+    bybit: "Bybit (Futures)"
+`)
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	cg := cfg.Runtime.CoinGecko
+	if !cg.Enabled {
+		t.Fatalf("CoinGecko.Enabled = false, want true")
+	}
+	if cg.BaseURL != "https://example.invalid/cg/v3" {
+		t.Fatalf("BaseURL = %q", cg.BaseURL)
+	}
+	if cg.APIKeyEnv != "TEST_CG_KEY" {
+		t.Fatalf("APIKeyEnv = %q", cg.APIKeyEnv)
+	}
+	if cg.Proxy != "http://127.0.0.1:7897" {
+		t.Fatalf("Proxy = %q", cg.Proxy)
+	}
+	if cg.PullInterval != 7*time.Minute {
+		t.Fatalf("PullInterval = %s", cg.PullInterval)
+	}
+	if cg.CacheTTL != 90*time.Second {
+		t.Fatalf("CacheTTL = %s", cg.CacheTTL)
+	}
+	if cg.RequestTimeout != 12*time.Second {
+		t.Fatalf("RequestTimeout = %s", cg.RequestTimeout)
+	}
+	if cg.ExchangeID["binance"] != "binance_futures" || cg.ExchangeID["bybit"] != "bybit" {
+		t.Fatalf("ExchangeID = %+v", cg.ExchangeID)
+	}
+	if cg.MarketName["binance"] != "Binance (Futures)" || cg.MarketName["bybit"] != "Bybit (Futures)" {
+		t.Fatalf("MarketName = %+v", cg.MarketName)
+	}
+}
+
+func TestLoadCoinGeckoDefaultsWhenYAMLOmitsBlock(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
+symbols:
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+    market_surface: perp
+    instrument_kind: canonical
+platforms: [edgeX]
+`)
+	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), `
+endpoints:
+  edgeX: https://example.invalid/edgex
+`)
+	mustWrite(t, filepath.Join(dir, "runtime.yaml"), `
+collection_interval: 90s
+`)
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	cg := cfg.Runtime.CoinGecko
+	if cg.Enabled {
+		t.Fatalf("default Enabled should be false, got true")
+	}
+	if cg.BaseURL == "" || cg.APIKeyEnv == "" || cg.PullInterval == 0 {
+		t.Fatalf("expected default CoinGecko config to be populated, got %+v", cg)
+	}
+	for _, p := range []string{"binance", "okx", "bybit", "bitget", "bingx", "mexc", "gate", "hyperliquid", "lighter"} {
+		if cg.ExchangeID[p] == "" {
+			t.Fatalf("default ExchangeID missing entry for %q: %+v", p, cg.ExchangeID)
+		}
+		if cg.MarketName[p] == "" {
+			t.Fatalf("default MarketName missing entry for %q: %+v", p, cg.MarketName)
+		}
+	}
+}
+
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

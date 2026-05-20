@@ -18,6 +18,26 @@ type Runtime struct {
 	DepthTiers            []float64          `json:"depth_tiers"`
 	SlippageBucketsUSD    []float64          `json:"slippage_buckets_usd"`
 	VolumeDiscounts       map[string]float64 `json:"volume_discounts"`
+	CoinGecko             CoinGeckoConfig    `json:"coingecko"`
+}
+
+// CoinGeckoConfig controls the CoinGecko derivatives ingestion path.
+//
+// Proxy is read as a literal URL string from runtime.yaml; the CoinGecko
+// client builds its own *http.Transport from this URL. Process-level
+// HTTPS_PROXY / HTTP_PROXY env vars are intentionally NOT consulted, so that
+// turning the CoinGecko proxy on never silently routes the other 9 native
+// exchange adapters through 127.0.0.1.
+type CoinGeckoConfig struct {
+	Enabled        bool              `json:"enabled"`
+	BaseURL        string            `json:"base_url"`
+	APIKeyEnv      string            `json:"api_key_env"`
+	Proxy          string            `json:"proxy,omitempty"`
+	PullInterval   time.Duration     `json:"pull_interval"`
+	CacheTTL       time.Duration     `json:"cache_ttl"`
+	RequestTimeout time.Duration     `json:"request_timeout"`
+	ExchangeID     map[string]string `json:"exchange_id,omitempty"`
+	MarketName     map[string]string `json:"market_name,omitempty"`
 }
 
 type Config struct {
@@ -149,6 +169,41 @@ func Default() Config {
 			DepthTiers:            []float64{0.0005, 0.001, 0.01, 0.02},
 			SlippageBucketsUSD:    []float64{50_000, 100_000, 500_000, 1_000_000},
 			VolumeDiscounts:       map[string]float64{"mexc": 0.4, "gate": 0.5},
+			CoinGecko:             defaultCoinGeckoConfig(),
+		},
+	}
+}
+
+func defaultCoinGeckoConfig() CoinGeckoConfig {
+	return CoinGeckoConfig{
+		Enabled:        false,
+		BaseURL:        "https://api.coingecko.com/api/v3",
+		APIKeyEnv:      "COINGECKO_DEMO_API_KEY",
+		Proxy:          "",
+		PullInterval:   15 * time.Minute,
+		CacheTTL:       5 * time.Minute,
+		RequestTimeout: 30 * time.Second,
+		ExchangeID: map[string]string{
+			"binance":     "binance_futures",
+			"okx":         "okex_swap",
+			"bybit":       "bybit",
+			"bitget":      "bitget_futures",
+			"bingx":       "bingx_futures",
+			"mexc":        "mxc_futures",
+			"gate":        "gate_futures",
+			"hyperliquid": "hyperliquid",
+			"lighter":     "lighter",
+		},
+		MarketName: map[string]string{
+			"binance":     "Binance (Futures)",
+			"okx":         "OKX (Futures)",
+			"bybit":       "Bybit (Futures)",
+			"bitget":      "Bitget Futures",
+			"bingx":       "BingX (Futures)",
+			"mexc":        "MEXC (Futures)",
+			"gate":        "Gate (Futures)",
+			"hyperliquid": "Hyperliquid (Futures)",
+			"lighter":     "Lighter",
 		},
 	}
 }
@@ -181,6 +236,19 @@ type runtimeFile struct {
 	DepthTiers            []float64          `yaml:"depth_tiers"`
 	SlippageBucketsUSD    []float64          `yaml:"slippage_buckets_usd"`
 	VolumeDiscounts       map[string]float64 `yaml:"volume_discounts"`
+	CoinGecko             *coinGeckoFile     `yaml:"coingecko"`
+}
+
+type coinGeckoFile struct {
+	Enabled        *bool             `yaml:"enabled"`
+	BaseURL        string            `yaml:"base_url"`
+	APIKeyEnv      string            `yaml:"api_key_env"`
+	Proxy          string            `yaml:"proxy"`
+	PullInterval   string            `yaml:"pull_interval"`
+	CacheTTL       string            `yaml:"cache_ttl"`
+	RequestTimeout string            `yaml:"request_timeout"`
+	ExchangeID     map[string]string `yaml:"exchange_id"`
+	MarketName     map[string]string `yaml:"market_name"`
 }
 
 // Catalog mirrors instrument_catalog.yaml. It is the per-(platform, canonical)
@@ -292,6 +360,56 @@ func loadRuntime(path string, base Runtime) (Runtime, error) {
 	}
 	if len(file.VolumeDiscounts) > 0 {
 		base.VolumeDiscounts = file.VolumeDiscounts
+	}
+	if file.CoinGecko != nil {
+		cg, err := applyCoinGeckoFile(base.CoinGecko, *file.CoinGecko)
+		if err != nil {
+			return Runtime{}, err
+		}
+		base.CoinGecko = cg
+	}
+	return base, nil
+}
+
+func applyCoinGeckoFile(base CoinGeckoConfig, file coinGeckoFile) (CoinGeckoConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.BaseURL != "" {
+		base.BaseURL = file.BaseURL
+	}
+	if file.APIKeyEnv != "" {
+		base.APIKeyEnv = file.APIKeyEnv
+	}
+	if file.Proxy != "" {
+		base.Proxy = file.Proxy
+	}
+	if file.PullInterval != "" {
+		d, err := time.ParseDuration(file.PullInterval)
+		if err != nil {
+			return CoinGeckoConfig{}, err
+		}
+		base.PullInterval = d
+	}
+	if file.CacheTTL != "" {
+		d, err := time.ParseDuration(file.CacheTTL)
+		if err != nil {
+			return CoinGeckoConfig{}, err
+		}
+		base.CacheTTL = d
+	}
+	if file.RequestTimeout != "" {
+		d, err := time.ParseDuration(file.RequestTimeout)
+		if err != nil {
+			return CoinGeckoConfig{}, err
+		}
+		base.RequestTimeout = d
+	}
+	if len(file.ExchangeID) > 0 {
+		base.ExchangeID = file.ExchangeID
+	}
+	if len(file.MarketName) > 0 {
+		base.MarketName = file.MarketName
 	}
 	return base, nil
 }
