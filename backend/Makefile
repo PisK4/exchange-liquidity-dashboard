@@ -1,4 +1,4 @@
-.PHONY: test run smoke-api smoke-adapters swagger migrate-up migrate-down catalog catalog-diff lint ci
+.PHONY: test run smoke-api smoke-adapters swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci
 
 PORT ?= 18080
 SYMBOL ?= BTC-USDT
@@ -51,12 +51,22 @@ migrate-down:
 	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000001_init_schema.down.sql"
 
 # Regenerate config/instrument_catalog.yaml + backend/docs/raw-instruments/*.
-# Run monthly (or any time an exchange ships a catalog change).
+# Run monthly (or any time an exchange ships a catalog change). Must be run
+# from a network that can reach all 10 exchange APIs.
 catalog:
 	go run ./scripts/build-catalog \
 	    --whitelist ../config/symbol_mapping.yaml \
 	    --output ../config/instrument_catalog.yaml \
 	    --raw-dir docs/raw-instruments
+
+# Refresh raw-instruments snapshots only, without touching the catalog yaml.
+# Use this when you only have partial network access and just want to update
+# the audit trail for the exchanges you can reach.
+catalog-raw:
+	go run ./scripts/build-catalog \
+	    --whitelist ../config/symbol_mapping.yaml \
+	    --raw-dir docs/raw-instruments \
+	    --raw-only
 
 # CI guard: dry-run the crawler and fail if the produced catalog differs
 # (semantically, excluding generated_at) from the committed file.

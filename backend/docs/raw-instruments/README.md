@@ -35,12 +35,25 @@ Monthly cadence (or whenever you suspect an exchange has changed):
 
 ```bash
 cd backend
-make catalog
+make catalog            # full refresh (requires network to all 10 exchanges)
 ```
 
 This fetches every endpoint live, rewrites every `<platform>-<market>/<YYYY-MM-DD>.json`,
 and regenerates `config/instrument_catalog.yaml`. The catalog YAML is the
 runtime source-of-truth; raw dumps are the audit trail.
+
+If you only have partial network access (e.g. you can reach Gate/Hyperliquid/Lighter
+but Binance is blocked), use the `--raw-only` mode to refresh raw dumps without
+overwriting the catalog yaml:
+
+```bash
+cd backend
+make catalog-raw        # raw dumps only, yaml untouched
+```
+
+`make catalog` itself will refuse to write a degraded catalog yaml when some
+platforms fail; pass `--allow-partial` only if you intentionally want to shrink
+the catalog.
 
 ## How to verify drift
 

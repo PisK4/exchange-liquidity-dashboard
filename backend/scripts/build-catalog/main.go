@@ -38,6 +38,7 @@ type cliFlags struct {
 	timeout       time.Duration
 	platforms     string
 	allowPartial  bool
+	rawOnly       bool
 }
 
 func main() {
@@ -57,6 +58,7 @@ func run() error {
 	flag.DurationVar(&f.timeout, "timeout", 60*time.Second, "per-platform fetch timeout")
 	flag.StringVar(&f.platforms, "platforms", "binance,okx,bybit,bitget,bingx,mexc,gate,hyperliquid,lighter,edgeX", "comma-separated platform list")
 	flag.BoolVar(&f.allowPartial, "allow-partial", false, "write catalog yaml even if some platforms failed (default: refuse, to avoid silently shrinking the catalog)")
+	flag.BoolVar(&f.rawOnly, "raw-only", false, "write raw dumps only; do not touch instrument_catalog.yaml (useful for partial-network audit refreshes)")
 	flag.Parse()
 
 	wl, err := loadSymbolWhitelist(f.whitelistPath)
@@ -118,18 +120,31 @@ func run() error {
 		return nil
 	}
 
-	// Non-dry-run path. Refuse to write a degraded catalog unless caller
-	// explicitly opts in. Raw dumps for successful platforms are still
-	// useful, so write those first.
+	// Non-dry-run path. Raw dumps for successful platforms are written
+	// first; catalog yaml writing is gated on either full coverage or an
+	// explicit --allow-partial. --raw-only skips catalog writing entirely.
 	if err := writeRawDumps(f.rawDir, dateStamp, results); err != nil {
 		return fmt.Errorf("write raw dumps: %w", err)
 	}
+	fmt.Printf("wrote raw dumps under %s/<platform>-<market>/%s.json (%d platform(s) succeeded)\n",
+		f.rawDir, dateStamp, len(results))
+
+	if f.rawOnly {
+		if len(errs) > 0 {
+			fmt.Fprintln(os.Stderr, "warnings (--raw-only, catalog yaml left untouched):")
+			for _, e := range errs {
+				fmt.Fprintln(os.Stderr, "  "+e)
+			}
+		}
+		return nil
+	}
+
 	if len(errs) > 0 && !f.allowPartial {
 		fmt.Fprintln(os.Stderr, "refusing to write catalog yaml because the following platforms failed:")
 		for _, e := range errs {
 			fmt.Fprintln(os.Stderr, "  "+e)
 		}
-		fmt.Fprintln(os.Stderr, "rerun with --allow-partial to overwrite catalog yaml anyway, or fix connectivity and retry")
+		fmt.Fprintln(os.Stderr, "rerun with --allow-partial to overwrite catalog yaml anyway, --raw-only to keep yaml intact, or fix connectivity and retry")
 		return fmt.Errorf("%d platform(s) failed; catalog not written", len(errs))
 	}
 	if err := writeCatalogYAML(f.catalogPath, catalog); err != nil {
@@ -137,7 +152,6 @@ func run() error {
 	}
 	fmt.Printf("wrote %s (%d platforms, %d entries)\n",
 		f.catalogPath, len(catalog.Platforms), countCatalogEntries(catalog))
-	fmt.Printf("wrote raw dumps under %s/<platform>-<market>/%s.json\n", f.rawDir, dateStamp)
 	if len(errs) > 0 {
 		fmt.Fprintln(os.Stderr, "warnings (catalog written with --allow-partial):")
 		for _, e := range errs {
