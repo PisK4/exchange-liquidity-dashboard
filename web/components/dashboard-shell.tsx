@@ -77,7 +77,6 @@ function DepthCell({ row, tier, side }: { row: PlatformRow; tier: string; side: 
   return (
     <td className="num">
       <div>{moneyM(depth?.[side])}</div>
-      <div><StatusBadge status={tierStatus(row, tier)} reason={tierReason(row, tier)} /></div>
       {source ? <div className="muted">{source}</div> : null}
     </td>
   );
