@@ -13,7 +13,16 @@ func TestInitSchemaIncludesPersistenceTables(t *testing.T) {
 	required := []string{
 		"CREATE TABLE IF NOT EXISTS t_symbol_mapping",
 		"CREATE TABLE IF NOT EXISTS t_orderbook_snapshot",
-		"depth_json JSON",
+		"tier VARCHAR(16)",
+		"bid_usd DECIMAL(28,8)",
+		"bid_levels_returned INT",
+		"ask_levels_returned INT",
+		"api_level_cap INT",
+		"farthest_bid_pct DECIMAL(18,8)",
+		"farthest_ask_pct DECIMAL(18,8)",
+		"depth_source VARCHAR(32)",
+		"source_id VARCHAR(64)",
+		"aggregation_params_json JSON",
 		"CREATE TABLE IF NOT EXISTS t_symbol_volume_snapshot",
 		"CREATE TABLE IF NOT EXISTS t_collection_status",
 		"CREATE TABLE IF NOT EXISTS t_collection_run",
@@ -22,6 +31,69 @@ func TestInitSchemaIncludesPersistenceTables(t *testing.T) {
 		if !contains(initSchemaSQL, snippet) {
 			t.Fatalf("init schema missing %q", snippet)
 		}
+	}
+}
+
+func TestPlatformSnapshotOrderbookRowsArePerTierWithLineage(t *testing.T) {
+	row := domain.PlatformSnapshot{
+		Platform:       "gate",
+		DisplaySymbol:  "BTC-USDT (perp)",
+		SnapshotTS:     time.Now().UTC(),
+		SourceEndpoint: "https://example.test/raw",
+		DepthStatus:    domain.StatusPartial,
+		PartialReason:  domain.ReasonAPILevelCap,
+		DepthByTier: map[string]domain.DepthMetrics{
+			"0.10%": {
+				BidUSD:              10,
+				AskUSD:              11,
+				TotalUSD:            21,
+				DepthStatus:         domain.StatusComplete,
+				DepthSource:         domain.SourceRawOrderbook,
+				SourceID:            "gate_raw",
+				SourceEndpoint:      "https://example.test/raw",
+				LevelsReturned:      400,
+				BidLevelsReturned:   200,
+				AskLevelsReturned:   200,
+				APILevelCap:         400,
+				FarthestBidPct:      0.2,
+				FarthestAskPct:      0.3,
+				FarthestDistancePct: 0.3,
+			},
+			"2.00%": {
+				BidUSD:              100,
+				AskUSD:              110,
+				TotalUSD:            210,
+				DepthStatus:         domain.StatusAggregatedOrderbook,
+				DepthSource:         domain.SourceAggregatedOrderbook,
+				SourceID:            "gate_agg_10",
+				SourceEndpoint:      "https://example.test/agg?interval=10",
+				LevelsReturned:      400,
+				BidLevelsReturned:   200,
+				AskLevelsReturned:   200,
+				APILevelCap:         400,
+				FarthestBidPct:      2.1,
+				FarthestAskPct:      2.2,
+				FarthestDistancePct: 2.2,
+				AggregationParams:   map[string]string{"interval": "10"},
+			},
+		},
+		BuySlippageBP:  map[string]float64{"50000": 1.2},
+		SellSlippageBP: map[string]float64{"50000": 1.4},
+	}
+
+	rows := platformSnapshotOrderbookRows(row)
+	if len(rows) != 2 {
+		t.Fatalf("expected one DB row per tier, got %d", len(rows))
+	}
+	deep := rows["2.00%"]
+	if deep.DepthStatus != domain.StatusAggregatedOrderbook || deep.DepthSource != domain.SourceAggregatedOrderbook || deep.SourceID != "gate_agg_10" {
+		t.Fatalf("expected deep tier lineage to be preserved, got %+v", deep)
+	}
+	if deep.BidLevelsReturned != 200 || deep.AskLevelsReturned != 200 || deep.FarthestDistancePct != 2.2 {
+		t.Fatalf("expected level/farthest metrics to be preserved, got %+v", deep)
+	}
+	if deep.AggregationParamsJSON == "" || !contains(deep.AggregationParamsJSON, "interval") {
+		t.Fatalf("expected aggregation params json, got %+v", deep)
 	}
 }
 
