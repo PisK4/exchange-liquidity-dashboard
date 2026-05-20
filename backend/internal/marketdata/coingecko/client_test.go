@@ -230,3 +230,86 @@ func TestTickerCacheHonoursTTL(t *testing.T) {
 		t.Fatalf("zero-ttl cache must always miss")
 	}
 }
+
+func TestFetchExchangeVolumeChartParsesPairs(t *testing.T) {
+	var seenPath, seenHeader, seenDays string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		seenPath = r.URL.Path
+		seenHeader = r.Header.Get(DefaultAPIKeyHeader)
+		seenDays = r.URL.Query().Get("days")
+		_, _ = w.Write([]byte(`[[1716163200000,"123.45"],[1716249600000,"678.90"]]`))
+	}))
+	defer srv.Close()
+	c, _ := New(Config{BaseURL: srv.URL, APIKey: "K", RequestTimeout: 2 * time.Second})
+	pts, endpoint, err := c.FetchExchangeVolumeChart(context.Background(), "binance_futures", 30)
+	if err != nil {
+		t.Fatalf("FetchExchangeVolumeChart: %v", err)
+	}
+	if seenPath != "/exchanges/binance_futures/volume_chart" {
+		t.Fatalf("path = %q", seenPath)
+	}
+	if seenHeader != "K" {
+		t.Fatalf("api key header = %q", seenHeader)
+	}
+	if seenDays != "30" {
+		t.Fatalf("days = %q", seenDays)
+	}
+	if !strings.Contains(endpoint, "/exchanges/binance_futures/volume_chart?") {
+		t.Fatalf("endpoint = %q", endpoint)
+	}
+	if len(pts) != 2 {
+		t.Fatalf("expected 2 points, got %d", len(pts))
+	}
+	if pts[0].TimestampMS != 1716163200000 || pts[0].VolumeBTC != 123.45 {
+		t.Fatalf("point0 = %+v", pts[0])
+	}
+	if pts[1].VolumeBTC != 678.90 {
+		t.Fatalf("point1 volume = %v", pts[1].VolumeBTC)
+	}
+}
+
+func TestFetchExchangeVolumeChartRejectsEmptyID(t *testing.T) {
+	c, _ := New(Config{BaseURL: "http://example", RequestTimeout: time.Second})
+	if _, _, err := c.FetchExchangeVolumeChart(context.Background(), "  ", 30); err == nil {
+		t.Fatalf("expected error for empty exchange id")
+	}
+}
+
+func TestFetchBitcoinPriceChartRangeParses(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if got := r.URL.Query().Get("vs_currency"); got != "usd" {
+			t.Errorf("vs_currency = %q", got)
+		}
+		_, _ = w.Write([]byte(`{"prices":[[1716163200000,69050.5],[1716249600000,68000.0]],"market_caps":[],"total_volumes":[]}`))
+	}))
+	defer srv.Close()
+	c, _ := New(Config{BaseURL: srv.URL, RequestTimeout: 2 * time.Second})
+	from := time.Unix(1716163200, 0).UTC()
+	to := time.Unix(1716336000, 0).UTC()
+	pts, endpoint, err := c.FetchBitcoinPriceChartRange(context.Background(), from, to)
+	if err != nil {
+		t.Fatalf("FetchBitcoinPriceChartRange: %v", err)
+	}
+	if !strings.Contains(endpoint, "/coins/bitcoin/market_chart/range?") {
+		t.Fatalf("endpoint = %q", endpoint)
+	}
+	if len(pts) != 2 || pts[0].PriceUSD != 69050.5 || pts[1].PriceUSD != 68000.0 {
+		t.Fatalf("price points = %+v", pts)
+	}
+}
+
+func TestFetchExchangeVolumeChartSurfaces429(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"status":{"error_code":429}}`))
+	}))
+	defer srv.Close()
+	c, _ := New(Config{BaseURL: srv.URL, RequestTimeout: 2 * time.Second})
+	_, _, err := c.FetchExchangeVolumeChart(context.Background(), "binance_futures", 30)
+	if err == nil {
+		t.Fatalf("expected error")
+	}
+	if !IsRateLimited(err) {
+		t.Fatalf("expected rate-limited, got %v", err)
+	}
+}

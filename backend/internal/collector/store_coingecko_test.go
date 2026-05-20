@@ -257,6 +257,62 @@ func TestDashboardMetaIncludesCoinGeckoLineageWhenEnabled(t *testing.T) {
 	}
 }
 
+func TestDailyAggregateBackfillYieldsToLiveCoinGecko(t *testing.T) {
+	cfg := config.Default()
+	cfg.Platforms = []string{"binance"}
+	store := NewStore(cfg)
+	day := startOfUTCDay(time.Now().UTC())
+
+	// Backfill lands first.
+	store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{{
+		Platform: "binance", Day: day, Volume24HUSD: 111,
+		DataSource: domain.DataSourceCoinGeckoBackfill, Status: domain.StatusComplete,
+	}})
+	// Then live coingecko arrives for the same day; it must win.
+	store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{{
+		Platform: "binance", Day: day, Volume24HUSD: 222,
+		DataSource: domain.DataSourceCoinGecko, Status: domain.StatusComplete,
+	}})
+
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	rows := store.dailyPlatformVolumes["binance"]
+	if len(rows) != 1 {
+		t.Fatalf("expected exactly 1 row after dedup, got %d (%+v)", len(rows), rows)
+	}
+	if rows[0].DataSource != domain.DataSourceCoinGecko {
+		t.Fatalf("live coingecko must win; got data_source=%q", rows[0].DataSource)
+	}
+	if rows[0].Volume24HUSD != 222 {
+		t.Fatalf("live volume must overwrite backfill; got %v", rows[0].Volume24HUSD)
+	}
+}
+
+func TestDailyAggregateLiveBlocksBackfillReplay(t *testing.T) {
+	cfg := config.Default()
+	cfg.Platforms = []string{"binance"}
+	store := NewStore(cfg)
+	day := startOfUTCDay(time.Now().UTC())
+
+	// Live row lands first.
+	store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{{
+		Platform: "binance", Day: day, Volume24HUSD: 500,
+		DataSource: domain.DataSourceCoinGecko, Status: domain.StatusComplete,
+	}})
+	// A late backfill replay tries to overwrite — it should be ignored.
+	store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{{
+		Platform: "binance", Day: day, Volume24HUSD: 999,
+		DataSource: domain.DataSourceCoinGeckoBackfill, Status: domain.StatusComplete,
+	}})
+
+	store.mu.RLock()
+	defer store.mu.RUnlock()
+	rows := store.dailyPlatformVolumes["binance"]
+	if len(rows) != 1 || rows[0].Volume24HUSD != 500 {
+		t.Fatalf("live row must survive backfill replay, got %+v", rows)
+	}
+}
+
 func TestSaveVolumeMirrorsEdgexIntoDailyAggregate(t *testing.T) {
 	cfg := config.Default()
 	cfg.Platforms = []string{"edgeX"}

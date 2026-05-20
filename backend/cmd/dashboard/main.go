@@ -41,10 +41,8 @@ func main() {
 			log.Fatalf("apply mysql migrations: %v", err)
 		}
 		store.AttachDB(db)
-		if *role == "api" {
-			if err := store.LoadLatestFromDB(context.Background()); err != nil {
-				log.Printf("load latest snapshots from mysql: %v", err)
-			}
+		if err := store.LoadLatestFromDB(context.Background()); err != nil {
+			log.Printf("load latest snapshots from mysql: %v", err)
 		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())

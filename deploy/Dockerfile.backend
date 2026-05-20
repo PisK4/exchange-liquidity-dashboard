@@ -6,10 +6,12 @@ WORKDIR /src/backend
 RUN go mod download
 COPY backend/ ./
 RUN CGO_ENABLED=0 go build -o /out/dashboard ./cmd/dashboard
+RUN CGO_ENABLED=0 go build -o /out/coingecko-backfill ./cmd/coingecko-backfill
 
 FROM alpine:3.20
 WORKDIR /app
 COPY --from=build /out/dashboard /app/dashboard
+COPY --from=build /out/coingecko-backfill /app/coingecko-backfill
 COPY config/ /config/
 EXPOSE 8080
 CMD ["/app/dashboard", "--role=all", "--addr=:8080"]

@@ -28,8 +28,9 @@ const (
 	SourceWSLocalBook         = "ws_local_book"
 	SourceWSLimitedDepth      = "ws_limited_depth"
 
-	DataSourceCoinGecko = "coingecko"
-	DataSourceNative    = "native"
+	DataSourceCoinGecko         = "coingecko"
+	DataSourceCoinGeckoBackfill = "coingecko_backfill"
+	DataSourceNative            = "native"
 )
 
 type SymbolSub struct {

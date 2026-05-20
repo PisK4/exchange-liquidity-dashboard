@@ -21,9 +21,9 @@ CREATE TABLE IF NOT EXISTS t_orderbook_snapshot (id BIGINT AUTO_INCREMENT PRIMAR
 CREATE TABLE IF NOT EXISTS t_book_quality_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, spread_bp DECIMAL(18,8), imbalance_pct DECIMAL(18,8));
 CREATE TABLE IF NOT EXISTS t_symbol_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), error_message TEXT);
 CREATE TABLE IF NOT EXISTS t_platform_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), discount DECIMAL(10,4));
-CREATE TABLE IF NOT EXISTS t_top30_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, symbol VARCHAR(96) NOT NULL, rank_no INT NOT NULL, volume_24h_usd DECIMAL(28,8), volume_7d_usd DECIMAL(28,8) NULL, delta_7d_pct DECIMAL(10,4) NULL, coverage_count INT NULL, edgex_listed TINYINT(1) NULL, suggested_action VARCHAR(64) NULL, data_source VARCHAR(16) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NULL, status VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL);
-CREATE TABLE IF NOT EXISTS t_daily_volume_aggregate (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), day DATE NOT NULL, volume_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, data_source VARCHAR(16) NOT NULL DEFAULT 'native', source_endpoint VARCHAR(255) NULL, snapshot_ts TIMESTAMP NULL, UNIQUE KEY uk_day_platform_symbol_source (day, platform, display_symbol, data_source));
-CREATE TABLE IF NOT EXISTS t_coingecko_platform_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,2), open_interest_usd DECIMAL(28,2), data_source VARCHAR(16) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NOT NULL, status VARCHAR(32) NOT NULL, INDEX idx_cg_platform_ts (platform, snapshot_ts));
+CREATE TABLE IF NOT EXISTS t_top30_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, symbol VARCHAR(96) NOT NULL, rank_no INT NOT NULL, volume_24h_usd DECIMAL(28,8), volume_7d_usd DECIMAL(28,8) NULL, delta_7d_pct DECIMAL(10,4) NULL, coverage_count INT NULL, edgex_listed TINYINT(1) NULL, suggested_action VARCHAR(64) NULL, data_source VARCHAR(32) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NULL, status VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL);
+CREATE TABLE IF NOT EXISTS t_daily_volume_aggregate (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), day DATE NOT NULL, volume_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, data_source VARCHAR(32) NOT NULL DEFAULT 'native', source_endpoint VARCHAR(255) NULL, snapshot_ts TIMESTAMP NULL, UNIQUE KEY uk_day_platform_symbol_source (day, platform, display_symbol, data_source));
+CREATE TABLE IF NOT EXISTS t_coingecko_platform_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,2), open_interest_usd DECIMAL(28,2), data_source VARCHAR(32) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NOT NULL, status VARCHAR(32) NOT NULL, INDEX idx_cg_platform_ts (platform, snapshot_ts));
 CREATE TABLE IF NOT EXISTS t_collection_run (id BIGINT AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, started_at TIMESTAMP NOT NULL, completed_at TIMESTAMP, success_count INT, failed_count INT);
 CREATE TABLE IF NOT EXISTS t_collection_status (id BIGINT AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), collector VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), status VARCHAR(32) NOT NULL, error_message TEXT, snapshot_ts TIMESTAMP NOT NULL, latency_ms BIGINT NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS t_runtime_config (id BIGINT AUTO_INCREMENT PRIMARY KEY, config_key VARCHAR(96) NOT NULL UNIQUE, config_value TEXT NOT NULL, updated_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
@@ -125,17 +125,36 @@ func (s *Store) persistCoinGeckoPlatformVolume(ctx context.Context, row domain.P
 }
 
 // persistDailyVolumeAggregate UPSERTs by (day, platform, display_symbol,
-// data_source) so successive calls within the same UTC day overwrite the
-// latest value. display_symbol participates in the unique key as NULL for
-// platform-level rows, which MySQL treats as distinct per row; we work
-// around this by emulating UPSERT with an INSERT...ON DUPLICATE KEY UPDATE
-// guarded by a per-row delete when display_symbol is NULL.
+// data_source). It also enforces priority semantics across data_source so a
+// coingecko_backfill row never displaces a coingecko or native row for the
+// same (platform, day, display_symbol), and conversely a fresh coingecko or
+// native row evicts any earlier backfill row for that same (platform, day,
+// display_symbol). This mirrors the in-memory mergeDailyAggregate dedup so
+// reload-from-MySQL surfaces the same shape the running collector observes.
 func (s *Store) persistDailyVolumeAggregate(ctx context.Context, row domain.DailyVolumeAggregate) error {
 	db := s.db
 	if db == nil {
 		return nil
 	}
 	source := defaultString(row.DataSource, domain.DataSourceNative)
+
+	// Backfill rows yield to any live row already covering the same slot.
+	if source == domain.DataSourceCoinGeckoBackfill {
+		hasLive, err := s.hasLiveDailyRow(ctx, db, row)
+		if err != nil {
+			return err
+		}
+		if hasLive {
+			return nil
+		}
+	} else {
+		// Live rows clear out any stale backfill row for the same slot so
+		// the share aggregation cannot double-count after reload.
+		if err := s.deleteBackfillDailyRow(ctx, db, row); err != nil {
+			return err
+		}
+	}
+
 	if row.DisplaySymbol == "" {
 		if _, err := db.ExecContext(ctx,
 			`DELETE FROM t_daily_volume_aggregate
@@ -162,6 +181,51 @@ func (s *Store) persistDailyVolumeAggregate(ctx context.Context, row domain.Dail
 		   source_endpoint = VALUES(source_endpoint),
 		   snapshot_ts = VALUES(snapshot_ts)`,
 		row.Platform, row.DisplaySymbol, row.Day, row.Volume24HUSD, row.Status, source, nullString(row.SourceEndpoint), nullTimePtr(row.SnapshotTS),
+	)
+	return err
+}
+
+// hasLiveDailyRow reports whether a coingecko or native row already exists
+// for the (day, platform, display_symbol) slot of `row`. Used to short-circuit
+// backfill writes.
+func (s *Store) hasLiveDailyRow(ctx context.Context, db *sql.DB, row domain.DailyVolumeAggregate) (bool, error) {
+	var n int
+	if row.DisplaySymbol == "" {
+		err := db.QueryRowContext(ctx,
+			`SELECT COUNT(*) FROM t_daily_volume_aggregate
+			   WHERE day = ? AND platform = ? AND display_symbol IS NULL
+			     AND data_source IN (?, ?)`,
+			row.Day, row.Platform, domain.DataSourceCoinGecko, domain.DataSourceNative,
+		).Scan(&n)
+		return n > 0, err
+	}
+	err := db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM t_daily_volume_aggregate
+		   WHERE day = ? AND platform = ? AND display_symbol = ?
+		     AND data_source IN (?, ?)`,
+		row.Day, row.Platform, row.DisplaySymbol, domain.DataSourceCoinGecko, domain.DataSourceNative,
+	).Scan(&n)
+	return n > 0, err
+}
+
+// deleteBackfillDailyRow removes any coingecko_backfill row for the same
+// (day, platform, display_symbol) slot as `row`. Invoked when a fresh
+// coingecko / native row arrives so the live row stands alone.
+func (s *Store) deleteBackfillDailyRow(ctx context.Context, db *sql.DB, row domain.DailyVolumeAggregate) error {
+	if row.DisplaySymbol == "" {
+		_, err := db.ExecContext(ctx,
+			`DELETE FROM t_daily_volume_aggregate
+			   WHERE day = ? AND platform = ? AND display_symbol IS NULL
+			     AND data_source = ?`,
+			row.Day, row.Platform, domain.DataSourceCoinGeckoBackfill,
+		)
+		return err
+	}
+	_, err := db.ExecContext(ctx,
+		`DELETE FROM t_daily_volume_aggregate
+		   WHERE day = ? AND platform = ? AND display_symbol = ?
+		     AND data_source = ?`,
+		row.Day, row.Platform, row.DisplaySymbol, domain.DataSourceCoinGeckoBackfill,
 	)
 	return err
 }

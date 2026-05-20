@@ -58,6 +58,7 @@ func (c *CoinGeckoCollector) Run(ctx context.Context) {
 	if err := c.CollectOnce(ctx); err != nil {
 		log.Printf("coingecko: initial collection failed: %v", err)
 	}
+	go c.runDailyBackfill(ctx)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -237,6 +238,188 @@ func (c *CoinGeckoCollector) logUnknownMarketsOnce(counts map[string]int) {
 		parts = append(parts, fmt.Sprintf("%q×%d", e.name, e.count))
 	}
 	log.Printf("coingecko: %d unmapped markets ignored (sample: %s)", len(counts), strings.Join(parts, ", "))
+}
+
+// backfillRequestPaceMin is the floor delay between successive backfill
+// requests so a single Run does not exceed CoinGecko's Demo-tier rate
+// budget (empirically ~5-10 req/min before bursts trip a 429 even when the
+// per-minute average is below the documented cap). Exposed as vars so
+// tests can crush them to zero.
+var (
+	backfillRequestPaceMin = 6500 * time.Millisecond
+	backfillRetryBackoffs  = []time.Duration{30 * time.Second, 60 * time.Second}
+)
+
+// BackfillVolumeHistory pulls the last `days` of per-platform 24h volume
+// from CoinGecko's /exchanges/{id}/volume_chart (Demo-tier endpoint;
+// the /range variant requires Pro), converts each daily BTC sample to USD
+// via /coins/bitcoin/market_chart/range, and UPSERTs the result into
+// t_daily_volume_aggregate as data_source="coingecko_backfill".
+//
+// Idempotent and side-effect light: the mysql_store UPSERT rule keeps any
+// existing "coingecko" or "native" row over a backfill row, so this can be
+// re-run on every boot or every day without overwriting fresh data.
+//
+// Rate-limit awareness: we pace requests at backfillRequestPaceMin and
+// transparently retry a single 429 per platform with a back-off proportional
+// to retry-after-style guidance from the upstream client.
+func (c *CoinGeckoCollector) BackfillVolumeHistory(ctx context.Context, days int) error {
+	if c.client == nil {
+		return errors.New("coingecko: client not initialised")
+	}
+	if c.mapping == nil {
+		return errors.New("coingecko: mapping not initialised")
+	}
+	if days < 1 {
+		days = 1
+	}
+	if days > 30 {
+		days = 30
+	}
+	now := time.Now().UTC()
+	from := startOfUTCDay(now).AddDate(0, 0, -days)
+	to := now
+
+	pricePts, btcEndpoint, err := c.client.FetchBitcoinPriceChartRange(ctx, from, to)
+	if err != nil {
+		return fmt.Errorf("fetch BTC price chart: %w", err)
+	}
+	btcByDay := bucketLatestPriceByDay(pricePts)
+	if len(btcByDay) == 0 {
+		return errors.New("coingecko: BTC price chart returned no usable samples")
+	}
+	log.Printf("coingecko backfill: fetched %d BTC price samples covering %d UTC days (endpoint=%s)", len(pricePts), len(btcByDay), btcEndpoint)
+
+	platforms := sortedKeys(c.cfg.ExchangeID)
+	totalRows := 0
+	for _, platform := range platforms {
+		exchangeID, ok := c.mapping.ExchangeIDFor(platform)
+		if !ok || exchangeID == "" {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(backfillRequestPaceMin):
+		}
+		points, endpoint, err := c.fetchVolumeChartWithRetry(ctx, exchangeID, days)
+		if err != nil {
+			log.Printf("coingecko backfill: %s (%s) failed: %v", platform, exchangeID, err)
+			continue
+		}
+		volByDay := bucketLatestVolumeByDay(points)
+		rows := make([]domain.DailyVolumeAggregate, 0, len(volByDay))
+		for day, btcVol := range volByDay {
+			btcUSD, ok := btcByDay[day]
+			if !ok || btcUSD <= 0 {
+				continue
+			}
+			rows = append(rows, domain.DailyVolumeAggregate{
+				Day:            day,
+				Platform:       platform,
+				Volume24HUSD:   btcVol * btcUSD,
+				DataSource:     domain.DataSourceCoinGeckoBackfill,
+				SourceEndpoint: endpoint,
+				Status:         domain.StatusComplete,
+				SnapshotTS:     now,
+			})
+		}
+		if len(rows) == 0 {
+			log.Printf("coingecko backfill: %s (%s) returned 0 usable rows", platform, exchangeID)
+			continue
+		}
+		c.store.SaveDailyVolumeAggregates(rows)
+		totalRows += len(rows)
+		log.Printf("coingecko backfill: %s persisted %d daily rows", platform, len(rows))
+	}
+	log.Printf("coingecko backfill: complete, %d platforms processed, %d rows persisted", len(platforms), totalRows)
+	return nil
+}
+
+// fetchVolumeChartWithRetry calls /exchanges/{id}/volume_chart and retries
+// each backoff in backfillRetryBackoffs after a 429. Any other error is
+// returned immediately; the outer loop just logs and skips the platform.
+func (c *CoinGeckoCollector) fetchVolumeChartWithRetry(ctx context.Context, exchangeID string, days int) ([]coingecko.VolumeChartPoint, string, error) {
+	pts, endpoint, err := c.client.FetchExchangeVolumeChart(ctx, exchangeID, days)
+	if err == nil {
+		return pts, endpoint, nil
+	}
+	if !coingecko.IsRateLimited(err) {
+		return nil, endpoint, err
+	}
+	for _, backoff := range backfillRetryBackoffs {
+		log.Printf("coingecko backfill: %s 429 received, retrying after %s", exchangeID, backoff)
+		select {
+		case <-ctx.Done():
+			return nil, endpoint, ctx.Err()
+		case <-time.After(backoff):
+		}
+		pts, endpoint, err = c.client.FetchExchangeVolumeChart(ctx, exchangeID, days)
+		if err == nil {
+			return pts, endpoint, nil
+		}
+		if !coingecko.IsRateLimited(err) {
+			return nil, endpoint, err
+		}
+	}
+	return nil, endpoint, err
+}
+
+// runDailyBackfill schedules a daily call to BackfillVolumeHistory(7) at
+// roughly UTC 01:00 so any service downtime overnight gets back-filled the
+// next morning. The first run also fires shortly after Run() starts to cover
+// the case where the collector boots after a long outage.
+func (c *CoinGeckoCollector) runDailyBackfill(ctx context.Context) {
+	t := time.NewTimer(90 * time.Second)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := c.BackfillVolumeHistory(ctx, 7); err != nil {
+				log.Printf("coingecko daily backfill failed: %v", err)
+			}
+			t.Reset(nextDailyBackfillDelay(time.Now().UTC()))
+		}
+	}
+}
+
+// nextDailyBackfillDelay returns the duration from `now` until the next UTC
+// 01:00 instant. Exposed for testing.
+func nextDailyBackfillDelay(now time.Time) time.Duration {
+	utc := now.UTC()
+	next := time.Date(utc.Year(), utc.Month(), utc.Day(), 1, 0, 0, 0, time.UTC)
+	if !next.After(utc) {
+		next = next.AddDate(0, 0, 1)
+	}
+	return next.Sub(utc)
+}
+
+func bucketLatestPriceByDay(pts []coingecko.PricePoint) map[time.Time]float64 {
+	out := map[time.Time]float64{}
+	latest := map[time.Time]int64{}
+	for _, p := range pts {
+		day := startOfUTCDay(time.UnixMilli(p.TimestampMS).UTC())
+		if existing, ok := latest[day]; !ok || p.TimestampMS > existing {
+			out[day] = p.PriceUSD
+			latest[day] = p.TimestampMS
+		}
+	}
+	return out
+}
+
+func bucketLatestVolumeByDay(pts []coingecko.VolumeChartPoint) map[time.Time]float64 {
+	out := map[time.Time]float64{}
+	latest := map[time.Time]int64{}
+	for _, p := range pts {
+		day := startOfUTCDay(time.UnixMilli(p.TimestampMS).UTC())
+		if existing, ok := latest[day]; !ok || p.TimestampMS > existing {
+			out[day] = p.VolumeBTC
+			latest[day] = p.TimestampMS
+		}
+	}
+	return out
 }
 
 func flattenByVolume(bucket map[string]coingecko.Ticker) []coingecko.Ticker {

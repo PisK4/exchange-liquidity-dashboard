@@ -1169,20 +1169,38 @@ func startOfUTCDay(t time.Time) time.Time {
 }
 
 // mergeDailyAggregate inserts or replaces a row in a daily-rollup slice. The
-// slice stays sorted ascending by Day. When the same (Day, DataSource) pair
-// already exists the latest row wins; rows from a different DataSource are
-// kept as separate entries so callers can distinguish coingecko vs native
-// roll-ups even when both sides land on the same day.
+// slice stays sorted ascending by Day and is deduped by (Day, DisplaySymbol)
+// — at most one row per (day, symbol) is retained, selected by data-source
+// priority: native > coingecko > coingecko_backfill. This ensures the share
+// aggregation can simply sum every entry without double-counting when both
+// a backfill row and a live row land on the same day.
 func mergeDailyAggregate(rows []domain.DailyVolumeAggregate, row domain.DailyVolumeAggregate) []domain.DailyVolumeAggregate {
 	for i, existing := range rows {
-		if existing.Day.Equal(row.Day) && existing.DataSource == row.DataSource && existing.DisplaySymbol == row.DisplaySymbol {
-			rows[i] = row
+		if existing.Day.Equal(row.Day) && existing.DisplaySymbol == row.DisplaySymbol {
+			if dataSourcePriority(row.DataSource) >= dataSourcePriority(existing.DataSource) {
+				rows[i] = row
+			}
 			return rows
 		}
 	}
 	rows = append(rows, row)
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Day.Before(rows[j].Day) })
 	return rows
+}
+
+// dataSourcePriority ranks the daily-aggregate data sources from most to
+// least trustworthy. A live coingecko or native row always wins over a
+// backfill row landing on the same day.
+func dataSourcePriority(src string) int {
+	switch src {
+	case domain.DataSourceNative:
+		return 3
+	case domain.DataSourceCoinGecko:
+		return 2
+	case domain.DataSourceCoinGeckoBackfill:
+		return 1
+	}
+	return 0
 }
 
 func latestTop30TS(rows []domain.Top30Row) time.Time {

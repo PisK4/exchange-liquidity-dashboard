@@ -206,7 +206,7 @@ function ShareTab({ data, query }: { data: ShareSnapshot; query: Query }) {
           <div className="table-wrap"><table className="tbl"><thead><tr><th>#</th><th>平台</th><th className="num">原始成交量</th><th className="num">折算系数</th><th className="num">折算后成交量</th><th className="num">在分母中占比</th><th>状态</th></tr></thead><tbody>{data.rows.map(row => <tr key={row.platform}><td>{row.rank ?? '—'}</td><td>{row.platform}</td><td className="num">{money(row.raw_volume_usd)}</td><td className="num">{row.discount ?? '—'}</td><td className="num">{money(row.adjusted_volume_usd ?? row.adjusted_volume_24h_usd)}</td><td className="num">{pct(row.denominator_pct ?? row.share_pct)}</td><td><StatusBadge status={row.status} />{typeof row.days_seen === 'number' && typeof row.days_window === 'number' && row.days_window > 0 ? <span className="muted"> {row.days_seen}/{row.days_window}d</span> : null}</td></tr>)}</tbody></table></div>
         </>}
       </section>
-      <section className="panel row-h-md"><div className="panel-head"><span className="panel-title">平台总市占率时序 (近 30d)</span><span className="panel-sub">· 三口径滚动叠加</span></div><StatusEmptyState status={data.trend?.status ?? 'unsupported'} message="历史时序聚合尚未实现" /></section>
+      <section className="panel row-h-md"><div className="panel-head"><span className="panel-title">平台总市占率时序 (近 30d)</span><span className="panel-sub">· 三口径滚动叠加</span></div><StatusEmptyState status={data.trend?.status ?? 'unsupported'} message="历史时序聚合数据不足" /></section>
     </div>
   );
 }

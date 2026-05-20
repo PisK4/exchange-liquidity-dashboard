@@ -1,8 +1,9 @@
-.PHONY: test run smoke-api smoke-adapters smoke-coingecko swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci
+.PHONY: test run smoke-api smoke-adapters smoke-coingecko backfill-share swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci
 
 PORT ?= 18080
 SYMBOL ?= BTC-USDT
-MYSQL_DSN ?= root:root@tcp(127.0.0.1:3306)/edgex_dashboard
+MYSQL_DSN ?= root:root@tcp(127.0.0.1:3306)/edgex_dashboard?parseTime=true
+BACKFILL_DAYS ?= 30
 COINGECKO_API_KEY_ENV ?= COINGECKO_DEMO_API_KEY
 COINGECKO_PROXY ?=
 
@@ -51,6 +52,17 @@ smoke-coingecko:
 	COINGECKO_API_KEY_ENV="$(COINGECKO_API_KEY_ENV)" \
 	go run ./cmd/coingecko-smoke
 
+# Back-fill BACKFILL_DAYS (default 30) of per-platform daily volume from
+# CoinGecko's /exchanges/{id}/volume_chart/range, converted to USD via
+# /coins/bitcoin/market_chart/range. The runtime.yaml CoinGecko block
+# supplies the proxy / api_key_env / exchange mapping; runtime.yaml.proxy is
+# used as-is and process-level HTTPS_PROXY env vars are intentionally
+# ignored (R1). Idempotent: any pre-existing live row beats a backfill row
+# for the same (platform, day, display_symbol) slot.
+backfill-share:
+	DASHBOARD_MYSQL_DSN="$(MYSQL_DSN)" \
+	go run ./cmd/coingecko-backfill --days=$(BACKFILL_DAYS)
+
 swagger:
 	mkdir -p docs
 	cp docs/openapi.json docs/swagger.json
@@ -59,10 +71,12 @@ migrate-up:
 	@echo "Apply backend/migrations/*.up.sql to MySQL DSN: $(MYSQL_DSN)"
 	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000001_init_schema.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000002_coingecko.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000003_widen_data_source.up.sql"
 
 migrate-down:
 	@echo "Apply backend/migrations/*.down.sql to MySQL DSN: $(MYSQL_DSN)"
-	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000002_coingecko.down.sql"
+	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000003_widen_data_source.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000002_coingecko.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000001_init_schema.down.sql"
 
 # Regenerate config/instrument_catalog.yaml + backend/docs/raw-instruments/*.

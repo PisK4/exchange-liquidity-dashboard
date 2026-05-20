@@ -135,6 +135,157 @@ func (c *Client) FetchDerivatives(ctx context.Context) ([]Ticker, string, error)
 	return tickers, endpoint, nil
 }
 
+// VolumeChartPoint is one [timestamp_ms, btc_volume] sample returned by
+// GET /exchanges/{id}/volume_chart{,_range}. CoinGecko's docs state the
+// volume_chart endpoints accept derivatives exchange IDs (e.g.
+// binance_futures), so we reuse the same parser for both spot and
+// derivatives backfills.
+type VolumeChartPoint struct {
+	TimestampMS int64
+	VolumeBTC   float64
+}
+
+// PricePoint is one [timestamp_ms, usd_price] sample returned by
+// GET /coins/{id}/market_chart{,_range}.
+type PricePoint struct {
+	TimestampMS int64
+	PriceUSD    float64
+}
+
+// FetchExchangeVolumeChart returns daily BTC volume time-series for the
+// given derivatives or spot exchange ID. CoinGecko's docs accept the
+// fixed values 1 / 7 / 14 / 30 / 90 / 180 / 365 for `days`; granularity is
+// daily once days≥30. This is the Demo-tier endpoint; the /range variant
+// requires a Pro subscription.
+func (c *Client) FetchExchangeVolumeChart(ctx context.Context, exchangeID string, days int) ([]VolumeChartPoint, string, error) {
+	if exchangeID = strings.TrimSpace(exchangeID); exchangeID == "" {
+		return nil, "", errors.New("coingecko: exchange id required")
+	}
+	if days <= 0 {
+		days = 30
+	}
+	q := url.Values{}
+	q.Set("days", fmt.Sprintf("%d", days))
+	endpoint := fmt.Sprintf("%s/exchanges/%s/volume_chart?%s", c.cfg.BaseURL, exchangeID, q.Encode())
+	raw, err := c.getJSONArray(ctx, endpoint)
+	if err != nil {
+		return nil, endpoint, err
+	}
+	points, err := parseChartArray(raw)
+	if err != nil {
+		return nil, endpoint, fmt.Errorf("coingecko volume_chart decode: %w", err)
+	}
+	out := make([]VolumeChartPoint, 0, len(points))
+	for _, p := range points {
+		out = append(out, VolumeChartPoint{TimestampMS: p.tsMS, VolumeBTC: p.value})
+	}
+	return out, endpoint, nil
+}
+
+// FetchBitcoinPriceChartRange returns daily BTC USD prices over the given
+// range. We use this to convert volume_chart's BTC-denominated samples into
+// USD for daily aggregates.
+func (c *Client) FetchBitcoinPriceChartRange(ctx context.Context, from, to time.Time) ([]PricePoint, string, error) {
+	q := url.Values{}
+	q.Set("vs_currency", "usd")
+	q.Set("from", fmt.Sprintf("%d", from.UTC().Unix()))
+	q.Set("to", fmt.Sprintf("%d", to.UTC().Unix()))
+	endpoint := fmt.Sprintf("%s/coins/bitcoin/market_chart/range?%s", c.cfg.BaseURL, q.Encode())
+	body, err := c.getJSONBytes(ctx, endpoint)
+	if err != nil {
+		return nil, endpoint, err
+	}
+	var payload struct {
+		Prices [][]json.Number `json:"prices"`
+	}
+	dec := json.NewDecoder(strings.NewReader(string(body)))
+	dec.UseNumber()
+	if err := dec.Decode(&payload); err != nil {
+		return nil, endpoint, fmt.Errorf("coingecko market_chart decode: %w", err)
+	}
+	out := make([]PricePoint, 0, len(payload.Prices))
+	for _, row := range payload.Prices {
+		if len(row) != 2 {
+			continue
+		}
+		tsMS, err := row[0].Int64()
+		if err != nil {
+			continue
+		}
+		price, err := row[1].Float64()
+		if err != nil {
+			continue
+		}
+		out = append(out, PricePoint{TimestampMS: tsMS, PriceUSD: price})
+	}
+	return out, endpoint, nil
+}
+
+type chartSample struct {
+	tsMS  int64
+	value float64
+}
+
+func parseChartArray(raw [][]json.Number) ([]chartSample, error) {
+	out := make([]chartSample, 0, len(raw))
+	for i, row := range raw {
+		if len(row) != 2 {
+			return nil, fmt.Errorf("row %d: expected 2 values, got %d", i, len(row))
+		}
+		tsMS, err := row[0].Int64()
+		if err != nil {
+			return nil, fmt.Errorf("row %d ts: %w", i, err)
+		}
+		v, err := row[1].Float64()
+		if err != nil {
+			return nil, fmt.Errorf("row %d value: %w", i, err)
+		}
+		out = append(out, chartSample{tsMS: tsMS, value: v})
+	}
+	return out, nil
+}
+
+func (c *Client) getJSONArray(ctx context.Context, endpoint string) ([][]json.Number, error) {
+	body, err := c.getJSONBytes(ctx, endpoint)
+	if err != nil {
+		return nil, err
+	}
+	var out [][]json.Number
+	dec := json.NewDecoder(strings.NewReader(string(body)))
+	dec.UseNumber()
+	if err := dec.Decode(&out); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *Client) getJSONBytes(ctx context.Context, endpoint string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
+	if err != nil {
+		return nil, err
+	}
+	if c.cfg.APIKey != "" {
+		req.Header.Set(c.cfg.APIKeyHeader, c.cfg.APIKey)
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", c.cfg.UserAgent)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("coingecko GET %s: %w", endpoint, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusTooManyRequests {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
+		return nil, &RateLimitedError{Status: resp.StatusCode, Body: string(body)}
+	}
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
+		return nil, &HTTPError{Status: resp.StatusCode, Body: string(body), Endpoint: endpoint}
+	}
+	return io.ReadAll(io.LimitReader(resp.Body, 16*1024*1024))
+}
+
 // HTTPError is returned for any non-2xx response other than 429.
 type HTTPError struct {
 	Status   int
