@@ -164,11 +164,11 @@ func perpMarketTypeFor(platform string) string {
 func apiLevelCapDefault(platform string) int {
 	switch platform {
 	case "binance":
-		return 1000
+		return 2000
 	case "okx":
-		return 800
+		return 10000
 	case "bybit":
-		return 1000
+		return 2000
 	case "bitget":
 		return 200
 	case "bingx":

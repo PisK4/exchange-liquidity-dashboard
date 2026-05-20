@@ -5,7 +5,7 @@
 # after clicking through each link to confirm the trading pair exists.
 schema_version: 1
 generated_at: 2026-05-20T00:00:00Z
-generated_by: bootstrap (Step 1 scaffold; replace with build-catalog output in Step 3)
+generated_by: backend/scripts/build-catalog
 
 # canonical_whitelist 是 symbol_mapping.yaml 的镜像，作为人审快照。
 # Runtime 仍然以 symbol_mapping.yaml 为 source-of-truth；这里只是审计用。

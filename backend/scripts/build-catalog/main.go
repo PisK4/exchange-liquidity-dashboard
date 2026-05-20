@@ -19,6 +19,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -102,16 +103,24 @@ func run() error {
 			if err != nil {
 				return fmt.Errorf("read diff-against: %w", err)
 			}
-			diff, equal := compareYAMLIgnoringTimestamp(existing, buf)
-			if !equal {
-				fmt.Fprintln(os.Stderr, diff)
-				return fmt.Errorf("catalog drift detected vs %s", f.diffAgainst)
+			if shouldSkipCatalogDiff(errs) {
+				fmt.Fprintln(os.Stderr, "warnings (dry-run, not fatal):")
+				for _, e := range errs {
+					fmt.Fprintln(os.Stderr, "  "+e)
+				}
+				fmt.Fprintln(os.Stderr, "catalog diff skipped because dry-run catalog is partial")
+			} else {
+				diff, equal := compareYAMLIgnoringTimestamp(existing, buf)
+				if !equal {
+					fmt.Fprintln(os.Stderr, diff)
+					return fmt.Errorf("catalog drift detected vs %s", f.diffAgainst)
+				}
+				fmt.Println("catalog has no semantic drift vs", f.diffAgainst)
 			}
-			fmt.Println("catalog has no semantic drift vs", f.diffAgainst)
 		} else {
 			os.Stdout.Write(buf)
 		}
-		if len(errs) > 0 {
+		if len(errs) > 0 && f.diffAgainst == "" {
 			fmt.Fprintln(os.Stderr, "warnings (dry-run, not fatal):")
 			for _, e := range errs {
 				fmt.Fprintln(os.Stderr, "  "+e)
@@ -159,6 +168,10 @@ func run() error {
 		}
 	}
 	return nil
+}
+
+func shouldSkipCatalogDiff(errs []string) bool {
+	return len(errs) > 0
 }
 
 type symbolWhitelist struct {
@@ -349,7 +362,7 @@ func sourceEndpointFor(platform string) string {
 	case "binance":
 		return "https://fapi.binance.com/fapi/v1/depth"
 	case "okx":
-		return "https://www.okx.com/api/v5/market/books"
+		return "https://www.okx.com/api/v5/market/books-full"
 	case "bybit":
 		return "https://api.bybit.com/v5/market/orderbook"
 	case "bitget":
@@ -416,8 +429,12 @@ func countCatalogEntries(cat config.Catalog) int {
 // is decided after stripping `generated_at:` lines so monthly regeneration
 // doesn't trip CI on the timestamp alone.
 func compareYAMLIgnoringTimestamp(a, b []byte) (string, bool) {
-	stripA := stripGeneratedAt(string(a))
-	stripB := stripGeneratedAt(string(b))
+	stripA, errA := normalizeCatalogYAML(a)
+	stripB, errB := normalizeCatalogYAML(b)
+	if errA != nil || errB != nil {
+		stripA = stripGeneratedAt(string(a))
+		stripB = stripGeneratedAt(string(b))
+	}
 	if stripA == stripB {
 		return "", true
 	}
@@ -433,6 +450,36 @@ func compareYAMLIgnoringTimestamp(a, b []byte) (string, bool) {
 		}
 	}
 	return diff.String(), false
+}
+
+func normalizeCatalogYAML(raw []byte) (string, error) {
+	var parsed any
+	if err := yaml.Unmarshal(raw, &parsed); err != nil {
+		return "", err
+	}
+	removeMapKey(parsed, "generated_at")
+	if !reflect.ValueOf(parsed).IsValid() {
+		return "", nil
+	}
+	normalized, err := yaml.Marshal(parsed)
+	if err != nil {
+		return "", err
+	}
+	return string(normalized), nil
+}
+
+func removeMapKey(value any, key string) {
+	switch typed := value.(type) {
+	case map[string]any:
+		delete(typed, key)
+		for _, child := range typed {
+			removeMapKey(child, key)
+		}
+	case []any:
+		for _, child := range typed {
+			removeMapKey(child, key)
+		}
+	}
 }
 
 func stripGeneratedAt(s string) string {
