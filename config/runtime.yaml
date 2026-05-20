@@ -22,10 +22,10 @@ history:
 # process level — that would also route the 9 native exchange adapters through
 # the proxy and pollute their latency measurements.
 coingecko:
-  enabled: false
+  enabled: true
   base_url: https://api.coingecko.com/api/v3
   api_key_env: COINGECKO_DEMO_API_KEY
-  proxy: ""
+  proxy: "http://host.docker.internal:7897"
   pull_interval: 15m
   cache_ttl: 5m
   request_timeout: 30s
