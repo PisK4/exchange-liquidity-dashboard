@@ -25,7 +25,7 @@ func NewCollector(cfg config.Config, store *Store) *Collector {
 func NewCollectorWithLighter(cfg config.Config, store *Store, lighter adapter.LighterBookProvider) *Collector {
 	adapters := map[string]adapter.ExchangeAdapter{}
 	for _, p := range cfg.Platforms {
-		adapters[p] = adapter.NewWithLighter(p, cfg.Runtime.HTTPTimeout, lighter)
+		adapters[p] = adapter.NewWithLighterAndProxy(p, cfg.Runtime.HTTPTimeout, lighter, cfg.Runtime.ExchangeProxy)
 	}
 	return &Collector{cfg: cfg, store: store, adapters: adapters}
 }

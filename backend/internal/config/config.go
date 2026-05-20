@@ -12,6 +12,7 @@ import (
 type Runtime struct {
 	CollectionInterval    time.Duration      `json:"collection_interval"`
 	HTTPTimeout           time.Duration      `json:"http_timeout"`
+	ExchangeProxy         string             `json:"exchange_proxy,omitempty"`
 	LighterWSURL          string             `json:"lighter_ws_url"`
 	LighterStaleAfter     time.Duration      `json:"lighter_stale_after"`
 	DisplayFallbackWindow time.Duration      `json:"display_fallback_window"`
@@ -230,6 +231,7 @@ type endpointFile struct {
 type runtimeFile struct {
 	CollectionInterval    string             `yaml:"collection_interval"`
 	HTTPTimeout           string             `yaml:"http_timeout"`
+	ExchangeProxy         string             `yaml:"exchange_proxy"`
 	LighterWSURL          string             `yaml:"lighter_ws_url"`
 	LighterStaleAfter     string             `yaml:"lighter_stale_after"`
 	DisplayFallbackWindow string             `yaml:"display_fallback_window"`
@@ -334,6 +336,9 @@ func loadRuntime(path string, base Runtime) (Runtime, error) {
 			return Runtime{}, err
 		}
 		base.HTTPTimeout = duration
+	}
+	if file.ExchangeProxy != "" {
+		base.ExchangeProxy = file.ExchangeProxy
 	}
 	if file.LighterWSURL != "" {
 		base.LighterWSURL = file.LighterWSURL

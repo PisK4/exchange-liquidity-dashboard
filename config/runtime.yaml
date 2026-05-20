@@ -1,5 +1,12 @@
 collection_interval: 5m
 http_timeout: 12s
+# Optional HTTP/HTTPS proxy for the 9 native exchange REST adapters. Set
+# this to e.g. http://host.docker.internal:7897 when the dashboard runs in
+# a container whose runtime network cannot reach binance/okx/bybit/...
+# directly. Leave blank in production environments that can reach the
+# upstream exchanges over the open internet — latency measurements are
+# clearest without an intermediary.
+exchange_proxy: "http://host.docker.internal:7897"
 lighter_ws_url: wss://mainnet.zklighter.elliot.ai/stream?readonly=true
 lighter_stale_after: 15s
 display_fallback_window: 30m

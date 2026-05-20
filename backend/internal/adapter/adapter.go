@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -31,11 +32,36 @@ type RESTAdapter struct {
 }
 
 func New(platform string, timeout time.Duration) ExchangeAdapter {
-	return RESTAdapter{Platform: platform, Client: &http.Client{Timeout: timeout}, MaxAttempts: 2}
+	return RESTAdapter{Platform: platform, Client: newHTTPClient(timeout, ""), MaxAttempts: 2}
 }
 
 func NewWithLighter(platform string, timeout time.Duration, lighter LighterBookProvider) ExchangeAdapter {
-	return RESTAdapter{Platform: platform, Client: &http.Client{Timeout: timeout}, MaxAttempts: 2, Lighter: lighter}
+	return NewWithLighterAndProxy(platform, timeout, lighter, "")
+}
+
+// NewWithLighterAndProxy lets callers route the platform's REST traffic
+// through an HTTP/HTTPS proxy (e.g. http://host.docker.internal:7897). An
+// empty proxy URL keeps the legacy direct-connection behaviour. The proxy
+// is opt-in per deployment; production should only enable it when the
+// container runtime cannot reach the upstream exchanges directly.
+func NewWithLighterAndProxy(platform string, timeout time.Duration, lighter LighterBookProvider, proxy string) ExchangeAdapter {
+	return RESTAdapter{Platform: platform, Client: newHTTPClient(timeout, proxy), MaxAttempts: 2, Lighter: lighter}
+}
+
+func newHTTPClient(timeout time.Duration, proxy string) *http.Client {
+	if proxy == "" {
+		return &http.Client{Timeout: timeout}
+	}
+	parsed, err := url.Parse(proxy)
+	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+		// Fall back to direct connection on a malformed proxy URL rather
+		// than fail the whole collector — the operator will see the
+		// failed-direct error in the next collection cycle.
+		return &http.Client{Timeout: timeout}
+	}
+	tr := http.DefaultTransport.(*http.Transport).Clone()
+	tr.Proxy = http.ProxyURL(parsed)
+	return &http.Client{Timeout: timeout, Transport: tr}
 }
 
 func (a RESTAdapter) Name() string { return a.Platform }
