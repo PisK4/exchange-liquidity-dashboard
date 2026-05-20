@@ -103,16 +103,39 @@ func platformFromBook(book domain.OrderBookSnapshot, runtime config.Runtime) dom
 	row.SpreadBP = spread
 	for _, tier := range runtime.DepthTiers {
 		label := fmt.Sprintf("%.2f%%", tier*100)
-		depth := indicators.DepthAtTier(book, tier)
+		depth := adapter.TierDepthMetrics(book, tier)
 		row.DepthByTier[label] = depth
 		if label == "0.10%" {
 			row.Imbalance = indicators.Imbalance(depth.BidUSD, depth.AskUSD)
 		}
 	}
+	row.DepthStatus, row.PartialReason = summarizeDepthStatus(row.DepthByTier, book.DepthStatus, book.PartialReason)
 	for _, bucket := range runtime.SlippageBucketsUSD {
 		label := fmt.Sprintf("%.0f", bucket)
 		row.BuySlippageBP[label] = indicators.BuySlippageBP(book, bucket)
 		row.SellSlippageBP[label] = indicators.SellSlippageBP(book, bucket)
 	}
 	return row
+}
+
+func summarizeDepthStatus(depthByTier map[string]domain.DepthMetrics, fallbackStatus, fallbackReason string) (string, string) {
+	if len(depthByTier) == 0 {
+		return fallbackStatus, fallbackReason
+	}
+	hasDisplayable := false
+	for _, depth := range depthByTier {
+		switch depth.DepthStatus {
+		case domain.StatusPartial:
+			if depth.PartialReason != "" {
+				return domain.StatusPartial, depth.PartialReason
+			}
+			return domain.StatusPartial, domain.ReasonUnknown
+		case domain.StatusComplete, domain.StatusAggregatedOrderbook, domain.StatusWSLimitedDepth:
+			hasDisplayable = true
+		}
+	}
+	if hasDisplayable {
+		return domain.StatusComplete, ""
+	}
+	return fallbackStatus, fallbackReason
 }

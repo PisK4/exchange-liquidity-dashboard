@@ -218,6 +218,126 @@ func TestLiquidityComputesCompetitorMedianRankAndUnsupportedHistory(t *testing.T
 	}
 }
 
+func TestLiquidityMedianAndRankUseTierLevelDepthStatus(t *testing.T) {
+	cfg := config.Default()
+	cfg.Platforms = []string{"edgeX", "binance", "okx", "gate"}
+	store := NewStore(cfg)
+	now := time.Now().UTC()
+	for _, row := range []domain.PlatformSnapshot{
+		{
+			Platform:      "edgeX",
+			DisplaySymbol: "BTC-USDT (perp)",
+			SnapshotTS:    now,
+			DepthStatus:   domain.StatusPartial,
+			DepthByTier: map[string]domain.DepthMetrics{
+				"0.10%": {TotalUSD: 20, DepthStatus: domain.StatusComplete},
+				"2.00%": {TotalUSD: 200, DepthStatus: domain.StatusPartial, PartialReason: domain.ReasonAPILevelCap},
+			},
+			BuySlippageBP:  map[string]float64{},
+			SellSlippageBP: map[string]float64{},
+		},
+		{
+			Platform:      "binance",
+			DisplaySymbol: "BTC-USDT (perp)",
+			SnapshotTS:    now,
+			DepthStatus:   domain.StatusPartial,
+			DepthByTier: map[string]domain.DepthMetrics{
+				"0.10%": {TotalUSD: 100, DepthStatus: domain.StatusComplete},
+				"2.00%": {TotalUSD: 1000, DepthStatus: domain.StatusPartial, PartialReason: domain.ReasonAPILevelCap},
+			},
+			BuySlippageBP:  map[string]float64{},
+			SellSlippageBP: map[string]float64{},
+		},
+		{
+			Platform:      "okx",
+			DisplaySymbol: "BTC-USDT (perp)",
+			SnapshotTS:    now,
+			DepthStatus:   domain.StatusComplete,
+			DepthByTier: map[string]domain.DepthMetrics{
+				"0.10%": {TotalUSD: 200, DepthStatus: domain.StatusComplete},
+				"2.00%": {TotalUSD: 2000, DepthStatus: domain.StatusComplete},
+			},
+			BuySlippageBP:  map[string]float64{},
+			SellSlippageBP: map[string]float64{},
+		},
+		{
+			Platform:      "gate",
+			DisplaySymbol: "BTC-USDT (perp)",
+			SnapshotTS:    now,
+			DepthStatus:   domain.StatusComplete,
+			DepthByTier: map[string]domain.DepthMetrics{
+				"0.10%": {TotalUSD: 300, DepthStatus: domain.StatusComplete},
+				"2.00%": {TotalUSD: 3000, DepthStatus: domain.StatusAggregatedOrderbook, DepthSource: domain.SourceAggregatedOrderbook},
+			},
+			BuySlippageBP:  map[string]float64{},
+			SellSlippageBP: map[string]float64{},
+		},
+	} {
+		store.SavePlatformSnapshot(row)
+	}
+
+	got := store.Liquidity("BTC-USDT (perp)")
+	medians := got["competitor_median_by_tier"].(map[string]float64)
+	if medians["0.10%"] != 200 {
+		t.Fatalf("expected complete 0.10%% tiers to participate in median, got %+v", medians)
+	}
+	if medians["2.00%"] != 2500 {
+		t.Fatalf("expected partial 2.00%% lower bounds to be excluded from median, got %+v", medians)
+	}
+	rows := got["rows"].([]domain.PlatformSnapshot)
+	if rows[0].Rank01 != 4 {
+		t.Fatalf("expected edgeX to be ranked by complete 0.10%% tier even when row is partial, got %+v", rows[0])
+	}
+	if _, ok := rows[0].VsMedianByTier["2.00%"]; ok {
+		t.Fatalf("partial edgeX 2.00%% lower bound must not get vs median ratio, got %+v", rows[0].VsMedianByTier)
+	}
+}
+
+func TestPlatformFromBookCreatesPerTierStatuses(t *testing.T) {
+	runtime := config.Default().Runtime
+	runtime.DepthTiers = []float64{0.001, 0.02}
+	book := domain.OrderBookSnapshot{
+		Platform:       "edgeX",
+		DisplaySymbol:  "BTC-USDT (perp)",
+		SourceEndpoint: "https://example.test/depth",
+		SnapshotTS:     time.Now().UTC(),
+		DepthStatus:    domain.StatusPartial,
+		PartialReason:  domain.ReasonAPILevelCap,
+		DepthSource:    domain.SourceRawOrderbook,
+		SourceID:       "raw",
+		APILevelCap:    4,
+		Bids: []domain.Level{
+			{Price: 99.95, Size: 1},
+			{Price: 99.0, Size: 1},
+		},
+		Asks: []domain.Level{
+			{Price: 100.05, Size: 1},
+			{Price: 101.0, Size: 1},
+		},
+		SourceBooks: map[string]domain.BookView{},
+	}
+	book.SourceBooks["raw"] = domain.BookView{
+		SourceID:       "raw",
+		Source:         domain.SourceRawOrderbook,
+		SourceEndpoint: book.SourceEndpoint,
+		Bids:           book.Bids,
+		Asks:           book.Asks,
+		SnapshotTS:     book.SnapshotTS,
+		APILevelCap:    book.APILevelCap,
+	}
+
+	row := platformFromBook(book, runtime)
+	if row.DepthByTier["0.10%"].DepthStatus != domain.StatusComplete {
+		t.Fatalf("expected near tier complete, got %+v", row.DepthByTier["0.10%"])
+	}
+	if row.DepthByTier["2.00%"].DepthStatus != domain.StatusPartial || row.DepthByTier["2.00%"].PartialReason != domain.ReasonAPILevelCap {
+		t.Fatalf("expected deep tier partial/api_level_cap, got %+v", row.DepthByTier["2.00%"])
+	}
+	if row.DepthStatus != domain.StatusPartial {
+		t.Fatalf("expected row status partial when only near tier is complete, got %+v", row)
+	}
+}
+
 func TestLiquidityWithoutCompetitorMedianDoesNotReportHealthy(t *testing.T) {
 	cfg := config.Default()
 	cfg.Platforms = []string{"edgeX", "binance"}

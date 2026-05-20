@@ -19,6 +19,11 @@ const (
 
 	FreshnessLive    = "live"
 	FreshnessDelayed = "delayed"
+
+	SourceRawOrderbook        = "raw_orderbook"
+	SourceAggregatedOrderbook = "aggregated_orderbook"
+	SourceWSLocalBook         = "ws_local_book"
+	SourceWSLimitedDepth      = "ws_limited_depth"
 )
 
 type SymbolSub struct {
@@ -48,26 +53,61 @@ type Level struct {
 	Size  float64 `json:"size"`
 }
 
-type OrderBookSnapshot struct {
-	Platform           string    `json:"platform"`
-	DisplaySymbol      string    `json:"display_symbol"`
-	SourceEndpoint     string    `json:"source_endpoint"`
-	SnapshotTS         time.Time `json:"snapshot_ts"`
-	Bids               []Level   `json:"bids,omitempty"`
-	Asks               []Level   `json:"asks,omitempty"`
-	DepthStatus        string    `json:"depth_status"`
-	PartialReason      string    `json:"partial_reason,omitempty"`
-	Error              string    `json:"error,omitempty"`
-	LevelsReturned     int       `json:"levels_returned"`
-	APILevelCap        int       `json:"api_level_cap"`
-	FarthestDistancePC float64   `json:"farthest_distance_pct"`
+type BookView struct {
+	SourceID          string            `json:"source_id"`
+	Source            string            `json:"depth_source"`
+	SourceEndpoint    string            `json:"source_endpoint"`
+	Bids              []Level           `json:"bids,omitempty"`
+	Asks              []Level           `json:"asks,omitempty"`
+	SequenceID        uint64            `json:"sequence_id,omitempty"`
+	SnapshotTS        time.Time         `json:"snapshot_ts"`
+	ReceivedTS        time.Time         `json:"received_ts,omitempty"`
+	AggregationParams map[string]string `json:"aggregation_params,omitempty"`
+	APILevelCap       int               `json:"api_level_cap,omitempty"`
 }
 
-type DepthMetrics struct {
-	BidUSD   float64 `json:"bid_usd"`
-	AskUSD   float64 `json:"ask_usd"`
-	TotalUSD float64 `json:"total_usd"`
+type OrderBookSnapshot struct {
+	Platform           string              `json:"platform"`
+	DisplaySymbol      string              `json:"display_symbol"`
+	SourceEndpoint     string              `json:"source_endpoint"`
+	SnapshotTS         time.Time           `json:"snapshot_ts"`
+	Bids               []Level             `json:"bids,omitempty"`
+	Asks               []Level             `json:"asks,omitempty"`
+	DepthStatus        string              `json:"depth_status"`
+	PartialReason      string              `json:"partial_reason,omitempty"`
+	Error              string              `json:"error,omitempty"`
+	LevelsReturned     int                 `json:"levels_returned"`
+	BidLevelsReturned  int                 `json:"bid_levels_returned,omitempty"`
+	AskLevelsReturned  int                 `json:"ask_levels_returned,omitempty"`
+	APILevelCap        int                 `json:"api_level_cap"`
+	FarthestDistancePC float64             `json:"farthest_distance_pct"`
+	FarthestBidPct     float64             `json:"farthest_bid_pct,omitempty"`
+	FarthestAskPct     float64             `json:"farthest_ask_pct,omitempty"`
+	DepthSource        string              `json:"depth_source,omitempty"`
+	SourceID           string              `json:"source_id,omitempty"`
+	SourceBooks        map[string]BookView `json:"-"`
 }
+
+type TierDepthMetrics struct {
+	BidUSD              float64           `json:"bid_usd"`
+	AskUSD              float64           `json:"ask_usd"`
+	TotalUSD            float64           `json:"total_usd"`
+	DepthStatus         string            `json:"depth_status,omitempty"`
+	PartialReason       string            `json:"partial_reason,omitempty"`
+	DepthSource         string            `json:"depth_source,omitempty"`
+	SourceID            string            `json:"source_id,omitempty"`
+	SourceEndpoint      string            `json:"source_endpoint,omitempty"`
+	LevelsReturned      int               `json:"levels_returned,omitempty"`
+	BidLevelsReturned   int               `json:"bid_levels_returned,omitempty"`
+	AskLevelsReturned   int               `json:"ask_levels_returned,omitempty"`
+	APILevelCap         int               `json:"api_level_cap,omitempty"`
+	FarthestBidPct      float64           `json:"farthest_bid_pct,omitempty"`
+	FarthestAskPct      float64           `json:"farthest_ask_pct,omitempty"`
+	FarthestDistancePct float64           `json:"farthest_distance_pct,omitempty"`
+	AggregationParams   map[string]string `json:"aggregation_params,omitempty"`
+}
+
+type DepthMetrics = TierDepthMetrics
 
 type PlatformSnapshot struct {
 	Platform             string                  `json:"platform"`

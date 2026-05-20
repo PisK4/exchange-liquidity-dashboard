@@ -41,6 +41,85 @@ func TestClassifyDepthMarksCompleteWhenTwoPercentIsCovered(t *testing.T) {
 	}
 }
 
+func TestFinalizeBookCountsTotalBidAndAskLevels(t *testing.T) {
+	book := domain.OrderBookSnapshot{
+		Platform:    "edgeX",
+		APILevelCap: 400,
+		Bids:        make([]domain.Level, 200),
+		Asks:        make([]domain.Level, 200),
+	}
+	for i := 0; i < 200; i++ {
+		book.Bids[i] = domain.Level{Price: 100 - float64(i)*0.004, Size: 1}
+		book.Asks[i] = domain.Level{Price: 100.1 + float64(i)*0.004, Size: 1}
+	}
+
+	got := finalizeBook(book, "raw", domain.SourceRawOrderbook, "")
+	if got.LevelsReturned != 400 || got.BidLevelsReturned != 200 || got.AskLevelsReturned != 200 {
+		t.Fatalf("expected bid+ask level counts, got total=%d bid=%d ask=%d", got.LevelsReturned, got.BidLevelsReturned, got.AskLevelsReturned)
+	}
+	if got.PartialReason != domain.ReasonAPILevelCap {
+		t.Fatalf("expected api_level_cap when total cap is filled but 2%% is not covered, got status=%s reason=%s", got.DepthStatus, got.PartialReason)
+	}
+}
+
+func TestTierDepthMetricsRequiresBothSidesToCoverTier(t *testing.T) {
+	book := finalizeBook(domain.OrderBookSnapshot{
+		Platform:    "binance",
+		APILevelCap: 4,
+		Bids: []domain.Level{
+			{Price: 99.9, Size: 1},
+			{Price: 97.9, Size: 1},
+		},
+		Asks: []domain.Level{
+			{Price: 100.1, Size: 1},
+			{Price: 100.2, Size: 1},
+		},
+	}, "raw", domain.SourceRawOrderbook, "https://example.test/raw")
+
+	got := TierDepthMetrics(book, 0.02)
+	if got.DepthStatus != domain.StatusPartial || got.PartialReason != domain.ReasonAPILevelCap {
+		t.Fatalf("expected partial/api_level_cap when ask side does not cover tier, got %+v", got)
+	}
+	if got.FarthestBidPct < 2 || got.FarthestAskPct >= 2 {
+		t.Fatalf("expected asymmetric coverage details, got bid=%f ask=%f", got.FarthestBidPct, got.FarthestAskPct)
+	}
+}
+
+func TestTierDepthMetricsSelectsAggregatedGateBookForDeepTier(t *testing.T) {
+	book := finalizeBook(domain.OrderBookSnapshot{
+		Platform:       "gate",
+		SourceEndpoint: "https://example.test/raw",
+		APILevelCap:    4,
+		Bids: []domain.Level{
+			{Price: 99.9, Size: 1},
+			{Price: 99.8, Size: 1},
+		},
+		Asks: []domain.Level{
+			{Price: 100.1, Size: 1},
+			{Price: 100.2, Size: 1},
+		},
+	}, "gate_raw", domain.SourceRawOrderbook, "https://example.test/raw")
+	book.SourceBooks["gate_agg_10"] = domain.BookView{
+		SourceID:       "gate_agg_10",
+		Source:         domain.SourceAggregatedOrderbook,
+		SourceEndpoint: "https://example.test/agg?interval=10",
+		Bids: []domain.Level{
+			{Price: 99.9, Size: 1},
+			{Price: 97.9, Size: 1},
+		},
+		Asks: []domain.Level{
+			{Price: 100.1, Size: 1},
+			{Price: 102.1, Size: 1},
+		},
+		APILevelCap: 4,
+	}
+
+	got := TierDepthMetrics(book, 0.02)
+	if got.DepthStatus != domain.StatusAggregatedOrderbook || got.SourceID != "gate_agg_10" || got.DepthSource != domain.SourceAggregatedOrderbook {
+		t.Fatalf("expected deep tier to use aggregated gate book, got %+v", got)
+	}
+}
+
 func TestEdgeXContractIDReturnsCatalogValue(t *testing.T) {
 	sub := domain.SymbolSub{Canonical: "BTC", ContractID: "10000001"}
 	got, err := edgeXContractID(sub)

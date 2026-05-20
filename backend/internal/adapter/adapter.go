@@ -87,10 +87,7 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 	}
 	book.Bids = bids
 	book.Asks = asks
-	book.LevelsReturned = min(len(bids), len(asks))
-	book.DepthStatus, book.PartialReason = classifyDepth(book)
-	book.FarthestDistancePC = farthestDistancePct(book)
-	return book, nil
+	return finalizeBook(book, defaultSourceID(a.Platform), defaultDepthSource(a.Platform), sub.SourceEndpoint), nil
 }
 
 func (a RESTAdapter) FetchTicker(ctx context.Context, sub domain.SymbolSub) (domain.VolumeSnapshot, error) {
@@ -634,6 +631,122 @@ func parseMapLevels(raw []map[string]any) []domain.Level {
 	return levels
 }
 
+func finalizeBook(book domain.OrderBookSnapshot, sourceID, depthSource, sourceEndpoint string) domain.OrderBookSnapshot {
+	if sourceID == "" {
+		sourceID = "raw"
+	}
+	if depthSource == "" {
+		depthSource = domain.SourceRawOrderbook
+	}
+	if sourceEndpoint == "" {
+		sourceEndpoint = book.SourceEndpoint
+	}
+	book.SourceID = sourceID
+	book.DepthSource = depthSource
+	book.SourceEndpoint = sourceEndpoint
+	book.BidLevelsReturned = len(book.Bids)
+	book.AskLevelsReturned = len(book.Asks)
+	book.LevelsReturned = book.BidLevelsReturned + book.AskLevelsReturned
+	book.FarthestBidPct, book.FarthestAskPct = farthestSideDistancePct(book.Bids, book.Asks)
+	book.FarthestDistancePC = maxFloat(book.FarthestBidPct, book.FarthestAskPct)
+	book.DepthStatus, book.PartialReason = classifyDepth(book)
+	if book.SourceBooks == nil {
+		book.SourceBooks = map[string]domain.BookView{}
+	}
+	book.SourceBooks[sourceID] = domain.BookView{
+		SourceID:       sourceID,
+		Source:         depthSource,
+		SourceEndpoint: sourceEndpoint,
+		Bids:           book.Bids,
+		Asks:           book.Asks,
+		SnapshotTS:     book.SnapshotTS,
+		APILevelCap:    book.APILevelCap,
+	}
+	return book
+}
+
+func TierDepthMetrics(book domain.OrderBookSnapshot, tier float64) domain.TierDepthMetrics {
+	view := selectBookView(book, tier)
+	mid := midPrice(book.Bids, book.Asks)
+	if mid <= 0 {
+		mid = midPrice(view.Bids, view.Asks)
+	}
+	bidFloor := mid * (1 - tier)
+	askCeil := mid * (1 + tier)
+	var bidUSD, askUSD float64
+	for _, level := range view.Bids {
+		if level.Price >= bidFloor {
+			bidUSD += level.Price * level.Size
+		}
+	}
+	for _, level := range view.Asks {
+		if level.Price <= askCeil {
+			askUSD += level.Price * level.Size
+		}
+	}
+	bidLevels := len(view.Bids)
+	askLevels := len(view.Asks)
+	levels := bidLevels + askLevels
+	farBid, farAsk := farthestSideDistancePctFromMid(view.Bids, view.Asks, mid)
+	status, reason := classifyDepthView(view.Source, farBid, farAsk, tier*100, levels, view.APILevelCap)
+	return domain.TierDepthMetrics{
+		BidUSD:              bidUSD,
+		AskUSD:              askUSD,
+		TotalUSD:            bidUSD + askUSD,
+		DepthStatus:         status,
+		PartialReason:       reason,
+		DepthSource:         view.Source,
+		SourceID:            view.SourceID,
+		SourceEndpoint:      view.SourceEndpoint,
+		LevelsReturned:      levels,
+		BidLevelsReturned:   bidLevels,
+		AskLevelsReturned:   askLevels,
+		APILevelCap:         view.APILevelCap,
+		FarthestBidPct:      farBid,
+		FarthestAskPct:      farAsk,
+		FarthestDistancePct: maxFloat(farBid, farAsk),
+		AggregationParams:   view.AggregationParams,
+	}
+}
+
+func selectBookView(book domain.OrderBookSnapshot, tier float64) domain.BookView {
+	if tier >= 0.01 {
+		switch book.Platform {
+		case "gate":
+			if view, ok := book.SourceBooks["gate_agg_10"]; ok {
+				return view
+			}
+		case "hyperliquid":
+			if view, ok := book.SourceBooks["hyperliquid_agg_3"]; ok {
+				return view
+			}
+		case "bitget":
+			if view, ok := book.SourceBooks["bitget_merge_depth"]; ok {
+				return view
+			}
+		}
+	}
+	if book.SourceBooks != nil {
+		if book.SourceID != "" {
+			if view, ok := book.SourceBooks[book.SourceID]; ok {
+				return view
+			}
+		}
+		if view, ok := book.SourceBooks["raw"]; ok {
+			return view
+		}
+	}
+	return domain.BookView{
+		SourceID:       book.SourceID,
+		Source:         book.DepthSource,
+		SourceEndpoint: book.SourceEndpoint,
+		Bids:           book.Bids,
+		Asks:           book.Asks,
+		SnapshotTS:     book.SnapshotTS,
+		APILevelCap:    book.APILevelCap,
+	}
+}
+
 func multiplySize(levels []domain.Level, multiplier float64) []domain.Level {
 	for i := range levels {
 		levels[i].Size *= multiplier
@@ -660,14 +773,32 @@ func classifyDepth(book domain.OrderBookSnapshot) (string, string) {
 	if len(book.Bids) == 0 || len(book.Asks) == 0 {
 		return domain.StatusPartial, domain.ReasonSparseBook
 	}
-	farthest := farthestDistancePct(book)
-	if farthest >= 2 {
+	levels := book.LevelsReturned
+	if levels == 0 {
+		levels = len(book.Bids) + len(book.Asks)
+	}
+	farBid, farAsk := farthestSideDistancePct(book.Bids, book.Asks)
+	return classifyDepthView(book.DepthSource, farBid, farAsk, 2, levels, book.APILevelCap)
+}
+
+func classifyDepthView(source string, farBid, farAsk, targetPct float64, levels, apiMax int) (string, string) {
+	if levels == 0 {
+		return domain.StatusPartial, domain.ReasonSparseBook
+	}
+	covered := farBid >= targetPct && farAsk >= targetPct
+	if covered {
+		if source == domain.SourceAggregatedOrderbook {
+			return domain.StatusAggregatedOrderbook, ""
+		}
+		if source == domain.SourceWSLimitedDepth {
+			return domain.StatusWSLimitedDepth, ""
+		}
 		return domain.StatusComplete, ""
 	}
-	if book.APILevelCap > 0 && book.LevelsReturned >= book.APILevelCap {
+	if apiMax > 0 && levels >= apiMax {
 		return domain.StatusPartial, domain.ReasonAPILevelCap
 	}
-	if book.APILevelCap > 0 && float64(book.LevelsReturned) < float64(book.APILevelCap)*0.8 {
+	if apiMax > 0 && float64(levels) < float64(apiMax)*0.8 {
 		return domain.StatusPartial, domain.ReasonSparseBook
 	}
 	return domain.StatusPartial, domain.ReasonUnknown
@@ -678,9 +809,9 @@ func apiLevelCap(platform string) int {
 	case "binance":
 		return 2000
 	case "okx":
-		return 800
+		return 10000
 	case "bybit":
-		return 1000
+		return 2000
 	case "bitget":
 		return 200
 	case "bingx":
@@ -701,19 +832,55 @@ func apiLevelCap(platform string) int {
 }
 
 func farthestDistancePct(book domain.OrderBookSnapshot) float64 {
-	if len(book.Bids) == 0 || len(book.Asks) == 0 {
+	farBid, farAsk := farthestSideDistancePct(book.Bids, book.Asks)
+	return maxFloat(farBid, farAsk)
+}
+
+func farthestSideDistancePct(bids, asks []domain.Level) (float64, float64) {
+	return farthestSideDistancePctFromMid(bids, asks, midPrice(bids, asks))
+}
+
+func farthestSideDistancePctFromMid(bids, asks []domain.Level, mid float64) (float64, float64) {
+	if len(bids) == 0 || len(asks) == 0 || mid <= 0 {
+		return 0, 0
+	}
+	farBid := mathAbs(bids[len(bids)-1].Price-mid) / mid * 100
+	farAsk := mathAbs(asks[len(asks)-1].Price-mid) / mid * 100
+	return farBid, farAsk
+}
+
+func midPrice(bids, asks []domain.Level) float64 {
+	if len(bids) == 0 || len(asks) == 0 {
 		return 0
 	}
-	mid := (book.Bids[0].Price + book.Asks[0].Price) / 2
-	if mid <= 0 {
-		return 0
+	return (bids[0].Price + asks[0].Price) / 2
+}
+
+func defaultSourceID(platform string) string {
+	switch platform {
+	case "okx":
+		return "okx_books_full"
+	case "bybit":
+		return "bybit_raw_1000"
+	case "lighter":
+		return "lighter_ws"
+	default:
+		return "raw"
 	}
-	farBid := mathAbs(book.Bids[len(book.Bids)-1].Price-mid) / mid * 100
-	farAsk := mathAbs(book.Asks[len(book.Asks)-1].Price-mid) / mid * 100
-	if farBid > farAsk {
-		return farBid
+}
+
+func defaultDepthSource(platform string) string {
+	if platform == "lighter" {
+		return domain.SourceWSLocalBook
 	}
-	return farAsk
+	return domain.SourceRawOrderbook
+}
+
+func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func mathAbs(v float64) float64 {

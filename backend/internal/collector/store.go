@@ -328,11 +328,11 @@ func liquidityKPIs(rows []domain.PlatformSnapshot, medians map[string]float64, v
 func competitorMedianByTier(rows []domain.PlatformSnapshot) map[string]float64 {
 	byTier := map[string][]float64{}
 	for _, row := range rows {
-		if row.Platform == "edgeX" || !isComparableDepth(row) {
+		if row.Platform == "edgeX" {
 			continue
 		}
 		for tier, depth := range row.DepthByTier {
-			if depth.TotalUSD > 0 {
+			if depth.TotalUSD > 0 && isComparableDepthTier(row, depth) {
 				byTier[tier] = append(byTier[tier], depth.TotalUSD)
 			}
 		}
@@ -347,12 +347,12 @@ func competitorMedianByTier(rows []domain.PlatformSnapshot) map[string]float64 {
 func enrichLiquidityRows(rows []domain.PlatformSnapshot, medians map[string]float64) []domain.PlatformSnapshot {
 	ranked := append([]domain.PlatformSnapshot(nil), rows...)
 	sort.Slice(ranked, func(i, j int) bool {
-		return ranked[i].DepthByTier["0.10%"].TotalUSD > ranked[j].DepthByTier["0.10%"].TotalUSD
+		return comparableTierTotal(ranked[i], "0.10%") > comparableTierTotal(ranked[j], "0.10%")
 	})
 	ranks := map[string]int{}
 	rank := 1
 	for _, row := range ranked {
-		if !isComparableDepth(row) || row.DepthByTier["0.10%"].TotalUSD <= 0 {
+		if comparableTierTotal(row, "0.10%") <= 0 {
 			continue
 		}
 		ranks[row.Platform] = rank
@@ -362,7 +362,7 @@ func enrichLiquidityRows(rows []domain.PlatformSnapshot, medians map[string]floa
 	for i := range out {
 		out[i].VsMedianByTier = map[string]float64{}
 		for tier, depth := range out[i].DepthByTier {
-			if medians[tier] > 0 && depth.TotalUSD > 0 && isComparableDepth(out[i]) {
+			if medians[tier] > 0 && depth.TotalUSD > 0 && isComparableDepthTier(out[i], depth) {
 				out[i].VsMedianByTier[tier] = depth.TotalUSD / medians[tier]
 			}
 		}
@@ -396,6 +396,25 @@ func isComparableDepth(row domain.PlatformSnapshot) bool {
 	default:
 		return false
 	}
+}
+
+func isComparableDepthTier(row domain.PlatformSnapshot, depth domain.DepthMetrics) bool {
+	switch depth.DepthStatus {
+	case domain.StatusComplete, domain.StatusAggregatedOrderbook:
+		return true
+	case "":
+		return isComparableDepth(row)
+	default:
+		return false
+	}
+}
+
+func comparableTierTotal(row domain.PlatformSnapshot, tier string) float64 {
+	depth := row.DepthByTier[tier]
+	if depth.TotalUSD <= 0 || !isComparableDepthTier(row, depth) {
+		return 0
+	}
+	return depth.TotalUSD
 }
 
 func median(values []float64) float64 {
