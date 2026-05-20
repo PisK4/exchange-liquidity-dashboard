@@ -368,18 +368,23 @@ func (c *CoinGeckoCollector) fetchVolumeChartWithRetry(ctx context.Context, exch
 // runDailyBackfill schedules a daily call to BackfillVolumeHistory(7) at
 // roughly UTC 01:00 so any service downtime overnight gets back-filled the
 // next morning. The first run also fires shortly after Run() starts to cover
-// the case where the collector boots after a long outage.
+// the case where the collector boots after a long outage. The boot run
+// requests 30 days so a fresh deployment immediately hydrates the Share 30d
+// window; subsequent daily runs only request 7 days because the rolling
+// catch-up window never needs to look further back than that.
 func (c *CoinGeckoCollector) runDailyBackfill(ctx context.Context) {
 	t := time.NewTimer(90 * time.Second)
 	defer t.Stop()
+	days := 30
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			if err := c.BackfillVolumeHistory(ctx, 7); err != nil {
+			if err := c.BackfillVolumeHistory(ctx, days); err != nil {
 				log.Printf("coingecko daily backfill failed: %v", err)
 			}
+			days = 7
 			t.Reset(nextDailyBackfillDelay(time.Now().UTC()))
 		}
 	}
