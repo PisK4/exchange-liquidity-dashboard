@@ -120,16 +120,22 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 	book = finalizeBook(book, defaultSourceID(a.Platform), defaultDepthSource(a.Platform), sub.SourceEndpoint)
 	switch a.Platform {
 	case "gate":
-		if view, viewErr := a.fetchGateAggregatedView(ctx, sub); viewErr == nil {
-			book.SourceBooks[view.SourceID] = view
+		for _, interval := range []string{"10", "100"} {
+			if view, viewErr := a.fetchGateAggregatedView(ctx, sub, interval); viewErr == nil {
+				book.SourceBooks[view.SourceID] = view
+			}
 		}
 	case "hyperliquid":
-		if view, viewErr := a.fetchHyperliquidAggregatedView(ctx, sub); viewErr == nil {
-			book.SourceBooks[view.SourceID] = view
+		for _, spec := range hyperliquidViewSpecs() {
+			if view, viewErr := a.fetchHyperliquidAggregatedView(ctx, sub, spec); viewErr == nil {
+				book.SourceBooks[view.SourceID] = view
+			}
 		}
 	case "bitget":
-		if view, viewErr := a.fetchBitgetMergeDepthView(ctx, sub); viewErr == nil {
-			book.SourceBooks[view.SourceID] = view
+		for _, precision := range []string{"scale0", "scale1", "scale2", "scale3"} {
+			if view, viewErr := a.fetchBitgetMergeDepthView(ctx, sub, precision); viewErr == nil {
+				book.SourceBooks[view.SourceID] = view
+			}
 		}
 	}
 	return book, nil
@@ -296,23 +302,26 @@ func (a RESTAdapter) fetchBitget(ctx context.Context, sub domain.SymbolSub) ([]d
 	return parseStringLevels(resp.Data.Bids), parseStringLevels(resp.Data.Asks), nil
 }
 
-func (a RESTAdapter) fetchBitgetMergeDepthView(ctx context.Context, sub domain.SymbolSub) (domain.BookView, error) {
+func (a RESTAdapter) fetchBitgetMergeDepthView(ctx context.Context, sub domain.SymbolSub, precision string) (domain.BookView, error) {
 	var resp struct {
-		Data struct{ Bids, Asks [][]string }
+		Data struct{ Bids, Asks [][]any }
 	}
-	url := "https://api.bitget.com/api/v2/mix/market/merge-depth?productType=USDT-FUTURES&precision=scale0&limit=100&symbol=" + sub.APISymbol
+	if precision == "" {
+		precision = "scale0"
+	}
+	url := "https://api.bitget.com/api/v2/mix/market/merge-depth?productType=USDT-FUTURES&precision=" + precision + "&limit=100&symbol=" + sub.APISymbol
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return domain.BookView{}, err
 	}
 	return domain.BookView{
-		SourceID:          "bitget_merge_depth",
+		SourceID:          "bitget_merge_" + precision,
 		Source:            domain.SourceAggregatedOrderbook,
 		SourceEndpoint:    url,
-		Bids:              parseStringLevels(resp.Data.Bids),
-		Asks:              parseStringLevels(resp.Data.Asks),
+		Bids:              parseAnyLevels(resp.Data.Bids),
+		Asks:              parseAnyLevels(resp.Data.Asks),
 		SnapshotTS:        time.Now().UTC(),
 		APILevelCap:       200,
-		AggregationParams: map[string]string{"precision": "scale0", "limit": "100"},
+		AggregationParams: map[string]string{"precision": precision, "limit": "100"},
 	}, nil
 }
 
@@ -395,8 +404,11 @@ func (a RESTAdapter) fetchGateLevels(ctx context.Context, sub domain.SymbolSub, 
 	return multiplySize(parseGateLevels(resp.Bids), sub.QuantoMultiplier), multiplySize(parseGateLevels(resp.Asks), sub.QuantoMultiplier), nil
 }
 
-func (a RESTAdapter) fetchGateAggregatedView(ctx context.Context, sub domain.SymbolSub) (domain.BookView, error) {
-	bids, asks, err := a.fetchGateLevels(ctx, sub, "10")
+func (a RESTAdapter) fetchGateAggregatedView(ctx context.Context, sub domain.SymbolSub, interval string) (domain.BookView, error) {
+	if interval == "" {
+		interval = "10"
+	}
+	bids, asks, err := a.fetchGateLevels(ctx, sub, interval)
 	if err != nil {
 		return domain.BookView{}, err
 	}
@@ -404,27 +416,37 @@ func (a RESTAdapter) fetchGateAggregatedView(ctx context.Context, sub domain.Sym
 	if contract == "" {
 		contract = strings.ReplaceAll(strings.TrimSuffix(sub.DisplaySymbol, " (perp)"), "-", "_")
 	}
-	url := "https://api.gateio.ws/api/v4/futures/usdt/order_book?limit=200&with_id=true&contract=" + contract + "&interval=10"
+	url := "https://api.gateio.ws/api/v4/futures/usdt/order_book?limit=200&with_id=true&contract=" + contract + "&interval=" + interval
+	step, _ := strconv.ParseFloat(interval, 64)
+	policy := ""
+	if interval == "100" {
+		policy = domain.PolicyLooseGroupedApprox
+	}
 	return domain.BookView{
-		SourceID:          "gate_agg_10",
+		SourceID:          "gate_agg_" + interval,
 		Source:            domain.SourceAggregatedOrderbook,
 		SourceEndpoint:    url,
 		Bids:              bids,
 		Asks:              asks,
 		SnapshotTS:        time.Now().UTC(),
 		APILevelCap:       400,
-		AggregationParams: map[string]string{"interval": "10"},
+		StepUSD:           step,
+		PolicyAcceptance:  policy,
+		AggregationParams: map[string]string{"interval": interval},
 	}, nil
 }
 
 func (a RESTAdapter) fetchHyperliquid(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
-	return a.fetchHyperliquidLevels(ctx, sub, 0)
+	return a.fetchHyperliquidLevels(ctx, sub, 0, 0)
 }
 
-func (a RESTAdapter) fetchHyperliquidLevels(ctx context.Context, sub domain.SymbolSub, sigFigs int) ([]domain.Level, []domain.Level, error) {
+func (a RESTAdapter) fetchHyperliquidLevels(ctx context.Context, sub domain.SymbolSub, sigFigs int, mantissa int) ([]domain.Level, []domain.Level, error) {
 	payload := map[string]any{"type": "l2Book", "coin": sub.APISymbol}
 	if sigFigs > 0 {
 		payload["nSigFigs"] = sigFigs
+	}
+	if mantissa > 0 {
+		payload["mantissa"] = mantissa
 	}
 	body, _ := json.Marshal(payload)
 	var resp struct {
@@ -439,20 +461,39 @@ func (a RESTAdapter) fetchHyperliquidLevels(ctx context.Context, sub domain.Symb
 	return parseMapLevels(resp.Levels[0]), parseMapLevels(resp.Levels[1]), nil
 }
 
-func (a RESTAdapter) fetchHyperliquidAggregatedView(ctx context.Context, sub domain.SymbolSub) (domain.BookView, error) {
-	bids, asks, err := a.fetchHyperliquidLevels(ctx, sub, 3)
+type hyperliquidViewSpec struct {
+	sourceID string
+	sigFigs  int
+	mantissa int
+}
+
+func hyperliquidViewSpecs() []hyperliquidViewSpec {
+	return []hyperliquidViewSpec{
+		{sourceID: "hyperliquid_s5_m2", sigFigs: 5, mantissa: 2},
+		{sourceID: "hyperliquid_s5_m5", sigFigs: 5, mantissa: 5},
+		{sourceID: "hyperliquid_s4", sigFigs: 4},
+		{sourceID: "hyperliquid_s3", sigFigs: 3},
+	}
+}
+
+func (a RESTAdapter) fetchHyperliquidAggregatedView(ctx context.Context, sub domain.SymbolSub, spec hyperliquidViewSpec) (domain.BookView, error) {
+	bids, asks, err := a.fetchHyperliquidLevels(ctx, sub, spec.sigFigs, spec.mantissa)
 	if err != nil {
 		return domain.BookView{}, err
 	}
+	params := map[string]string{"nSigFigs": strconv.Itoa(spec.sigFigs)}
+	if spec.mantissa > 0 {
+		params["mantissa"] = strconv.Itoa(spec.mantissa)
+	}
 	return domain.BookView{
-		SourceID:          "hyperliquid_agg_3",
+		SourceID:          spec.sourceID,
 		Source:            domain.SourceAggregatedOrderbook,
 		SourceEndpoint:    "https://api.hyperliquid.xyz/info",
 		Bids:              bids,
 		Asks:              asks,
 		SnapshotTS:        time.Now().UTC(),
 		APILevelCap:       40,
-		AggregationParams: map[string]string{"nSigFigs": "3"},
+		AggregationParams: params,
 	}, nil
 }
 
@@ -816,6 +857,11 @@ func TierDepthMetrics(book domain.OrderBookSnapshot, tier float64) domain.TierDe
 	view = enrichBookViewMetrics(view, mid)
 	farBid, farAsk := farthestSideDistancePctFromMid(view.Bids, view.Asks, mid)
 	status, reason := classifyDepthView(view.Source, farBid, farAsk, tier*100, levels, view.APILevelCap)
+	resolutionOK := viewResolutionOK(view, tier, mid)
+	if farBid >= tier*100 && farAsk >= tier*100 && !resolutionOK {
+		status = domain.StatusPartial
+		reason = domain.ReasonFeedTruncation
+	}
 	metric := domain.TierDepthMetrics{
 		BidUSD:               bidUSD,
 		AskUSD:               askUSD,
@@ -836,46 +882,82 @@ func TierDepthMetrics(book domain.OrderBookSnapshot, tier float64) domain.TierDe
 		PolicyAcceptance:     policyAcceptanceForView(view.Source, status),
 		UnofficialUIEndpoint: view.UnofficialUIEndpoint,
 	}
+	if view.PolicyAcceptance == domain.PolicyLooseGroupedApprox || view.PolicyAcceptance == domain.PolicyLooseLowerBound {
+		metric.DepthStatus = domain.StatusPartial
+		metric.StrictComplete = false
+		metric.PolicyAcceptance = view.PolicyAcceptance
+		if metric.PartialReason == "" {
+			metric.PartialReason = domain.ReasonFeedTruncation
+		}
+	}
 	domain.DeriveDepthMetricsDefaults(book.DepthStatus, &metric)
 	return metric
 }
 
 func selectBookView(book domain.OrderBookSnapshot, tier float64) domain.BookView {
-	if tier >= 0.01 {
-		switch book.Platform {
-		case "gate":
-			if view, ok := book.SourceBooks["gate_agg_10"]; ok {
-				return view
-			}
-		case "hyperliquid":
-			if view, ok := book.SourceBooks["hyperliquid_agg_3"]; ok {
-				return view
-			}
-		case "bitget":
-			if view, ok := book.SourceBooks["bitget_merge_depth"]; ok {
-				return view
-			}
+	mid := midPrice(book.Bids, book.Asks)
+	candidates := make([]domain.BookView, 0, len(book.SourceBooks)+1)
+	if book.SourceBooks != nil {
+		for _, view := range book.SourceBooks {
+			candidates = append(candidates, enrichBookViewMetrics(view, mid))
 		}
 	}
-	if book.SourceBooks != nil {
-		if book.SourceID != "" {
-			if view, ok := book.SourceBooks[book.SourceID]; ok {
-				return view
-			}
+	if len(candidates) == 0 {
+		candidates = append(candidates, enrichBookViewMetrics(domain.BookView{
+			SourceID:       book.SourceID,
+			Source:         book.DepthSource,
+			SourceEndpoint: book.SourceEndpoint,
+			Bids:           book.Bids,
+			Asks:           book.Asks,
+			SnapshotTS:     book.SnapshotTS,
+			APILevelCap:    book.APILevelCap,
+		}, mid))
+	}
+	if mid <= 0 && len(candidates) > 0 {
+		mid = midPrice(candidates[0].Bids, candidates[0].Asks)
+		for i := range candidates {
+			candidates[i] = enrichBookViewMetrics(candidates[i], mid)
 		}
-		if view, ok := book.SourceBooks["raw"]; ok {
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return viewStepForSort(candidates[i]) < viewStepForSort(candidates[j])
+	})
+	targetPct := tier * 100
+	maxStep := tier * mid / 4
+	for _, view := range candidates {
+		farBid, farAsk := farthestSideDistancePctFromMid(view.Bids, view.Asks, mid)
+		if farBid >= targetPct && farAsk >= targetPct && (view.StepUSD <= 0 || view.StepUSD <= maxStep || view.Source != domain.SourceAggregatedOrderbook) && view.PolicyAcceptance == "" {
 			return view
 		}
 	}
-	return domain.BookView{
-		SourceID:       book.SourceID,
-		Source:         book.DepthSource,
-		SourceEndpoint: book.SourceEndpoint,
-		Bids:           book.Bids,
-		Asks:           book.Asks,
-		SnapshotTS:     book.SnapshotTS,
-		APILevelCap:    book.APILevelCap,
+	best := candidates[0]
+	bestCoverage := -1.0
+	for _, view := range candidates {
+		farBid, farAsk := farthestSideDistancePctFromMid(view.Bids, view.Asks, mid)
+		coverage := minFloat(farBid, farAsk)
+		if coverage > bestCoverage {
+			best = view
+			bestCoverage = coverage
+		}
 	}
+	return best
+}
+
+func viewStepForSort(view domain.BookView) float64 {
+	if view.StepUSD <= 0 {
+		return 0
+	}
+	return view.StepUSD
+}
+
+func viewResolutionOK(view domain.BookView, tier, mid float64) bool {
+	if view.Source != domain.SourceAggregatedOrderbook {
+		return true
+	}
+	if view.StepUSD <= 0 || mid <= 0 {
+		return true
+	}
+	return view.StepUSD <= tier*mid/4
 }
 
 func multiplySize(levels []domain.Level, multiplier float64) []domain.Level {
@@ -1061,6 +1143,13 @@ func defaultDepthSource(platform string) string {
 
 func maxFloat(a, b float64) float64 {
 	if a > b {
+		return a
+	}
+	return b
+}
+
+func minFloat(a, b float64) float64 {
+	if a < b {
 		return a
 	}
 	return b

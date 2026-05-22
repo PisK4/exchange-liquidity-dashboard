@@ -129,6 +129,7 @@ func TestTierDepthMetricsSelectsAggregatedGateBookForDeepTier(t *testing.T) {
 			{Price: 102.1, Size: 1},
 		},
 		APILevelCap: 4,
+		StepUSD:     0.1,
 	}
 
 	got := TierDepthMetrics(book, 0.02)
@@ -185,6 +186,30 @@ func TestFetchBingXUsesAPISymbol(t *testing.T) {
 	}
 }
 
+func TestFetchBitgetAddsAllMergeScaleBooks(t *testing.T) {
+	var urls []string
+	a := RESTAdapter{Platform: "bitget", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		urls = append(urls, req.URL.String())
+		return jsonResponse(`{"data":{"bids":[["99","1"]],"asks":[["101","1"]]}}`), nil
+	})}, MaxAttempts: 1}
+
+	book, err := a.FetchOrderBook(context.Background(), domain.SymbolSub{DisplaySymbol: "BTC-USDT (perp)", APISymbol: "BTCUSDT"})
+	if err != nil {
+		t.Fatalf("FetchOrderBook: %v", err)
+	}
+	for _, sourceID := range []string{"bitget_merge_scale0", "bitget_merge_scale1", "bitget_merge_scale2", "bitget_merge_scale3"} {
+		if _, ok := book.SourceBooks[sourceID]; !ok {
+			t.Fatalf("expected %s source book, got %+v", sourceID, book.SourceBooks)
+		}
+	}
+	joined := strings.Join(urls, " ")
+	for _, precision := range []string{"precision=scale0", "precision=scale1", "precision=scale2", "precision=scale3"} {
+		if !strings.Contains(joined, precision) {
+			t.Fatalf("expected %s request, got %+v", precision, urls)
+		}
+	}
+}
+
 func TestFetchGateAddsAggregatedIntervalBook(t *testing.T) {
 	var urls []string
 	a := RESTAdapter{Platform: "gate", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
@@ -199,8 +224,12 @@ func TestFetchGateAddsAggregatedIntervalBook(t *testing.T) {
 	if _, ok := book.SourceBooks["gate_agg_10"]; !ok {
 		t.Fatalf("expected gate_agg_10 source book, got %+v", book.SourceBooks)
 	}
-	if len(urls) != 2 || !strings.Contains(urls[1], "interval=10") {
-		t.Fatalf("expected raw and interval=10 requests, got %+v", urls)
+	if _, ok := book.SourceBooks["gate_agg_100"]; !ok {
+		t.Fatalf("expected gate_agg_100 source book, got %+v", book.SourceBooks)
+	}
+	joined := strings.Join(urls, " ")
+	if len(urls) != 3 || !strings.Contains(joined, "interval=10") || !strings.Contains(joined, "interval=100") {
+		t.Fatalf("expected raw, interval=10, and interval=100 requests, got %+v", urls)
 	}
 }
 
@@ -216,11 +245,14 @@ func TestFetchHyperliquidAddsAggregatedSigFigBook(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FetchOrderBook: %v", err)
 	}
-	if _, ok := book.SourceBooks["hyperliquid_agg_3"]; !ok {
-		t.Fatalf("expected hyperliquid_agg_3 source book, got %+v", book.SourceBooks)
+	for _, sourceID := range []string{"hyperliquid_s5_m2", "hyperliquid_s5_m5", "hyperliquid_s4", "hyperliquid_s3"} {
+		if _, ok := book.SourceBooks[sourceID]; !ok {
+			t.Fatalf("expected %s source book, got %+v", sourceID, book.SourceBooks)
+		}
 	}
-	if len(bodies) != 2 || !strings.Contains(bodies[1], `"nSigFigs":3`) {
-		t.Fatalf("expected raw and nSigFigs=3 requests, got %+v", bodies)
+	joined := strings.Join(bodies, " ")
+	if len(bodies) != 5 || !strings.Contains(joined, `"nSigFigs":5`) || !strings.Contains(joined, `"mantissa":2`) || !strings.Contains(joined, `"mantissa":5`) || !strings.Contains(joined, `"nSigFigs":4`) || !strings.Contains(joined, `"nSigFigs":3`) {
+		t.Fatalf("expected raw and Hyperliquid multi-view requests, got %+v", bodies)
 	}
 }
 
