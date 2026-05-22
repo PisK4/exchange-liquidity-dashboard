@@ -81,6 +81,24 @@ func TestMatchInstrumentAliasAcceptsOffQuote(t *testing.T) {
 	}
 }
 
+func TestMatchInstrumentCryptoFallsBackToOffQuoteWhenUSDTMissing(t *testing.T) {
+	// edgeX-perp-v1 quotes everything in USD (settle in USDT/USD); OKX
+	// SWAP linear rows surface an empty QuoteCcy. With expectedQuote
+	// treated as a strict filter the canonical match would drop both,
+	// breaking the catalog refresh. The preference-based ordering keeps
+	// the BaseAsset==canonical row even when its QuoteAsset differs.
+	insts := []adapter.Instrument{
+		{APISymbol: "BTCUSD", BaseAsset: "BTC", QuoteAsset: "USD"},
+	}
+	got, ok := matchInstrument(insts, "BTC", "USDT", "edgeX", nil)
+	if !ok {
+		t.Fatalf("expected match for BTC even with USD-only quote")
+	}
+	if got.APISymbol != "BTCUSD" {
+		t.Errorf("APISymbol = %q, want BTCUSD", got.APISymbol)
+	}
+}
+
 func TestMatchInstrumentReturnsFalseWhenNoCandidate(t *testing.T) {
 	insts := []adapter.Instrument{
 		{APISymbol: "BTCUSDT", BaseAsset: "BTC", QuoteAsset: "USDT"},

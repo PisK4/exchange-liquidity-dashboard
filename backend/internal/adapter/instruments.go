@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"sort"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -172,6 +173,16 @@ func (a RESTAdapter) fetchOKXInstruments(ctx context.Context, fetchedAt time.Tim
 			quote := d.QuoteCcy
 			if base == "" && d.CtValCcy != "" {
 				base = d.CtValCcy
+			}
+			// For OKX SWAP linear contracts the response leaves baseCcy
+			// and quoteCcy empty; we already fall back to ctValCcy for
+			// the base, and for the quote the settleCcy is the
+			// authoritative value (linear settles in the quote it is
+			// margined in). Without this fallback matchInstrument's
+			// preferred-quote sort would treat every SWAP row as
+			// quote-empty and pick a less canonical candidate.
+			if quote == "" && d.SettleCcy != "" && d.CtType == "linear" {
+				quote = d.SettleCcy
 			}
 			var ctVal float64
 			if d.CtVal != "" {
@@ -563,12 +574,33 @@ func (a RESTAdapter) fetchEdgeXInstruments(ctx context.Context, fetchedAt time.T
 // parseEdgeXMeta best-effort extracts contract / instrument records from the
 // edgeX meta payload. The schema varies subtly between V1/V2/spot, so we look
 // for the common shape: data.{contractList|instrumentList|symbolList}[].{contractId|instrumentId|symbolId, contractName|symbolName, baseCurrency, quoteCurrency, ...}
+//
+// edgeX-perp-v1 leaves baseCurrency / quoteCurrency / settleCurrency as null
+// and instead expresses the base via baseCoinId → coinList[].coinName. This
+// helper joins the two so downstream matchInstrument can match canonicals
+// like BTC against the per-row BaseAsset field. When a row is missing both
+// baseCoinId and any string base value, BaseAsset is left empty and the row
+// degrades to a raw audit entry (still surfaced in MarketDump.Instruments
+// for completeness, but skipped by buildCatalog's strict-canonical match).
 func parseEdgeXMeta(raw []byte) []Instrument {
 	var envelope struct {
 		Data map[string]json.RawMessage `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &envelope); err != nil {
 		return nil
+	}
+	coinByID := map[string]string{}
+	if rawCoinList, ok := envelope.Data["coinList"]; ok {
+		var rows []map[string]any
+		if err := json.Unmarshal(rawCoinList, &rows); err == nil {
+			for _, row := range rows {
+				id := stringFromMap(row, "coinId")
+				name := stringFromMap(row, "coinName")
+				if id != "" && name != "" {
+					coinByID[id] = strings.ToUpper(name)
+				}
+			}
+		}
 	}
 	candidates := []string{"contractList", "instrumentList", "symbolList"}
 	for _, key := range candidates {
@@ -590,6 +622,36 @@ func parseEdgeXMeta(raw []byte) []Instrument {
 				Status:      stringFromMap(row, "status", "state", "tradeStatus"),
 				ContractID:  stringFromMap(row, "contractId", "instrumentId", "symbolId"),
 			}
+			if inst.BaseAsset == "" {
+				if id := stringFromMap(row, "baseCoinId"); id != "" {
+					if base, ok := coinByID[id]; ok {
+						inst.BaseAsset = base
+					}
+				}
+			}
+			if inst.QuoteAsset == "" {
+				if id := stringFromMap(row, "quoteCoinId"); id != "" {
+					if quote, ok := coinByID[id]; ok {
+						inst.QuoteAsset = quote
+					}
+				}
+			}
+			if inst.SettleAsset == "" {
+				if id := stringFromMap(row, "settleCoinId"); id != "" {
+					if settle, ok := coinByID[id]; ok {
+						inst.SettleAsset = settle
+					}
+				}
+			}
+			if inst.Status == "" {
+				if et, ok := boolFromMap(row, "enableTrade"); ok {
+					if et {
+						inst.Status = "TRADING"
+					} else {
+						inst.Status = "DELISTED"
+					}
+				}
+			}
 			if inst.APISymbol == "" && inst.ContractID == "" {
 				continue
 			}
@@ -600,6 +662,27 @@ func parseEdgeXMeta(raw []byte) []Instrument {
 		}
 	}
 	return nil
+}
+
+func boolFromMap(m map[string]any, keys ...string) (bool, bool) {
+	for _, k := range keys {
+		v, ok := m[k]
+		if !ok {
+			continue
+		}
+		switch x := v.(type) {
+		case bool:
+			return x, true
+		case string:
+			if x == "true" {
+				return true, true
+			}
+			if x == "false" {
+				return false, true
+			}
+		}
+	}
+	return false, false
 }
 
 func stringFromMap(m map[string]any, keys ...string) string {

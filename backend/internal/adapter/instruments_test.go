@@ -198,6 +198,42 @@ func TestParseEdgeXMetaAcceptsMultipleKeyNames(t *testing.T) {
 	}
 }
 
+func TestParseEdgeXMetaJoinsCoinListForBaseAndQuote(t *testing.T) {
+	// The live edgeX-perp-v1 payload leaves baseCurrency / quoteCurrency
+	// as null and references baseCoinId / quoteCoinId instead. The parser
+	// must join the coinList entries so downstream matchInstrument can
+	// match canonicals (BTC) against the per-row BaseAsset.
+	raw := []byte(`{"data":{
+		"coinList":[
+			{"coinId":"1000","coinName":"USD"},
+			{"coinId":"1001","coinName":"BTC"}
+		],
+		"contractList":[
+			{"contractId":"10000001","contractName":"BTCUSD","baseCoinId":"1001","quoteCoinId":"1000","enableTrade":true,"enableDisplay":true}
+		]
+	}}`)
+	insts := parseEdgeXMeta(raw)
+	if len(insts) != 1 {
+		t.Fatalf("expected 1 instrument, got %d", len(insts))
+	}
+	got := insts[0]
+	if got.APISymbol != "BTCUSD" {
+		t.Errorf("APISymbol = %q, want BTCUSD", got.APISymbol)
+	}
+	if got.BaseAsset != "BTC" {
+		t.Errorf("BaseAsset = %q, want BTC (joined via baseCoinId)", got.BaseAsset)
+	}
+	if got.QuoteAsset != "USD" {
+		t.Errorf("QuoteAsset = %q, want USD (joined via quoteCoinId)", got.QuoteAsset)
+	}
+	if got.ContractID != "10000001" {
+		t.Errorf("ContractID = %q, want 10000001", got.ContractID)
+	}
+	if got.Status != "TRADING" {
+		t.Errorf("Status = %q, want TRADING (derived from enableTrade)", got.Status)
+	}
+}
+
 func TestFetchLighterInstrumentsSplitsPerpAndSpot(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/orderBookDetails", func(w http.ResponseWriter, r *http.Request) {

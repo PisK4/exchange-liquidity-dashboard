@@ -41,6 +41,7 @@ type cliFlags struct {
 	platforms          string
 	allowPartial       bool
 	rawOnly            bool
+	proxy              string
 }
 
 func main() {
@@ -62,6 +63,7 @@ func run() error {
 	flag.StringVar(&f.platforms, "platforms", "binance,okx,bybit,bitget,bingx,mexc,gate,hyperliquid,lighter,edgeX", "comma-separated platform list")
 	flag.BoolVar(&f.allowPartial, "allow-partial", false, "write catalog yaml even if some platforms failed (default: refuse, to avoid silently shrinking the catalog)")
 	flag.BoolVar(&f.rawOnly, "raw-only", false, "write raw dumps only; do not touch instrument_catalog.yaml (useful for partial-network audit refreshes)")
+	flag.StringVar(&f.proxy, "proxy", "", "optional HTTP/HTTPS proxy URL (e.g. http://127.0.0.1:7897); when blank, falls back to direct connection. Per-platform exchange APIs reuse this proxy uniformly.")
 	flag.Parse()
 
 	wl, err := loadSymbolWhitelist(f.whitelistPath)
@@ -82,7 +84,7 @@ func run() error {
 		if platform == "" {
 			continue
 		}
-		ad := adapter.New(platform, f.timeout)
+		ad := adapter.NewWithLighterAndProxy(platform, f.timeout, nil, f.proxy)
 		ctx, cancel := context.WithTimeout(context.Background(), f.timeout)
 		res, err := ad.FetchInstruments(ctx)
 		cancel()
@@ -419,9 +421,6 @@ func matchInstrument(insts []adapter.Instrument, canonical, expectedQuote, platf
 		if !strings.EqualFold(inst.BaseAsset, canonical) {
 			continue
 		}
-		if expectedQuote != "" && !strings.EqualFold(inst.QuoteAsset, expectedQuote) {
-			continue
-		}
 		if isExpiringContract(inst.APISymbol) {
 			continue
 		}
@@ -430,8 +429,26 @@ func matchInstrument(insts []adapter.Instrument, canonical, expectedQuote, platf
 	if len(candidates) == 0 {
 		return adapter.Instrument{}, false
 	}
+	// expectedQuote is treated as a *preference* rather than a hard
+	// filter: OKX SWAP rows surface an empty QuoteCcy, edgeX-perp-v1
+	// quotes everything in USD (settle in USDT/USD), and several venues
+	// run synthetic markets in USD/USDC even when the canonical's
+	// preferred perp quote is USDT. Filtering strictly by
+	// QuoteAsset==USDT therefore drops legitimate matches. The sort
+	// below floats the USDT candidate to the top when one exists, so
+	// platforms that DO have BTC-USDT linear keep picking it over
+	// inverse / synthetic siblings.
 	sort.SliceStable(candidates, func(i, j int) bool {
-		return len(candidates[i].APISymbol) < len(candidates[j].APISymbol)
+		ai := candidates[i]
+		aj := candidates[j]
+		if expectedQuote != "" {
+			ia := strings.EqualFold(ai.QuoteAsset, expectedQuote)
+			ja := strings.EqualFold(aj.QuoteAsset, expectedQuote)
+			if ia != ja {
+				return ia
+			}
+		}
+		return len(ai.APISymbol) < len(aj.APISymbol)
 	})
 	return candidates[0], true
 }
