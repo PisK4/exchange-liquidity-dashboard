@@ -239,6 +239,13 @@ func (b *Top30Backfiller) runOne(ctx context.Context, platform, base, displaySym
 	}
 	klines, err := fetcher.FetchDailyVolumeHistory(ctx, sub, days)
 	if err != nil {
+		// adapter.ErrInstrumentNotFound is a permanent skip — exchanges
+		// like BingX have CG-reported tickers (GOLD/NASDAQ100/...) that
+		// don't have a USDT-base alias on the REST API, so retrying is
+		// pointless and the warning would just spam every backfill round.
+		if errors.Is(err, adapter.ErrInstrumentNotFound) {
+			return 0, nil
+		}
 		log.Printf("top30 backfill: %s %s fetch %dd: %v", platform, base, days, err)
 		return 0, err
 	}

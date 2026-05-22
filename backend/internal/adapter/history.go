@@ -13,6 +13,15 @@ import (
 	"edgex-dashboard/backend/internal/domain"
 )
 
+// ErrInstrumentNotFound is returned by adapter daily-history fetchers when
+// the upstream exchange responds with a "symbol does not exist" payload
+// (e.g. BingX code 109425 returns `data: {}` instead of an array). Callers
+// — notably the Top30 backfill goroutine — treat this as a permanent
+// per-(platform, base) skip rather than a retriable failure, so a noisy
+// commodity ticker (GOLD/NASDAQ100/OIL/SILVER on bingx) doesn't keep
+// generating warning logs every backfill round.
+var ErrInstrumentNotFound = errors.New("instrument not found on exchange")
+
 // DailyVolumeHistoryFetcher is an optional capability that exchange adapters
 // can satisfy in order to back-fill per-(platform, display_symbol) 7d / 14d
 // daily USD volume from their native kline / candlestick endpoints. The
@@ -79,6 +88,24 @@ func (a RESTAdapter) FetchDailyVolumeHistory(ctx context.Context, sub domain.Sym
 func startOfUTCDayMS(ms int64) time.Time {
 	t := time.UnixMilli(ms).UTC()
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// looksLikeJSONArray reports whether a json.RawMessage payload begins
+// with '[' (modulo leading whitespace). Used by adapters whose upstream
+// alternates between `data: []` (success) and `data: {}` (error) so we
+// can branch without trying both unmarshals.
+func looksLikeJSONArray(raw json.RawMessage) bool {
+	for _, b := range raw {
+		switch b {
+		case ' ', '\t', '\n', '\r':
+			continue
+		case '[':
+			return true
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 func backfillRow(platform string, sub domain.SymbolSub, day time.Time, volume float64, endpoint string, now time.Time) domain.DailyVolumeAggregate {
@@ -211,21 +238,52 @@ func (a RESTAdapter) fetchBitgetDailyHistory(ctx context.Context, sub domain.Sym
 
 // BingX swap v3 klines: `{ data: [{open, close, high, low, volume, time}] }`.
 // The `volume` field is in quote (USDT) currency for the linear swap.
+//
+// BingX commodity / index "wrapper" contracts (GOLD, NASDAQ100, OIL,
+// SILVER) are reported by CoinGecko under their bare names but only
+// exist on BingX REST under prefixed symbols like NCFXAUD2USD-USDT —
+// querying the bare name returns code 109425 with `data: {}` (an
+// object, not an array). To avoid the unmarshal error spamming every
+// backfill round we decode `data` into json.RawMessage first and
+// surface ErrInstrumentNotFound on the object case so the caller skips
+// the symbol silently.
 func (a RESTAdapter) fetchBingXDailyHistory(ctx context.Context, sub domain.SymbolSub, days int, now time.Time) ([]domain.DailyVolumeAggregate, error) {
 	endpoint := fmt.Sprintf("https://open-api.bingx.com/openApi/swap/v3/quote/klines?interval=1d&limit=%d&symbol=%s", days, sub.APISymbol)
-	var resp struct {
-		Data []struct {
-			Open   string `json:"open"`
-			Close  string `json:"close"`
-			Volume string `json:"volume"`
-			Time   int64  `json:"time"`
-		} `json:"data"`
+	var envelope struct {
+		Code int             `json:"code"`
+		Msg  string          `json:"msg"`
+		Data json.RawMessage `json:"data"`
 	}
-	if err := a.fetchJSON(ctx, http.MethodGet, endpoint, nil, &resp); err != nil {
+	if err := a.fetchJSON(ctx, http.MethodGet, endpoint, nil, &envelope); err != nil {
 		return nil, err
 	}
-	out := make([]domain.DailyVolumeAggregate, 0, len(resp.Data))
-	for _, row := range resp.Data {
+	if envelope.Code != 0 || len(envelope.Data) == 0 || !looksLikeJSONArray(envelope.Data) {
+		// 109425 = "symbol not exist". Other non-zero codes (rate-limit,
+		// auth, etc.) come back with code != 0 too but are usually
+		// retriable; we only swallow the explicit not-exist code as
+		// permanent and surface the rest as transient errors.
+		if envelope.Code == 109425 || strings.Contains(envelope.Msg, "not exist") {
+			return nil, fmt.Errorf("%w: bingx %s (code=%d msg=%q)",
+				ErrInstrumentNotFound, sub.APISymbol, envelope.Code, envelope.Msg)
+		}
+		if envelope.Code != 0 {
+			return nil, fmt.Errorf("bingx kline error: code=%d msg=%q", envelope.Code, envelope.Msg)
+		}
+		// `data: {}` with code=0 is unexpected but defensible — treat as
+		// not-found to avoid hard-fail.
+		return nil, fmt.Errorf("%w: bingx %s (empty data)", ErrInstrumentNotFound, sub.APISymbol)
+	}
+	var rows []struct {
+		Open   string `json:"open"`
+		Close  string `json:"close"`
+		Volume string `json:"volume"`
+		Time   int64  `json:"time"`
+	}
+	if err := json.Unmarshal(envelope.Data, &rows); err != nil {
+		return nil, fmt.Errorf("bingx kline decode: %w", err)
+	}
+	out := make([]domain.DailyVolumeAggregate, 0, len(rows))
+	for _, row := range rows {
 		vol, _ := strconv.ParseFloat(row.Volume, 64)
 		if vol <= 0 {
 			continue

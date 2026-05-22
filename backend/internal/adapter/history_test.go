@@ -2,6 +2,7 @@ package adapter
 
 import (
 	"context"
+	"errors"
 	"math"
 	"net/http"
 	"strings"
@@ -200,5 +201,39 @@ func TestUnsupportedPlatformReturnsError(t *testing.T) {
 	a := RESTAdapter{Platform: "unknown"}
 	if _, err := a.FetchDailyVolumeHistory(context.Background(), domain.SymbolSub{}, 7); err == nil {
 		t.Fatal("expected error for unsupported platform")
+	}
+}
+
+// TestBingXDailyHistoryHappyPath asserts the standard array shape still
+// decodes correctly under the new RawMessage-first path.
+func TestBingXDailyHistoryHappyPath(t *testing.T) {
+	body := `{"code":0,"msg":"","data":[{"open":"30000","close":"30500","volume":"100","time":1700006400000}]}`
+	a := RESTAdapter{Platform: "bingx", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(body), nil
+	})}, MaxAttempts: 1}
+	rows, err := a.FetchDailyVolumeHistory(context.Background(), domain.SymbolSub{DisplaySymbol: "BTC-USDT (perp)", APISymbol: "BTC-USDT"}, 1)
+	if err != nil {
+		t.Fatalf("FetchDailyVolumeHistory: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if math.Abs(rows[0].Volume24HUSD-3050000) > 1 {
+		t.Fatalf("expected vol*close = 100*30500 = 3,050,000, got %v", rows[0].Volume24HUSD)
+	}
+}
+
+// TestBingXDailyHistoryNotExistReturnsSentinel pins the BingX commodity /
+// index regression: code 109425 with `data: {}` must surface as
+// adapter.ErrInstrumentNotFound rather than a JSON unmarshal error so the
+// Top30 backfiller can skip the symbol silently.
+func TestBingXDailyHistoryNotExistReturnsSentinel(t *testing.T) {
+	body := `{"code":109425,"msg":"GOLD-USDT not exist","data":{}}`
+	a := RESTAdapter{Platform: "bingx", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(body), nil
+	})}, MaxAttempts: 1}
+	_, err := a.FetchDailyVolumeHistory(context.Background(), domain.SymbolSub{DisplaySymbol: "GOLD-USDT (perp)", APISymbol: "GOLD-USDT"}, 14)
+	if err == nil || !errors.Is(err, ErrInstrumentNotFound) {
+		t.Fatalf("expected ErrInstrumentNotFound, got %v", err)
 	}
 }
