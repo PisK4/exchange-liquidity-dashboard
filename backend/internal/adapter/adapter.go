@@ -279,7 +279,15 @@ func (a RESTAdapter) fetchOKX(ctx context.Context, sub domain.SymbolSub) ([]doma
 	if len(resp.Data) == 0 {
 		return nil, nil, errors.New("empty okx book")
 	}
-	return parseStringLevels(resp.Data[0].Bids), parseStringLevels(resp.Data[0].Asks), nil
+	// OKX SWAP/FUTURES `sz` is in contracts; convert to base currency via ctVal.
+	// SPOT books have contract_size=0 in catalog, which would zero out the size,
+	// so only multiply when a positive ctVal is configured for the instrument.
+	if sub.ContractSize <= 0 {
+		return nil, nil, fmt.Errorf("okx %s: contract_size missing from catalog (run `make catalog`)", sub.Canonical)
+	}
+	bids := multiplySize(parseStringLevels(resp.Data[0].Bids), sub.ContractSize)
+	asks := multiplySize(parseStringLevels(resp.Data[0].Asks), sub.ContractSize)
+	return bids, asks, nil
 }
 
 func (a RESTAdapter) fetchBybit(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {

@@ -59,6 +59,10 @@ func TestCatalogCoversAllRuntimePairs(t *testing.T) {
 				if entry.ContractSize <= 0 {
 					t.Errorf("mexc/%s contract_size missing (%v)", c, entry.ContractSize)
 				}
+			case "okx":
+				if entry.ContractSize <= 0 {
+					t.Errorf("okx/%s contract_size missing (%v)", c, entry.ContractSize)
+				}
 			case "gate":
 				if entry.QuantoMultiplier <= 0 {
 					t.Errorf("gate/%s quanto_multiplier missing (%v)", c, entry.QuantoMultiplier)

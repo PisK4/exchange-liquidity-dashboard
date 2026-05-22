@@ -158,6 +158,7 @@ func (a RESTAdapter) fetchOKXInstruments(ctx context.Context, fetchedAt time.Tim
 				SettleCcy string `json:"settleCcy"`
 				State     string `json:"state"`
 				CtType    string `json:"ctType"`
+				CtVal     string `json:"ctVal"`
 				CtValCcy  string `json:"ctValCcy"`
 			} `json:"data"`
 		}
@@ -172,6 +173,10 @@ func (a RESTAdapter) fetchOKXInstruments(ctx context.Context, fetchedAt time.Tim
 			if base == "" && d.CtValCcy != "" {
 				base = d.CtValCcy
 			}
+			var ctVal float64
+			if d.CtVal != "" {
+				ctVal, _ = strconv.ParseFloat(d.CtVal, 64)
+			}
 			insts = append(insts, Instrument{
 				APISymbol:    d.InstID,
 				BaseAsset:    base,
@@ -179,6 +184,7 @@ func (a RESTAdapter) fetchOKXInstruments(ctx context.Context, fetchedAt time.Tim
 				SettleAsset:  d.SettleCcy,
 				Status:       d.State,
 				ContractType: d.CtType,
+				ContractSize: ctVal,
 			})
 		}
 		res.Markets = append(res.Markets, MarketDump{

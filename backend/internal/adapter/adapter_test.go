@@ -145,12 +145,51 @@ func TestFetchOKXUsesBooksFullLimit5000(t *testing.T) {
 		return jsonResponse(`{"data":[{"bids":[["99","1"]],"asks":[["101","1"]]}]}`), nil
 	})}, MaxAttempts: 1}
 
-	_, err := a.FetchOrderBook(context.Background(), domain.SymbolSub{DisplaySymbol: "BTC-USDT (perp)", APISymbol: "BTC-USDT-SWAP", APILevelCap: 800})
+	_, err := a.FetchOrderBook(context.Background(), domain.SymbolSub{DisplaySymbol: "BTC-USDT (perp)", APISymbol: "BTC-USDT-SWAP", APILevelCap: 800, ContractSize: 0.01})
 	if err != nil {
 		t.Fatalf("FetchOrderBook: %v", err)
 	}
 	if !strings.Contains(gotURL, "/api/v5/market/books-full") || !strings.Contains(gotURL, "sz=5000") {
 		t.Fatalf("expected OKX books-full sz=5000, got %s", gotURL)
+	}
+}
+
+func TestFetchOKXMultipliesSizeByCtVal(t *testing.T) {
+	a := RESTAdapter{Platform: "okx", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(`{"data":[{"bids":[["100","500","0","3"]],"asks":[["101","700","0","4"]]}]}`), nil
+	})}, MaxAttempts: 1}
+
+	book, err := a.FetchOrderBook(context.Background(), domain.SymbolSub{
+		DisplaySymbol: "BTC-USDT (perp)",
+		Canonical:     "BTC",
+		APISymbol:     "BTC-USDT-SWAP",
+		APILevelCap:   5000,
+		ContractSize:  0.01,
+	})
+	if err != nil {
+		t.Fatalf("FetchOrderBook: %v", err)
+	}
+	if len(book.Bids) != 1 || book.Bids[0].Size != 5 {
+		t.Fatalf("expected bid size 500*0.01=5, got %+v", book.Bids)
+	}
+	if len(book.Asks) != 1 || book.Asks[0].Size != 7 {
+		t.Fatalf("expected ask size 700*0.01=7, got %+v", book.Asks)
+	}
+}
+
+func TestFetchOKXErrorsWhenContractSizeMissing(t *testing.T) {
+	a := RESTAdapter{Platform: "okx", Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		return jsonResponse(`{"data":[{"bids":[["100","1"]],"asks":[["101","1"]]}]}`), nil
+	})}, MaxAttempts: 1}
+
+	_, err := a.FetchOrderBook(context.Background(), domain.SymbolSub{
+		DisplaySymbol: "BTC-USDT (perp)",
+		Canonical:     "BTC",
+		APISymbol:     "BTC-USDT-SWAP",
+		APILevelCap:   5000,
+	})
+	if err == nil || !strings.Contains(err.Error(), "contract_size missing") {
+		t.Fatalf("expected contract_size missing error, got %v", err)
 	}
 }
 
