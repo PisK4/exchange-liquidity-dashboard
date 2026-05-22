@@ -152,6 +152,15 @@ func applyCatalogOverlay(subs []domain.SymbolSub, cat Catalog) {
 		subs[i].FrontendURL = entry.FrontendURL
 		subs[i].URLVerified = entry.URLVerified
 		subs[i].CatalogStatus = entry.CatalogStatus
+		if entry.MarketSurface != "" {
+			subs[i].MarketSurface = entry.MarketSurface
+		}
+		if entry.InstrumentKind != "" {
+			subs[i].InstrumentKind = entry.InstrumentKind
+		}
+		if entry.Lineage != "" {
+			subs[i].Lineage = entry.Lineage
+		}
 	}
 }
 
@@ -387,6 +396,13 @@ type CatalogSymbol struct {
 	CatalogStatus    string  `yaml:"catalog_status,omitempty" json:"catalog_status,omitempty"`
 	FrontendURL      string  `yaml:"frontend_url,omitempty" json:"frontend_url,omitempty"`
 	URLVerified      bool    `yaml:"url_verified" json:"url_verified"`
+	// MarketSurface / InstrumentKind / Lineage are post-merge values written
+	// by build-catalog after applying any platform_overrides declared in
+	// symbol_mapping.yaml. The runtime adapter consumes the resolved value
+	// directly; per-platform override declarations are never re-read here.
+	MarketSurface  string `yaml:"market_surface,omitempty" json:"market_surface,omitempty"`
+	InstrumentKind string `yaml:"instrument_kind,omitempty" json:"instrument_kind,omitempty"`
+	Lineage        string `yaml:"lineage,omitempty" json:"lineage,omitempty"`
 }
 
 // LoadCatalog parses instrument_catalog.yaml. Missing file returns an empty

@@ -382,6 +382,47 @@ func TestApplyCatalogOverlayPopulatesPerPlatformFields(t *testing.T) {
 	}
 }
 
+func TestApplyCatalogOverlayPropagatesMarketSurfaceAndLineage(t *testing.T) {
+	subs := []domain.SymbolSub{
+		{Platform: "bingx", Canonical: "SAMSUNG", DisplaySymbol: "SAMSUNG-USDT (perp)", MarketSurface: "perp", InstrumentKind: "canonical"},
+		{Platform: "binance", Canonical: "BTC", DisplaySymbol: "BTC-USDT (perp)", MarketSurface: "perp", InstrumentKind: "canonical"},
+	}
+	cat := Catalog{
+		Platforms: map[string]map[string]CatalogSymbol{
+			"bingx": {
+				"SAMSUNG": {
+					APISymbol:      "NCSKSAMSUNG2USD-USDT",
+					BaseAsset:      "NCSKSAMSUNG2USD",
+					QuoteAsset:     "USDT",
+					MarketSurface:  "synthetic_futures",
+					InstrumentKind: "synthetic",
+					Lineage:        "bingx:NCSKSAMSUNG2USD@synthetic_futures",
+				},
+			},
+			"binance": {
+				"BTC": {APISymbol: "BTCUSDT", BaseAsset: "BTC", QuoteAsset: "USDT"},
+			},
+		},
+	}
+	applyCatalogOverlay(subs, cat)
+	if subs[0].MarketSurface != "synthetic_futures" {
+		t.Errorf("SAMSUNG MarketSurface = %q, want synthetic_futures", subs[0].MarketSurface)
+	}
+	if subs[0].InstrumentKind != "synthetic" {
+		t.Errorf("SAMSUNG InstrumentKind = %q, want synthetic", subs[0].InstrumentKind)
+	}
+	if subs[0].Lineage != "bingx:NCSKSAMSUNG2USD@synthetic_futures" {
+		t.Errorf("SAMSUNG Lineage = %q", subs[0].Lineage)
+	}
+	// Crypto entries without catalog override keep their expandSymbols default.
+	if subs[1].MarketSurface != "perp" {
+		t.Errorf("BTC MarketSurface = %q, want perp (catalog override empty)", subs[1].MarketSurface)
+	}
+	if subs[1].Lineage != "" {
+		t.Errorf("BTC Lineage = %q, want empty", subs[1].Lineage)
+	}
+}
+
 func TestLoadAppliesCatalogWhenPresent(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `

@@ -188,18 +188,44 @@ type symbolWhitelist struct {
 }
 
 type whitelistEntry struct {
-	displaySymbol string
-	canonical     string
-	marketSurface string
+	displaySymbol     string
+	canonical         string
+	marketSurface     string
+	instrumentKind    string
+	aliases           map[string][]string         // platform -> list of base_asset aliases
+	preferredSurface  []string                    // surface priority list
+	platformOverrides map[string]platformOverride // platform -> override metadata
+}
+
+// platformOverride captures the post-match metadata symbol_mapping.yaml
+// asks build-catalog to bake into instrument_catalog.yaml for a specific
+// (platform, canonical) pair. Empty fields are left as the build-time
+// defaults (which come from the matched instrument or platform inference).
+type platformOverride struct {
+	APISymbol      string
+	MarketSurface  string
+	InstrumentKind string
+	Lineage        string
 }
 
 type whitelistFile struct {
 	Symbols []struct {
-		DisplaySymbol string `yaml:"display_symbol"`
-		Canonical     string `yaml:"canonical"`
-		MarketSurface string `yaml:"market_surface"`
+		DisplaySymbol     string                              `yaml:"display_symbol"`
+		Canonical         string                              `yaml:"canonical"`
+		MarketSurface     string                              `yaml:"market_surface"`
+		InstrumentKind    string                              `yaml:"instrument_kind"`
+		Aliases           map[string][]string                 `yaml:"aliases"`
+		PreferredSurface  []string                            `yaml:"preferred_surface"`
+		PlatformOverrides map[string]platformOverrideYAMLFile `yaml:"platform_overrides"`
 	} `yaml:"symbols"`
 	Platforms []string `yaml:"platforms"`
+}
+
+type platformOverrideYAMLFile struct {
+	APISymbol      string `yaml:"api_symbol"`
+	MarketSurface  string `yaml:"market_surface"`
+	InstrumentKind string `yaml:"instrument_kind"`
+	Lineage        string `yaml:"lineage"`
 }
 
 func loadSymbolWhitelist(path string) (symbolWhitelist, error) {
@@ -213,11 +239,31 @@ func loadSymbolWhitelist(path string) (symbolWhitelist, error) {
 	}
 	wl := symbolWhitelist{platforms: wf.Platforms}
 	for _, s := range wf.Symbols {
-		wl.symbols = append(wl.symbols, whitelistEntry{
-			displaySymbol: s.DisplaySymbol,
-			canonical:     s.Canonical,
-			marketSurface: s.MarketSurface,
-		})
+		entry := whitelistEntry{
+			displaySymbol:    s.DisplaySymbol,
+			canonical:        s.Canonical,
+			marketSurface:    s.MarketSurface,
+			instrumentKind:   s.InstrumentKind,
+			preferredSurface: append([]string(nil), s.PreferredSurface...),
+		}
+		if len(s.Aliases) > 0 {
+			entry.aliases = make(map[string][]string, len(s.Aliases))
+			for k, v := range s.Aliases {
+				entry.aliases[k] = append([]string(nil), v...)
+			}
+		}
+		if len(s.PlatformOverrides) > 0 {
+			entry.platformOverrides = make(map[string]platformOverride, len(s.PlatformOverrides))
+			for k, v := range s.PlatformOverrides {
+				entry.platformOverrides[k] = platformOverride{
+					APISymbol:      v.APISymbol,
+					MarketSurface:  v.MarketSurface,
+					InstrumentKind: v.InstrumentKind,
+					Lineage:        v.Lineage,
+				}
+			}
+		}
+		wl.symbols = append(wl.symbols, entry)
 	}
 	return wl, nil
 }
@@ -275,7 +321,8 @@ func buildCatalog(now time.Time, wl symbolWhitelist, results map[string]adapter.
 		expectedQuote := expectedQuoteFor(platform)
 		platformMap := map[string]config.CatalogSymbol{}
 		for _, s := range wl.symbols {
-			inst, ok := matchInstrument(market.Instruments, s.canonical, expectedQuote, platform)
+			aliases := s.aliases[platform]
+			inst, ok := matchInstrument(market.Instruments, s.canonical, expectedQuote, platform, aliases)
 			if !ok {
 				continue
 			}
@@ -293,10 +340,23 @@ func buildCatalog(now time.Time, wl symbolWhitelist, results map[string]adapter.
 				CatalogStatus:    inst.Status,
 				FrontendURL:      url,
 				URLVerified:      false,
+				MarketSurface:    s.marketSurface,
+				InstrumentKind:   s.instrumentKind,
 			}
 			if platform == "lighter" {
 				v := inst.MarketID
 				sym.MarketID = &v
+			}
+			if override, ok := s.platformOverrides[platform]; ok {
+				if override.MarketSurface != "" {
+					sym.MarketSurface = override.MarketSurface
+				}
+				if override.InstrumentKind != "" {
+					sym.InstrumentKind = override.InstrumentKind
+				}
+				if override.Lineage != "" {
+					sym.Lineage = override.Lineage
+				}
 			}
 			platformMap[s.canonical] = sym
 		}
@@ -308,9 +368,52 @@ func buildCatalog(now time.Time, wl symbolWhitelist, results map[string]adapter.
 }
 
 // matchInstrument finds the canonical instrument in a market's parsed
-// instrument list. We use base==canonical && quote==expectedQuote; ties broken
-// by preferring the shortest api_symbol (e.g. "BTCUSDT" over "BTCUSDT_240329").
-func matchInstrument(insts []adapter.Instrument, canonical, expectedQuote, platform string) (adapter.Instrument, bool) {
+// instrument list. The match rules cascade in this order:
+//  1. If aliases[platform] is configured (e.g. ["NCSKSAMSUNG2USD"] for
+//     SAMSUNG on bingx), try base_asset case-insensitively against each
+//     alias in order. The first alias that yields any candidate wins.
+//     expectedQuote is treated as a *preference* (not a hard filter) here
+//     because synthetic / RWA markets routinely use USD / USDC instead of
+//     the platform's perp quote.
+//  2. Otherwise fall back to the original crypto path: base==canonical
+//     AND quote==expectedQuote (strict).
+//
+// In both modes, instruments whose api_symbol is an obviously dated
+// future (e.g. "BTC-USDT-241227") are dropped. Tie-break is shortest
+// api_symbol so "BTCUSDT" beats "BTCUSDT_240329".
+func matchInstrument(insts []adapter.Instrument, canonical, expectedQuote, platform string, aliases []string) (adapter.Instrument, bool) {
+	if len(aliases) > 0 {
+		for _, base := range aliases {
+			candidates := make([]adapter.Instrument, 0, 4)
+			for _, inst := range insts {
+				if !strings.EqualFold(inst.BaseAsset, base) {
+					continue
+				}
+				if isExpiringContract(inst.APISymbol) {
+					continue
+				}
+				candidates = append(candidates, inst)
+			}
+			if len(candidates) == 0 {
+				continue
+			}
+			sort.SliceStable(candidates, func(i, j int) bool {
+				ai := candidates[i]
+				aj := candidates[j]
+				if expectedQuote != "" {
+					ia := strings.EqualFold(ai.QuoteAsset, expectedQuote)
+					ja := strings.EqualFold(aj.QuoteAsset, expectedQuote)
+					if ia != ja {
+						return ia
+					}
+				}
+				return len(ai.APISymbol) < len(aj.APISymbol)
+			})
+			return candidates[0], true
+		}
+		return adapter.Instrument{}, false
+	}
+
 	candidates := make([]adapter.Instrument, 0, 4)
 	for _, inst := range insts {
 		if !strings.EqualFold(inst.BaseAsset, canonical) {

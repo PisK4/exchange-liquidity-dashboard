@@ -18,6 +18,29 @@
 #                      (default: perp)
 #   instrument_kind  — canonical / synthetic / rwa / proxy / ...
 #                      (default: canonical)
+#
+# Build-catalog-only fields (read by backend/scripts/build-catalog; the
+# runtime config loader ignores them after the catalog has been generated):
+#   aliases:
+#     <platform>: [<base_asset alias>, ...]
+#       — Tells the crawler "on this platform the canonical's base_asset
+#         actually looks like one of these". Required for non-crypto
+#         canonicals where exchanges expose synthetic names like
+#         "NCSKSAMSUNG2USD" for SAMSUNG. Matched case-insensitively
+#         against inst.BaseAsset; falls back to base==canonical when no
+#         alias is configured.
+#   preferred_surface: [perp, synthetic_futures, rwa_spot, spot]
+#       — Tiebreaker when multiple instruments on the same platform match
+#         the canonical (e.g. perp + synthetic_perp + rwa_spot). The
+#         build-catalog generator picks the earliest matching surface.
+#   platform_overrides:
+#     <platform>:
+#       market_surface: synthetic_futures
+#       instrument_kind: synthetic
+#       lineage: "bingx:NCSKSAMSUNG2USD@synthetic_futures"
+#       — Baked into instrument_catalog.yaml as the post-merge values for
+#         (platform, canonical). The runtime adapter sees only the
+#         resolved fields, never the override declaration itself.
 symbols:
   - display_symbol: BTC-USDT (perp)
     display_name: BTC-USD
