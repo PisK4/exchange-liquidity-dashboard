@@ -37,7 +37,7 @@ test('monitor depth curves render Chart.js canvases with hover detail tooltips',
 test('depth detail table shows depth values without per-cell source labels', async ({ page }) => {
   await page.goto('/');
 
-  const detailPanel = page.locator('section.panel').filter({ hasText: '深度明细 · 平台 × 档位 (M USD)' });
+  const detailPanel = page.locator('section.panel').filter({ hasText: '深度明细 · 平台 × 档位 (USD)' });
   await expect(detailPanel).toBeVisible();
   await expect(detailPanel.locator('tbody')).toContainText(/(\d|—)/);
 });
@@ -142,10 +142,10 @@ test('symbol dropdown opens, filters by typed query and routes to the canonical'
   const dropdown = page.getByTestId('symbol-select-dropdown');
   await expect(dropdown).toBeVisible();
 
-  // Default category is crypto -> dropdown shows BTC + ETH only.
+  // Default category is all -> dropdown shows symbols from every category.
   await expect(page.getByTestId('symbol-select-option-BTC')).toBeVisible();
   await expect(page.getByTestId('symbol-select-option-ETH')).toBeVisible();
-  await expect(page.locator('[data-testid="symbol-select-option-GOLD"]')).toHaveCount(0);
+  await expect(page.getByTestId('symbol-select-option-GOLD')).toBeVisible();
 
   // Filter narrows the list to ETH only.
   await page.getByTestId('symbol-select-input').fill('eth');

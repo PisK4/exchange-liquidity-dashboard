@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import Chart from 'chart.js/auto';
 import type { ChartConfiguration, TooltipModel } from 'chart.js';
 import { colorFor, rgba } from '@/components/chart-colors';
+import { moneyAuto } from '@/lib/api/client';
 
 export type Series = {
   label: string;
@@ -62,7 +63,7 @@ function renderExternalTooltip(chart: Chart, tooltip: TooltipModel<'line'>) {
   tooltipEl.style.top = `${canvasRect.top - parentRect.top + tooltip.caretY}px`;
 }
 
-export function LineChart({ ariaLabel, labels, series, unit = 'M USD' }: LineChartProps) {
+export function LineChart({ ariaLabel, labels, series, unit = 'USD' }: LineChartProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartRef = useRef<Chart<'line', Array<number | null>, string> | null>(null);
 
@@ -109,7 +110,7 @@ export function LineChart({ ariaLabel, labels, series, unit = 'M USD' }: LineCha
             grid: { color: '#2c3038' },
             ticks: {
               color: '#8e8f91',
-              callback: value => `${value}${unit === 'M USD' ? 'M' : ''}`,
+              callback: value => moneyAuto(typeof value === 'number' ? value : Number(value)),
             },
           },
         },
@@ -127,7 +128,7 @@ export function LineChart({ ariaLabel, labels, series, unit = 'M USD' }: LineCha
               label: context => {
                 const value = context.parsed.y;
                 if (typeof value !== 'number') return '';
-                return `${context.dataset.label}: ${value.toFixed(2)}M @ ${context.label}`;
+                return `${context.dataset.label}: ${moneyAuto(value)} @ ${context.label}`;
               },
             },
           },

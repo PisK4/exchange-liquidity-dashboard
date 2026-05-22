@@ -257,15 +257,27 @@ export async function getJSONWithFallback<T>(path: string, key: string = path): 
 export const symbols = ['BTC-USDT (perp)', 'ETH-USDT (perp)', 'SOL-USDT (perp)'];
 
 export function money(value?: number) {
-  if (typeof value !== 'number') return '—';
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
   if (value === 0) return '$0';
-  if (value >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
-  if (value >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
-  return `$${value.toFixed(0)}`;
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
+  if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
+  if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(2)}k`;
+  return `${sign}$${abs.toFixed(0)}`;
 }
 
-export function moneyM(value?: number) {
-  return typeof value === 'number' ? `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 1 : 2)}M` : '—';
+export function moneyAuto(value?: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  if (value === 0) return '0';
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  const fmt = (v: number) => v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2);
+  if (abs >= 1_000_000_000) return `${sign}${fmt(abs / 1_000_000_000)}B`;
+  if (abs >= 1_000_000) return `${sign}${fmt(abs / 1_000_000)}M`;
+  if (abs >= 1_000) return `${sign}${fmt(abs / 1_000)}k`;
+  if (abs >= 1) return `${sign}${abs.toFixed(0)}`;
+  return `${sign}${abs.toFixed(2)}`;
 }
 
 export function pct(value?: number) { return typeof value === 'number' ? `${value.toFixed(2)}%` : '—'; }
