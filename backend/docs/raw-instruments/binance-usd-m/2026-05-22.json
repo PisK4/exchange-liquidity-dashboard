@@ -83,7 +83,7 @@
       "rateLimitType": "ORDERS"
     }
   ],
-  "serverTime": 1779451215721,
+  "serverTime": 1779451215826,
   "symbols": [
     {
       "baseAsset": "BTC",
@@ -62194,10 +62194,6 @@
           "multiplierDecimal": "4",
           "multiplierDown": "0.9700",
           "multiplierUp": "1.0300"
-        },
-        {
-          "filterType": "POSITION_RISK_CONTROL",
-          "positionControlSide": "NONE"
         }
       ],
       "liquidationFee": "0.015000",
@@ -62280,10 +62276,6 @@
           "multiplierDecimal": "4",
           "multiplierDown": "0.9700",
           "multiplierUp": "1.0300"
-        },
-        {
-          "filterType": "POSITION_RISK_CONTROL",
-          "positionControlSide": "NONE"
         }
       ],
       "liquidationFee": "0.015000",
@@ -62366,10 +62358,6 @@
           "multiplierDecimal": "4",
           "multiplierDown": "0.9700",
           "multiplierUp": "1.0300"
-        },
-        {
-          "filterType": "POSITION_RISK_CONTROL",
-          "positionControlSide": "NONE"
         }
       ],
       "liquidationFee": "0.015000",
@@ -62452,10 +62440,6 @@
           "multiplierDecimal": "4",
           "multiplierDown": "0.9700",
           "multiplierUp": "1.0300"
-        },
-        {
-          "filterType": "POSITION_RISK_CONTROL",
-          "positionControlSide": "NONE"
         }
       ],
       "liquidationFee": "0.015000",
@@ -62538,10 +62522,6 @@
           "multiplierDecimal": "4",
           "multiplierDown": "0.9700",
           "multiplierUp": "1.0300"
-        },
-        {
-          "filterType": "POSITION_RISK_CONTROL",
-          "positionControlSide": "NONE"
         }
       ],
       "liquidationFee": "0.015000",
@@ -62624,10 +62604,6 @@
           "multiplierDecimal": "4",
           "multiplierDown": "0.9700",
           "multiplierUp": "1.0300"
-        },
-        {
-          "filterType": "POSITION_RISK_CONTROL",
-          "positionControlSide": "NONE"
         }
       ],
       "liquidationFee": "0.015000",
@@ -62710,10 +62686,6 @@
           "multiplierDecimal": "4",
           "multiplierDown": "0.9700",
           "multiplierUp": "1.0300"
-        },
-        {
-          "filterType": "POSITION_RISK_CONTROL",
-          "positionControlSide": "NONE"
         }
       ],
       "liquidationFee": "0.015000",
@@ -62796,10 +62768,6 @@
           "multiplierDecimal": "4",
           "multiplierDown": "0.9700",
           "multiplierUp": "1.0300"
-        },
-        {
-          "filterType": "POSITION_RISK_CONTROL",
-          "positionControlSide": "NONE"
         }
       ],
       "liquidationFee": "0.015000",
@@ -62882,10 +62850,6 @@
           "multiplierDecimal": "4",
           "multiplierDown": "0.9700",
           "multiplierUp": "1.0300"
-        },
-        {
-          "filterType": "POSITION_RISK_CONTROL",
-          "positionControlSide": "NONE"
         }
       ],
       "liquidationFee": "0.015000",

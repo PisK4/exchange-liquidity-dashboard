@@ -4,7 +4,7 @@
 # Front-end URLs (frontend_url) and url_verified flag MAY be edited by hand
 # after clicking through each link to confirm the trading pair exists.
 schema_version: 1
-generated_at: "2026-05-22T12:29:54Z"
+generated_at: "2026-05-22T12:34:01Z"
 generated_by: backend/scripts/build-catalog
 canonical_whitelist:
   - canonical: BTC
@@ -127,6 +127,42 @@ canonical_whitelist:
     market_surface: synthetic_futures
     quote: USDT
     confidence: confirmed
+  - canonical: US500
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: QQQ
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: DIA
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: IWM
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: IAU
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: EWY
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: EWJ
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: JP225
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: KR200
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
 platforms:
   binance:
     AAPL:
@@ -213,6 +249,18 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    DIA:
+      api_symbol: DIAUSDT
+      base_asset: DIA
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/DIAUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGEUSDT
       base_asset: DOGE
@@ -249,6 +297,30 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    EWJ:
+      api_symbol: EWJUSDT
+      base_asset: EWJ
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/EWJUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    EWY:
+      api_symbol: EWYUSDT
+      base_asset: EWY
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/EWYUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     GOLD:
       api_symbol: XAUUSDT
       base_asset: XAU
@@ -393,6 +465,18 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    QQQ:
+      api_symbol: QQQUSDT
+      base_asset: QQQ
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/QQQUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SILVER:
       api_symbol: XAGUSDT
       base_asset: XAG
@@ -426,6 +510,18 @@ platforms:
       source_endpoint: https://fapi.binance.com/fapi/v1/depth
       catalog_status: TRADING
       frontend_url: https://www.binance.com/zh-CN/futures/TSLAUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    US500:
+      api_symbol: SPXUSDT
+      base_asset: SPX
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/SPXUSDT
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -526,6 +622,18 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    DIA:
+      api_symbol: DIA-USDT
+      base_asset: DIA
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/DIA-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGE-USDT
       base_asset: DOGE
@@ -562,6 +670,30 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    EWJ:
+      api_symbol: NCSIEWJ2USD-USDT
+      base_asset: NCSIEWJ2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCSIEWJ2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    EWY:
+      api_symbol: NCSIEWY2USD-USDT
+      base_asset: NCSIEWY2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCSIEWY2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     GOLD:
       api_symbol: NCCOGOLD2USD-USDT
       base_asset: NCCOGOLD2USD
@@ -595,6 +727,30 @@ platforms:
       source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
       catalog_status: "1"
       frontend_url: https://bingx.com/zh-cn/perpetual/NCSKINTC2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    JP225:
+      api_symbol: NCSINIKKEI2252USD-USDT
+      base_asset: NCSINIKKEI2252USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCSINIKKEI2252USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    KR200:
+      api_symbol: NCSIKOSPI2USD-USDT
+      base_asset: NCSIKOSPI2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCSIKOSPI2USD-USDT/
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -706,6 +862,18 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    QQQ:
+      api_symbol: NCSKQQQ2USD-USDT
+      base_asset: NCSKQQQ2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCSKQQQ2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SAMSUNG:
       api_symbol: NCSKSAMSUNG2USD-USDT
       base_asset: NCSKSAMSUNG2USD
@@ -763,6 +931,18 @@ platforms:
       source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
       catalog_status: "1"
       frontend_url: https://bingx.com/zh-cn/perpetual/NCSKTSLA2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    US500:
+      api_symbol: SPX-USDT
+      base_asset: SPX
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/SPX-USDT/
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -875,6 +1055,18 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    DIA:
+      api_symbol: DIAUSDT
+      base_asset: DIA
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/DIAUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGEUSDT
       base_asset: DOGE
@@ -911,6 +1103,30 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    EWJ:
+      api_symbol: EWJUSDT
+      base_asset: EWJ
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/EWJUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    EWY:
+      api_symbol: EWYUSDT
+      base_asset: EWY
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/EWYUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     GOLD:
       api_symbol: XAUUSDT
       base_asset: XAU
@@ -1043,6 +1259,18 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    QQQ:
+      api_symbol: QQQUSDT
+      base_asset: QQQ
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/QQQUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SILVER:
       api_symbol: XAGUSDT
       base_asset: XAG
@@ -1076,6 +1304,18 @@ platforms:
       source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
       catalog_status: normal
       frontend_url: https://www.bitget.com/futures/usdt/TSLAUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    US500:
+      api_symbol: SPXUSDT
+      base_asset: SPX
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/SPXUSDT
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -1152,6 +1392,18 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    DIA:
+      api_symbol: DIAUSDT
+      base_asset: DIA
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/DIAUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGEUSDT
       base_asset: DOGE
@@ -1188,6 +1440,30 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    EWJ:
+      api_symbol: EWJUSDT
+      base_asset: EWJ
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/EWJUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    EWY:
+      api_symbol: EWYUSDT
+      base_asset: EWY
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/EWYUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     GOLD:
       api_symbol: XAUUSDT
       base_asset: XAU
@@ -1221,6 +1497,18 @@ platforms:
       source_endpoint: https://api.bybit.com/v5/market/orderbook
       catalog_status: Trading
       frontend_url: https://www.bybit.com/trade/usdt/INTCUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    IWM:
+      api_symbol: IWMUSDT
+      base_asset: IWM
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/IWMUSDT
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -1284,6 +1572,18 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    QQQ:
+      api_symbol: QQQUSDT
+      base_asset: QQQ
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/QQQUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SILVER:
       api_symbol: XAGUSDT
       base_asset: XAG
@@ -1317,6 +1617,18 @@ platforms:
       source_endpoint: https://api.bybit.com/v5/market/orderbook
       catalog_status: Trading
       frontend_url: https://www.bybit.com/trade/usdt/TSLAUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    US500:
+      api_symbol: SPXUSDT
+      base_asset: SPX
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/SPXUSDT
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -1476,6 +1788,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    IAU:
+      api_symbol: IAUUSD
+      base_asset: IAU
+      quote_asset: USD
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000245"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/IAUUSD
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     INTC:
       api_symbol: INTCUSD
       base_asset: INTC
@@ -1580,6 +1905,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    QQQ:
+      api_symbol: QQQUSD
+      base_asset: QQQ
+      quote_asset: USD
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000249"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/QQQUSD
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SILVER:
       api_symbol: SILVERUSD
       base_asset: SILVER
@@ -1616,6 +1954,19 @@ platforms:
       source_endpoint: https://pro.edgex.exchange
       catalog_status: TRADING
       frontend_url: https://pro.edgex.exchange/en-US/trade/TSLAUSD
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    US500:
+      api_symbol: SPXUSD
+      base_asset: SPX
+      quote_asset: USD
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000080"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/SPXUSD
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -1711,6 +2062,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    DIA:
+      api_symbol: DIA_USDT
+      base_asset: DIA
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 1
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/DIA_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGE_USDT
       base_asset: DOGE
@@ -1750,6 +2114,32 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    EWJ:
+      api_symbol: EWJ_USDT
+      base_asset: EWJ
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.01
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/EWJ_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    EWY:
+      api_symbol: EWY_USDT
+      base_asset: EWY
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.01
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/EWY_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     GOLD:
       api_symbol: XAU_USDT
       base_asset: XAU
@@ -1776,6 +2166,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    IAU:
+      api_symbol: IAU_USDT
+      base_asset: IAU
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.01
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/IAU_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     INTC:
       api_symbol: INTC_USDT
       base_asset: INTC
@@ -1786,6 +2189,19 @@ platforms:
       source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
       catalog_status: trading
       frontend_url: https://www.gate.io/futures/USDT/INTC_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    IWM:
+      api_symbol: IWM_USDT
+      base_asset: IWM
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.01
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/IWM_USDT
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -2005,6 +2421,18 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    US500:
+      api_symbol: SPX
+      base_asset: SPX
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 40
+      source_endpoint: https://api.hyperliquid.xyz/info
+      catalog_status: live
+      frontend_url: https://app.hyperliquid.xyz/trade/SPX
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     XRP:
       api_symbol: XRP
       base_asset: XRP
@@ -2096,6 +2524,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    DIA:
+      api_symbol: DIA
+      base_asset: DIA
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 152
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/DIA
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGE
       base_asset: DOGE
@@ -2122,6 +2563,19 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    EWY:
+      api_symbol: EWY
+      base_asset: EWY
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 166
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/EWY
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     GOLD:
       api_symbol: PAXG
       base_asset: PAXG
@@ -2171,6 +2625,19 @@ platforms:
       source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
       catalog_status: active
       frontend_url: https://app.lighter.xyz/trade/INTC
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    IWM:
+      api_symbol: IWM
+      base_asset: IWM
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 153
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/IWM
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -2265,6 +2732,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    QQQ:
+      api_symbol: QQQ
+      base_asset: QQQ
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 129
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/QQQ
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SAMSUNG:
       api_symbol: SAMSUNGUSD
       base_asset: SAMSUNGUSD
@@ -2327,6 +2807,19 @@ platforms:
       source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
       catalog_status: active
       frontend_url: https://app.lighter.xyz/trade/TSLA
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    US500:
+      api_symbol: US500
+      base_asset: US500
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 180
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/US500
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -2448,6 +2941,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    DIA:
+      api_symbol: DIA_USDT
+      base_asset: DIA
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 1
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/DIA_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGE_USDT
       base_asset: DOGE
@@ -2487,6 +2993,32 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    EWJ:
+      api_symbol: EWJ_USDT
+      base_asset: EWJ
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.01
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/EWJ_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    EWY:
+      api_symbol: EWY_USDT
+      base_asset: EWY
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.01
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/EWY_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     GOLD:
       api_symbol: PAXG_USDT
       base_asset: PAXG
@@ -2523,6 +3055,19 @@ platforms:
       source_endpoint: https://contract.mexc.com/api/v1/contract/depth
       catalog_status: "0"
       frontend_url: https://www.mexc.com/futures/INTCSTOCK_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    JP225:
+      api_symbol: JP225_USDT
+      base_asset: JP225
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 1e-05
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/JP225_USDT
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -2617,6 +3162,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    QQQ:
+      api_symbol: QQQSTOCK_USDT
+      base_asset: QQQSTOCK
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.01
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/QQQSTOCK_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SAMSUNG:
       api_symbol: SAMSUNGSTOCK_USDT
       base_asset: SAMSUNGSTOCK
@@ -2669,6 +3227,19 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    US500:
+      api_symbol: SPX_USDT
+      base_asset: SPX
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 1
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/SPX_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     XRP:
       api_symbol: XRP_USDT
       base_asset: XRP
@@ -2800,6 +3371,32 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    EWJ:
+      api_symbol: EWJ-USDT-SWAP
+      base_asset: EWJ
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 1
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/ewj-usdt-swap
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    EWY:
+      api_symbol: EWY-USDT-SWAP
+      base_asset: EWY
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 1
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/ewy-usdt-swap
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     INTC:
       api_symbol: INTC-USDT-SWAP
       base_asset: INTC
@@ -2810,6 +3407,19 @@ platforms:
       source_endpoint: https://www.okx.com/api/v5/market/books-full
       catalog_status: live
       frontend_url: https://www.okx.com/trade-swap/intc-usdt-swap
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    IWM:
+      api_symbol: IWM-USDT-SWAP
+      base_asset: IWM
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 1
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/iwm-usdt-swap
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -2875,6 +3485,19 @@ platforms:
       source_endpoint: https://www.okx.com/api/v5/market/books-full
       catalog_status: live
       frontend_url: https://www.okx.com/trade-swap/pltr-usdt-swap
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    QQQ:
+      api_symbol: QQQ-USDT-SWAP
+      base_asset: QQQ
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 1
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/qqq-usdt-swap
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic

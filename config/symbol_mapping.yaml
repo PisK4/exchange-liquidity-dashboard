@@ -355,4 +355,86 @@ symbols:
     instrument_kind: synthetic
     aliases:
       lighter: [HYUNDAIUSD]
+
+  # ---- Index / ETF (synthetic_futures) ----
+  # US500 wraps the S&P 500 family of representations: SPX (cash index),
+  # SPY (ETF) and ES (CME futures). Lighter lists "US500" verbatim.
+  # Bingx exposes a synthetic NCSI<index>2USD line that is distinct from
+  # the AAPLX-style equity perps.
+  - display_symbol: US500-USDT (perp)
+    display_name: US500-USD
+    canonical: US500
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      binance: [SPX, SPY]
+      bybit: [SPX, ES, SPY]
+      bitget: [SPX, SPY]
+      bingx: [SPX, NCSKSPY2USD]
+      mexc: [SPX, SPX500]
+      hyperliquid: [SPX]
+      lighter: [US500, SPX]
+      edgeX: [SPX, SPY]
+  - display_symbol: QQQ-USDT (perp)
+    display_name: QQQ-USD
+    canonical: QQQ
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKQQQ2USD]
+      mexc: [QQQSTOCK]
+  - display_symbol: DIA-USDT (perp)
+    display_name: DIA-USD
+    canonical: DIA
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [DIA, NCSIDOWJONES2USD]
+  - display_symbol: IWM-USDT (perp)
+    display_name: IWM-USD
+    canonical: IWM
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: IAU-USDT (perp)
+    display_name: IAU-USD
+    canonical: IAU
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: EWY-USDT (perp)
+    display_name: EWY-USD
+    canonical: EWY
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSIEWY2USD]
+  - display_symbol: EWJ-USDT (perp)
+    display_name: EWJ-USD
+    canonical: EWJ
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSIEWJ2USD]
+  - display_symbol: JP225-USDT (perp)
+    display_name: JP225-USD
+    canonical: JP225
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSINIKKEI2252USD]
+  - display_symbol: KR200-USDT (perp)
+    display_name: KR200-USD
+    canonical: KR200
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSIKOSPI2USD]
 platforms: [edgeX, binance, okx, bybit, bitget, bingx, mexc, gate, hyperliquid, lighter]

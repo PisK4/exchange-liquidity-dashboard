@@ -272,7 +272,7 @@
       "symbol": "ALGO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 17,
+      "tradeMinQuantity": 16.9,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00100000"
     },
@@ -347,7 +347,7 @@
       "symbol": "SHIB-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 341356,
+      "tradeMinQuantity": 341472,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00100000"
     },
@@ -372,7 +372,7 @@
       "symbol": "ICP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.76,
+      "tradeMinQuantity": 0.75,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00355000"
     },
@@ -797,7 +797,7 @@
       "symbol": "SKL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 320,
+      "tradeMinQuantity": 319,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00120000"
     },
@@ -1022,7 +1022,7 @@
       "symbol": "AR-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1,
+      "tradeMinQuantity": 0.9,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00080000"
     },
@@ -1272,7 +1272,7 @@
       "symbol": "ONT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 33.4,
+      "tradeMinQuantity": 33.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00060000"
     },
@@ -1397,7 +1397,7 @@
       "symbol": "KAVA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 33.6,
+      "tradeMinQuantity": 33.5,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00050000"
     },
@@ -1497,7 +1497,7 @@
       "symbol": "ALICE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 15.4,
+      "tradeMinQuantity": 15.5,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -1522,7 +1522,7 @@
       "symbol": "CHR-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 85,
+      "tradeMinQuantity": 86,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -1572,7 +1572,7 @@
       "symbol": "RSR-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1111,
+      "tradeMinQuantity": 1110,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -1797,7 +1797,7 @@
       "symbol": "ROSE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 199,
+      "tradeMinQuantity": 198,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00090000"
     },
@@ -1922,7 +1922,7 @@
       "symbol": "SLP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3058,
+      "tradeMinQuantity": 3061,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00400000"
     },
@@ -2097,7 +2097,7 @@
       "symbol": "CRO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 28.65,
+      "tradeMinQuantity": 28.64,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -2297,7 +2297,7 @@
       "symbol": "ARPA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 176,
+      "tradeMinQuantity": 175,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00070000"
     },
@@ -2472,7 +2472,7 @@
       "symbol": "COTI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 155,
+      "tradeMinQuantity": 156,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00060000"
     },
@@ -2672,7 +2672,7 @@
       "symbol": "FLOKI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 64980,
+      "tradeMinQuantity": 64938,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00270000"
     },
@@ -2822,7 +2822,7 @@
       "symbol": "CKB-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1356,
+      "tradeMinQuantity": 1352,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00095000"
     },
@@ -2972,7 +2972,7 @@
       "symbol": "XCN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 410,
+      "tradeMinQuantity": 411,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -3047,7 +3047,7 @@
       "symbol": "ID-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 65,
+      "tradeMinQuantity": 64,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00300000"
     },
@@ -3147,7 +3147,7 @@
       "symbol": "TURBO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1661,
+      "tradeMinQuantity": 1662,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -3197,7 +3197,7 @@
       "symbol": "UMA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.278,
+      "tradeMinQuantity": 4.269,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00115000"
     },
@@ -3297,7 +3297,7 @@
       "symbol": "WLD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 7.018,
+      "tradeMinQuantity": 7.006,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00140000"
     },
@@ -3497,7 +3497,7 @@
       "symbol": "BIGTIME-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 157.73,
+      "tradeMinQuantity": 157.86,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00075000"
     },
@@ -3522,7 +3522,7 @@
       "symbol": "POLYX-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 35.89,
+      "tradeMinQuantity": 35.75,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00275000"
     },
@@ -3547,7 +3547,7 @@
       "symbol": "GAS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.258,
+      "tradeMinQuantity": 1.257,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00055000"
     },
@@ -3572,7 +3572,7 @@
       "symbol": "TIA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.479,
+      "tradeMinQuantity": 4.467,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00410000"
     },
@@ -3647,7 +3647,7 @@
       "symbol": "10000SATS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 14834,
+      "tradeMinQuantity": 14843,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00415000"
     },
@@ -3672,7 +3672,7 @@
       "symbol": "BEAM-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1041,
+      "tradeMinQuantity": 1043,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00135000"
     },
@@ -3697,7 +3697,7 @@
       "symbol": "RATS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 56340,
+      "tradeMinQuantity": 56451,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00345000"
     },
@@ -3822,7 +3822,7 @@
       "symbol": "AXL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 32.06,
+      "tradeMinQuantity": 32,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00120000"
     },
@@ -3847,7 +3847,7 @@
       "symbol": "JTO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3.867,
+      "tradeMinQuantity": 3.87,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00095000"
     },
@@ -3872,7 +3872,7 @@
       "symbol": "AUCTION-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.4209,
+      "tradeMinQuantity": 0.4207,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00175000"
     },
@@ -3897,7 +3897,7 @@
       "symbol": "ACE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 16.5974,
+      "tradeMinQuantity": 16.6112,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00315000"
     },
@@ -3922,7 +3922,7 @@
       "symbol": "MOVR-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.8749,
+      "tradeMinQuantity": 0.8746,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00065000"
     },
@@ -3947,7 +3947,7 @@
       "symbol": "NFP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 183.991,
+      "tradeMinQuantity": 183.657,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00205000"
     },
@@ -3972,7 +3972,7 @@
       "symbol": "CETUS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 71.8,
+      "tradeMinQuantity": 71.7,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00160000"
     },
@@ -3997,7 +3997,7 @@
       "symbol": "XAI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 189.76,
+      "tradeMinQuantity": 189.58,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00065000"
     },
@@ -4022,7 +4022,7 @@
       "symbol": "WIF-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 9.94,
+      "tradeMinQuantity": 9.93,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00060000"
     },
@@ -4047,7 +4047,7 @@
       "symbol": "MANTA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 24.848,
+      "tradeMinQuantity": 24.817,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00055000"
     },
@@ -4072,7 +4072,7 @@
       "symbol": "ONDO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.62,
+      "tradeMinQuantity": 4.59,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00070000"
     },
@@ -4097,7 +4097,7 @@
       "symbol": "LSK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 16.34,
+      "tradeMinQuantity": 16.301,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -4122,7 +4122,7 @@
       "symbol": "ALT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 201.21,
+      "tradeMinQuantity": 202.23,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00125000"
     },
@@ -4147,7 +4147,7 @@
       "symbol": "TAO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.00688,
+      "tradeMinQuantity": 0.0069,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00170000"
     },
@@ -4172,7 +4172,7 @@
       "symbol": "JUP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 9.2,
+      "tradeMinQuantity": 9.19,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00110000"
     },
@@ -4197,7 +4197,7 @@
       "symbol": "ZETA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 38.18,
+      "tradeMinQuantity": 38.28,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00400000"
     },
@@ -4247,7 +4247,7 @@
       "symbol": "DYM-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 76.8,
+      "tradeMinQuantity": 77.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -4272,7 +4272,7 @@
       "symbol": "PIXEL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 280.51,
+      "tradeMinQuantity": 280.27,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00195000"
     },
@@ -4297,7 +4297,7 @@
       "symbol": "MAVIA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 58.157,
+      "tradeMinQuantity": 58.123,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00105000"
     },
@@ -4322,7 +4322,7 @@
       "symbol": "STRK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 45.673,
+      "tradeMinQuantity": 45.662,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00410000"
     },
@@ -4372,7 +4372,7 @@
       "symbol": "PORTAL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 233.643,
+      "tradeMinQuantity": 232.827,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00050000"
     },
@@ -4397,7 +4397,7 @@
       "symbol": "AEVO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 75.672,
+      "tradeMinQuantity": 75.529,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00105000"
     },
@@ -4422,7 +4422,7 @@
       "symbol": "VANRY-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 388.88,
+      "tradeMinQuantity": 389.11,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00050000"
     },
@@ -4447,7 +4447,7 @@
       "symbol": "BOME-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3274,
+      "tradeMinQuantity": 3275,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00060000"
     },
@@ -4472,7 +4472,7 @@
       "symbol": "ETHFI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 5.163,
+      "tradeMinQuantity": 5.162,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00170000"
     },
@@ -4522,7 +4522,7 @@
       "symbol": "W-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 151.632,
+      "tradeMinQuantity": 151.977,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00070000"
     },
@@ -4547,7 +4547,7 @@
       "symbol": "TNSR-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 51.086,
+      "tradeMinQuantity": 51.034,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00395000"
     },
@@ -4572,7 +4572,7 @@
       "symbol": "SAGA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 98.425,
+      "tradeMinQuantity": 98.329,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00095000"
     },
@@ -4597,7 +4597,7 @@
       "symbol": "MERL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 68.005,
+      "tradeMinQuantity": 68.167,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00300000"
     },
@@ -4647,7 +4647,7 @@
       "symbol": "REZ-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 420.08,
+      "tradeMinQuantity": 419.73,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00165000"
     },
@@ -4672,7 +4672,7 @@
       "symbol": "BB-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 60.7,
+      "tradeMinQuantity": 60.45,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00305000"
     },
@@ -4697,7 +4697,7 @@
       "symbol": "NOT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4170,
+      "tradeMinQuantity": 4172,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00225000"
     },
@@ -4722,7 +4722,7 @@
       "symbol": "IO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 13.115,
+      "tradeMinQuantity": 13.055,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00260000"
     },
@@ -4747,7 +4747,7 @@
       "symbol": "1000000BABYDOGE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4886,
+      "tradeMinQuantity": 4884,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00230000"
     },
@@ -4847,7 +4847,7 @@
       "symbol": "ZK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 127.96,
+      "tradeMinQuantity": 127.56,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00085000"
     },
@@ -4897,7 +4897,7 @@
       "symbol": "ZRO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.474,
+      "tradeMinQuantity": 1.473,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00070000"
     },
@@ -5097,7 +5097,7 @@
       "symbol": "WIF-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 9.95,
+      "tradeMinQuantity": 9.94,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5122,7 +5122,7 @@
       "symbol": "BANANA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.5013,
+      "tradeMinQuantity": 0.5011,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00095000"
     },
@@ -5147,7 +5147,7 @@
       "symbol": "RENDER-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.977,
+      "tradeMinQuantity": 0.972,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00075000"
     },
@@ -5172,7 +5172,7 @@
       "symbol": "RARE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 123.3,
+      "tradeMinQuantity": 123.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00500000"
     },
@@ -5197,7 +5197,7 @@
       "symbol": "G-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 544.7,
+      "tradeMinQuantity": 544.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5222,7 +5222,7 @@
       "symbol": "SYN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 41.91,
+      "tradeMinQuantity": 41.77,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00235000"
     },
@@ -5247,7 +5247,7 @@
       "symbol": "CATI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 39.19,
+      "tradeMinQuantity": 39.24,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00305000"
     },
@@ -5272,7 +5272,7 @@
       "symbol": "POPCAT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 34.69,
+      "tradeMinQuantity": 34.66,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5297,7 +5297,7 @@
       "symbol": "DOGS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 36063,
+      "tradeMinQuantity": 36018,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5322,7 +5322,7 @@
       "symbol": "ORDER-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 36.3,
+      "tradeMinQuantity": 36.04,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00315000"
     },
@@ -5372,7 +5372,7 @@
       "symbol": "POL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 21.67,
+      "tradeMinQuantity": 21.64,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5397,7 +5397,7 @@
       "symbol": "AERGO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 38.04,
+      "tradeMinQuantity": 38.03,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00330000"
     },
@@ -5422,7 +5422,7 @@
       "symbol": "NEIROCTO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 19801,
+      "tradeMinQuantity": 19777,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00260000"
     },
@@ -5447,7 +5447,7 @@
       "symbol": "RPL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.146,
+      "tradeMinQuantity": 1.144,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00260000"
     },
@@ -5472,7 +5472,7 @@
       "symbol": "FIDA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 51.59,
+      "tradeMinQuantity": 50.68,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00260000"
     },
@@ -5497,7 +5497,7 @@
       "symbol": "HMSTR-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 13158,
+      "tradeMinQuantity": 13184,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00400000"
     },
@@ -5522,7 +5522,7 @@
       "symbol": "EIGEN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 9.63,
+      "tradeMinQuantity": 9.658,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5547,7 +5547,7 @@
       "symbol": "DIA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 10.88,
+      "tradeMinQuantity": 10.86,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5622,7 +5622,7 @@
       "symbol": "GOAT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 109.78,
+      "tradeMinQuantity": 109.9,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5647,7 +5647,7 @@
       "symbol": "SAFE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 12.937,
+      "tradeMinQuantity": 12.912,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00240000"
     },
@@ -5697,7 +5697,7 @@
       "symbol": "GRASS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.4,
+      "tradeMinQuantity": 4.41,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00500000"
     },
@@ -5722,7 +5722,7 @@
       "symbol": "MOODENG-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 37.96,
+      "tradeMinQuantity": 37.89,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00275000"
     },
@@ -5747,7 +5747,7 @@
       "symbol": "KAIA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 36.57,
+      "tradeMinQuantity": 36.51,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00075000"
     },
@@ -5797,7 +5797,7 @@
       "symbol": "1000000MOG-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 13.624,
+      "tradeMinQuantity": 13.615,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5822,7 +5822,7 @@
       "symbol": "DRIFT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 68.823,
+      "tradeMinQuantity": 68.682,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5847,7 +5847,7 @@
       "symbol": "SPX-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 5.07,
+      "tradeMinQuantity": 5.06,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00340000"
     },
@@ -5872,7 +5872,7 @@
       "symbol": "ACT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 149.26,
+      "tradeMinQuantity": 149.04,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00210000"
     },
@@ -5922,7 +5922,7 @@
       "symbol": "RAY-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.563,
+      "tradeMinQuantity": 2.559,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5947,7 +5947,7 @@
       "symbol": "AKT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.39,
+      "tradeMinQuantity": 2.374,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -5972,7 +5972,7 @@
       "symbol": "CHILLGUY-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 135.33,
+      "tradeMinQuantity": 135.52,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00500000"
     },
@@ -5997,7 +5997,7 @@
       "symbol": "1000CHEEMS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2796,
+      "tradeMinQuantity": 2791,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00255000"
     },
@@ -6022,7 +6022,7 @@
       "symbol": "THE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 21.053,
+      "tradeMinQuantity": 21.031,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00240000"
     },
@@ -6072,7 +6072,7 @@
       "symbol": "AERO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.279,
+      "tradeMinQuantity": 4.284,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6097,7 +6097,7 @@
       "symbol": "MOVE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 118.56,
+      "tradeMinQuantity": 118.77,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6122,7 +6122,7 @@
       "symbol": "ME-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 20.636,
+      "tradeMinQuantity": 20.605,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00440000"
     },
@@ -6172,7 +6172,7 @@
       "symbol": "VELODROME-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 115.47,
+      "tradeMinQuantity": 115.25,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6197,7 +6197,7 @@
       "symbol": "VANA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.2563,
+      "tradeMinQuantity": 1.2508,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6222,7 +6222,7 @@
       "symbol": "PENGU-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 207.9,
+      "tradeMinQuantity": 208.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00260000"
     },
@@ -6247,7 +6247,7 @@
       "symbol": "LUMIA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 19.666,
+      "tradeMinQuantity": 19.647,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6297,7 +6297,7 @@
       "symbol": "HYPE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.0328,
+      "tradeMinQuantity": 0.0326,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00245000"
     },
@@ -6347,7 +6347,7 @@
       "symbol": "HIVE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 33.04,
+      "tradeMinQuantity": 33.02,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6372,7 +6372,7 @@
       "symbol": "PHA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 57.44,
+      "tradeMinQuantity": 57.53,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6397,7 +6397,7 @@
       "symbol": "AIXBT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 61.94,
+      "tradeMinQuantity": 61.91,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00215000"
     },
@@ -6422,7 +6422,7 @@
       "symbol": "VIRTUAL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.549,
+      "tradeMinQuantity": 2.536,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6447,7 +6447,7 @@
       "symbol": "CGPT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 73.66,
+      "tradeMinQuantity": 73.72,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6472,7 +6472,7 @@
       "symbol": "FARTCOIN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 10.117,
+      "tradeMinQuantity": 10.132,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00415000"
     },
@@ -6497,7 +6497,7 @@
       "symbol": "KMNO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 91.33,
+      "tradeMinQuantity": 91.25,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6522,7 +6522,7 @@
       "symbol": "GRIFFAIN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 170.22,
+      "tradeMinQuantity": 170.45,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00215000"
     },
@@ -6547,7 +6547,7 @@
       "symbol": "ZEREBRO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 94.39,
+      "tradeMinQuantity": 94.43,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6572,7 +6572,7 @@
       "symbol": "BIO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 54.81,
+      "tradeMinQuantity": 54.66,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6597,7 +6597,7 @@
       "symbol": "SUI-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.799,
+      "tradeMinQuantity": 1.794,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6622,7 +6622,7 @@
       "symbol": "ALCH-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 26.75,
+      "tradeMinQuantity": 26.7,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6647,7 +6647,7 @@
       "symbol": "COOKIE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 130.3,
+      "tradeMinQuantity": 130.64,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6672,7 +6672,7 @@
       "symbol": "SWARMS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 184.51,
+      "tradeMinQuantity": 183.32,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6697,7 +6697,7 @@
       "symbol": "WLD-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 7.015,
+      "tradeMinQuantity": 7.005,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6722,7 +6722,7 @@
       "symbol": "D-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 146.8,
+      "tradeMinQuantity": 146.63,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6747,7 +6747,7 @@
       "symbol": "PROM-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.766,
+      "tradeMinQuantity": 1.76,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6772,7 +6772,7 @@
       "symbol": "S-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 41.53,
+      "tradeMinQuantity": 41.52,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6797,7 +6797,7 @@
       "symbol": "SOLV-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 461.89,
+      "tradeMinQuantity": 459.76,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00375000"
     },
@@ -6822,7 +6822,7 @@
       "symbol": "TRUMPSOL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.9479,
+      "tradeMinQuantity": 0.9466,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00500000"
     },
@@ -6872,7 +6872,7 @@
       "symbol": "ARC-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 31.18,
+      "tradeMinQuantity": 31.17,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6897,7 +6897,7 @@
       "symbol": "AVAAI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 278.09,
+      "tradeMinQuantity": 278.56,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00210000"
     },
@@ -6947,7 +6947,7 @@
       "symbol": "ANIME-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 449.85,
+      "tradeMinQuantity": 449.55,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -6972,7 +6972,7 @@
       "symbol": "PIPPIN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 82.86,
+      "tradeMinQuantity": 82.92,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7022,7 +7022,7 @@
       "symbol": "VVV-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.101,
+      "tradeMinQuantity": 0.1004,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7047,7 +7047,7 @@
       "symbol": "BERA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 5.01,
+      "tradeMinQuantity": 5,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7072,7 +7072,7 @@
       "symbol": "LAYER-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 21.009,
+      "tradeMinQuantity": 21.002,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7097,7 +7097,7 @@
       "symbol": "IP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3.995,
+      "tradeMinQuantity": 3.988,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7147,7 +7147,7 @@
       "symbol": "SHELL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 58.31,
+      "tradeMinQuantity": 58.41,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00210000"
     },
@@ -7172,7 +7172,7 @@
       "symbol": "GPS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 294.56,
+      "tradeMinQuantity": 294.89,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00345000"
     },
@@ -7197,7 +7197,7 @@
       "symbol": "KAITO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3.837,
+      "tradeMinQuantity": 3.828,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7247,7 +7247,7 @@
       "symbol": "REDSTONE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 14.58,
+      "tradeMinQuantity": 14.62,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00215000"
     },
@@ -7272,7 +7272,7 @@
       "symbol": "ARB-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 17.61,
+      "tradeMinQuantity": 17.58,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7372,7 +7372,7 @@
       "symbol": "BCH-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.00527,
+      "tradeMinQuantity": 0.00526,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7397,7 +7397,7 @@
       "symbol": "NEAR-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.893,
+      "tradeMinQuantity": 0.891,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7422,7 +7422,7 @@
       "symbol": "LINK-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.202,
+      "tradeMinQuantity": 0.2019,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7447,7 +7447,7 @@
       "symbol": "AVAX-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.2099,
+      "tradeMinQuantity": 0.2101,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7472,7 +7472,7 @@
       "symbol": "TIA-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.479,
+      "tradeMinQuantity": 4.465,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00050000"
     },
@@ -7497,7 +7497,7 @@
       "symbol": "BOME-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3275,
+      "tradeMinQuantity": 3274,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00070000"
     },
@@ -7522,7 +7522,7 @@
       "symbol": "MUBARAK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 143.38,
+      "tradeMinQuantity": 142.97,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00290000"
     },
@@ -7547,7 +7547,7 @@
       "symbol": "EPIC-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 7.667,
+      "tradeMinQuantity": 7.756,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7572,7 +7572,7 @@
       "symbol": "FIL-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.961,
+      "tradeMinQuantity": 1.957,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7622,7 +7622,7 @@
       "symbol": "NEO-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.684,
+      "tradeMinQuantity": 0.683,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7647,7 +7647,7 @@
       "symbol": "POPCAT-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 34.71,
+      "tradeMinQuantity": 34.68,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7672,7 +7672,7 @@
       "symbol": "ONDO-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.62,
+      "tradeMinQuantity": 4.58,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7697,7 +7697,7 @@
       "symbol": "NOT-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4170,
+      "tradeMinQuantity": 4169,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7722,7 +7722,7 @@
       "symbol": "FORM-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 8.316,
+      "tradeMinQuantity": 8.303,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00395000"
     },
@@ -7747,7 +7747,7 @@
       "symbol": "KOMA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 280.5,
+      "tradeMinQuantity": 280.6,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00335000"
     },
@@ -7772,7 +7772,7 @@
       "symbol": "TUT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 172.2,
+      "tradeMinQuantity": 171.9,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00240000"
     },
@@ -7797,7 +7797,7 @@
       "symbol": "OP-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 14.85,
+      "tradeMinQuantity": 14.83,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7822,7 +7822,7 @@
       "symbol": "POL-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 21.7,
+      "tradeMinQuantity": 21.65,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7847,7 +7847,7 @@
       "symbol": "ETC-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.2132,
+      "tradeMinQuantity": 0.213,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7897,7 +7897,7 @@
       "symbol": "BANANAS31-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 179,
+      "tradeMinQuantity": 180,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -7922,7 +7922,7 @@
       "symbol": "BR-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 15.48,
+      "tradeMinQuantity": 15.49,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00320000"
     },
@@ -7997,7 +7997,7 @@
       "symbol": "AEVO-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 75.7,
+      "tradeMinQuantity": 75.53,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8022,7 +8022,7 @@
       "symbol": "XLM-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 13.44,
+      "tradeMinQuantity": 13.42,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00050000"
     },
@@ -8072,7 +8072,7 @@
       "symbol": "BROCCOLIF3B-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 354.9,
+      "tradeMinQuantity": 354.2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00245000"
     },
@@ -8097,7 +8097,7 @@
       "symbol": "ORCA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.414,
+      "tradeMinQuantity": 1.416,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8122,7 +8122,7 @@
       "symbol": "PLUME-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 135.6,
+      "tradeMinQuantity": 134.87,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8147,7 +8147,7 @@
       "symbol": "SHIB-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 341297,
+      "tradeMinQuantity": 341414,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8172,7 +8172,7 @@
       "symbol": "ADA-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 7.94,
+      "tradeMinQuantity": 7.93,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8197,7 +8197,7 @@
       "symbol": "HBAR-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 22.07,
+      "tradeMinQuantity": 22.08,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8297,7 +8297,7 @@
       "symbol": "APT-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.024,
+      "tradeMinQuantity": 2.026,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8372,7 +8372,7 @@
       "symbol": "PARTI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 35.85,
+      "tradeMinQuantity": 35.88,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8397,7 +8397,7 @@
       "symbol": "AAVE-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.02257,
+      "tradeMinQuantity": 0.02256,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8422,7 +8422,7 @@
       "symbol": "PNUT-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 33.17,
+      "tradeMinQuantity": 33.16,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8447,7 +8447,7 @@
       "symbol": "PAXG-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.000443,
+      "tradeMinQuantity": 0.000444,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8472,7 +8472,7 @@
       "symbol": "WAL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 29.11,
+      "tradeMinQuantity": 29.07,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8497,7 +8497,7 @@
       "symbol": "IP-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3.995,
+      "tradeMinQuantity": 3.988,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8522,7 +8522,7 @@
       "symbol": "KAITO-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3.839,
+      "tradeMinQuantity": 3.828,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8547,7 +8547,7 @@
       "symbol": "FARTCOIN-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 10.11,
+      "tradeMinQuantity": 10.13,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8572,7 +8572,7 @@
       "symbol": "MLN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.9154,
+      "tradeMinQuantity": 0.9202,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8597,7 +8597,7 @@
       "symbol": "GUN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 155.4,
+      "tradeMinQuantity": 155.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00275000"
     },
@@ -8622,7 +8622,7 @@
       "symbol": "XAUT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.000443,
+      "tradeMinQuantity": 0.000444,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8647,7 +8647,7 @@
       "symbol": "BABY-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 122.2,
+      "tradeMinQuantity": 122.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8672,7 +8672,7 @@
       "symbol": "PROMPT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 52.09,
+      "tradeMinQuantity": 52.14,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8697,7 +8697,7 @@
       "symbol": "PUMPBTC-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 137.4,
+      "tradeMinQuantity": 137.5,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8722,7 +8722,7 @@
       "symbol": "FHE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 69.6,
+      "tradeMinQuantity": 69.8,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8747,7 +8747,7 @@
       "symbol": "STO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 28.37,
+      "tradeMinQuantity": 28.39,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00325000"
     },
@@ -8772,7 +8772,7 @@
       "symbol": "KERNEL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 30.68,
+      "tradeMinQuantity": 30.64,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8797,7 +8797,7 @@
       "symbol": "WCT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 30.89,
+      "tradeMinQuantity": 30.85,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8822,7 +8822,7 @@
       "symbol": "DEEP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 58.1,
+      "tradeMinQuantity": 58,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -8872,7 +8872,7 @@
       "symbol": "BANK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 52.7,
+      "tradeMinQuantity": 52.6,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00290000"
     },
@@ -8897,7 +8897,7 @@
       "symbol": "HYPERLANE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 17.02,
+      "tradeMinQuantity": 16.98,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00335000"
     },
@@ -8922,7 +8922,7 @@
       "symbol": "ZORA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 176.7,
+      "tradeMinQuantity": 176.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00430000"
     },
@@ -8947,7 +8947,7 @@
       "symbol": "SIGN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 150.8,
+      "tradeMinQuantity": 150.5,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00290000"
     },
@@ -8972,7 +8972,7 @@
       "symbol": "AIOT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 27.91,
+      "tradeMinQuantity": 27.93,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00235000"
     },
@@ -8997,7 +8997,7 @@
       "symbol": "HAEDAL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 68.15,
+      "tradeMinQuantity": 68.25,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9022,7 +9022,7 @@
       "symbol": "DOLO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 61.3,
+      "tradeMinQuantity": 61.2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00250000"
     },
@@ -9047,7 +9047,7 @@
       "symbol": "ASR-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.732,
+      "tradeMinQuantity": 1.735,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00500000"
     },
@@ -9072,7 +9072,7 @@
       "symbol": "ALPINE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.728,
+      "tradeMinQuantity": 4.726,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00370000"
     },
@@ -9097,7 +9097,7 @@
       "symbol": "B2-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3.08,
+      "tradeMinQuantity": 3.07,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9122,7 +9122,7 @@
       "symbol": "SYRUP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 9.92,
+      "tradeMinQuantity": 9.9,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9147,7 +9147,7 @@
       "symbol": "SXT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 166.53,
+      "tradeMinQuantity": 165.98,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9172,7 +9172,7 @@
       "symbol": "DOOD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 732,
+      "tradeMinQuantity": 731,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00225000"
     },
@@ -9222,7 +9222,7 @@
       "symbol": "SKYAI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 7.3,
+      "tradeMinQuantity": 7.2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00315000"
     },
@@ -9247,7 +9247,7 @@
       "symbol": "MYX-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 10.97,
+      "tradeMinQuantity": 10.93,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00230000"
     },
@@ -9272,7 +9272,7 @@
       "symbol": "NXPC-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 5.94,
+      "tradeMinQuantity": 5.926,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9322,7 +9322,7 @@
       "symbol": "B-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 7.28,
+      "tradeMinQuantity": 7.29,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9347,7 +9347,7 @@
       "symbol": "SOON-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 11.73,
+      "tradeMinQuantity": 11.74,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9372,7 +9372,7 @@
       "symbol": "HUMA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 82.9,
+      "tradeMinQuantity": 83.2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9397,7 +9397,7 @@
       "symbol": "A-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 24.51,
+      "tradeMinQuantity": 24.47,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9447,7 +9447,7 @@
       "symbol": "FLOCK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 29.22,
+      "tradeMinQuantity": 29.18,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00215000"
     },
@@ -9497,7 +9497,7 @@
       "symbol": "1000000BOB-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 130.5,
+      "tradeMinQuantity": 130.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00380000"
     },
@@ -9522,7 +9522,7 @@
       "symbol": "RESOLV-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 68.13,
+      "tradeMinQuantity": 68.26,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00500000"
     },
@@ -9547,7 +9547,7 @@
       "symbol": "HOME-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 86.9,
+      "tradeMinQuantity": 87.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9572,7 +9572,7 @@
       "symbol": "IDOL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 78.1,
+      "tradeMinQuantity": 78.2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00250000"
     },
@@ -9622,7 +9622,7 @@
       "symbol": "SQD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 47.33,
+      "tradeMinQuantity": 47.21,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9672,7 +9672,7 @@
       "symbol": "F-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 370.8,
+      "tradeMinQuantity": 370.7,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00235000"
     },
@@ -9697,7 +9697,7 @@
       "symbol": "SAHARA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 58.25,
+      "tradeMinQuantity": 58.31,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9722,7 +9722,7 @@
       "symbol": "H-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 9.23,
+      "tradeMinQuantity": 9.29,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00380000"
     },
@@ -9747,7 +9747,7 @@
       "symbol": "HFT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 166.81,
+      "tradeMinQuantity": 168.07,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9772,7 +9772,7 @@
       "symbol": "USELESS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 26.42,
+      "tradeMinQuantity": 26.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9822,7 +9822,7 @@
       "symbol": "ICNT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 6.53,
+      "tradeMinQuantity": 6.54,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9872,7 +9872,7 @@
       "symbol": "CRCLX-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.01725,
+      "tradeMinQuantity": 0.01723,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9947,7 +9947,7 @@
       "symbol": "PUMP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1091,
+      "tradeMinQuantity": 1089,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -9972,7 +9972,7 @@
       "symbol": "AIN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 20.21,
+      "tradeMinQuantity": 20.16,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00395000"
     },
@@ -9997,7 +9997,7 @@
       "symbol": "CROSS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 20.9,
+      "tradeMinQuantity": 20.87,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00500000"
     },
@@ -10022,7 +10022,7 @@
       "symbol": "C-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 22.92,
+      "tradeMinQuantity": 23.01,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00385000"
     },
@@ -10072,7 +10072,7 @@
       "symbol": "TAC-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 111.1,
+      "tradeMinQuantity": 111.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00500000"
     },
@@ -10097,7 +10097,7 @@
       "symbol": "ERA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 15.21,
+      "tradeMinQuantity": 15.198,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -10122,7 +10122,7 @@
       "symbol": "TA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 30.94,
+      "tradeMinQuantity": 30.71,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00230000"
     },
@@ -10147,7 +10147,7 @@
       "symbol": "PENGU-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 208.2,
+      "tradeMinQuantity": 208.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -10172,7 +10172,7 @@
       "symbol": "TAG-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1505,
+      "tradeMinQuantity": 1503,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00335000"
     },
@@ -10197,7 +10197,7 @@
       "symbol": "ESPORTS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.75,
+      "tradeMinQuantity": 2.76,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00370000"
     },
@@ -10247,7 +10247,7 @@
       "symbol": "NAORIS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 52.79,
+      "tradeMinQuantity": 52.8,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00290000"
     },
@@ -10297,7 +10297,7 @@
       "symbol": "TOWNS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 588.8,
+      "tradeMinQuantity": 588.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -10322,7 +10322,7 @@
       "symbol": "PROVE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 6.73,
+      "tradeMinQuantity": 6.75,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -10372,7 +10372,7 @@
       "symbol": "IN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 31.87,
+      "tradeMinQuantity": 31.86,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00230000"
     },
@@ -10397,7 +10397,7 @@
       "symbol": "XNY-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 282.2,
+      "tradeMinQuantity": 282.5,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00205000"
     },
@@ -10447,7 +10447,7 @@
       "symbol": "SAPIEN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 16.23,
+      "tradeMinQuantity": 16.16,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -10522,7 +10522,7 @@
       "symbol": "SOMI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 11.738,
+      "tradeMinQuantity": 11.758,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -10547,7 +10547,7 @@
       "symbol": "BAS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 87.4,
+      "tradeMinQuantity": 88.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00375000"
     },
@@ -10597,7 +10597,7 @@
       "symbol": "NCFXUSD2JPY-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.01,
+      "tradeMinQuantity": 2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -10697,7 +10697,7 @@
       "symbol": "NCFXGBP2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.5,
+      "tradeMinQuantity": 1.49,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -10797,7 +10797,7 @@
       "symbol": "HEMI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 262,
+      "tradeMinQuantity": 262.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -10822,7 +10822,7 @@
       "symbol": "LINEA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 574.3,
+      "tradeMinQuantity": 573.9,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -10847,7 +10847,7 @@
       "symbol": "Q-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 106,
+      "tradeMinQuantity": 105,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00280000"
     },
@@ -10872,7 +10872,7 @@
       "symbol": "ARIA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 42.79,
+      "tradeMinQuantity": 42.8,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00210000"
     },
@@ -10897,7 +10897,7 @@
       "symbol": "TAKE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 84.93,
+      "tradeMinQuantity": 85.09,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00235000"
     },
@@ -10922,7 +10922,7 @@
       "symbol": "PTB-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2263.2,
+      "tradeMinQuantity": 2256.6,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00400000"
     },
@@ -11022,7 +11022,7 @@
       "symbol": "AVNT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 12.71,
+      "tradeMinQuantity": 12.72,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11047,7 +11047,7 @@
       "symbol": "HOLO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 26.4,
+      "tradeMinQuantity": 26.37,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11072,7 +11072,7 @@
       "symbol": "XPIN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1570,
+      "tradeMinQuantity": 1555,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11097,7 +11097,7 @@
       "symbol": "UB-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 18.4,
+      "tradeMinQuantity": 18.2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11122,7 +11122,7 @@
       "symbol": "ZKC-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 28.09,
+      "tradeMinQuantity": 28.169,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11172,7 +11172,7 @@
       "symbol": "STBL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 59.93,
+      "tradeMinQuantity": 59.89,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00220000"
     },
@@ -11197,7 +11197,7 @@
       "symbol": "0G-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.079,
+      "tradeMinQuantity": 4.077,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00320000"
     },
@@ -11222,7 +11222,7 @@
       "symbol": "AIA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 32.2,
+      "tradeMinQuantity": 32.27,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11247,7 +11247,7 @@
       "symbol": "ASTER-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.85,
+      "tradeMinQuantity": 2.82,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11347,7 +11347,7 @@
       "symbol": "BLESS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 385.2,
+      "tradeMinQuantity": 385.7,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00235000"
     },
@@ -11372,7 +11372,7 @@
       "symbol": "FLUID-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.171,
+      "tradeMinQuantity": 1.164,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11397,7 +11397,7 @@
       "symbol": "COAI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 6.58,
+      "tradeMinQuantity": 6.59,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00265000"
     },
@@ -11422,7 +11422,7 @@
       "symbol": "MIRANETWORK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 24.456,
+      "tradeMinQuantity": 24.412,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11447,7 +11447,7 @@
       "symbol": "HANA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 57.7,
+      "tradeMinQuantity": 58.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11472,7 +11472,7 @@
       "symbol": "AKE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 5429,
+      "tradeMinQuantity": 5469,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00230000"
     },
@@ -11497,7 +11497,7 @@
       "symbol": "BITLIGHT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 14.806,
+      "tradeMinQuantity": 14.813,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00220000"
     },
@@ -11522,7 +11522,7 @@
       "symbol": "APEX-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 5.636,
+      "tradeMinQuantity": 5.655,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11547,7 +11547,7 @@
       "symbol": "XAN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 196.55,
+      "tradeMinQuantity": 196.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11572,7 +11572,7 @@
       "symbol": "FF-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 21.83,
+      "tradeMinQuantity": 21.88,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11597,7 +11597,7 @@
       "symbol": "OPENEDEN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 14.37,
+      "tradeMinQuantity": 14.11,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11622,7 +11622,7 @@
       "symbol": "NOMINA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 927.7,
+      "tradeMinQuantity": 927.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11647,7 +11647,7 @@
       "symbol": "TRUTH-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 179.1,
+      "tradeMinQuantity": 178.6,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11672,7 +11672,7 @@
       "symbol": "2Z-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 17.31,
+      "tradeMinQuantity": 17.28,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11697,7 +11697,7 @@
       "symbol": "4-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 194.37,
+      "tradeMinQuantity": 194.56,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11722,7 +11722,7 @@
       "symbol": "EVAA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3.963,
+      "tradeMinQuantity": 3.944,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11747,7 +11747,7 @@
       "symbol": "LYN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 45.26,
+      "tradeMinQuantity": 45.12,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00305000"
     },
@@ -11797,7 +11797,7 @@
       "symbol": "MONAD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 69.81,
+      "tradeMinQuantity": 69.62,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11822,7 +11822,7 @@
       "symbol": "METEORA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 13.496,
+      "tradeMinQuantity": 13.487,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11847,7 +11847,7 @@
       "symbol": "YB-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 16.354,
+      "tradeMinQuantity": 16.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11922,7 +11922,7 @@
       "symbol": "ENSO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.379,
+      "tradeMinQuantity": 2.376,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -11947,7 +11947,7 @@
       "symbol": "CLO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 29.38,
+      "tradeMinQuantity": 29.2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00400000"
     },
@@ -11997,7 +11997,7 @@
       "symbol": "RECALL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 33.15,
+      "tradeMinQuantity": 33.13,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00285000"
     },
@@ -12022,7 +12022,7 @@
       "symbol": "ZBT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 13.108,
+      "tradeMinQuantity": 13.117,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00340000"
     },
@@ -12047,7 +12047,7 @@
       "symbol": "BNLIFE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.5,
+      "tradeMinQuantity": 4.51,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12072,7 +12072,7 @@
       "symbol": "BLUAI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 214.6,
+      "tradeMinQuantity": 213.8,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00350000"
     },
@@ -12097,7 +12097,7 @@
       "symbol": "TURTLE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 42.85,
+      "tradeMinQuantity": 42.7,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12122,7 +12122,7 @@
       "symbol": "MEGA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 22.92,
+      "tradeMinQuantity": 22.99,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12147,7 +12147,7 @@
       "symbol": "APR-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 11.14,
+      "tradeMinQuantity": 11.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12172,7 +12172,7 @@
       "symbol": "ON-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 15.45,
+      "tradeMinQuantity": 15.41,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12197,7 +12197,7 @@
       "symbol": "AT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 15.59,
+      "tradeMinQuantity": 15.61,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12322,7 +12322,7 @@
       "symbol": "MMT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 15.4,
+      "tradeMinQuantity": 15.45,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12347,7 +12347,7 @@
       "symbol": "CLANKER-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.08211,
+      "tradeMinQuantity": 0.0825,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12372,7 +12372,7 @@
       "symbol": "KITE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 8.89,
+      "tradeMinQuantity": 8.87,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00425000"
     },
@@ -12397,7 +12397,7 @@
       "symbol": "CC-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 13.04,
+      "tradeMinQuantity": 13.02,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00260000"
     },
@@ -12647,7 +12647,7 @@
       "symbol": "TRUST-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 29.03,
+      "tradeMinQuantity": 28.99,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12672,7 +12672,7 @@
       "symbol": "UAI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 7.51,
+      "tradeMinQuantity": 7.52,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00440000"
     },
@@ -12722,7 +12722,7 @@
       "symbol": "FOLKS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.473,
+      "tradeMinQuantity": 1.475,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12747,7 +12747,7 @@
       "symbol": "ELIZAOS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2092.6,
+      "tradeMinQuantity": 2100.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12772,7 +12772,7 @@
       "symbol": "TIMI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1772.8,
+      "tradeMinQuantity": 1772.6,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -12822,7 +12822,7 @@
       "symbol": "ALLO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 20.513,
+      "tradeMinQuantity": 20.64,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -13247,7 +13247,7 @@
       "symbol": "PIEVERSE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.58,
+      "tradeMinQuantity": 2.57,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -13272,7 +13272,7 @@
       "symbol": "SENT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 121,
+      "tradeMinQuantity": 120.7,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -13322,7 +13322,7 @@
       "symbol": "ZEC-USDC",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.00312,
+      "tradeMinQuantity": 0.00313,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -13472,7 +13472,7 @@
       "symbol": "WET-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 24.53,
+      "tradeMinQuantity": 24.52,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -13647,7 +13647,7 @@
       "symbol": "NIGHT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 63.4,
+      "tradeMinQuantity": 63.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -13797,7 +13797,7 @@
       "symbol": "CYS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.26,
+      "tradeMinQuantity": 4.24,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -13822,7 +13822,7 @@
       "symbol": "US-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 320.6,
+      "tradeMinQuantity": 317.5,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -13872,7 +13872,7 @@
       "symbol": "MAGMA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 8.44,
+      "tradeMinQuantity": 8.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -13897,7 +13897,7 @@
       "symbol": "ZKP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 25.64,
+      "tradeMinQuantity": 25.61,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00235000"
     },
@@ -13922,7 +13922,7 @@
       "symbol": "LIGHTER-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.52,
+      "tradeMinQuantity": 1.504,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -13972,7 +13972,7 @@
       "symbol": "BREV-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 16.91,
+      "tradeMinQuantity": 16.84,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14147,7 +14147,7 @@
       "symbol": "NCCOLEAD2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.0011,
+      "tradeMinQuantity": 0.001,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14197,7 +14197,7 @@
       "symbol": "ZAMA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 61.54,
+      "tradeMinQuantity": 61.17,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14222,7 +14222,7 @@
       "symbol": "FOGO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 119.5,
+      "tradeMinQuantity": 119.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14247,7 +14247,7 @@
       "symbol": "WOTAMALAILE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 237.2,
+      "tradeMinQuantity": 237.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00240000"
     },
@@ -14272,7 +14272,7 @@
       "symbol": "TESTICLE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 362.5,
+      "tradeMinQuantity": 361.8,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14297,7 +14297,7 @@
       "symbol": "FRAX-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4.628,
+      "tradeMinQuantity": 4.629,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14347,7 +14347,7 @@
       "symbol": "SPORTFUN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 39.4,
+      "tradeMinQuantity": 39.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14372,7 +14372,7 @@
       "symbol": "BUTTCOIN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 109,
+      "tradeMinQuantity": 109.6,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14397,7 +14397,7 @@
       "symbol": "XUEQIU-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 183.1,
+      "tradeMinQuantity": 182.6,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14497,7 +14497,7 @@
       "symbol": "NCFXUSD2NOK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.997,
+      "tradeMinQuantity": 1.996,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14522,7 +14522,7 @@
       "symbol": "NCFXUSD2ZAR-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.0048,
+      "tradeMinQuantity": 2.0056,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14547,7 +14547,7 @@
       "symbol": "NCFXUSD2SEK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2,
+      "tradeMinQuantity": 1.999,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14597,7 +14597,7 @@
       "symbol": "NCFXCAD2JPY-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.762,
+      "tradeMinQuantity": 2.761,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14622,7 +14622,7 @@
       "symbol": "NCFXUSD2MXN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.001,
+      "tradeMinQuantity": 2.0008,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14647,7 +14647,7 @@
       "symbol": "NCFXNZD2JPY-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3.4174,
+      "tradeMinQuantity": 3.4168,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14672,7 +14672,7 @@
       "symbol": "NCFXUSD2DKK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.999,
+      "tradeMinQuantity": 2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14697,7 +14697,7 @@
       "symbol": "NCFXUSD2ILS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.001,
+      "tradeMinQuantity": 2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14722,7 +14722,7 @@
       "symbol": "GWEI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 17,
+      "tradeMinQuantity": 16.8,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14747,7 +14747,7 @@
       "symbol": "FIGHTID-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 379.7,
+      "tradeMinQuantity": 379.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14772,7 +14772,7 @@
       "symbol": "SPACECOIN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 239.1,
+      "tradeMinQuantity": 239.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00310000"
     },
@@ -14822,7 +14822,7 @@
       "symbol": "BIRB-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 14.64,
+      "tradeMinQuantity": 14.63,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14847,7 +14847,7 @@
       "symbol": "INX-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 195.2,
+      "tradeMinQuantity": 195.3,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14872,7 +14872,7 @@
       "symbol": "KIN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 334.3,
+      "tradeMinQuantity": 337.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14947,7 +14947,7 @@
       "symbol": "NCCOXAG2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.0264,
+      "tradeMinQuantity": 0.0265,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -14972,7 +14972,7 @@
       "symbol": "AZTEC-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 90.5,
+      "tradeMinQuantity": 90.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15097,7 +15097,7 @@
       "symbol": "ROBO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 89.7,
+      "tradeMinQuantity": 89.5,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15122,7 +15122,7 @@
       "symbol": "CFG-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 6.38,
+      "tradeMinQuantity": 6.36,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15147,7 +15147,7 @@
       "symbol": "FREEDOMMONEY-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 206,
+      "tradeMinQuantity": 208,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15172,7 +15172,7 @@
       "symbol": "KAT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 234,
+      "tradeMinQuantity": 233.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15222,7 +15222,7 @@
       "symbol": "BSB-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.24,
+      "tradeMinQuantity": 2.29,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00225000"
     },
@@ -15247,7 +15247,7 @@
       "symbol": "MANTRA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 204.3,
+      "tradeMinQuantity": 203.9,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15297,7 +15297,7 @@
       "symbol": "NCCO1OILWTI2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.0207,
+      "tradeMinQuantity": 0.02075,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15322,7 +15322,7 @@
       "symbol": "LONGXIA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 304.9,
+      "tradeMinQuantity": 305.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15347,7 +15347,7 @@
       "symbol": "NCCOXPT2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.00103,
+      "tradeMinQuantity": 0.001034,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15447,7 +15447,7 @@
       "symbol": "NCCOSUGAR2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 13.5,
+      "tradeMinQuantity": 13.51,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15472,7 +15472,7 @@
       "symbol": "UNITAS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 7.8,
+      "tradeMinQuantity": 7.9,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15572,7 +15572,7 @@
       "symbol": "EDGEX-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1.44,
+      "tradeMinQuantity": 1.43,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15822,7 +15822,7 @@
       "symbol": "IQ-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1833,
+      "tradeMinQuantity": 1832,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15872,7 +15872,7 @@
       "symbol": "PRL-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 10.08,
+      "tradeMinQuantity": 10.06,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15922,7 +15922,7 @@
       "symbol": "BASED-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 25.41,
+      "tradeMinQuantity": 25.46,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -15972,7 +15972,7 @@
       "symbol": "AMP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2406,
+      "tradeMinQuantity": 2409,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16147,7 +16147,7 @@
       "symbol": "BURNIE-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 240,
+      "tradeMinQuantity": 239,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16172,7 +16172,7 @@
       "symbol": "NCCO7241OILWTI2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.02069,
+      "tradeMinQuantity": 0.02076,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16247,7 +16247,7 @@
       "symbol": "OFC-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 38.6,
+      "tradeMinQuantity": 38.9,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16322,7 +16322,7 @@
       "symbol": "GENIUS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3.18,
+      "tradeMinQuantity": 3.25,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16447,7 +16447,7 @@
       "symbol": "NCSKTSMU2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.0049,
+      "tradeMinQuantity": 0.00489,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00050000"
     },
@@ -16547,7 +16547,7 @@
       "symbol": "CHIP-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 41.6,
+      "tradeMinQuantity": 41.4,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00210000"
     },
@@ -16572,7 +16572,7 @@
       "symbol": "ASTEROID-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 8551,
+      "tradeMinQuantity": 8548,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16597,7 +16597,7 @@
       "symbol": "ASTEROIDETH-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 6487,
+      "tradeMinQuantity": 6485,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16697,7 +16697,7 @@
       "symbol": "NCSKCOHR2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.0053,
+      "tradeMinQuantity": 0.00529,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16747,7 +16747,7 @@
       "symbol": "NCSKLRCX2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.00658,
+      "tradeMinQuantity": 0.0066,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16797,7 +16797,7 @@
       "symbol": "OPG-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 7.55,
+      "tradeMinQuantity": 7.53,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16897,7 +16897,7 @@
       "symbol": "10000NAT-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 1949,
+      "tradeMinQuantity": 1951,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16947,7 +16947,7 @@
       "symbol": "SCAM-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 4729.8,
+      "tradeMinQuantity": 4579.8,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16972,7 +16972,7 @@
       "symbol": "NCSKAMD2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.00434,
+      "tradeMinQuantity": 0.00432,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -16997,7 +16997,7 @@
       "symbol": "NCSKQCOM2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.00925,
+      "tradeMinQuantity": 0.00924,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17022,7 +17022,7 @@
       "symbol": "UPEG-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.00205,
+      "tradeMinQuantity": 0.00204,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17047,7 +17047,7 @@
       "symbol": "PHAROS-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.983,
+      "tradeMinQuantity": 2.98,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17072,7 +17072,7 @@
       "symbol": "GENSYN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 62.2,
+      "tradeMinQuantity": 61.7,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17122,7 +17122,7 @@
       "symbol": "NCSKSMCI2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.0597,
+      "tradeMinQuantity": 0.0596,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17197,7 +17197,7 @@
       "symbol": "NCSKUSAR2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.0815,
+      "tradeMinQuantity": 0.0814,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17272,7 +17272,7 @@
       "symbol": "SATO-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 2.268,
+      "tradeMinQuantity": 2.238,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00350000"
     },
@@ -17297,7 +17297,7 @@
       "symbol": "GOBLIN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 186,
+      "tradeMinQuantity": 187,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17322,7 +17322,7 @@
       "symbol": "HANTA-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 3377,
+      "tradeMinQuantity": 3366,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17422,7 +17422,7 @@
       "symbol": "NCSKRKLB2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.01544,
+      "tradeMinQuantity": 0.0154,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17497,7 +17497,7 @@
       "symbol": "DOLPHIN-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 7.19,
+      "tradeMinQuantity": 7.2,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17647,7 +17647,7 @@
       "symbol": "NCSKAXTI2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.01682,
+      "tradeMinQuantity": 0.0168,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17722,7 +17722,7 @@
       "symbol": "BABYSHARK-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 128,
+      "tradeMinQuantity": 128.1,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17747,7 +17747,7 @@
       "symbol": "HOOLI-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 269.5,
+      "tradeMinQuantity": 269.7,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17847,7 +17847,7 @@
       "symbol": "NCCOXAUJPY2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.00044224,
+      "tradeMinQuantity": 0.00044268,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17872,7 +17872,7 @@
       "symbol": "ZEST-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 13.7,
+      "tradeMinQuantity": 13.8,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
@@ -17972,7 +17972,7 @@
       "symbol": "NCSKTXN2USD-USDT",
       "takerFeeRate": 0.0005,
       "tradeMinLimit": 0,
-      "tradeMinQuantity": 0.00659,
+      "tradeMinQuantity": 0.00658,
       "tradeMinUSDT": 2,
       "triggerFeeRate": "0.00200000"
     },
