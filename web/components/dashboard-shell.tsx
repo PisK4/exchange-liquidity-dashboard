@@ -211,7 +211,6 @@ function DepthCell({ row, tier, side }: { row: PlatformRow; tier: string; side: 
 export function DashboardShell({ query, data }: { query: Query; data: DashboardData }) {
   const tab = query.tab ?? 'monitor';
   const symbol = query.symbol ?? data.liquidity.symbol ?? data.meta.symbols[0];
-  const window = query.window ?? '7d';
   const tier = query.tier ?? '0.10%';
   const bucket = query.bucket ?? '100000';
   const platform = query.platform ?? data.top30.platform ?? 'binance';
@@ -234,7 +233,7 @@ export function DashboardShell({ query, data }: { query: Query; data: DashboardD
         ))}
       </nav>
       <main className="dashboard-main">
-        {needsControls ? <DashboardControls query={{ ...query, tab }} symbols={data.meta.symbols} activeSymbol={symbol} activeWindow={window} /> : null}
+        {needsControls ? <DashboardControls query={{ ...query, tab }} symbols={data.meta.symbols} activeSymbol={symbol} /> : null}
         {tab === 'quality' ? <QualityTab data={data} query={query} bucket={bucket} symbol={symbol} /> : null}
         {tab === 'share' ? <ShareTab data={data.share} query={query} /> : null}
         {tab === 'top30' ? <Top30Tab data={data.top30} query={query} platform={platform} /> : null}
@@ -268,14 +267,12 @@ function LiquidityTab({ data, query, tier, symbol }: { data: DashboardData; quer
           {typeof data.liquidity.kpis?.symbol_share_7d_pct === 'number'
             ? <div className="big-number">{pct(data.liquidity.kpis.symbol_share_7d_pct)}</div>
             : <div className="big-number muted">—</div>}
-          <StatusBadge status={data.liquidity.kpis?.symbol_share_7d_status ?? 'unsupported'} />
         </section>
         <section className="panel span-6 row-h-sm">
           <div className="panel-head"><span className="panel-title">edgeX spread (10min 均值)</span><span className="panel-tag">盘口</span></div>
           {typeof data.liquidity.kpis?.edgex_spread_10m_bp === 'number'
             ? <div className="big-number">{bp(data.liquidity.kpis.edgex_spread_10m_bp)}</div>
             : <div className="big-number muted">—</div>}
-          <StatusBadge status={data.liquidity.kpis?.edgex_spread_10m_status ?? 'unsupported'} />
         </section>
         <section className="panel span-6 row-h-sm">
           <div className="panel-head"><span className="panel-title">edgeX 当前 spread</span><span className="panel-tag">latest</span></div>

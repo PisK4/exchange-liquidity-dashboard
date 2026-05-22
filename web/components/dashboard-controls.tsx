@@ -23,7 +23,7 @@ export function PillGroup({ label, items, active, query, param }: { label?: stri
   );
 }
 
-export function DashboardControls({ query, symbols, activeSymbol, activeWindow }: { query: Query; symbols: string[]; activeSymbol: string; activeWindow: string }) {
+export function DashboardControls({ query, symbols, activeSymbol }: { query: Query; symbols: string[]; activeSymbol: string }) {
   return (
     <div className="global-controls">
       <label>
@@ -33,10 +33,6 @@ export function DashboardControls({ query, symbols, activeSymbol, activeWindow }
       <label>
         <span>交易对</span>
         <PillGroup items={symbols} active={activeSymbol} query={query} param="symbol" />
-      </label>
-      <label>
-        <span>统计窗口</span>
-        <PillGroup items={['24h', '7d', '30d']} active={activeWindow} query={query} param="window" />
       </label>
       <Link className={`pill ${query.coreOnly === '1' ? 'active' : ''}`} href={href(query, { coreOnly: query.coreOnly === '1' ? undefined : '1' })}>
         仅看核心

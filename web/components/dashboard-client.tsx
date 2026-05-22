@@ -32,7 +32,7 @@ function buildPaths(query: Query) {
   const symbolParam = encodeURIComponent(query.symbol);
   return {
     meta: '/api/dashboard/meta',
-    liquidity: `/api/snapshot/liquidity?symbol=${symbolParam}&window=${query.window}`,
+    liquidity: `/api/snapshot/liquidity?symbol=${symbolParam}`,
     quality: `/api/snapshot/quality?symbol=${symbolParam}`,
     share: `/api/snapshot/share?window=${query.window}`,
     top30: `/api/snapshot/top30?surface=perp&platform=${query.platform}`,
