@@ -21,6 +21,25 @@ type Runtime struct {
 	VolumeDiscounts       map[string]float64          `json:"volume_discounts"`
 	CoinGecko             CoinGeckoConfig             `json:"coingecko"`
 	WSProviders           map[string]WSProviderConfig `json:"ws_providers,omitempty"`
+	Backfill              BackfillConfig              `json:"backfill"`
+}
+
+// BackfillConfig drives the Top30 daily kline backfill. Defaults are tuned
+// to be safe in any free-tier exchange budget: ColdStartDays=14 means a
+// brand-new deployment hydrates the 7d Vol / 7d Δ window (with one extra
+// day of slack) on first boot; DailyRepairDays=3 keeps the rolling
+// re-pull cheap; PerPlatformConcurrency=3 + PerPlatformRatePerSec=4 keeps
+// the request fan-out below known free-tier ceilings for binance / okx /
+// bybit / mexc / gate. ScheduleUTCHour=2 fires the daily run after the
+// CoinGecko 01:00 backfill to let the higher-priority CG row land first.
+type BackfillConfig struct {
+	Enabled                bool `json:"enabled"`
+	ColdStartDays          int  `json:"cold_start_days"`
+	DailyRepairDays        int  `json:"daily_repair_days"`
+	PerPlatformConcurrency int  `json:"per_platform_concurrency"`
+	PerPlatformRatePerSec  int  `json:"per_platform_rate_per_sec"`
+	ScheduleUTCHour        int  `json:"schedule_utc_hour"`
+	ScheduleUTCMinute      int  `json:"schedule_utc_minute"`
 }
 
 // CoinGeckoConfig controls the CoinGecko derivatives ingestion path.
@@ -180,7 +199,23 @@ func Default() Config {
 			VolumeDiscounts:       map[string]float64{"mexc": 0.4, "gate": 0.5},
 			CoinGecko:             defaultCoinGeckoConfig(),
 			WSProviders:           defaultWSProviderConfig(),
+			Backfill:              defaultBackfillConfig(),
 		},
+	}
+}
+
+// defaultBackfillConfig keeps Top30 backfill enabled by default; an
+// operator who explicitly wants to disable it can set
+// `backfill.enabled: false` in runtime.yaml.
+func defaultBackfillConfig() BackfillConfig {
+	return BackfillConfig{
+		Enabled:                true,
+		ColdStartDays:          14,
+		DailyRepairDays:        3,
+		PerPlatformConcurrency: 3,
+		PerPlatformRatePerSec:  4,
+		ScheduleUTCHour:        2,
+		ScheduleUTCMinute:      30,
 	}
 }
 
@@ -279,6 +314,7 @@ type runtimeFile struct {
 	VolumeDiscounts       map[string]float64        `yaml:"volume_discounts"`
 	CoinGecko             *coinGeckoFile            `yaml:"coingecko"`
 	WSProviders           map[string]wsProviderFile `yaml:"ws_providers"`
+	Backfill              *backfillFile             `yaml:"backfill"`
 }
 
 type coinGeckoFile struct {
@@ -298,6 +334,16 @@ type wsProviderFile struct {
 	URL        string `yaml:"url"`
 	Proxy      string `yaml:"proxy"`
 	StaleAfter string `yaml:"stale_after"`
+}
+
+type backfillFile struct {
+	Enabled                *bool `yaml:"enabled"`
+	ColdStartDays          *int  `yaml:"cold_start_days"`
+	DailyRepairDays        *int  `yaml:"daily_repair_days"`
+	PerPlatformConcurrency *int  `yaml:"per_platform_concurrency"`
+	PerPlatformRatePerSec  *int  `yaml:"per_platform_rate_per_sec"`
+	ScheduleUTCHour        *int  `yaml:"schedule_utc_hour"`
+	ScheduleUTCMinute      *int  `yaml:"schedule_utc_minute"`
 }
 
 // Catalog mirrors instrument_catalog.yaml. It is the per-(platform, canonical)
@@ -427,7 +473,37 @@ func loadRuntime(path string, base Runtime) (Runtime, error) {
 		}
 		base.WSProviders = providers
 	}
+	if file.Backfill != nil {
+		base.Backfill = applyBackfillFile(base.Backfill, *file.Backfill)
+	}
 	return base, nil
+}
+
+// applyBackfillFile overrides any non-nil field from the yaml on top of
+// the defaults so partial yaml stanzas (e.g. just `enabled: false`) work.
+func applyBackfillFile(base BackfillConfig, file backfillFile) BackfillConfig {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.ColdStartDays != nil {
+		base.ColdStartDays = *file.ColdStartDays
+	}
+	if file.DailyRepairDays != nil {
+		base.DailyRepairDays = *file.DailyRepairDays
+	}
+	if file.PerPlatformConcurrency != nil {
+		base.PerPlatformConcurrency = *file.PerPlatformConcurrency
+	}
+	if file.PerPlatformRatePerSec != nil {
+		base.PerPlatformRatePerSec = *file.PerPlatformRatePerSec
+	}
+	if file.ScheduleUTCHour != nil {
+		base.ScheduleUTCHour = *file.ScheduleUTCHour
+	}
+	if file.ScheduleUTCMinute != nil {
+		base.ScheduleUTCMinute = *file.ScheduleUTCMinute
+	}
+	return base
 }
 
 func applyWSProviderFile(base map[string]WSProviderConfig, file map[string]wsProviderFile) (map[string]WSProviderConfig, error) {
