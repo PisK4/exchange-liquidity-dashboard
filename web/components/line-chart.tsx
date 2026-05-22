@@ -127,10 +127,7 @@ export function LineChart({ ariaLabel, labels, series, unit = 'M USD' }: LineCha
               label: context => {
                 const value = context.parsed.y;
                 if (typeof value !== 'number') return '';
-                const source = series[context.datasetIndex]?.sources?.[context.dataIndex];
-                const status = series[context.datasetIndex]?.statuses?.[context.dataIndex];
-                const suffix = source ? ` · ${source}` : status && status !== 'complete' ? ` · ${status}` : '';
-                return `${context.dataset.label}: ${value.toFixed(2)}M @ ${context.label}${suffix}`;
+                return `${context.dataset.label}: ${value.toFixed(2)}M @ ${context.label}`;
               },
             },
           },
