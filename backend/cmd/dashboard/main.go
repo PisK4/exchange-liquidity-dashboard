@@ -23,6 +23,7 @@ func main() {
 	mysqlDSN := flag.String("mysql-dsn", os.Getenv("DASHBOARD_MYSQL_DSN"), "optional MySQL DSN, for example root:root@tcp(127.0.0.1:3306)/edgex_dashboard?parseTime=true")
 	configDir := flag.String("config-dir", "../config", "directory containing dashboard yaml configs")
 	catalogReloadInterval := flag.Duration("catalog-reload-interval", 2*time.Second, "polling interval for instrument_catalog.yaml hot reload; 0 disables the watcher")
+	rawInstrumentsDir := flag.String("raw-instruments-dir", "docs/raw-instruments", "directory containing per-platform raw instrument dumps used by Top30 backfill")
 	flag.Parse()
 
 	cfg, err := config.Load(*configDir)
@@ -78,6 +79,19 @@ func main() {
 				log.Printf("symbol-volume backfill run-once completed with errors: %v", err)
 			}
 		}
+		// Top30Backfiller: only relevant under collector role; runs in its
+		// own goroutine and waits for the first CG /derivatives round to
+		// land before issuing kline pulls.
+		if cfg.Runtime.Backfill.Enabled && !*runOnce {
+			resolver := collector.NewCatalogResolver(*rawInstrumentsDir)
+			top30bf := collector.NewTop30Backfiller(cfg, store, lighterProvider, resolver)
+			top30bf.Run(ctx)
+			log.Printf("top30 backfill scheduled (cold_start=%dd, daily=%02d:%02d UTC, concurrency=%d, rate=%d/s)",
+				cfg.Runtime.Backfill.ColdStartDays,
+				cfg.Runtime.Backfill.ScheduleUTCHour, cfg.Runtime.Backfill.ScheduleUTCMinute,
+				cfg.Runtime.Backfill.PerPlatformConcurrency, cfg.Runtime.Backfill.PerPlatformRatePerSec)
+		}
+
 		if cfg.Runtime.CoinGecko.Enabled {
 			if cgCollector, err := buildCoinGeckoCollector(cfg, store); err != nil {
 				log.Printf("coingecko collector disabled: %v", err)

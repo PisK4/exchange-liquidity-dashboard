@@ -83,3 +83,20 @@ coingecko:
     gate: "Gate (Futures)"
     hyperliquid: "Hyperliquid (Futures)"
     lighter: "Lighter"
+
+# Top30 7d Vol / 7d Δ backfill. The backfiller iterates over the union of
+# base assets currently ranked in every platform's Top30 and pulls daily
+# kline rows from the platform's native endpoint, persisted as
+# data_source=native_backfill. The schedule fires once at boot (after a
+# 90s warmup so the first /derivatives round populates the roster) and
+# again every UTC day at schedule_utc_hour:schedule_utc_minute. Defaults
+# below are sized for free-tier exchange budgets — operators with paid
+# tiers can raise per_platform_concurrency / per_platform_rate_per_sec.
+backfill:
+  enabled: true
+  cold_start_days: 14
+  daily_repair_days: 3
+  per_platform_concurrency: 3
+  per_platform_rate_per_sec: 4
+  schedule_utc_hour: 2
+  schedule_utc_minute: 30
