@@ -60,4 +60,22 @@ symbols:
     asset_category: crypto
     market_surface: perp
     instrument_kind: canonical
+  - display_symbol: BNB-USDT (perp)
+    display_name: BNB-USD
+    canonical: BNB
+    asset_category: crypto
+    market_surface: perp
+    instrument_kind: canonical
+  - display_symbol: XRP-USDT (perp)
+    display_name: XRP-USD
+    canonical: XRP
+    asset_category: crypto
+    market_surface: perp
+    instrument_kind: canonical
+  - display_symbol: DOGE-USDT (perp)
+    display_name: DOGE-USD
+    canonical: DOGE
+    asset_category: crypto
+    market_surface: perp
+    instrument_kind: canonical
 platforms: [edgeX, binance, okx, bybit, bitget, bingx, mexc, gate, hyperliquid, lighter]

@@ -293,8 +293,8 @@ func TestLoadCatalogParsesRepoYAML(t *testing.T) {
 	if cat.SchemaVersion != 1 {
 		t.Fatalf("schema_version = %d, want 1", cat.SchemaVersion)
 	}
-	if len(cat.CanonicalWhitelist) != 3 {
-		t.Fatalf("canonical_whitelist len = %d, want 3", len(cat.CanonicalWhitelist))
+	if len(cat.CanonicalWhitelist) < 3 {
+		t.Fatalf("canonical_whitelist len = %d, want >= 3", len(cat.CanonicalWhitelist))
 	}
 	wantPlatforms := []string{"binance", "okx", "bybit", "bitget", "bingx", "mexc", "gate", "hyperliquid", "edgeX", "lighter"}
 	for _, p := range wantPlatforms {

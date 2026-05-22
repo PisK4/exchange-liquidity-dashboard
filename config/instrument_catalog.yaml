@@ -22,6 +22,18 @@ canonical_whitelist:
     market_surface: perp
     quote: USDT
     confidence: confirmed
+  - canonical: BNB
+    market_surface: perp
+    quote: USDT
+    confidence: confirmed
+  - canonical: XRP
+    market_surface: perp
+    quote: USDT
+    confidence: confirmed
+  - canonical: DOGE
+    market_surface: perp
+    quote: USDT
+    confidence: confirmed
 
 platforms:
   binance:
@@ -55,6 +67,36 @@ platforms:
       catalog_status: TRADING
       frontend_url: https://www.binance.com/zh-CN/futures/SOLUSDT
       url_verified: true
+    BNB:
+      api_symbol: BNBUSDT
+      base_asset: BNB
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/BNBUSDT
+      url_verified: false
+    XRP:
+      api_symbol: XRPUSDT
+      base_asset: XRP
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/XRPUSDT
+      url_verified: false
+    DOGE:
+      api_symbol: DOGEUSDT
+      base_asset: DOGE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/DOGEUSDT
+      url_verified: false
 
   okx:
     BTC:
@@ -90,6 +132,39 @@ platforms:
       catalog_status: live
       frontend_url: https://www.okx.com/trade-swap/sol-usdt-swap
       url_verified: false
+    BNB:
+      api_symbol: BNB-USDT-SWAP
+      base_asset: BNB
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 0.01
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/bnb-usdt-swap
+      url_verified: false
+    XRP:
+      api_symbol: XRP-USDT-SWAP
+      base_asset: XRP
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 100
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/xrp-usdt-swap
+      url_verified: false
+    DOGE:
+      api_symbol: DOGE-USDT-SWAP
+      base_asset: DOGE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 1000
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/doge-usdt-swap
+      url_verified: false
 
   bybit:
     BTC:
@@ -121,6 +196,36 @@ platforms:
       source_endpoint: https://api.bybit.com/v5/market/orderbook
       catalog_status: Trading
       frontend_url: https://www.bybit.com/trade/usdt/SOLUSDT
+      url_verified: false
+    BNB:
+      api_symbol: BNBUSDT
+      base_asset: BNB
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/BNBUSDT
+      url_verified: false
+    XRP:
+      api_symbol: XRPUSDT
+      base_asset: XRP
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/XRPUSDT
+      url_verified: false
+    DOGE:
+      api_symbol: DOGEUSDT
+      base_asset: DOGE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/DOGEUSDT
       url_verified: false
 
   bitget:
@@ -154,6 +259,36 @@ platforms:
       catalog_status: normal
       frontend_url: https://www.bitget.com/futures/usdt/SOLUSDT
       url_verified: false
+    BNB:
+      api_symbol: BNBUSDT
+      base_asset: BNB
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/BNBUSDT
+      url_verified: false
+    XRP:
+      api_symbol: XRPUSDT
+      base_asset: XRP
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/XRPUSDT
+      url_verified: false
+    DOGE:
+      api_symbol: DOGEUSDT
+      base_asset: DOGE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/DOGEUSDT
+      url_verified: false
 
   bingx:
     BTC:
@@ -185,6 +320,36 @@ platforms:
       source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
       catalog_status: 1
       frontend_url: https://bingx.com/zh-cn/perpetual/SOL-USDT/
+      url_verified: false
+    BNB:
+      api_symbol: BNB-USDT
+      base_asset: BNB
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: 1
+      frontend_url: https://bingx.com/zh-cn/perpetual/BNB-USDT/
+      url_verified: false
+    XRP:
+      api_symbol: XRP-USDT
+      base_asset: XRP
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: 1
+      frontend_url: https://bingx.com/zh-cn/perpetual/XRP-USDT/
+      url_verified: false
+    DOGE:
+      api_symbol: DOGE-USDT
+      base_asset: DOGE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: 1
+      frontend_url: https://bingx.com/zh-cn/perpetual/DOGE-USDT/
       url_verified: false
 
   mexc:
@@ -221,6 +386,39 @@ platforms:
       catalog_status: 0
       frontend_url: https://www.mexc.com/futures/SOL_USDT
       url_verified: false
+    BNB:
+      api_symbol: BNB_USDT
+      base_asset: BNB
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.01
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: 0
+      frontend_url: https://www.mexc.com/futures/BNB_USDT
+      url_verified: false
+    XRP:
+      api_symbol: XRP_USDT
+      base_asset: XRP
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 1
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: 0
+      frontend_url: https://www.mexc.com/futures/XRP_USDT
+      url_verified: false
+    DOGE:
+      api_symbol: DOGE_USDT
+      base_asset: DOGE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 100
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: 0
+      frontend_url: https://www.mexc.com/futures/DOGE_USDT
+      url_verified: false
 
   gate:
     BTC:
@@ -256,6 +454,39 @@ platforms:
       catalog_status: trading
       frontend_url: https://www.gate.io/futures/USDT/SOL_USDT
       url_verified: false
+    BNB:
+      api_symbol: BNB_USDT
+      base_asset: BNB
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.001
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/BNB_USDT
+      url_verified: false
+    XRP:
+      api_symbol: XRP_USDT
+      base_asset: XRP
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 10
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/XRP_USDT
+      url_verified: false
+    DOGE:
+      api_symbol: DOGE_USDT
+      base_asset: DOGE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 10
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/DOGE_USDT
+      url_verified: false
 
   hyperliquid:
     BTC:
@@ -287,6 +518,36 @@ platforms:
       source_endpoint: https://api.hyperliquid.xyz/info
       catalog_status: live
       frontend_url: https://app.hyperliquid.xyz/trade/SOL
+      url_verified: false
+    BNB:
+      api_symbol: BNB
+      base_asset: BNB
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 40
+      source_endpoint: https://api.hyperliquid.xyz/info
+      catalog_status: live
+      frontend_url: https://app.hyperliquid.xyz/trade/BNB
+      url_verified: false
+    XRP:
+      api_symbol: XRP
+      base_asset: XRP
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 40
+      source_endpoint: https://api.hyperliquid.xyz/info
+      catalog_status: live
+      frontend_url: https://app.hyperliquid.xyz/trade/XRP
+      url_verified: false
+    DOGE:
+      api_symbol: DOGE
+      base_asset: DOGE
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 40
+      source_endpoint: https://api.hyperliquid.xyz/info
+      catalog_status: live
+      frontend_url: https://app.hyperliquid.xyz/trade/DOGE
       url_verified: false
 
   edgeX:
@@ -323,6 +584,39 @@ platforms:
       catalog_status: TRADING
       frontend_url: https://pro.edgex.exchange/en-US/trade/SOLUSD
       url_verified: true
+    BNB:
+      api_symbol: BNB-USDT
+      base_asset: BNB
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000064"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/BNBUSD
+      url_verified: false
+    XRP:
+      api_symbol: XRP-USDT
+      base_asset: XRP
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000066"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/XRPUSD
+      url_verified: false
+    DOGE:
+      api_symbol: DOGE-USDT
+      base_asset: DOGE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000067"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/DOGEUSD
+      url_verified: false
 
   lighter:
     BTC:
@@ -357,4 +651,37 @@ platforms:
       source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
       catalog_status: active
       frontend_url: https://app.lighter.xyz/trade/SOL
+      url_verified: false
+    BNB:
+      api_symbol: BNB
+      base_asset: BNB
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 25
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/BNB
+      url_verified: false
+    XRP:
+      api_symbol: XRP
+      base_asset: XRP
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 7
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/XRP
+      url_verified: false
+    DOGE:
+      api_symbol: DOGE
+      base_asset: DOGE
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 3
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/DOGE
       url_verified: false
