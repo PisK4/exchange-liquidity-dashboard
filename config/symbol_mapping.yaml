@@ -78,4 +78,116 @@ symbols:
     asset_category: crypto
     market_surface: perp
     instrument_kind: canonical
+
+  # ---- Commodities (synthetic_futures / RWA) ----
+  # Canonical names follow the dashboard convention {COMMODITY}-USD.
+  # Aliases enumerate the per-platform base_asset variants so build-catalog
+  # can resolve them: GOLD has multiple coexisting representations (XAU
+  # synthetic, PAXG / XAUT token-backed RWA), so the alias list is the
+  # priority order build-catalog walks until it finds a candidate.
+  - display_symbol: GOLD-USDT (perp)
+    display_name: GOLD-USD
+    canonical: GOLD
+    asset_category: commodity
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      binance: [XAU, PAXG, XAUT]
+      bybit: [XAU, PAXG, XAUT]
+      bitget: [XAU, PAXG, XAUT]
+      bingx: [NCCOGOLD2USD, PAXG, XAUT]
+      mexc: [PAXG, XAUT]
+      gate: [XAU, PAXG, XAUT]
+      hyperliquid: [XAU, PAXG]
+      lighter: [PAXG]
+      edgeX: [PAXG, XAUT]
+  - display_symbol: SILVER-USDT (perp)
+    display_name: SILVER-USD
+    canonical: SILVER
+    asset_category: commodity
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      binance: [XAG]
+      bybit: [XAG]
+      bitget: [XAG]
+      bingx: [NCCOXAG2USD]
+      mexc: [SILVER, XAG]
+      gate: [XAG]
+      hyperliquid: [XAG]
+      lighter: [XAG]
+      edgeX: [SILVER]
+  - display_symbol: COPPER-USDT (perp)
+    display_name: COPPER-USD
+    canonical: COPPER
+    asset_category: commodity
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      binance: [COPPER]
+      bitget: [COPPER]
+      bingx: [NCCOCOPPER2USD]
+      mexc: [COPPER]
+      edgeX: [COPPER]
+  - display_symbol: PLATINUM-USDT (perp)
+    display_name: PLATINUM-USD
+    canonical: PLATINUM
+    asset_category: commodity
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      binance: [XPT]
+      bitget: [XPT]
+      bingx: [NCCOXPT2USD]
+      mexc: [XPT]
+      gate: [XPT]
+      hyperliquid: [XPT]
+      lighter: [XPT]
+  - display_symbol: PALLADIUM-USDT (perp)
+    display_name: PALLADIUM-USD
+    canonical: PALLADIUM
+    asset_category: commodity
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      binance: [XPD]
+      bitget: [XPD]
+      bingx: [NCCOPALLADIUM2USD]
+      mexc: [XPD]
+      gate: [XPD]
+      hyperliquid: [XPD]
+  - display_symbol: OIL-USDT (perp)
+    display_name: OIL-USD
+    canonical: OIL
+    asset_category: commodity
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      binance: [CL]
+      bingx: [NCCO1OILWTI2USD, NCCO7241OILWTI2USD]
+      mexc: [USOIL]
+      hyperliquid: [BRENTOIL]
+      edgeX: [CL]
+  - display_symbol: NATGAS-USDT (perp)
+    display_name: NATGAS-USD
+    canonical: NATGAS
+    asset_category: commodity
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      binance: [NATGAS]
+      bitget: [NATGAS]
+      bingx: [NCCO7241NATGAS2USD]
+      hyperliquid: [NATGAS]
+      lighter: [NATGAS]
+      edgeX: [NATGAS]
+  - display_symbol: WHEAT-USDT (perp)
+    display_name: WHEAT-USD
+    canonical: WHEAT
+    asset_category: commodity
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCCOWHEAT2USD]
+      hyperliquid: [WHEAT]
 platforms: [edgeX, binance, okx, bybit, bitget, bingx, mexc, gate, hyperliquid, lighter]

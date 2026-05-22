@@ -4,7 +4,7 @@
 # Front-end URLs (frontend_url) and url_verified flag MAY be edited by hand
 # after clicking through each link to confirm the trading pair exists.
 schema_version: 1
-generated_at: "2026-05-22T12:15:54Z"
+generated_at: "2026-05-22T12:24:02Z"
 generated_by: backend/scripts/build-catalog
 canonical_whitelist:
   - canonical: BTC
@@ -29,6 +29,38 @@ canonical_whitelist:
     confidence: confirmed
   - canonical: DOGE
     market_surface: perp
+    quote: USDT
+    confidence: confirmed
+  - canonical: GOLD
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: SILVER
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: COPPER
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: PLATINUM
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: PALLADIUM
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: OIL
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: NATGAS
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: WHEAT
+    market_surface: synthetic_futures
     quote: USDT
     confidence: confirmed
 platforms:
@@ -57,6 +89,18 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    COPPER:
+      api_symbol: COPPERUSDT
+      base_asset: COPPER
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/COPPERUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGEUSDT
       base_asset: DOGE
@@ -81,6 +125,78 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    GOLD:
+      api_symbol: XAUUSDT
+      base_asset: XAU
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/XAUUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    NATGAS:
+      api_symbol: NATGASUSDT
+      base_asset: NATGAS
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/NATGASUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    OIL:
+      api_symbol: CLUSDT
+      base_asset: CL
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/CLUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PALLADIUM:
+      api_symbol: XPDUSDT
+      base_asset: XPD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/XPDUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PLATINUM:
+      api_symbol: XPTUSDT
+      base_asset: XPT
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/XPTUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    SILVER:
+      api_symbol: XAGUSDT
+      base_asset: XAG
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      catalog_status: TRADING
+      frontend_url: https://www.binance.com/zh-CN/futures/XAGUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SOL:
       api_symbol: SOLUSDT
       base_asset: SOL
@@ -130,6 +246,18 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    COPPER:
+      api_symbol: NCCOCOPPER2USD-USDT
+      base_asset: NCCOCOPPER2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCCOCOPPER2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGE-USDT
       base_asset: DOGE
@@ -154,6 +282,78 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    GOLD:
+      api_symbol: NCCOGOLD2USD-USDT
+      base_asset: NCCOGOLD2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCCOGOLD2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    NATGAS:
+      api_symbol: NCCO7241NATGAS2USD-USDT
+      base_asset: NCCO7241NATGAS2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCCO7241NATGAS2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    OIL:
+      api_symbol: NCCO1OILWTI2USD-USDT
+      base_asset: NCCO1OILWTI2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCCO1OILWTI2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PALLADIUM:
+      api_symbol: NCCOPALLADIUM2USD-USDT
+      base_asset: NCCOPALLADIUM2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCCOPALLADIUM2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PLATINUM:
+      api_symbol: NCCOXPT2USD-USDT
+      base_asset: NCCOXPT2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCCOXPT2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    SILVER:
+      api_symbol: NCCOXAG2USD-USDT
+      base_asset: NCCOXAG2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCCOXAG2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SOL:
       api_symbol: SOL-USDT
       base_asset: SOL
@@ -166,6 +366,18 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    WHEAT:
+      api_symbol: NCCOWHEAT2USD-USDT
+      base_asset: NCCOWHEAT2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCCOWHEAT2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     XRP:
       api_symbol: XRP-USDT
       base_asset: XRP
@@ -203,6 +415,18 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    COPPER:
+      api_symbol: COPPERUSDT
+      base_asset: COPPER
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/COPPERUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGEUSDT
       base_asset: DOGE
@@ -227,6 +451,66 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    GOLD:
+      api_symbol: XAUUSDT
+      base_asset: XAU
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/XAUUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    NATGAS:
+      api_symbol: NATGASUSDT
+      base_asset: NATGAS
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/NATGASUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PALLADIUM:
+      api_symbol: XPDUSDT
+      base_asset: XPD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/XPDUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PLATINUM:
+      api_symbol: XPTUSDT
+      base_asset: XPT
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/XPTUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    SILVER:
+      api_symbol: XAGUSDT
+      base_asset: XAG
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 200
+      source_endpoint: https://api.bitget.com/api/v2/mix/market/orderbook
+      catalog_status: normal
+      frontend_url: https://www.bitget.com/futures/usdt/XAGUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SOL:
       api_symbol: SOLUSDT
       base_asset: SOL
@@ -300,6 +584,30 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    GOLD:
+      api_symbol: XAUUSDT
+      base_asset: XAU
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/XAUUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    SILVER:
+      api_symbol: XAGUSDT
+      base_asset: XAG
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://api.bybit.com/v5/market/orderbook
+      catalog_status: Trading
+      frontend_url: https://www.bybit.com/trade/usdt/XAGUSDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SOL:
       api_symbol: SOLUSDT
       base_asset: SOL
@@ -351,6 +659,19 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    COPPER:
+      api_symbol: COPPERUSD
+      base_asset: COPPER
+      quote_asset: USD
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000279"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/COPPERUSD
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGEUSD
       base_asset: DOGE
@@ -377,6 +698,58 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    GOLD:
+      api_symbol: PAXGUSD
+      base_asset: PAXG
+      quote_asset: USD
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000227"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/PAXGUSD
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    NATGAS:
+      api_symbol: NATGASUSD
+      base_asset: NATGAS
+      quote_asset: USD
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000271"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/NATGASUSD
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    OIL:
+      api_symbol: CLUSD
+      base_asset: CL
+      quote_asset: USD
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000283"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/CLUSD
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    SILVER:
+      api_symbol: SILVERUSD
+      base_asset: SILVER
+      quote_asset: USD
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000278"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/SILVERUSD
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SOL:
       api_symbol: SOLUSD
       base_asset: SOL
@@ -456,6 +829,58 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    GOLD:
+      api_symbol: XAU_USDT
+      base_asset: XAU
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.0001
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/XAU_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PALLADIUM:
+      api_symbol: XPD_USDT
+      base_asset: XPD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.001
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/XPD_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PLATINUM:
+      api_symbol: XPT_USDT
+      base_asset: XPT
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.001
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/XPT_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    SILVER:
+      api_symbol: XAG_USDT
+      base_asset: XAG
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.001
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/XAG_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SOL:
       api_symbol: SOL_USDT
       base_asset: SOL
@@ -531,6 +956,18 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    GOLD:
+      api_symbol: PAXG
+      base_asset: PAXG
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 40
+      source_endpoint: https://api.hyperliquid.xyz/info
+      catalog_status: live
+      frontend_url: https://app.hyperliquid.xyz/trade/PAXG
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SOL:
       api_symbol: SOL
       base_asset: SOL
@@ -608,6 +1045,58 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    GOLD:
+      api_symbol: PAXG
+      base_asset: PAXG
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 48
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/PAXG
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    NATGAS:
+      api_symbol: NATGAS
+      base_asset: NATGAS
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 158
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/NATGAS
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PLATINUM:
+      api_symbol: XPT
+      base_asset: XPT
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 147
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/XPT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    SILVER:
+      api_symbol: XAG
+      base_asset: XAG
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 93
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/XAG
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SOL:
       api_symbol: SOL
       base_asset: SOL
@@ -621,6 +1110,19 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    WHEAT:
+      api_symbol: WHEAT
+      base_asset: WHEAT
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 170
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/WHEAT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     XRP:
       api_symbol: XRP
       base_asset: XRP
@@ -661,6 +1163,19 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    COPPER:
+      api_symbol: COPPER_USDT
+      base_asset: COPPER
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.1
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/COPPER_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     DOGE:
       api_symbol: DOGE_USDT
       base_asset: DOGE
@@ -687,6 +1202,71 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    GOLD:
+      api_symbol: PAXG_USDT
+      base_asset: PAXG
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.001
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/PAXG_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    OIL:
+      api_symbol: USOIL_USDT
+      base_asset: USOIL
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.01
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/USOIL_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PALLADIUM:
+      api_symbol: XPD_USDT
+      base_asset: XPD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.001
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/XPD_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    PLATINUM:
+      api_symbol: XPT_USDT
+      base_asset: XPT
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.001
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/XPT_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    SILVER:
+      api_symbol: SILVER_USDT
+      base_asset: SILVER
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.01
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/SILVER_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SOL:
       api_symbol: SOL_USDT
       base_asset: SOL
