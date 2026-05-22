@@ -293,7 +293,7 @@ func TestLiquidityComputesCompetitorMedianRankAndUnsupportedHistory(t *testing.T
 	if edge.Rank01 != 3 {
 		t.Fatalf("expected edgeX rank 3 among valid platforms, got %+v", edge)
 	}
-	if edge.DepthStatusLabel != "深度落后" {
+	if edge.DepthStatusLabel != "落后" {
 		t.Fatalf("expected depth status label, got %+v", edge)
 	}
 	if rows[3].Rank01 != 0 {

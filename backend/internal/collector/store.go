@@ -1414,7 +1414,7 @@ func depthStatusLabel(row domain.PlatformSnapshot) string {
 		return domain.StatusUnsupported
 	}
 	if ratio < 0.5 {
-		return "深度落后"
+		return "落后"
 	}
 	if ratio < 0.8 {
 		return "偏弱"

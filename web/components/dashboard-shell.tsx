@@ -226,8 +226,13 @@ function depthSourceLabel(depth?: DepthTierMetrics) {
   return source;
 }
 
+function normalizeDepthLabel(label?: string) {
+  if (label === '深度落后') return '落后';
+  return label;
+}
+
 function depthLabelBadgeClass(label?: string) {
-  switch (label) {
+  switch (normalizeDepthLabel(label)) {
     case '达标': return 'b-ok';
     case '偏弱': return 'b-warn';
     case '落后': return 'b-bad';
@@ -330,7 +335,7 @@ function LiquidityTab({ data, query, tier, symbolCtx }: { data: DashboardData; q
         <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">合计深度曲线 BID + ASK</span></div><LineChart ariaLabel="合计深度曲线 BID + ASK" labels={tierLabels.map(displayTierLabel)} series={tierSeries(rows, 'total_usd')} /></section>
         <section className="panel span-24">
           <div className="panel-head"><span className="panel-title">深度明细 · 平台 × 档位 (M USD)</span><span className="panel-sub">· 合计深度 vs 竞品中位数 / 排名</span></div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num col-bid">0.05% BID</th><th className="num col-ask">0.05% ASK</th><th className="num col-bid">0.1% BID</th><th className="num col-ask">0.1% ASK</th><th className="num col-bid">1% BID</th><th className="num col-ask">1% ASK</th><th className="num col-bid">2% BID</th><th className="num col-ask">2% ASK</th><th className="num">±0.1% 合计</th><th className="num">vs 中位数</th><th className="num">排名</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><DepthCell row={row} tier="0.05%" side="bid_usd" /><DepthCell row={row} tier="0.05%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="bid_usd" /><DepthCell row={row} tier="0.10%" side="ask_usd" /><DepthCell row={row} tier="1.00%" side="bid_usd" /><DepthCell row={row} tier="1.00%" side="ask_usd" /><DepthCell row={row} tier="2.00%" side="bid_usd" /><DepthCell row={row} tier="2.00%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="total_usd" /><td className="num">{ratio(row.vs_median_by_tier?.['0.10%'])}{row.depth_status_label && <span className={`badge ${depthLabelBadgeClass(row.depth_status_label)} depth-label-badge`} title={row.partial_reason}>{row.depth_status_label}</span>}</td><td className="num">{row.rank_0_1 ? `#${row.rank_0_1}` : '—'}</td></tr>)}</tbody></table></div>
+          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num col-bid">0.05% BID</th><th className="num col-ask">0.05% ASK</th><th className="num col-bid">0.1% BID</th><th className="num col-ask">0.1% ASK</th><th className="num col-bid">1% BID</th><th className="num col-ask">1% ASK</th><th className="num col-bid">2% BID</th><th className="num col-ask">2% ASK</th><th className="num">±0.1% 合计</th><th className="num">vs 中位数</th><th className="num">排名</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><DepthCell row={row} tier="0.05%" side="bid_usd" /><DepthCell row={row} tier="0.05%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="bid_usd" /><DepthCell row={row} tier="0.10%" side="ask_usd" /><DepthCell row={row} tier="1.00%" side="bid_usd" /><DepthCell row={row} tier="1.00%" side="ask_usd" /><DepthCell row={row} tier="2.00%" side="bid_usd" /><DepthCell row={row} tier="2.00%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="total_usd" /><td className="num">{ratio(row.vs_median_by_tier?.['0.10%'])}{row.depth_status_label && <span className={`badge ${depthLabelBadgeClass(row.depth_status_label)} depth-label-badge`} title={row.partial_reason}>{normalizeDepthLabel(row.depth_status_label)}</span>}</td><td className="num">{row.rank_0_1 ? `#${row.rank_0_1}` : '—'}</td></tr>)}</tbody></table></div>
           <div className="panel-foot-note"><span className="approx-mark">*</span> 表示该档位深度仅部分覆盖，数值为已观测部分的合计</div>
         </section>
       </div>
