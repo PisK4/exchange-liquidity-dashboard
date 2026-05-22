@@ -199,35 +199,56 @@ func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
 	//     symbolShare7dLocked compute 单币种 7d 市占率 once we have at
 	//     least one day per platform. Only configured symbols are written
 	//     so /derivatives chatter cannot pollute the per-symbol map.
-	configuredSymbols := c.configuredDisplaySymbols()
-	if len(configuredSymbols) > 0 {
-		symbolRows := make([]domain.DailyVolumeAggregate, 0, len(platforms)*len(configuredSymbols))
-		for _, platform := range platforms {
-			symbols := byPlatformSymbol[platform]
-			for display := range configuredSymbols {
-				t, ok := symbols[display]
-				if !ok {
-					continue
-				}
-				vol := t.Volume24HUSD()
-				if vol <= 0 {
-					continue
-				}
-				symbolRows = append(symbolRows, domain.DailyVolumeAggregate{
-					Platform:       platform,
-					DisplaySymbol:  display,
-					Day:            day,
-					Volume24HUSD:   vol,
-					Status:         domain.StatusComplete,
-					DataSource:     domain.DataSourceCoinGecko,
-					SourceEndpoint: endpoint,
-					SnapshotTS:     now,
-				})
+	// The configured V1 symbols (BTC/ETH/SOL) MUST always be written so
+	// symbolShare7dLocked has guaranteed coverage even when the rolling
+	// Top30 doesn't list them on a particular platform. The per-platform
+	// Top60 set (by 24h volume) is then unioned in to feed Top30Backfiller
+	// gap-detection at steady state — without it a brand-new top mover
+	// would have to wait for the next daily backfill round to acquire its
+	// first per-symbol daily row. SaveDailyVolumeAggregates dedups by
+	// (platform, day, display_symbol) so duplicates between the two sets
+	// collapse to a single store entry per (platform, symbol) per day.
+	symbolUniverse := map[string]map[string]struct{}{}
+	for _, platform := range platforms {
+		symbolUniverse[platform] = map[string]struct{}{}
+		for display := range c.configuredDisplaySymbols() {
+			symbolUniverse[platform][display] = struct{}{}
+		}
+		ranked := flattenByVolume(byPlatformSymbol[platform])
+		limit := len(ranked)
+		if limit > 60 {
+			limit = 60
+		}
+		for i := 0; i < limit; i++ {
+			symbolUniverse[platform][coingecko.NormaliseSymbol(ranked[i].Symbol)] = struct{}{}
+		}
+	}
+	symbolRows := make([]domain.DailyVolumeAggregate, 0, 60*len(platforms))
+	for _, platform := range platforms {
+		symbols := byPlatformSymbol[platform]
+		for display := range symbolUniverse[platform] {
+			t, ok := symbols[display]
+			if !ok {
+				continue
 			}
+			vol := t.Volume24HUSD()
+			if vol <= 0 {
+				continue
+			}
+			symbolRows = append(symbolRows, domain.DailyVolumeAggregate{
+				Platform:       platform,
+				DisplaySymbol:  display,
+				Day:            day,
+				Volume24HUSD:   vol,
+				Status:         domain.StatusComplete,
+				DataSource:     domain.DataSourceCoinGecko,
+				SourceEndpoint: endpoint,
+				SnapshotTS:     now,
+			})
 		}
-		if len(symbolRows) > 0 {
-			c.store.SaveDailyVolumeAggregates(symbolRows)
-		}
+	}
+	if len(symbolRows) > 0 {
+		c.store.SaveDailyVolumeAggregates(symbolRows)
 	}
 
 	// 3) Top30 per platform: sort the best-per-symbol bucket by 24h volume
