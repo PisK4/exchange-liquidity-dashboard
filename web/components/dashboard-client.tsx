@@ -29,6 +29,10 @@ type DashboardData = {
 };
 
 function buildPaths(query: Query) {
+  // The backend ResolveSymbol() accepts either a canonical (BTC) or a
+  // legacy display_symbol ("BTC-USDT (perp)"), so we forward the URL
+  // parameter as-is. This preserves bookmarks pointing to the V1 URL
+  // shape while letting the new dropdown emit canonical-only links.
   const symbolParam = encodeURIComponent(query.symbol);
   return {
     meta: '/api/dashboard/meta',

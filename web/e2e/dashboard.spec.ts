@@ -83,6 +83,97 @@ test('share detail table matches the reference visual semantics', async ({ page 
   await expect(sharePanel.locator('.platform-self').first()).toHaveCSS('color', 'rgb(108, 207, 142)');
 });
 
+// Stub the dashboard meta + liquidity payloads so the dropdown / category
+// pills can be exercised offline. Categories carry crypto + commodity +
+// stock buckets so we can verify the filter actually swaps the visible
+// option list.
+function stubMultiCategoryMeta(page: import('@playwright/test').Page) {
+  return page.addInitScript(() => {
+    const now = new Date().toISOString();
+    const depth = { bid_usd: 1000000, ask_usd: 1000000, total_usd: 2000000, depth_status: 'complete', strict_complete: true, display_available: true };
+    window.localStorage.setItem('edgex-dashboard:v1:/api/dashboard/meta', JSON.stringify({
+      ts: Date.now(),
+      data: {
+        tabs: ['monitor', 'quality', 'share', 'top30'],
+        platforms: ['edgeX', 'binance'],
+        symbols: ['BTC-USDT (perp)'],
+        categories: [
+          { key: 'crypto', label: '加密货币', symbols: [
+            { canonical: 'BTC', display_name: 'BTC-USD', display_symbol: 'BTC-USDT (perp)', asset_category: 'crypto', instrument_kind: 'canonical', market_surface: 'perp', supported_platform_count: 10 },
+            { canonical: 'ETH', display_name: 'ETH-USD', display_symbol: 'ETH-USDT (perp)', asset_category: 'crypto', instrument_kind: 'canonical', market_surface: 'perp', supported_platform_count: 10 },
+          ] },
+          { key: 'commodity', label: '大宗商品', symbols: [
+            { canonical: 'GOLD', display_name: 'GOLD-USD', display_symbol: 'GOLD-USDT (perp)', asset_category: 'commodity', instrument_kind: 'synthetic', market_surface: 'synthetic_futures', supported_platform_count: 5 },
+          ] },
+          { key: 'stock', label: '股票', symbols: [
+            { canonical: 'TSLA', display_name: 'TSLA-USD', display_symbol: 'TSLA-USDT (perp)', asset_category: 'stock', instrument_kind: 'synthetic', market_surface: 'synthetic_futures', supported_platform_count: 4 },
+          ] },
+          { key: 'index_etf', label: '指数 / ETF', symbols: [] },
+        ],
+        windows: ['24h', '7d'],
+        depth_tiers: [0.0005, 0.001, 0.01, 0.02],
+        slippage_buckets_usd: [50000, 100000, 500000, 1000000],
+        refresh_interval_sec: 30,
+        volume_discounts: {},
+      },
+    }));
+    const liquidity = (sym: string) => JSON.stringify({ ts: Date.now(), data: { symbol: sym, snapshot_ts: now, rows: [{ platform: 'edgeX', display_symbol: sym, snapshot_ts: now, source_endpoint: '', depth_status: 'complete', depth_by_tier: { '0.05%': depth, '0.10%': depth, '1.00%': depth, '2.00%': depth }, vs_median_by_tier: { '0.10%': 1.2 }, buy_slippage_bp: {}, sell_slippage_bp: {}, worst_slippage_bp: {} }], kpis: { edgex_24h_share_pct: 10.5 } } });
+    const empty = (sym: string) => JSON.stringify({ ts: Date.now(), data: { symbol: sym, snapshot_ts: now, slippage_buckets_usd: [50000, 100000, 500000, 1000000], rows: [] } });
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/liquidity?symbol=BTC', liquidity('BTC-USDT (perp)'));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=BTC', empty('BTC-USDT (perp)'));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/liquidity?symbol=BTC-USDT%20(perp)', liquidity('BTC-USDT (perp)'));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=BTC-USDT%20(perp)', empty('BTC-USDT (perp)'));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/liquidity?symbol=GOLD', liquidity('GOLD-USDT (perp)'));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=GOLD', empty('GOLD-USDT (perp)'));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/share?window=7d', JSON.stringify({ ts: Date.now(), data: { window: '7d', snapshot_ts: now, rows: [] } }));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/top30?surface=perp&platform=binance', JSON.stringify({ ts: Date.now(), data: { surface: 'perp', platform: 'binance', snapshot_ts: now, rows: [] } }));
+  });
+}
+
+test('symbol dropdown opens, filters by typed query and routes to the canonical', async ({ page }) => {
+  await stubMultiCategoryMeta(page);
+  await page.route('**/api/**', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+  await page.goto('/');
+
+  const trigger = page.getByTestId('symbol-select-trigger');
+  await expect(trigger).toContainText('BTC-USD');
+
+  await trigger.click();
+  const dropdown = page.getByTestId('symbol-select-dropdown');
+  await expect(dropdown).toBeVisible();
+
+  // Default category is crypto -> dropdown shows BTC + ETH only.
+  await expect(page.getByTestId('symbol-select-option-BTC')).toBeVisible();
+  await expect(page.getByTestId('symbol-select-option-ETH')).toBeVisible();
+  await expect(page.locator('[data-testid="symbol-select-option-GOLD"]')).toHaveCount(0);
+
+  // Filter narrows the list to ETH only.
+  await page.getByTestId('symbol-select-input').fill('eth');
+  await expect(page.locator('[data-testid="symbol-select-option-BTC"]')).toHaveCount(0);
+  await expect(page.getByTestId('symbol-select-option-ETH')).toBeVisible();
+});
+
+test('switching asset category resets the dropdown to the first symbol of that category', async ({ page }) => {
+  await stubMultiCategoryMeta(page);
+  await page.route('**/api/**', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+  await page.goto('/');
+
+  await page.getByTestId('category-pill-commodity').click();
+  await expect(page).toHaveURL(/symbol=GOLD/);
+  await expect(page.getByTestId('symbol-select-trigger')).toContainText('GOLD-USD');
+});
+
+test('legacy display_symbol URL still loads the canonical view', async ({ page }) => {
+  await stubMultiCategoryMeta(page);
+  await page.route('**/api/**', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+  await page.goto('/?symbol=BTC-USDT%20(perp)');
+
+  // Resolver maps the legacy display_symbol back to BTC for the trigger
+  // label even though the URL itself is left untouched (so existing
+  // bookmarks keep working without forced redirects).
+  await expect(page.getByTestId('symbol-select-trigger')).toContainText('BTC-USD');
+});
+
 test('quality charts match the reference labels and signed imbalance treatment', async ({ page }) => {
   await page.goto('/quality?bucket=100000');
 

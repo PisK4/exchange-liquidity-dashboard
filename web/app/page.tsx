@@ -10,9 +10,12 @@ function scalar(value: string | string[] | undefined) {
 
 export default function Page({ searchParams }: { searchParams: SearchParams }) {
   const tab = scalar(searchParams.tab) ?? 'monitor';
+  // Default URL shape is canonical (?symbol=BTC); the backend resolves
+  // legacy values like "BTC-USDT (perp)" via Store.ResolveSymbol so old
+  // bookmarks keep working without the frontend rewriting the URL.
   const query = {
     tab,
-    symbol: scalar(searchParams.symbol) ?? 'BTC-USDT (perp)',
+    symbol: scalar(searchParams.symbol) ?? 'BTC',
     window: scalar(searchParams.window) ?? (tab === 'share' ? '24h' : '7d'),
     tier: scalar(searchParams.tier) ?? '0.10%',
     bucket: scalar(searchParams.bucket) ?? '100000',

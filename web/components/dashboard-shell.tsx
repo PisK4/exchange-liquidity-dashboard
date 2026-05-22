@@ -8,6 +8,39 @@ import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { bp, money, moneyM, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
 
+type SymbolContext = {
+  canonical: string;
+  displayName: string;
+  // displaySymbol is the legacy "BTC-USDT (perp)" form retained as the
+  // store-internal key. It is still used for PlatformCell lookups and
+  // the api/snapshot/* requests; the resolver logic on the backend
+  // accepts either canonical or display_symbol.
+  displaySymbol: string;
+  category: string;
+};
+
+// resolveSymbolContext maps the URL ?symbol= parameter (which may be a
+// canonical like "BTC" or a legacy display_symbol like "BTC-USDT (perp)")
+// to the trio of values the dashboard needs: canonical for routing /
+// dropdowns, display_name for headers / labels, and display_symbol for
+// platform-cell / lookup tables. When the parameter does not match any
+// known symbol we fall back to using it verbatim so legacy bookmarks keep
+// loading something the API can still resolve server-side.
+function resolveSymbolContext(meta: DashboardMeta, raw: string): SymbolContext {
+  const all = meta.categories?.flatMap(c => c.symbols.map(s => ({ ...s, _category: c.key }))) ?? [];
+  const upper = (raw ?? '').trim().toUpperCase();
+  const byCanon = all.find(s => s.canonical.toUpperCase() === upper);
+  if (byCanon) {
+    return { canonical: byCanon.canonical, displayName: byCanon.display_name, displaySymbol: byCanon.display_symbol, category: byCanon._category };
+  }
+  const byDisplay = all.find(s => s.display_symbol.toUpperCase() === upper);
+  if (byDisplay) {
+    return { canonical: byDisplay.canonical, displayName: byDisplay.display_name, displaySymbol: byDisplay.display_symbol, category: byDisplay._category };
+  }
+  // Fallback: caller supplied something unknown. Treat as legacy display_symbol.
+  return { canonical: raw, displayName: raw, displaySymbol: raw, category: 'crypto' };
+}
+
 type Query = Record<string, string | undefined>;
 
 type DashboardData = {
@@ -220,11 +253,13 @@ function DepthCell({ row, tier, side }: { row: PlatformRow; tier: string; side: 
 
 export function DashboardShell({ query, data }: { query: Query; data: DashboardData }) {
   const tab = query.tab ?? 'monitor';
-  const symbol = query.symbol ?? data.liquidity.symbol ?? data.meta.symbols[0];
+  const symbolCtx = resolveSymbolContext(data.meta, query.symbol ?? data.meta.symbols[0] ?? 'BTC');
   const tier = query.tier ?? '0.10%';
   const bucket = query.bucket ?? '100000';
   const platform = query.platform ?? data.top30.platform ?? 'binance';
   const needsControls = tab === 'monitor' || tab === 'quality';
+  const categories = data.meta.categories ?? [];
+  const activeCategory = query.category ?? symbolCtx.category;
 
   return (
     <>
@@ -243,26 +278,27 @@ export function DashboardShell({ query, data }: { query: Query; data: DashboardD
         ))}
       </nav>
       <main className="dashboard-main">
-        {needsControls ? <DashboardControls query={{ ...query, tab }} symbols={data.meta.symbols} activeSymbol={symbol} /> : null}
-        {tab === 'quality' ? <QualityTab data={data} query={query} bucket={bucket} symbol={symbol} /> : null}
+        {needsControls ? <DashboardControls query={{ ...query, tab }} categories={categories} activeCategory={activeCategory} activeCanonical={symbolCtx.canonical} /> : null}
+        {tab === 'quality' ? <QualityTab data={data} query={query} bucket={bucket} symbolCtx={symbolCtx} /> : null}
         {tab === 'share' ? <ShareTab data={data.share} query={query} /> : null}
         {tab === 'top30' ? <Top30Tab data={data.top30} query={query} platform={platform} /> : null}
-        {tab === 'monitor' ? <LiquidityTab data={data} query={query} tier={tier} symbol={symbol} /> : null}
+        {tab === 'monitor' ? <LiquidityTab data={data} query={query} tier={tier} symbolCtx={symbolCtx} /> : null}
       </main>
       <footer className="footer">edgeX Liquidity Monitor · 正式版</footer>
     </>
   );
 }
 
-function LiquidityTab({ data, query, tier, symbol }: { data: DashboardData; query: Query; tier: string; symbol: string }) {
+function LiquidityTab({ data, query, tier, symbolCtx }: { data: DashboardData; query: Query; tier: string; symbolCtx: SymbolContext }) {
   const rows = data.liquidity.rows ?? [];
   const edge = rows.find(row => row.platform === 'edgeX');
   const edgeDepth = edge && depthDisplayAvailable(edge, tier) ? edge.depth_by_tier?.[tier]?.total_usd : undefined;
   const edgeRatio = edge?.vs_median_by_tier?.[tier];
+  const symbol = symbolCtx.displaySymbol;
 
   return (
     <div className="page-content active">
-      <div className="section-bar"><span>3.2 · <b>深度对比</b></span><div className="line" /><span>{symbol} · 4 档深度</span></div>
+      <div className="section-bar"><span>3.2 · <b>深度对比</b></span><div className="line" /><span>{symbolCtx.displayName} · 4 档深度</span></div>
       <div className="grid">
         <section className="panel span-6 row-h-sm">
           <div className="panel-head">
@@ -302,13 +338,14 @@ function LiquidityTab({ data, query, tier, symbol }: { data: DashboardData; quer
   );
 }
 
-function QualityTab({ data, query, bucket, symbol }: { data: DashboardData; query: Query; bucket: string; symbol: string }) {
+function QualityTab({ data, query, bucket, symbolCtx }: { data: DashboardData; query: Query; bucket: string; symbolCtx: SymbolContext }) {
   const rows = data.quality.rows ?? [];
   const rowByPlatform = new Map(rows.map(row => [row.platform, row]));
   const buckets = (data.quality.slippage_buckets_usd ?? [50_000, 100_000, 500_000, 1_000_000]).map(String);
+  const symbol = symbolCtx.displaySymbol;
   return (
     <div className="page-content active">
-      <div className="section-bar"><span>3.5 · <b>盘口质量</b></span><div className="line" /><span>Spread · Imbalance · 模拟下单滑点</span></div>
+      <div className="section-bar"><span>3.5 · <b>盘口质量</b></span><div className="line" /><span>{symbolCtx.displayName} · Spread · Imbalance · 模拟下单滑点</span></div>
       <div className="grid">
         <section className="panel span-8 row-h-md">
           <div className="panel-head"><span className="panel-title">Spread (bp)</span><span className="panel-sub">· 买一/卖一相对价差</span></div>

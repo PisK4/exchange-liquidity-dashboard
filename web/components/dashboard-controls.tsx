@@ -1,6 +1,10 @@
 import Link from 'next/link';
+import { SymbolSearchSelect } from './symbol-search-select';
+import type { DashboardCategory, DashboardCategorySymbol } from '@/lib/api/client';
 
 type Query = Record<string, string | undefined>;
+
+const ALL_CATEGORY_KEY = 'all';
 
 function href(query: Query, patch: Query) {
   const params = new URLSearchParams();
@@ -23,16 +27,52 @@ export function PillGroup({ label, items, active, query, param }: { label?: stri
   );
 }
 
-export function DashboardControls({ query, symbols, activeSymbol }: { query: Query; symbols: string[]; activeSymbol: string }) {
+export function DashboardControls({
+  query,
+  categories,
+  activeCategory,
+  activeCanonical,
+}: {
+  query: Query;
+  categories: DashboardCategory[];
+  activeCategory: string;
+  activeCanonical: string;
+}) {
+  const visibleSymbols: DashboardCategorySymbol[] =
+    activeCategory === ALL_CATEGORY_KEY
+      ? categories.flatMap(c => c.symbols)
+      : categories.find(c => c.key === activeCategory)?.symbols ?? [];
+
   return (
     <div className="global-controls">
       <label>
         <span>资产类别</span>
-        <PillGroup items={['加密货币', '大宗商品', '股票', '指数', '全部']} active={query.category ?? '加密货币'} query={query} param="category" />
+        <span className="pill-group" aria-label="资产类别">
+          {categories.map(c => {
+            const firstSymbol = c.symbols[0]?.canonical;
+            return (
+              <Link
+                key={c.key}
+                className={`pill ${c.key === activeCategory ? 'active' : ''}`}
+                href={href(query, { category: c.key, symbol: firstSymbol })}
+                data-testid={`category-pill-${c.key}`}
+              >
+                {c.label}
+              </Link>
+            );
+          })}
+          <Link
+            className={`pill ${activeCategory === ALL_CATEGORY_KEY ? 'active' : ''}`}
+            href={href(query, { category: ALL_CATEGORY_KEY })}
+            data-testid="category-pill-all"
+          >
+            全部
+          </Link>
+        </span>
       </label>
       <label>
         <span>交易对</span>
-        <PillGroup items={symbols} active={activeSymbol} query={query} param="symbol" />
+        <SymbolSearchSelect symbols={visibleSymbols} activeCanonical={activeCanonical} query={query} />
       </label>
       <Link className={`pill ${query.coreOnly === '1' ? 'active' : ''}`} href={href(query, { coreOnly: query.coreOnly === '1' ? undefined : '1' })}>
         仅看核心
