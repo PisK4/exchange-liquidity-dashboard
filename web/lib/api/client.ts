@@ -88,6 +88,11 @@ export type DepthTierMetrics = {
   farthest_ask_pct?: number;
   farthest_distance_pct?: number;
   aggregation_params?: Record<string, string>;
+  strict_complete?: boolean;
+  display_available?: boolean;
+  policy_acceptance?: 'raw_strict' | 'aggregated_strict' | 'loose_lower_bound' | 'loose_grouped_approx' | string;
+  physical_limit?: boolean;
+  unofficial_ui_endpoint?: boolean;
 };
 
 export type CoinGeckoLineage = {
@@ -119,9 +124,11 @@ export type LiquiditySnapshot = {
   snapshot_ts: string;
   rows: PlatformRow[];
   competitor_median_by_tier?: Record<string, number>;
+  strict_competitor_median_by_tier?: Record<string, number>;
   kpis?: {
     edgex_depth_by_tier?: Record<string, DepthTierMetrics>;
     edgex_vs_median_by_tier?: Record<string, number>;
+    strict_competitor_median_by_tier?: Record<string, number>;
     edgex_spread_bp?: number;
     edgex_spread_10m_bp?: number;
     edgex_spread_10m_status?: ApiStatus;

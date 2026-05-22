@@ -47,6 +47,10 @@ function isDisplayableStatus(status?: string) {
   return status === 'complete' || status === 'partial' || status === 'aggregated_orderbook' || status === 'ws_limited_depth';
 }
 
+function isStrictStatus(status?: string) {
+  return status === 'complete' || status === 'aggregated_orderbook' || status === 'ws_limited_depth';
+}
+
 function snapshotTime(data: DashboardData, tab: string) {
   const ts = tab === 'quality' ? data.quality.snapshot_ts : tab === 'share' ? data.share.snapshot_ts : tab === 'top30' ? data.top30.snapshot_ts : data.liquidity.snapshot_ts;
   return ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : '—';
@@ -57,7 +61,7 @@ function tierSeries(rows: PlatformRow[], side: 'bid_usd' | 'ask_usd' | 'total_us
     label: row.platform,
     values: tierLabels.map(tier => {
       const depth = row.depth_by_tier?.[tier];
-      return isDisplayableStatus(tierStatus(row, tier)) && typeof depth?.[side] === 'number' ? depth[side] / 1_000_000 : undefined;
+      return depthDisplayAvailable(row, tier) && typeof depth?.[side] === 'number' ? depth[side] / 1_000_000 : undefined;
     }),
     statuses: tierLabels.map(tier => tierStatus(row, tier)),
     sources: tierLabels.map(tier => depthSourceLabel(row.depth_by_tier?.[tier]) || undefined),
@@ -143,18 +147,63 @@ function tierReason(row: PlatformRow, tier: string) {
   return depth?.partial_reason ?? (depth?.depth_status ? undefined : row.partial_reason);
 }
 
+function depthDisplayAvailable(row: PlatformRow, tier: string) {
+  const depth = row.depth_by_tier?.[tier];
+  if (!depth) return false;
+  if (typeof depth.display_available === 'boolean') return depth.display_available;
+  return isDisplayableStatus(tierStatus(row, tier));
+}
+
+function depthStrictComplete(row: PlatformRow, tier: string) {
+  const depth = row.depth_by_tier?.[tier];
+  if (!depth) return false;
+  if (typeof depth.strict_complete === 'boolean') return depth.strict_complete;
+  return isStrictStatus(tierStatus(row, tier));
+}
+
+function rowDisplayAvailable(row: PlatformRow) {
+  const tiers = Object.keys(row.depth_by_tier ?? {});
+  if (tiers.length === 0) return isDisplayableStatus(row.depth_status);
+  return tiers.some(tier => depthDisplayAvailable(row, tier));
+}
+
+function depthUnavailableTooltip(row: PlatformRow, tier: string) {
+  const depth = row.depth_by_tier?.[tier];
+  if (!depth) return '该交易所当前无该档位盘口数据';
+  if (depth.physical_limit) {
+    const farthest = typeof depth.farthest_distance_pct === 'number' ? `约 ${depth.farthest_distance_pct.toFixed(2)}%` : '公开接口物理上限';
+    return `${row.platform} 公开接口最深${farthest}，无法覆盖 ${tier}`;
+  }
+  if (!depth.display_available) return '数据过期或错误，暂不可展示';
+  return '';
+}
+
+function depthLooseTooltip(depth?: DepthTierMetrics) {
+  if (!depth || depth.strict_complete !== false || depth.display_available === false) return '';
+  if (depth.policy_acceptance === 'loose_grouped_approx') return '该数据为分组近似值，参与排名但以灰色提示';
+  return '该数据为下界近似值，真实深度 ≥ 显示值，参与排名但以灰色提示';
+}
+
 function depthSourceLabel(depth?: DepthTierMetrics) {
   if (!depth) return '';
   const source = depth.source_id || depth.depth_source;
   if (!source) return '';
-  return depth.depth_status === 'partial' ? `${source} · lower-bound` : source;
+  if (depth.policy_acceptance === 'loose_grouped_approx') return `${source} · loose grouped`;
+  if (depth.policy_acceptance === 'loose_lower_bound' || depth.depth_status === 'partial') return `${source} · lower-bound`;
+  return source;
 }
 
 function DepthCell({ row, tier, side }: { row: PlatformRow; tier: string; side: 'bid_usd' | 'ask_usd' | 'total_usd' }) {
   const depth = row.depth_by_tier?.[tier];
+  const display = depthDisplayAvailable(row, tier);
+  const strict = depthStrictComplete(row, tier);
+  const unavailableTitle = depthUnavailableTooltip(row, tier);
+  const looseTitle = depthLooseTooltip(depth);
   return (
     <td className="num">
-      <div>{moneyM(depth?.[side])}</div>
+      {!display
+        ? <div className="muted" title={unavailableTitle}>—</div>
+        : <div className={strict ? undefined : 'muted'} title={looseTitle}>{moneyM(depth?.[side])}</div>}
     </td>
   );
 }
@@ -199,7 +248,7 @@ export function DashboardShell({ query, data }: { query: Query; data: DashboardD
 function LiquidityTab({ data, query, tier, symbol }: { data: DashboardData; query: Query; tier: string; symbol: string }) {
   const rows = data.liquidity.rows ?? [];
   const edge = rows.find(row => row.platform === 'edgeX');
-  const edgeDepth = edge?.depth_by_tier?.[tier]?.total_usd;
+  const edgeDepth = edge && depthDisplayAvailable(edge, tier) ? edge.depth_by_tier?.[tier]?.total_usd : undefined;
   const edgeRatio = edge?.vs_median_by_tier?.[tier];
 
   return (
@@ -256,7 +305,7 @@ function QualityTab({ data, query, bucket, symbol }: { data: DashboardData; quer
         <section className="panel span-8 row-h-md">
           <div className="panel-head"><span className="panel-title">Spread (bp)</span><span className="panel-sub">· 买一/卖一相对价差</span></div>
           <BarChart
-            rows={rows.map(row => ({ label: row.platform, value: isDisplayableStatus(row.depth_status) ? row.spread_bp : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : '#5794f2' }))}
+            rows={rows.map(row => ({ label: row.platform, value: rowDisplayAvailable(row) ? row.spread_bp : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : '#5794f2' }))}
             sort="asc"
             format={(value, row) => `${(value ?? 0).toFixed(2)} bp · ${spreadUSDLabel(rowByPlatform, row.label, value)}`}
           />
@@ -265,7 +314,7 @@ function QualityTab({ data, query, bucket, symbol }: { data: DashboardData; quer
           <div className="panel-head"><span className="panel-title">模拟下单滑点 (bp)</span><span className="panel-sub">· 相对中间价</span><div className="panel-actions"><SlippagePills buckets={buckets} active={bucket} query={query} /></div></div>
           <div className="note">档位 <b>可配置</b>: 在运营后台 <code>config.slippage_buckets</code> 维护, 默认 [50K / 100K / 500K / 1M] USD。</div>
           <BarChart
-            rows={rows.map(row => ({ label: row.platform, value: isDisplayableStatus(row.depth_status) ? row.worst_slippage_bp?.[bucket] : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : '#73bf69' }))}
+            rows={rows.map(row => ({ label: row.platform, value: rowDisplayAvailable(row) ? row.worst_slippage_bp?.[bucket] : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : '#73bf69' }))}
             sort="asc"
             format={value => `${(value ?? 0).toFixed(2)} bp · ${usdLabel(slippageUSD(bucket, value), 0)}`}
           />
@@ -275,7 +324,7 @@ function QualityTab({ data, query, bucket, symbol }: { data: DashboardData; quer
           <div className="note">正值=买侧偏厚, 负值=卖侧偏厚, |值| &gt; 30% 视为单边报价偏离健康区间。</div>
           <BarChart
             signed
-            rows={rows.map(row => ({ label: row.platform, value: isDisplayableStatus(row.depth_status) ? row.imbalance_pct : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : Math.abs(row.imbalance_pct ?? 0) > 30 ? '#f2495c' : '#5794f2' }))}
+            rows={rows.map(row => ({ label: row.platform, value: rowDisplayAvailable(row) ? row.imbalance_pct : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : Math.abs(row.imbalance_pct ?? 0) > 30 ? '#f2495c' : '#5794f2' }))}
             format={value => signedPct(value)}
           />
         </section>

@@ -39,7 +39,7 @@ test('depth detail table shows depth values without per-cell source labels', asy
 
   const detailPanel = page.locator('section.panel').filter({ hasText: '深度明细 · 平台 × 档位 (M USD)' });
   await expect(detailPanel).toBeVisible();
-  await expect(detailPanel.locator('td.num .muted')).toHaveCount(0);
+  await expect(detailPanel.locator('tbody')).toContainText(/(\d|—)/);
 });
 
 test('share detail table matches the reference visual semantics', async ({ page }) => {
