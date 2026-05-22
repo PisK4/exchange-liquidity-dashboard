@@ -408,6 +408,33 @@ func (s *Store) persistStatus(ctx context.Context, rows []domain.CollectionStatu
 	return tx.Commit()
 }
 
+// LoadMaxDayPerSymbol returns MAX(day) across every data_source for the
+// given (platform, displaySymbol). Top30Backfiller uses this for gap
+// detection so a process restart on an already-populated MySQL doesn't
+// re-pull the full cold-start window. A zero time.Time is returned when no
+// row exists (i.e. a fresh symbol) or when the DB is not attached.
+func (s *Store) LoadMaxDayPerSymbol(ctx context.Context, platform, displaySymbol string) (time.Time, error) {
+	s.mu.RLock()
+	db := s.db
+	s.mu.RUnlock()
+	if db == nil {
+		return time.Time{}, nil
+	}
+	var day sql.NullTime
+	err := db.QueryRowContext(ctx,
+		`SELECT MAX(day) FROM t_daily_volume_aggregate
+		 WHERE platform = ? AND display_symbol = ?`,
+		platform, displaySymbol,
+	).Scan(&day)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if !day.Valid {
+		return time.Time{}, nil
+	}
+	return day.Time.UTC(), nil
+}
+
 func (s *Store) LoadLatestFromDB(ctx context.Context) error {
 	s.mu.Lock()
 	db := s.db

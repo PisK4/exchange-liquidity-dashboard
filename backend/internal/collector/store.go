@@ -280,6 +280,11 @@ func (s *Store) SaveDailyVolumeAggregates(rows []domain.DailyVolumeAggregate) {
 // SaveTop30 replaces the cached Top30 ranking for the given (platform) key.
 // CoinGecko delivers all rows in a single response, so callers pass the full
 // slice for one platform at a time.
+//
+// Before persisting, the rows are enriched with 7d Vol / 7d Δ derived from
+// the in-memory dailySymbolVolumes window. Computing here means MySQL row
+// carries the values for cold-start hydration; Top30() re-derives on read
+// so daily aggregates arriving between SaveTop30 rounds also surface.
 func (s *Store) SaveTop30(platform string, rows []domain.Top30Row) {
 	if platform == "" {
 		return
@@ -287,6 +292,7 @@ func (s *Store) SaveTop30(platform string, rows []domain.Top30Row) {
 	dup := make([]domain.Top30Row, len(rows))
 	copy(dup, rows)
 	s.mu.Lock()
+	enrichTop30With7dWindowLocked(s, platform, dup)
 	s.top30ByPlatform[platform] = dup
 	s.mu.Unlock()
 	if err := s.persistTop30(context.Background(), platform, dup); err != nil {
@@ -825,10 +831,10 @@ func (s *Store) Top30(surface, platform string) map[string]any {
 		platform = "binance"
 	}
 	s.mu.RLock()
-	defer s.mu.RUnlock()
 	rows, ok := s.top30ByPlatform[platform]
 	now := time.Now().UTC()
 	if !ok || len(rows) == 0 {
+		s.mu.RUnlock()
 		return map[string]any{
 			"surface":     surface,
 			"platform":    platform,
@@ -839,6 +845,12 @@ func (s *Store) Top30(surface, platform string) map[string]any {
 	}
 	out := make([]domain.Top30Row, len(rows))
 	copy(out, rows)
+	// Re-derive 7d Vol / 7d Δ from the latest daily-aggregate window so any
+	// rows persisted (or hydrated from MySQL) before the most recent daily
+	// row landed still surface their newest values. The compute is read-
+	// only against dailySymbolVolumes which is held under the same RLock.
+	enrichTop30With7dWindowLocked(s, platform, out)
+	s.mu.RUnlock()
 	return map[string]any{
 		"surface":     surface,
 		"platform":    platform,
@@ -1348,6 +1360,121 @@ func dataSourcePriority(src string) int {
 		return 1
 	}
 	return 0
+}
+
+// enrichTop30With7dWindowLocked computes Volume7DUSD / Delta7DPct for every
+// Top30 row whose (platform, symbol) has at least 7 contiguous UTC days of
+// daily aggregates in dailySymbolVolumes. Rows without enough history keep
+// their existing `insufficient_history` status; rows that previously
+// resolved to `complete` but newly fall back into insufficiency (e.g. after
+// a roster change exposed a symbol with no history yet) have their values
+// cleared so the API never returns a stale 7d figure for a fresh row.
+//
+// The caller must hold s.mu (either RLock or full Lock) to keep
+// dailySymbolVolumes coherent for the duration of the loop. Raw USD values
+// are summed; MEXC×0.4 / Gate×0.5 discounts are not applied here so the
+// TOP30 column remains consistent with the existing 24h column (which also
+// presents raw exchange-reported volume).
+func enrichTop30With7dWindowLocked(s *Store, platform string, rows []domain.Top30Row) {
+	if len(rows) == 0 {
+		return
+	}
+	today := startOfUTCDay(time.Now().UTC())
+	curStart := today.AddDate(0, 0, -6) // 7-day window inclusive: today-6 .. today
+	prevEnd := curStart.AddDate(0, 0, -1)
+	prevStart := prevEnd.AddDate(0, 0, -6)
+	for i := range rows {
+		daily := s.dailySymbolVolumes[key(platform, rows[i].Symbol)]
+		curSum, curDays := sumWindow(daily, curStart, today)
+		prevSum, prevDays := sumWindow(daily, prevStart, prevEnd)
+		if curDays >= 7 && curSum > 0 {
+			v := curSum
+			rows[i].Volume7DUSD = &v
+			rows[i].Volume7DStatus = domain.StatusComplete
+			if prevDays >= 7 && prevSum > 0 {
+				d := (curSum - prevSum) / prevSum * 100
+				rows[i].Delta7DPct = &d
+				rows[i].Delta7DStatus = domain.StatusComplete
+			} else {
+				rows[i].Delta7DPct = nil
+				rows[i].Delta7DStatus = domain.StatusInsufficientHistory
+			}
+		} else {
+			rows[i].Volume7DUSD = nil
+			rows[i].Volume7DStatus = domain.StatusInsufficientHistory
+			rows[i].Delta7DPct = nil
+			rows[i].Delta7DStatus = domain.StatusInsufficientHistory
+		}
+	}
+}
+
+// sumWindow returns the (sum, distinctDayCount) of Volume24HUSD across every
+// row whose Day falls in the inclusive [from, to] UTC window. Rows are
+// already deduped by (Day, DisplaySymbol) via mergeDailyAggregate so each
+// UTC day contributes at most one entry. Days with zero volume are not
+// counted toward distinctDayCount so a single all-zero row cannot satisfy
+// the 7-day completeness gate.
+func sumWindow(rows []domain.DailyVolumeAggregate, from, to time.Time) (sum float64, days int) {
+	for _, r := range rows {
+		if r.Day.Before(from) || r.Day.After(to) {
+			continue
+		}
+		if r.Volume24HUSD <= 0 {
+			continue
+		}
+		sum += r.Volume24HUSD
+		days++
+	}
+	return sum, days
+}
+
+// Top30RosterUnion returns the latest set of base assets currently ranked
+// in each platform's Top30. Top30Backfiller iterates over this map to
+// decide which (platform, base) pairs need a kline pull. Returning bases
+// (not full display symbols) keeps the Top30 view decoupled from the
+// CatalogResolver's resolution shape: base "BTC" + platform "gate" ->
+// the resolver yields {APISymbol: "BTC_USDT", QuantoMultiplier: ...}.
+//
+// Callers receive a fresh map; mutation does not affect the store.
+func (s *Store) Top30RosterUnion() map[string][]string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string][]string, len(s.top30ByPlatform))
+	for platform, rows := range s.top30ByPlatform {
+		seen := map[string]struct{}{}
+		bases := make([]string, 0, len(rows))
+		for _, r := range rows {
+			b := baseAssetFromSymbol(r.Symbol)
+			if b == "" {
+				continue
+			}
+			if _, ok := seen[b]; ok {
+				continue
+			}
+			seen[b] = struct{}{}
+			bases = append(bases, b)
+		}
+		if len(bases) > 0 {
+			sort.Strings(bases)
+			out[platform] = bases
+		}
+	}
+	return out
+}
+
+// DailySymbolHistoryLatest returns the most recent UTC Day for which a
+// (platform, displaySymbol) has any non-empty daily aggregate in memory.
+// Returns zero time when no row exists. Used by Top30Backfiller's gap
+// detection alongside the MySQL LoadMaxDayPerSymbol fallback so a fresh
+// process boot doesn't always re-pull the full cold-start window.
+func (s *Store) DailySymbolHistoryLatest(platform, displaySymbol string) time.Time {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	rows := s.dailySymbolVolumes[key(platform, displaySymbol)]
+	if len(rows) == 0 {
+		return time.Time{}
+	}
+	return rows[len(rows)-1].Day
 }
 
 func latestTop30TS(rows []domain.Top30Row) time.Time {

@@ -198,3 +198,104 @@ func TestLiquidityKPIsExposeNumericsWhenAvailable(t *testing.T) {
 		t.Fatalf("expected spread 10m bp = 1.5, got %+v", kpis["edgex_spread_10m_bp"])
 	}
 }
+
+// TestTop30Window7dFromDailyHistory exercises the read-path window
+// aggregation: when 7 contiguous UTC days of daily aggregates exist for a
+// Top30 row's (platform, symbol), Top30() must promote Volume7DStatus to
+// complete and produce a sum matching the seeded values. Previous-week
+// data is also seeded so the 7d Δ surfaces a non-nil percentage. MEXC×0.4
+// discount is NOT applied here because the Top30 24h column is also
+// reported raw; the column must stay self-consistent.
+func TestTop30Window7dFromDailyHistory(t *testing.T) {
+	cfg := config.Default()
+	cfg.Platforms = []string{"binance"}
+	store := NewStore(cfg)
+	today := startOfUTCDay(time.Now().UTC())
+	for i := 0; i < 7; i++ {
+		store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{
+			{Platform: "binance", DisplaySymbol: "BTC-USDT (perp)", Day: today.AddDate(0, 0, -i), Volume24HUSD: 1000, Status: domain.StatusComplete, DataSource: domain.DataSourceNative},
+		})
+	}
+	for i := 7; i < 14; i++ {
+		store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{
+			{Platform: "binance", DisplaySymbol: "BTC-USDT (perp)", Day: today.AddDate(0, 0, -i), Volume24HUSD: 800, Status: domain.StatusComplete, DataSource: domain.DataSourceNative},
+		})
+	}
+	store.SaveTop30("binance", []domain.Top30Row{
+		{Rank: 1, Platform: "binance", Symbol: "BTC-USDT (perp)", Volume24HUSD: 1234, Status: domain.StatusComplete, DataSource: domain.DataSourceCoinGecko, SnapshotTS: time.Now().UTC(), Volume7DStatus: domain.StatusInsufficientHistory, Delta7DStatus: domain.StatusInsufficientHistory},
+	})
+	out := store.Top30("perp", "binance")
+	rows := out["rows"].([]domain.Top30Row)
+	if len(rows) != 1 {
+		t.Fatalf("rows=%d", len(rows))
+	}
+	if rows[0].Volume7DStatus != domain.StatusComplete {
+		t.Fatalf("Volume7DStatus=%s want complete", rows[0].Volume7DStatus)
+	}
+	if rows[0].Volume7DUSD == nil || math.Abs(*rows[0].Volume7DUSD-7000) > 1e-6 {
+		t.Fatalf("Volume7DUSD=%+v want 7000", rows[0].Volume7DUSD)
+	}
+	if rows[0].Delta7DStatus != domain.StatusComplete {
+		t.Fatalf("Delta7DStatus=%s want complete", rows[0].Delta7DStatus)
+	}
+	if rows[0].Delta7DPct == nil {
+		t.Fatalf("Delta7DPct nil")
+	}
+	wantDelta := (7000.0 - 5600.0) / 5600.0 * 100
+	if math.Abs(*rows[0].Delta7DPct-wantDelta) > 1e-6 {
+		t.Fatalf("Delta7DPct=%v want %v", *rows[0].Delta7DPct, wantDelta)
+	}
+}
+
+// TestTop30Window7dInsufficient ensures that with only 4 of 7 days seeded,
+// the row stays in insufficient_history and the numeric pointers are
+// cleared (not stale from a previous SaveTop30 call).
+func TestTop30Window7dInsufficient(t *testing.T) {
+	cfg := config.Default()
+	cfg.Platforms = []string{"binance"}
+	store := NewStore(cfg)
+	today := startOfUTCDay(time.Now().UTC())
+	for i := 0; i < 4; i++ {
+		store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{
+			{Platform: "binance", DisplaySymbol: "BTC-USDT (perp)", Day: today.AddDate(0, 0, -i), Volume24HUSD: 1000, Status: domain.StatusComplete, DataSource: domain.DataSourceNative},
+		})
+	}
+	store.SaveTop30("binance", []domain.Top30Row{
+		{Rank: 1, Platform: "binance", Symbol: "BTC-USDT (perp)", Volume24HUSD: 1234, Status: domain.StatusComplete, DataSource: domain.DataSourceCoinGecko, SnapshotTS: time.Now().UTC(), Volume7DStatus: domain.StatusInsufficientHistory, Delta7DStatus: domain.StatusInsufficientHistory},
+	})
+	out := store.Top30("perp", "binance")
+	rows := out["rows"].([]domain.Top30Row)
+	if rows[0].Volume7DStatus != domain.StatusInsufficientHistory {
+		t.Fatalf("Volume7DStatus=%s want insufficient_history", rows[0].Volume7DStatus)
+	}
+	if rows[0].Volume7DUSD != nil {
+		t.Fatalf("Volume7DUSD=%v want nil", rows[0].Volume7DUSD)
+	}
+	if rows[0].Delta7DPct != nil {
+		t.Fatalf("Delta7DPct=%v want nil", rows[0].Delta7DPct)
+	}
+}
+
+// TestTop30RosterUnionReturnsBases sanity-checks the helper that feeds the
+// Top30Backfiller: it must collapse "BTC-USDT (perp)" / "ETH-USDT (perp)"
+// to BTC / ETH and dedup across rounds within one snapshot.
+func TestTop30RosterUnionReturnsBases(t *testing.T) {
+	cfg := config.Default()
+	cfg.Platforms = []string{"binance", "okx"}
+	store := NewStore(cfg)
+	store.SaveTop30("binance", []domain.Top30Row{
+		{Rank: 1, Platform: "binance", Symbol: "BTC-USDT (perp)", Volume24HUSD: 1, Status: domain.StatusComplete, SnapshotTS: time.Now().UTC()},
+		{Rank: 2, Platform: "binance", Symbol: "ETH-USDT (perp)", Volume24HUSD: 1, Status: domain.StatusComplete, SnapshotTS: time.Now().UTC()},
+	})
+	store.SaveTop30("okx", []domain.Top30Row{
+		{Rank: 1, Platform: "okx", Symbol: "BTC-USDT (perp)", Volume24HUSD: 1, Status: domain.StatusComplete, SnapshotTS: time.Now().UTC()},
+		{Rank: 2, Platform: "okx", Symbol: "1000PEPE-USDT (perp)", Volume24HUSD: 1, Status: domain.StatusComplete, SnapshotTS: time.Now().UTC()},
+	})
+	roster := store.Top30RosterUnion()
+	if got := roster["binance"]; len(got) != 2 || got[0] != "BTC" || got[1] != "ETH" {
+		t.Fatalf("binance roster=%v want [BTC ETH]", got)
+	}
+	if got := roster["okx"]; len(got) != 2 || got[0] != "1000PEPE" || got[1] != "BTC" {
+		t.Fatalf("okx roster=%v want [1000PEPE BTC]", got)
+	}
+}
