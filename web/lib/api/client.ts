@@ -3,11 +3,16 @@ import { loadCached, saveCached } from './cache';
 export type ApiStatus = 'complete' | 'partial' | 'aggregated_orderbook' | 'ws_limited_depth' | 'stale' | 'unsupported' | 'error' | 'insufficient_history';
 export type DataFreshness = 'live' | 'delayed';
 
+export type AssetCategoryKey = 'crypto' | 'commodity' | 'stock' | 'index_etf' | string;
+
 export type SymbolMapping = {
   display_symbol: string;
+  display_name?: string;
   canonical: string;
+  asset_category?: AssetCategoryKey;
   market_surface: string;
   instrument_kind: string;
+  lineage?: string;
   platform: string;
   api_symbol: string;
   base_asset: string;
@@ -22,6 +27,23 @@ export type SymbolMapping = {
   frontend_url?: string;
   url_verified?: boolean;
   catalog_status?: string;
+};
+
+export type DashboardCategorySymbol = {
+  canonical: string;
+  display_name: string;
+  display_symbol: string;
+  asset_category: AssetCategoryKey;
+  instrument_kind: string;
+  market_surface: string;
+  lineage?: string;
+  supported_platform_count: number;
+};
+
+export type DashboardCategory = {
+  key: AssetCategoryKey;
+  label: string;
+  symbols: DashboardCategorySymbol[];
 };
 
 export type SymbolsResponse = {
@@ -111,6 +133,7 @@ export type DashboardMeta = {
   tabs: string[];
   platforms: string[];
   symbols: string[];
+  categories?: DashboardCategory[];
   windows: string[];
   depth_tiers: number[];
   slippage_buckets_usd: number[];

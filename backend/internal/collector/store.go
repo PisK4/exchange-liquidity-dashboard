@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"sort"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -335,6 +336,31 @@ func (s *Store) Symbols() []string {
 	return out
 }
 
+// ResolveSymbol maps an incoming API symbol parameter to the canonical
+// display_symbol used as the storage key. It accepts either:
+//   - a canonical key like "BTC" -> returns "BTC-USDT (perp)"
+//   - an existing display_symbol like "BTC-USDT (perp)" -> returned unchanged
+//
+// Lookup is case-insensitive on the canonical and display_symbol axes so
+// "btc" and "BTC-usdt (perp)" both resolve. The original input is returned
+// unchanged when no match is found so callers can still treat the value
+// as a free-form display_symbol (handled by missingPlatform fallback).
+func (s *Store) ResolveSymbol(input string) string {
+	if input == "" {
+		return ""
+	}
+	upper := strings.ToUpper(strings.TrimSpace(input))
+	for _, sub := range s.symbolSnapshot() {
+		if strings.ToUpper(sub.Canonical) == upper {
+			return sub.DisplaySymbol
+		}
+		if strings.ToUpper(sub.DisplaySymbol) == upper {
+			return sub.DisplaySymbol
+		}
+	}
+	return input
+}
+
 func (s *Store) SymbolMappings() []domain.SymbolSub {
 	return append([]domain.SymbolSub(nil), s.symbolSnapshot()...)
 }
@@ -359,6 +385,7 @@ func (s *Store) DashboardMeta() map[string]any {
 		"tabs":                 []string{"monitor", "quality", "share", "top30"},
 		"platforms":            s.cfg.Platforms,
 		"symbols":              s.Symbols(),
+		"categories":           s.symbolCategories(),
 		"windows":              []string{"24h", "7d", "30d"},
 		"depth_tiers":          s.cfg.Runtime.DepthTiers,
 		"slippage_buckets_usd": s.cfg.Runtime.SlippageBucketsUSD,
@@ -398,7 +425,129 @@ func (s *Store) DashboardMeta() map[string]any {
 	return out
 }
 
+// categoryLabel returns the human-friendly Chinese label for an asset
+// category key. Unknown keys fall back to the raw key so new categories
+// surface in the UI without breaking the dropdown.
+func categoryLabel(key string) string {
+	switch key {
+	case domain.AssetCategoryCrypto:
+		return "加密货币"
+	case domain.AssetCategoryCommodity:
+		return "大宗商品"
+	case domain.AssetCategoryStock:
+		return "股票"
+	case domain.AssetCategoryIndexETF:
+		return "指数 / ETF"
+	default:
+		return key
+	}
+}
+
+// symbolCategories groups SymbolSubs by asset_category for the dashboard
+// dropdown. Each symbol entry exposes the metadata the frontend needs to
+// label and route to the canonical view. supported_platform_count counts
+// the number of platforms whose catalog overlay produced a non-empty
+// api_symbol, i.e. platforms that will actually return real data rather
+// than an unsupported row.
+func (s *Store) symbolCategories() []map[string]any {
+	subs := s.symbolSnapshot()
+	type entry struct {
+		Canonical      string
+		DisplayName    string
+		DisplaySymbol  string
+		AssetCategory  string
+		InstrumentKind string
+		MarketSurface  string
+		Lineage        string
+		Supported      int
+	}
+	bucket := map[string][]*entry{}
+	index := map[string]*entry{}
+	order := []string{
+		domain.AssetCategoryCrypto,
+		domain.AssetCategoryCommodity,
+		domain.AssetCategoryStock,
+		domain.AssetCategoryIndexETF,
+	}
+	for _, sub := range subs {
+		canon := sub.Canonical
+		if canon == "" {
+			continue
+		}
+		e, ok := index[canon]
+		if !ok {
+			cat := sub.AssetCategory
+			if cat == "" {
+				cat = domain.AssetCategoryCrypto
+			}
+			displayName := sub.DisplayName
+			if displayName == "" {
+				displayName = domain.DefaultDisplayName(canon)
+			}
+			e = &entry{
+				Canonical:      canon,
+				DisplayName:    displayName,
+				DisplaySymbol:  sub.DisplaySymbol,
+				AssetCategory:  cat,
+				InstrumentKind: sub.InstrumentKind,
+				MarketSurface:  sub.MarketSurface,
+				Lineage:        sub.Lineage,
+			}
+			index[canon] = e
+			bucket[cat] = append(bucket[cat], e)
+		}
+		if sub.APISymbol != "" {
+			e.Supported++
+		}
+	}
+	// Stable category order: known categories first, unknown appended sorted.
+	seen := map[string]bool{}
+	for _, k := range order {
+		seen[k] = true
+	}
+	extra := []string{}
+	for k := range bucket {
+		if !seen[k] {
+			extra = append(extra, k)
+		}
+	}
+	sort.Strings(extra)
+	final := append([]string{}, order...)
+	final = append(final, extra...)
+	out := make([]map[string]any, 0, len(final))
+	for _, cat := range final {
+		entries, ok := bucket[cat]
+		if !ok {
+			continue
+		}
+		sort.Slice(entries, func(i, j int) bool { return entries[i].Canonical < entries[j].Canonical })
+		symbols := make([]map[string]any, 0, len(entries))
+		for _, e := range entries {
+			row := map[string]any{
+				"canonical":                e.Canonical,
+				"display_name":             e.DisplayName,
+				"display_symbol":           e.DisplaySymbol,
+				"asset_category":           e.AssetCategory,
+				"instrument_kind":          e.InstrumentKind,
+				"market_surface":           e.MarketSurface,
+				"supported_platform_count": e.Supported,
+			}
+			if e.Lineage != "" {
+				row["lineage"] = e.Lineage
+			}
+			symbols = append(symbols, row)
+		}
+		out = append(out, map[string]any{
+			"key":     cat,
+			"label":   categoryLabel(cat),
+			"symbols": symbols,
+		})
+	}
+	return out
+}
+
 func (s *Store) Liquidity(symbol string) map[string]any {
+	symbol = s.ResolveSymbol(symbol)
 	if symbol == "" {
 		symbol = "BTC-USDT (perp)"
 	}
@@ -426,6 +575,7 @@ func (s *Store) Liquidity(symbol string) map[string]any {
 }
 
 func (s *Store) Quality(symbol string) map[string]any {
+	symbol = s.ResolveSymbol(symbol)
 	if symbol == "" {
 		symbol = "BTC-USDT (perp)"
 	}

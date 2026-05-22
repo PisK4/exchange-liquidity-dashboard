@@ -44,9 +44,12 @@ const (
 
 type SymbolSub struct {
 	DisplaySymbol  string `json:"display_symbol"`
+	DisplayName    string `json:"display_name"`
 	Canonical      string `json:"canonical"`
+	AssetCategory  string `json:"asset_category"`
 	MarketSurface  string `json:"market_surface"`
 	InstrumentKind string `json:"instrument_kind"`
+	Lineage        string `json:"lineage,omitempty"`
 	Platform       string `json:"platform"`
 	APISymbol      string `json:"api_symbol"`
 	BaseAsset      string `json:"base_asset"`
@@ -62,6 +65,22 @@ type SymbolSub struct {
 	FrontendURL      string  `json:"frontend_url,omitempty"`
 	URLVerified      bool    `json:"url_verified,omitempty"`
 	CatalogStatus    string  `json:"catalog_status,omitempty"`
+}
+
+const (
+	AssetCategoryCrypto    = "crypto"
+	AssetCategoryCommodity = "commodity"
+	AssetCategoryStock     = "stock"
+	AssetCategoryIndexETF  = "index_etf"
+)
+
+// DefaultDisplayName composes the canonical-USD display label used across the
+// UI when symbol_mapping.yaml does not specify display_name explicitly.
+func DefaultDisplayName(canonical string) string {
+	if canonical == "" {
+		return ""
+	}
+	return canonical + "-USD"
 }
 
 type Level struct {

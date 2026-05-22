@@ -83,6 +83,11 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 		SnapshotTS:     time.Now().UTC(),
 		APILevelCap:    cap,
 	}
+	if sub.APISymbol == "" {
+		book.DepthStatus = domain.StatusUnsupported
+		book.Error = "no catalog entry for (" + a.Platform + ", " + sub.Canonical + ")"
+		return book, nil
+	}
 	var bids, asks []domain.Level
 	var err error
 	switch a.Platform {
@@ -144,6 +149,10 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 func (a RESTAdapter) FetchTicker(ctx context.Context, sub domain.SymbolSub) (domain.VolumeSnapshot, error) {
 	now := time.Now().UTC()
 	vol := domain.VolumeSnapshot{Platform: a.Platform, DisplaySymbol: sub.DisplaySymbol, SnapshotTS: now, SourceEndpoint: sub.SourceEndpoint, Status: domain.StatusUnsupported}
+	if sub.APISymbol == "" {
+		vol.Error = "no catalog entry for (" + a.Platform + ", " + sub.Canonical + ")"
+		return vol, nil
+	}
 	var raw float64
 	var err error
 	switch a.Platform {

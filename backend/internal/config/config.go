@@ -173,7 +173,9 @@ func Default() Config {
 		for _, p := range platforms {
 			subs = append(subs, domain.SymbolSub{
 				DisplaySymbol:  s.api + " (perp)",
+				DisplayName:    domain.DefaultDisplayName(s.canonical),
 				Canonical:      s.canonical,
+				AssetCategory:  domain.AssetCategoryCrypto,
 				MarketSurface:  "perp",
 				InstrumentKind: "canonical",
 				Platform:       p,
@@ -285,9 +287,12 @@ func defaultCoinGeckoConfig() CoinGeckoConfig {
 
 type symbolYAML struct {
 	DisplaySymbol  string `yaml:"display_symbol"`
+	DisplayName    string `yaml:"display_name"`
 	Canonical      string `yaml:"canonical"`
+	AssetCategory  string `yaml:"asset_category"`
 	MarketSurface  string `yaml:"market_surface"`
 	InstrumentKind string `yaml:"instrument_kind"`
+	Lineage        string `yaml:"lineage"`
 	BaseAsset      string `yaml:"base_asset"`
 	QuoteAsset     string `yaml:"quote_asset"`
 	SettleAsset    string `yaml:"settle_asset"`
@@ -603,12 +608,20 @@ func expandSymbols(symbols []symbolYAML, platforms []string, endpoints map[strin
 		if settle == "" {
 			settle = "USDT"
 		}
+		displayName := symbol.DisplayName
+		if displayName == "" {
+			displayName = domain.DefaultDisplayName(symbol.Canonical)
+		}
+		category := valueOr(symbol.AssetCategory, domain.AssetCategoryCrypto)
 		for _, platform := range platforms {
 			subs = append(subs, domain.SymbolSub{
 				DisplaySymbol:  symbol.DisplaySymbol,
+				DisplayName:    displayName,
 				Canonical:      symbol.Canonical,
+				AssetCategory:  category,
 				MarketSurface:  valueOr(symbol.MarketSurface, "perp"),
 				InstrumentKind: valueOr(symbol.InstrumentKind, "canonical"),
+				Lineage:        symbol.Lineage,
 				Platform:       platform,
 				BaseAsset:      base,
 				QuoteAsset:     quote,

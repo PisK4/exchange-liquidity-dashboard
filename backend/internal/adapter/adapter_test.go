@@ -26,6 +26,64 @@ func jsonResponse(body string) *http.Response {
 	}
 }
 
+func TestFetchOrderBookEmptyAPISymbolReturnsUnsupported(t *testing.T) {
+	requestCount := 0
+	adapter := RESTAdapter{
+		Platform: "binance",
+		Client: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				requestCount++
+				return nil, errors.New("HTTP should not be called for unsupported (platform, canonical) pairs")
+			}),
+		},
+	}
+	book, err := adapter.FetchOrderBook(context.Background(), domain.SymbolSub{
+		Platform:      "binance",
+		Canonical:     "DRAM",
+		DisplaySymbol: "DRAM-USDT (perp)",
+		// APISymbol intentionally empty: no catalog entry on this platform.
+	})
+	if err != nil {
+		t.Fatalf("FetchOrderBook with empty APISymbol should not return error, got %v", err)
+	}
+	if book.DepthStatus != domain.StatusUnsupported {
+		t.Fatalf("DepthStatus = %q, want unsupported", book.DepthStatus)
+	}
+	if book.Error == "" || !strings.Contains(book.Error, "no catalog entry") {
+		t.Fatalf("Error should mention catalog, got %q", book.Error)
+	}
+	if requestCount != 0 {
+		t.Fatalf("expected no HTTP requests, got %d", requestCount)
+	}
+}
+
+func TestFetchTickerEmptyAPISymbolReturnsUnsupported(t *testing.T) {
+	requestCount := 0
+	adapter := RESTAdapter{
+		Platform: "binance",
+		Client: &http.Client{
+			Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+				requestCount++
+				return nil, errors.New("HTTP should not be called for unsupported (platform, canonical) pairs")
+			}),
+		},
+	}
+	vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+		Platform:      "binance",
+		Canonical:     "DRAM",
+		DisplaySymbol: "DRAM-USDT (perp)",
+	})
+	if err != nil {
+		t.Fatalf("FetchTicker with empty APISymbol should not return error, got %v", err)
+	}
+	if vol.Status != domain.StatusUnsupported {
+		t.Fatalf("Status = %q, want unsupported", vol.Status)
+	}
+	if requestCount != 0 {
+		t.Fatalf("expected no HTTP requests, got %d", requestCount)
+	}
+}
+
 func TestClassifyDepthMarksSparseBookPartialWhenTwoPercentNotCovered(t *testing.T) {
 	book := domain.OrderBookSnapshot{
 		Bids:        make([]domain.Level, 20),

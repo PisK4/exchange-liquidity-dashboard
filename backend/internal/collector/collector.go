@@ -43,6 +43,22 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					mu.Lock()
+					failed++
+					statuses = append(statuses, domain.CollectionStatus{
+						Platform:       sub.Platform,
+						DisplaySymbol:  sub.DisplaySymbol,
+						Collector:      "rest_orderbook",
+						SourceEndpoint: sub.SourceEndpoint,
+						Status:         domain.StatusError,
+						Error:          fmt.Sprintf("collector panic: %v", r),
+						SnapshotTS:     time.Now().UTC(),
+					})
+					mu.Unlock()
+				}
+			}()
 			adapter := c.adapters[sub.Platform]
 			begin := time.Now()
 			book, err := adapter.FetchOrderBook(ctx, sub)
@@ -52,6 +68,8 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 				mu.Lock()
 				failed++
 				mu.Unlock()
+			} else if book.DepthStatus == domain.StatusUnsupported {
+				status = domain.StatusUnsupported
 			} else {
 				mu.Lock()
 				success++
@@ -69,6 +87,8 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 				mu.Lock()
 				failed++
 				mu.Unlock()
+			} else if vstatus == domain.StatusUnsupported {
+				// expected for (platform, canonical) pairs with no catalog entry
 			} else {
 				mu.Lock()
 				success++

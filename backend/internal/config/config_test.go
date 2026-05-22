@@ -209,6 +209,81 @@ func mustWrite(t *testing.T, path, content string) {
 	}
 }
 
+func TestExpandSymbolsAppliesCategoryAndDisplayName(t *testing.T) {
+	subs := expandSymbols([]symbolYAML{
+		{
+			DisplaySymbol: "BTC-USDT (perp)",
+			DisplayName:   "BTC-USD",
+			Canonical:     "BTC",
+			AssetCategory: "crypto",
+			MarketSurface: "perp",
+		},
+		{
+			DisplaySymbol: "GOLD-USDT (perp)",
+			Canonical:     "GOLD",
+			AssetCategory: "commodity",
+		},
+		{
+			DisplaySymbol:  "TSLA-USDT (perp)",
+			Canonical:      "TSLA",
+			AssetCategory:  "stock",
+			InstrumentKind: "synthetic",
+			Lineage:        "bybit:TSLAUSDT@synthetic_perp",
+		},
+	}, []string{"binance", "bybit"}, map[string]string{
+		"binance": "https://example.invalid/binance",
+		"bybit":   "https://example.invalid/bybit",
+	})
+
+	if len(subs) != 6 {
+		t.Fatalf("expected 6 subs (3 symbols × 2 platforms), got %d", len(subs))
+	}
+	for _, s := range subs {
+		switch s.Canonical {
+		case "BTC":
+			if s.DisplayName != "BTC-USD" {
+				t.Errorf("BTC DisplayName = %q, want BTC-USD", s.DisplayName)
+			}
+			if s.AssetCategory != domain.AssetCategoryCrypto {
+				t.Errorf("BTC AssetCategory = %q, want crypto", s.AssetCategory)
+			}
+		case "GOLD":
+			if s.DisplayName != "GOLD-USD" {
+				t.Errorf("GOLD DisplayName = %q (default), want GOLD-USD", s.DisplayName)
+			}
+			if s.AssetCategory != domain.AssetCategoryCommodity {
+				t.Errorf("GOLD AssetCategory = %q, want commodity", s.AssetCategory)
+			}
+		case "TSLA":
+			if s.AssetCategory != domain.AssetCategoryStock {
+				t.Errorf("TSLA AssetCategory = %q, want stock", s.AssetCategory)
+			}
+			if s.InstrumentKind != "synthetic" {
+				t.Errorf("TSLA InstrumentKind = %q, want synthetic", s.InstrumentKind)
+			}
+			if s.Lineage != "bybit:TSLAUSDT@synthetic_perp" {
+				t.Errorf("TSLA Lineage = %q", s.Lineage)
+			}
+		}
+	}
+}
+
+func TestExpandSymbolsDefaultsCategoryToCrypto(t *testing.T) {
+	subs := expandSymbols([]symbolYAML{{
+		DisplaySymbol: "ETH-USDT (perp)",
+		Canonical:     "ETH",
+	}}, []string{"binance"}, map[string]string{})
+	if len(subs) != 1 {
+		t.Fatalf("expected 1 sub, got %d", len(subs))
+	}
+	if subs[0].AssetCategory != domain.AssetCategoryCrypto {
+		t.Errorf("default AssetCategory = %q, want crypto", subs[0].AssetCategory)
+	}
+	if subs[0].DisplayName != "ETH-USD" {
+		t.Errorf("default DisplayName = %q, want ETH-USD", subs[0].DisplayName)
+	}
+}
+
 func TestLoadCatalogParsesRepoYAML(t *testing.T) {
 	path := filepath.Join("..", "..", "..", "config", "instrument_catalog.yaml")
 	cat, err := LoadCatalog(path)

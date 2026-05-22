@@ -1,16 +1,40 @@
-# Source of truth for V1 quick launch. Backend reads this file at startup and
-# expands each display symbol across the configured platform list.
+# Source of truth for symbol expansion. Backend reads this file at startup and
+# expands each canonical symbol across the configured platform list.
+#
+# Schema (v2, multi-token support):
+#   canonical        — Stable business key (BTC / GOLD / TSLA). Used as URL
+#                      key (?symbol=BTC) and DB key for daily aggregates.
+#   display_name     — UI label shown in dropdown, KPI, table headers
+#                      (BTC-USD / GOLD-USD / TSLA-USD). Falls back to
+#                      "{canonical}-USD" when omitted.
+#   display_symbol   — Legacy storage key (e.g. "BTC-USDT (perp)") kept for
+#                      backward compatibility with daily aggregates and
+#                      existing URLs; new entries SHOULD specify it
+#                      explicitly to keep store keying deterministic.
+#   asset_category   — One of crypto / commodity / stock / index_etf.
+#                      Drives the dropdown filter; does not influence
+#                      ranking / median / share calculations.
+#   market_surface   — perp / spot / synthetic_futures / rwa_spot / ...
+#                      (default: perp)
+#   instrument_kind  — canonical / synthetic / rwa / proxy / ...
+#                      (default: canonical)
 symbols:
   - display_symbol: BTC-USDT (perp)
+    display_name: BTC-USD
     canonical: BTC
+    asset_category: crypto
     market_surface: perp
     instrument_kind: canonical
   - display_symbol: ETH-USDT (perp)
+    display_name: ETH-USD
     canonical: ETH
+    asset_category: crypto
     market_surface: perp
     instrument_kind: canonical
   - display_symbol: SOL-USDT (perp)
+    display_name: SOL-USD
     canonical: SOL
+    asset_category: crypto
     market_surface: perp
     instrument_kind: canonical
 platforms: [edgeX, binance, okx, bybit, bitget, bingx, mexc, gate, hyperliquid, lighter]

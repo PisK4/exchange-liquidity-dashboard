@@ -342,13 +342,13 @@ func TestEdgeXBTCUSDFoldsIntoCanonicalKey(t *testing.T) {
 // TestCanonicalDailyKey covers the symbol-suffix collapse helper directly.
 func TestCanonicalDailyKey(t *testing.T) {
 	cases := map[string]string{
-		"BTC-USDT (perp)":     "BTC-USDT (perp)",
-		"BTC-USD (perp)":      "BTC-USDT (perp)",
-		"BTC-USDC (perp)":     "BTC-USDT (perp)",
+		"BTC-USDT (perp)":      "BTC-USDT (perp)",
+		"BTC-USD (perp)":       "BTC-USDT (perp)",
+		"BTC-USDC (perp)":      "BTC-USDT (perp)",
 		"1000PEPE-USDT (perp)": "1000PEPE-USDT (perp)",
-		"":                    "",
-		"NOT-A-PERP":          "NOT-A-PERP",
-		"BTC-EUR (perp)":      "BTC-EUR (perp)", // unknown quote: passthrough
+		"":                     "",
+		"NOT-A-PERP":           "NOT-A-PERP",
+		"BTC-EUR (perp)":       "BTC-EUR (perp)", // unknown quote: passthrough
 	}
 	for in, want := range cases {
 		if got := canonicalDailyKey(in); got != want {
