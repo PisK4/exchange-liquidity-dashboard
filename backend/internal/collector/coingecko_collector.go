@@ -359,6 +359,37 @@ func baseAssetFromSymbol(s string) string {
 	return strings.ToUpper(s)
 }
 
+// canonicalDailyKey collapses every quote-currency variant of a perp
+// display symbol onto the single 'BASE-USDT (perp)' form used as the
+// canonical key for per-symbol daily aggregates and KPI computations.
+// edgeX reports BTC-USD (perp), some bingx markets list BTC-USDC (perp);
+// V1 KPIs intentionally treat all of these as the same logical 'BTC perp'
+// so the share-of-volume math sums them. The TOP30 tab still shows the
+// platform-native symbol — only the daily-aggregate write path and the
+// 7d window enrichment lookup go through this normalisation.
+//
+// Idempotent: any input that already ends in '-USDT (perp)' is returned
+// unchanged.
+func canonicalDailyKey(displaySymbol string) string {
+	s := strings.TrimSpace(displaySymbol)
+	if !strings.HasSuffix(s, " (perp)") {
+		return displaySymbol
+	}
+	head := strings.TrimSuffix(s, " (perp)")
+	idx := strings.LastIndex(head, "-")
+	if idx <= 0 {
+		return displaySymbol
+	}
+	base := head[:idx]
+	quote := strings.ToUpper(head[idx+1:])
+	switch quote {
+	case "USD", "USDC", "USDT":
+		return base + "-USDT (perp)"
+	default:
+		return displaySymbol
+	}
+}
+
 // deriveSuggestedAction mirrors the badge ladder in the source demo HTML
 // (architecture/方案设计/EdgeX运营/原需求/edgeX · 流动性 & 深度监控面板 (Demo)(3).html
 // renderTop30). The edgeX self-tab is excluded because "建议动作" against

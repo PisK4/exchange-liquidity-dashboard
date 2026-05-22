@@ -299,3 +299,60 @@ func TestTop30RosterUnionReturnsBases(t *testing.T) {
 		t.Fatalf("okx roster=%+v want [1000PEPE BTC]", got)
 	}
 }
+
+// TestEdgeXBTCUSDFoldsIntoCanonicalKey pins the regression that produced
+// 'partial' status on the Liquidity tab: edgeX's native ticker is
+// BTC-USD (perp), but cfg.Symbols / V1 KPIs query by canonical
+// BTC-USDT (perp). Both display variants must collapse onto the same
+// in-memory bucket so a 7-contiguous-day edgeX history satisfies the
+// share7d completeness gate. The TOP30 row's user-facing Symbol stays
+// the platform-native name; only the daily-aggregate key is canonical.
+func TestEdgeXBTCUSDFoldsIntoCanonicalKey(t *testing.T) {
+	cfg := config.Default()
+	cfg.Platforms = []string{"edgeX", "binance"}
+	store := NewStore(cfg)
+	today := startOfUTCDay(time.Now().UTC())
+	for i := 0; i < 7; i++ {
+		store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{
+			// edgeX writes its native '-USD' suffix...
+			{Platform: "edgeX", DisplaySymbol: "BTC-USD (perp)", Day: today.AddDate(0, 0, -i), Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceNativeBackfill},
+			// ...others write the canonical '-USDT' suffix.
+			{Platform: "binance", DisplaySymbol: "BTC-USDT (perp)", Day: today.AddDate(0, 0, -i), Volume24HUSD: 900, Status: domain.StatusComplete, DataSource: domain.DataSourceNativeBackfill},
+		})
+	}
+	_, status7d, _ := store.symbolShare7dLocked("BTC-USDT (perp)")
+	if status7d != domain.StatusComplete {
+		t.Fatalf("expected complete (canonical fold succeeded), got %s", status7d)
+	}
+	// The TOP30 enrichment lookup must also succeed via the canonical
+	// fold even when row.Symbol carries the platform-native '-USD' name.
+	store.SaveTop30("edgeX", []domain.Top30Row{
+		{Rank: 1, Platform: "edgeX", Symbol: "BTC-USD (perp)", Volume24HUSD: 100, Status: domain.StatusComplete, SnapshotTS: time.Now().UTC(), Volume7DStatus: domain.StatusInsufficientHistory, Delta7DStatus: domain.StatusInsufficientHistory},
+	})
+	out := store.Top30("perp", "edgeX")
+	rows := out["rows"].([]domain.Top30Row)
+	if rows[0].Volume7DStatus != domain.StatusComplete {
+		t.Fatalf("expected complete 7d on edgeX BTC-USD via canonical fold, got %s", rows[0].Volume7DStatus)
+	}
+	if rows[0].Volume7DUSD == nil || *rows[0].Volume7DUSD != 700 {
+		t.Fatalf("expected 7d sum = 700 (7*100), got %v", rows[0].Volume7DUSD)
+	}
+}
+
+// TestCanonicalDailyKey covers the symbol-suffix collapse helper directly.
+func TestCanonicalDailyKey(t *testing.T) {
+	cases := map[string]string{
+		"BTC-USDT (perp)":     "BTC-USDT (perp)",
+		"BTC-USD (perp)":      "BTC-USDT (perp)",
+		"BTC-USDC (perp)":     "BTC-USDT (perp)",
+		"1000PEPE-USDT (perp)": "1000PEPE-USDT (perp)",
+		"":                    "",
+		"NOT-A-PERP":          "NOT-A-PERP",
+		"BTC-EUR (perp)":      "BTC-EUR (perp)", // unknown quote: passthrough
+	}
+	for in, want := range cases {
+		if got := canonicalDailyKey(in); got != want {
+			t.Errorf("canonicalDailyKey(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

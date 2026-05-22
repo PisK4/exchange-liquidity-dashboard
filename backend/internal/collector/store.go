@@ -249,6 +249,18 @@ func (s *Store) SaveDailyVolumeAggregates(rows []domain.DailyVolumeAggregate) {
 	if len(rows) == 0 {
 		return
 	}
+	// Canonicalise per-symbol rows up-front so every storage layer (in-
+	// memory map keyed by (platform, display_symbol), and the MySQL
+	// UPSERT keyed by the same tuple) uses the single canonical
+	// 'BASE-USDT (perp)' form. edgeX writes 'BTC-USD (perp)' and bingx
+	// occasionally writes 'BTC-USDC (perp)'; without this collapse the
+	// Liquidity-tab 7d KPI (which queries by canonical name from
+	// cfg.Symbols) would see fragmented rows and degrade to 'partial'.
+	for i := range rows {
+		if rows[i].DisplaySymbol != "" {
+			rows[i].DisplaySymbol = canonicalDailyKey(rows[i].DisplaySymbol)
+		}
+	}
 	s.mu.Lock()
 	for _, row := range rows {
 		if row.Platform == "" {
@@ -1384,7 +1396,11 @@ func enrichTop30With7dWindowLocked(s *Store, platform string, rows []domain.Top3
 	prevEnd := curStart.AddDate(0, 0, -1)
 	prevStart := prevEnd.AddDate(0, 0, -6)
 	for i := range rows {
-		daily := s.dailySymbolVolumes[key(platform, rows[i].Symbol)]
+		// dailySymbolVolumes is keyed by the canonical 'BASE-USDT (perp)'
+		// form (see SaveDailyVolumeAggregates) so we must canonicalise
+		// the platform-native row.Symbol before the lookup; otherwise
+		// edgeX 'BTC-USD (perp)' rows always miss.
+		daily := s.dailySymbolVolumes[key(platform, canonicalDailyKey(rows[i].Symbol))]
 		curSum, curDays := sumWindow(daily, curStart, today)
 		prevSum, prevDays := sumWindow(daily, prevStart, prevEnd)
 		if curDays >= 7 && curSum > 0 {
@@ -1479,7 +1495,7 @@ func (s *Store) Top30RosterUnion() map[string][]RosterEntry {
 func (s *Store) DailySymbolHistoryLatest(platform, displaySymbol string) time.Time {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rows := s.dailySymbolVolumes[key(platform, displaySymbol)]
+	rows := s.dailySymbolVolumes[key(platform, canonicalDailyKey(displaySymbol))]
 	if len(rows) == 0 {
 		return time.Time{}
 	}
@@ -1493,7 +1509,7 @@ func (s *Store) DailySymbolHistoryLatest(platform, displaySymbol string) time.Ti
 func (s *Store) DailySymbolDayCount(platform, displaySymbol string) int {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	return len(s.dailySymbolVolumes[key(platform, displaySymbol)])
+	return len(s.dailySymbolVolumes[key(platform, canonicalDailyKey(displaySymbol))])
 }
 
 func latestTop30TS(rows []domain.Top30Row) time.Time {

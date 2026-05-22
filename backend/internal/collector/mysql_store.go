@@ -424,7 +424,7 @@ func (s *Store) LoadMaxDayPerSymbol(ctx context.Context, platform, displaySymbol
 	err := db.QueryRowContext(ctx,
 		`SELECT MAX(day) FROM t_daily_volume_aggregate
 		 WHERE platform = ? AND display_symbol = ?`,
-		platform, displaySymbol,
+		platform, canonicalDailyKey(displaySymbol),
 	).Scan(&day)
 	if err != nil {
 		return time.Time{}, err
