@@ -56,25 +56,39 @@ func TestDecideFetchDays(t *testing.T) {
 	if got := bf.decideFetchDays(context.Background(), "binance", "DOGE-USDT (perp)"); got != 14 {
 		t.Fatalf("fresh symbol days=%d want 14", got)
 	}
-	// Today already covered → repair window.
+	// Today already covered but only one day of history → cold-start
+	// window (shallow-history guard prevents gap=0 from short-circuiting).
 	today := startOfUTCDay(time.Now().UTC())
 	store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{
 		{Platform: "binance", DisplaySymbol: "BTC-USDT (perp)", Day: today, Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceNative},
 	})
-	if got := bf.decideFetchDays(context.Background(), "binance", "BTC-USDT (perp)"); got != 3 {
-		t.Fatalf("same-day days=%d want 3", got)
+	if got := bf.decideFetchDays(context.Background(), "binance", "BTC-USDT (perp)"); got != 14 {
+		t.Fatalf("shallow-history days=%d want 14", got)
 	}
-	// 5-day gap → 6 (gap+1).
-	store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{
-		{Platform: "binance", DisplaySymbol: "ETH-USDT (perp)", Day: today.AddDate(0, 0, -5), Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceNative},
-	})
+	// Once 7 days exist, same-day → repair window.
+	for i := 1; i < 7; i++ {
+		store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{
+			{Platform: "binance", DisplaySymbol: "BTC-USDT (perp)", Day: today.AddDate(0, 0, -i), Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceNative},
+		})
+	}
+	if got := bf.decideFetchDays(context.Background(), "binance", "BTC-USDT (perp)"); got != 3 {
+		t.Fatalf("steady-state days=%d want 3", got)
+	}
+	// 5-day gap with deep history → 6 (gap+1).
+	for i := 5; i < 12; i++ {
+		store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{
+			{Platform: "binance", DisplaySymbol: "ETH-USDT (perp)", Day: today.AddDate(0, 0, -i), Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceNative},
+		})
+	}
 	if got := bf.decideFetchDays(context.Background(), "binance", "ETH-USDT (perp)"); got != 6 {
 		t.Fatalf("5-day gap days=%d want 6", got)
 	}
 	// Huge gap → capped at cold-start.
-	store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{
-		{Platform: "binance", DisplaySymbol: "SOL-USDT (perp)", Day: today.AddDate(0, 0, -90), Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceNative},
-	})
+	for i := 90; i < 100; i++ {
+		store.SaveDailyVolumeAggregates([]domain.DailyVolumeAggregate{
+			{Platform: "binance", DisplaySymbol: "SOL-USDT (perp)", Day: today.AddDate(0, 0, -i), Volume24HUSD: 100, Status: domain.StatusComplete, DataSource: domain.DataSourceNative},
+		})
+	}
 	if got := bf.decideFetchDays(context.Background(), "binance", "SOL-USDT (perp)"); got != 14 {
 		t.Fatalf("90-day gap days=%d want 14 (cap)", got)
 	}

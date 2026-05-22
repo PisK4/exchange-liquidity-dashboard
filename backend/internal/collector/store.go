@@ -1428,21 +1428,30 @@ func sumWindow(rows []domain.DailyVolumeAggregate, from, to time.Time) (sum floa
 	return sum, days
 }
 
-// Top30RosterUnion returns the latest set of base assets currently ranked
-// in each platform's Top30. Top30Backfiller iterates over this map to
-// decide which (platform, base) pairs need a kline pull. Returning bases
-// (not full display symbols) keeps the Top30 view decoupled from the
-// CatalogResolver's resolution shape: base "BTC" + platform "gate" ->
-// the resolver yields {APISymbol: "BTC_USDT", QuantoMultiplier: ...}.
+// RosterEntry pairs a base asset with the platform-specific display
+// symbol so Top30Backfiller can pass the right key to the daily
+// aggregate store. edgeX uses "BTC-USD (perp)"; everyone else uses
+// "BTC-USDT (perp)" — synthesising the display symbol from the base
+// would mismatch on edgeX.
+type RosterEntry struct {
+	BaseAsset     string
+	DisplaySymbol string
+}
+
+// Top30RosterUnion returns the latest set of (baseAsset, displaySymbol)
+// pairs currently ranked in each platform's Top30. The caller iterates
+// these to decide which kline pulls to issue; baseAsset feeds the
+// CatalogResolver and displaySymbol feeds the Store gap-detection /
+// daily aggregate keys.
 //
 // Callers receive a fresh map; mutation does not affect the store.
-func (s *Store) Top30RosterUnion() map[string][]string {
+func (s *Store) Top30RosterUnion() map[string][]RosterEntry {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make(map[string][]string, len(s.top30ByPlatform))
+	out := make(map[string][]RosterEntry, len(s.top30ByPlatform))
 	for platform, rows := range s.top30ByPlatform {
 		seen := map[string]struct{}{}
-		bases := make([]string, 0, len(rows))
+		entries := make([]RosterEntry, 0, len(rows))
 		for _, r := range rows {
 			b := baseAssetFromSymbol(r.Symbol)
 			if b == "" {
@@ -1452,11 +1461,11 @@ func (s *Store) Top30RosterUnion() map[string][]string {
 				continue
 			}
 			seen[b] = struct{}{}
-			bases = append(bases, b)
+			entries = append(entries, RosterEntry{BaseAsset: b, DisplaySymbol: r.Symbol})
 		}
-		if len(bases) > 0 {
-			sort.Strings(bases)
-			out[platform] = bases
+		if len(entries) > 0 {
+			sort.Slice(entries, func(i, j int) bool { return entries[i].BaseAsset < entries[j].BaseAsset })
+			out[platform] = entries
 		}
 	}
 	return out
@@ -1475,6 +1484,16 @@ func (s *Store) DailySymbolHistoryLatest(platform, displaySymbol string) time.Ti
 		return time.Time{}
 	}
 	return rows[len(rows)-1].Day
+}
+
+// DailySymbolDayCount returns the number of distinct UTC days currently
+// in memory for (platform, displaySymbol). Top30Backfiller uses this to
+// distinguish "we already have a long history, just patch today" from
+// "we only have today's CG row, still need to back-fill prior days".
+func (s *Store) DailySymbolDayCount(platform, displaySymbol string) int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return len(s.dailySymbolVolumes[key(platform, displaySymbol)])
 }
 
 func latestTop30TS(rows []domain.Top30Row) time.Time {

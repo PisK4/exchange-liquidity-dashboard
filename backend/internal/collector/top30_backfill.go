@@ -149,8 +149,8 @@ func (b *Top30Backfiller) RunOnce(ctx context.Context) error {
 	}
 	results := make(chan platformResult, len(roster))
 	var wg sync.WaitGroup
-	for platform, bases := range roster {
-		platform, bases := platform, bases
+	for platform, entries := range roster {
+		platform, entries := platform, entries
 		ad, ok := b.adapters[platform]
 		if !ok {
 			continue
@@ -162,7 +162,7 @@ func (b *Top30Backfiller) RunOnce(ctx context.Context) error {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			rows, errs := b.runPlatform(ctx, platform, bases, fetcher)
+			rows, errs := b.runPlatform(ctx, platform, entries, fetcher)
 			results <- platformResult{platform: platform, rows: rows, errCount: errs}
 		}()
 	}
@@ -184,15 +184,15 @@ func (b *Top30Backfiller) RunOnce(ctx context.Context) error {
 }
 
 // runPlatform processes one platform's roster with bounded concurrency.
-func (b *Top30Backfiller) runPlatform(ctx context.Context, platform string, bases []string, fetcher adapter.DailyVolumeHistoryFetcher) (rows int, errCount int) {
+func (b *Top30Backfiller) runPlatform(ctx context.Context, platform string, entries []RosterEntry, fetcher adapter.DailyVolumeHistoryFetcher) (rows int, errCount int) {
 	sem := make(chan struct{}, b.perPlatN)
 	var (
 		mu    sync.Mutex
 		wg    sync.WaitGroup
 		limit = b.limiters[platform]
 	)
-	for _, base := range bases {
-		base := base
+	for _, entry := range entries {
+		entry := entry
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -203,7 +203,7 @@ func (b *Top30Backfiller) runPlatform(ctx context.Context, platform string, base
 					return
 				}
 			}
-			n, err := b.runOne(ctx, platform, base, fetcher)
+			n, err := b.runOne(ctx, platform, entry.BaseAsset, entry.DisplaySymbol, fetcher)
 			mu.Lock()
 			defer mu.Unlock()
 			if err != nil {
@@ -219,10 +219,10 @@ func (b *Top30Backfiller) runPlatform(ctx context.Context, platform string, base
 
 // runOne resolves a single (platform, base), decides how many days to
 // fetch via gap detection, calls the kline endpoint, filters the result
-// to the requested window, and persists. Returns the number of rows
-// written to the store (which equals 0 for an idempotent skip).
-func (b *Top30Backfiller) runOne(ctx context.Context, platform, base string, fetcher adapter.DailyVolumeHistoryFetcher) (int, error) {
-	displaySymbol := base + "-USDT (perp)"
+// to the requested window, and persists. displaySymbol is taken from the
+// roster entry so it matches whatever convention the platform uses
+// ("BTC-USD (perp)" on edgeX, "BTC-USDT (perp)" elsewhere).
+func (b *Top30Backfiller) runOne(ctx context.Context, platform, base, displaySymbol string, fetcher adapter.DailyVolumeHistoryFetcher) (int, error) {
 	sub, err := b.resolver.Resolve(platform, base, displaySymbol)
 	if err != nil {
 		// Unsupported on this platform — silently skip. ErrSymbolUnsupported
@@ -252,14 +252,18 @@ func (b *Top30Backfiller) runOne(ctx context.Context, platform, base string, fet
 
 // decideFetchDays returns the smallest backfill window that closes the
 // gap between today and the most recent persisted day for this
-// (platform, displaySymbol). A fresh symbol (no rows yet) gets the full
-// cold-start window; a same-day repair returns 0 (skip).
+// (platform, displaySymbol). The decision must satisfy three goals:
+//   - cold-start: a brand-new symbol pulls the full cold-start window so
+//     7d Vol / Δ light up after the first round;
+//   - shallow-history: a symbol with today's CG row but no prior days
+//     still pulls the full cold-start window, otherwise gap=0 short-
+//     circuits to repairDay=3 and 7d stays insufficient_history forever;
+//   - steady-state: a symbol with many days of history just patches
+//     today + a small repair window for late writers.
 func (b *Top30Backfiller) decideFetchDays(ctx context.Context, platform, displaySymbol string) int {
 	today := startOfUTCDay(time.Now().UTC())
 	last := b.store.DailySymbolHistoryLatest(platform, displaySymbol)
 	if last.IsZero() {
-		// Fall back to MySQL — process restart with populated DB shouldn't
-		// reread the full window unnecessarily.
 		if dbLast, err := b.store.LoadMaxDayPerSymbol(ctx, platform, displaySymbol); err == nil && !dbLast.IsZero() {
 			last = startOfUTCDay(dbLast)
 		}
@@ -269,10 +273,14 @@ func (b *Top30Backfiller) decideFetchDays(ctx context.Context, platform, display
 	if last.IsZero() {
 		return b.coldDays
 	}
+	// Shallow-history guard: even if we have today's row, force cold
+	// start when the symbol owns fewer than 7 distinct days. A floor of
+	// 7 ensures the 7d window always closes after one backfill round.
+	if dayCount := b.store.DailySymbolDayCount(platform, displaySymbol); dayCount < 7 {
+		return b.coldDays
+	}
 	gapDays := int(today.Sub(last).Hours() / 24)
 	if gapDays <= 0 {
-		// Still want to repair "today" once a day in case the live
-		// CoinGecko writer is lagging.
 		return b.repairDay
 	}
 	want := gapDays + 1

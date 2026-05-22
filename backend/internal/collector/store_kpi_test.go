@@ -292,10 +292,10 @@ func TestTop30RosterUnionReturnsBases(t *testing.T) {
 		{Rank: 2, Platform: "okx", Symbol: "1000PEPE-USDT (perp)", Volume24HUSD: 1, Status: domain.StatusComplete, SnapshotTS: time.Now().UTC()},
 	})
 	roster := store.Top30RosterUnion()
-	if got := roster["binance"]; len(got) != 2 || got[0] != "BTC" || got[1] != "ETH" {
-		t.Fatalf("binance roster=%v want [BTC ETH]", got)
+	if got := roster["binance"]; len(got) != 2 || got[0].BaseAsset != "BTC" || got[1].BaseAsset != "ETH" || got[0].DisplaySymbol != "BTC-USDT (perp)" || got[1].DisplaySymbol != "ETH-USDT (perp)" {
+		t.Fatalf("binance roster=%+v want [BTC,BTC-USDT (perp); ETH,ETH-USDT (perp)]", got)
 	}
-	if got := roster["okx"]; len(got) != 2 || got[0] != "1000PEPE" || got[1] != "BTC" {
-		t.Fatalf("okx roster=%v want [1000PEPE BTC]", got)
+	if got := roster["okx"]; len(got) != 2 || got[0].BaseAsset != "1000PEPE" || got[1].BaseAsset != "BTC" {
+		t.Fatalf("okx roster=%+v want [1000PEPE BTC]", got)
 	}
 }
