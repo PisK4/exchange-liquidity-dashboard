@@ -13,5 +13,6 @@ WORKDIR /app
 COPY --from=build /out/dashboard /app/dashboard
 COPY --from=build /out/coingecko-backfill /app/coingecko-backfill
 COPY config/ /config/
+COPY backend/docs/raw-instruments/ /app/docs/raw-instruments/
 EXPOSE 8080
 CMD ["/app/dashboard", "--role=all", "--addr=:8080"]

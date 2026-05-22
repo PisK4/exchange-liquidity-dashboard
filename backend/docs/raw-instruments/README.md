@@ -31,7 +31,20 @@ backend/docs/raw-instruments/
 
 ## How to refresh
 
-Monthly cadence (or whenever you suspect an exchange has changed):
+### Automated (preferred)
+
+`.github/workflows/catalog-refresh.yml` runs `make catalog` on the 1st of
+every month at 03:30 UTC and opens a PR with the regenerated dumps + yaml.
+You can also trigger it on demand from the GitHub Actions UI ("Run
+workflow"). Review the diff per the PR checklist, merge, and redeploy the
+backend so the new dumps land at `/app/docs/raw-instruments` for the
+Top30 backfill goroutine to consume.
+
+### Manual
+
+Use this when GitHub-hosted runners are blocked from one of the
+exchanges (binance / okx are the typical culprits) and the automated PR
+fails:
 
 ```bash
 cd backend
