@@ -104,6 +104,7 @@ func platformFromBook(book domain.OrderBookSnapshot, runtime config.Runtime) dom
 	for _, tier := range runtime.DepthTiers {
 		label := fmt.Sprintf("%.2f%%", tier*100)
 		depth := adapter.TierDepthMetrics(book, tier)
+		domain.DeriveDepthMetricsDefaults(book.DepthStatus, &depth)
 		row.DepthByTier[label] = depth
 		if label == "0.10%" {
 			row.Imbalance = indicators.Imbalance(depth.BidUSD, depth.AskUSD)

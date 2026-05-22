@@ -20,6 +20,14 @@ const (
 	ReasonSparseBook  = "sparse_book"
 	ReasonUnknown     = "unknown"
 
+	ReasonFeedTruncation        = "feed_truncation"
+	ReasonMaxPrecisionShortfall = "max_precision_shortfall"
+
+	PolicyRawStrict          = "raw_strict"
+	PolicyAggregatedStrict   = "aggregated_strict"
+	PolicyLooseLowerBound    = "loose_lower_bound"
+	PolicyLooseGroupedApprox = "loose_grouped_approx"
+
 	FreshnessLive    = "live"
 	FreshnessDelayed = "delayed"
 
@@ -62,16 +70,20 @@ type Level struct {
 }
 
 type BookView struct {
-	SourceID          string            `json:"source_id"`
-	Source            string            `json:"depth_source"`
-	SourceEndpoint    string            `json:"source_endpoint"`
-	Bids              []Level           `json:"bids,omitempty"`
-	Asks              []Level           `json:"asks,omitempty"`
-	SequenceID        uint64            `json:"sequence_id,omitempty"`
-	SnapshotTS        time.Time         `json:"snapshot_ts"`
-	ReceivedTS        time.Time         `json:"received_ts,omitempty"`
-	AggregationParams map[string]string `json:"aggregation_params,omitempty"`
-	APILevelCap       int               `json:"api_level_cap,omitempty"`
+	SourceID             string            `json:"source_id"`
+	Source               string            `json:"depth_source"`
+	SourceEndpoint       string            `json:"source_endpoint"`
+	Bids                 []Level           `json:"bids,omitempty"`
+	Asks                 []Level           `json:"asks,omitempty"`
+	SequenceID           uint64            `json:"sequence_id,omitempty"`
+	SnapshotTS           time.Time         `json:"snapshot_ts"`
+	ReceivedTS           time.Time         `json:"received_ts,omitempty"`
+	AggregationParams    map[string]string `json:"aggregation_params,omitempty"`
+	APILevelCap          int               `json:"api_level_cap,omitempty"`
+	StepUSD              float64           `json:"step_usd,omitempty"`
+	ResolutionPct        float64           `json:"resolution_pct,omitempty"`
+	UnofficialUIEndpoint bool              `json:"unofficial_ui_endpoint,omitempty"`
+	PolicyAcceptance     string            `json:"policy_acceptance,omitempty"`
 }
 
 type OrderBookSnapshot struct {
@@ -97,22 +109,27 @@ type OrderBookSnapshot struct {
 }
 
 type TierDepthMetrics struct {
-	BidUSD              float64           `json:"bid_usd"`
-	AskUSD              float64           `json:"ask_usd"`
-	TotalUSD            float64           `json:"total_usd"`
-	DepthStatus         string            `json:"depth_status,omitempty"`
-	PartialReason       string            `json:"partial_reason,omitempty"`
-	DepthSource         string            `json:"depth_source,omitempty"`
-	SourceID            string            `json:"source_id,omitempty"`
-	SourceEndpoint      string            `json:"source_endpoint,omitempty"`
-	LevelsReturned      int               `json:"levels_returned,omitempty"`
-	BidLevelsReturned   int               `json:"bid_levels_returned,omitempty"`
-	AskLevelsReturned   int               `json:"ask_levels_returned,omitempty"`
-	APILevelCap         int               `json:"api_level_cap,omitempty"`
-	FarthestBidPct      float64           `json:"farthest_bid_pct,omitempty"`
-	FarthestAskPct      float64           `json:"farthest_ask_pct,omitempty"`
-	FarthestDistancePct float64           `json:"farthest_distance_pct,omitempty"`
-	AggregationParams   map[string]string `json:"aggregation_params,omitempty"`
+	BidUSD               float64           `json:"bid_usd"`
+	AskUSD               float64           `json:"ask_usd"`
+	TotalUSD             float64           `json:"total_usd"`
+	DepthStatus          string            `json:"depth_status,omitempty"`
+	PartialReason        string            `json:"partial_reason,omitempty"`
+	DepthSource          string            `json:"depth_source,omitempty"`
+	SourceID             string            `json:"source_id,omitempty"`
+	SourceEndpoint       string            `json:"source_endpoint,omitempty"`
+	LevelsReturned       int               `json:"levels_returned,omitempty"`
+	BidLevelsReturned    int               `json:"bid_levels_returned,omitempty"`
+	AskLevelsReturned    int               `json:"ask_levels_returned,omitempty"`
+	APILevelCap          int               `json:"api_level_cap,omitempty"`
+	FarthestBidPct       float64           `json:"farthest_bid_pct,omitempty"`
+	FarthestAskPct       float64           `json:"farthest_ask_pct,omitempty"`
+	FarthestDistancePct  float64           `json:"farthest_distance_pct,omitempty"`
+	AggregationParams    map[string]string `json:"aggregation_params,omitempty"`
+	StrictComplete       bool              `json:"strict_complete"`
+	DisplayAvailable     bool              `json:"display_available"`
+	PolicyAcceptance     string            `json:"policy_acceptance,omitempty"`
+	PhysicalLimit        bool              `json:"physical_limit,omitempty"`
+	UnofficialUIEndpoint bool              `json:"unofficial_ui_endpoint,omitempty"`
 }
 
 type DepthMetrics = TierDepthMetrics
@@ -222,4 +239,56 @@ type CollectionStatus struct {
 	Error          string    `json:"error,omitempty"`
 	SnapshotTS     time.Time `json:"snapshot_ts"`
 	LatencyMS      int64     `json:"latency_ms"`
+}
+
+func NormalizePlatformSnapshot(row *PlatformSnapshot) {
+	if row == nil {
+		return
+	}
+	for tier, depth := range row.DepthByTier {
+		DeriveDepthMetricsDefaults(row.DepthStatus, &depth)
+		row.DepthByTier[tier] = depth
+	}
+}
+
+func DeriveDepthMetricsDefaults(rowStatus string, metric *TierDepthMetrics) {
+	if metric == nil {
+		return
+	}
+	status := metric.DepthStatus
+	if status == "" {
+		status = rowStatus
+		metric.DepthStatus = status
+	}
+	switch status {
+	case StatusComplete:
+		metric.StrictComplete = true
+		metric.DisplayAvailable = true
+		if metric.PolicyAcceptance == "" {
+			metric.PolicyAcceptance = PolicyRawStrict
+		}
+	case StatusAggregatedOrderbook, StatusWSLimitedDepth:
+		metric.StrictComplete = true
+		metric.DisplayAvailable = true
+		if metric.PolicyAcceptance == "" {
+			metric.PolicyAcceptance = PolicyAggregatedStrict
+		}
+	case StatusPartial:
+		metric.StrictComplete = false
+		metric.DisplayAvailable = !metric.PhysicalLimit
+		if metric.PolicyAcceptance == "" {
+			metric.PolicyAcceptance = PolicyLooseLowerBound
+		}
+	case StatusStale, StatusUnsupported, StatusError, StatusInsufficientHistory:
+		metric.StrictComplete = false
+		metric.DisplayAvailable = false
+	default:
+		if metric.PolicyAcceptance == PolicyRawStrict || metric.PolicyAcceptance == PolicyAggregatedStrict {
+			metric.StrictComplete = true
+			metric.DisplayAvailable = true
+		} else if metric.PolicyAcceptance == PolicyLooseLowerBound || metric.PolicyAcceptance == PolicyLooseGroupedApprox {
+			metric.StrictComplete = false
+			metric.DisplayAvailable = !metric.PhysicalLimit
+		}
+	}
 }

@@ -180,6 +180,7 @@ func (s *Store) WatchCatalog(ctx context.Context, path string, interval time.Dur
 func key(platform, symbol string) string { return platform + "|" + symbol }
 
 func (s *Store) SavePlatformSnapshot(row domain.PlatformSnapshot) {
+	domain.NormalizePlatformSnapshot(&row)
 	s.mu.Lock()
 	s.savePlatformSnapshotLocked(row)
 	s.mu.Unlock()
@@ -394,13 +395,15 @@ func (s *Store) Liquidity(symbol string) map[string]any {
 		}
 	}
 	medians := competitorMedianByTier(rows)
+	strictMedians := strictCompetitorMedianByTier(rows)
 	rows = enrichLiquidityRows(rows, medians)
 	return map[string]any{
-		"symbol":                    symbol,
-		"snapshot_ts":               latestTS(rows),
-		"rows":                      rows,
-		"competitor_median_by_tier": medians,
-		"kpis":                      s.liquidityKPIsLocked(rows, medians, symbol),
+		"symbol":                           symbol,
+		"snapshot_ts":                      latestTS(rows),
+		"rows":                             rows,
+		"competitor_median_by_tier":        medians,
+		"strict_competitor_median_by_tier": strictMedians,
+		"kpis":                             s.liquidityKPIsLocked(rows, medians, strictMedians, symbol),
 	}
 }
 
@@ -912,7 +915,7 @@ func latestTS(rows []domain.PlatformSnapshot) time.Time {
 
 // liquidityKPIsLocked builds the per-symbol KPIs for the Liquidity tab. The
 // caller already holds s.mu (RLock).
-func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians map[string]float64, symbol string) map[string]any {
+func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians, strictMedians map[string]float64, symbol string) map[string]any {
 	var edge domain.PlatformSnapshot
 	for _, r := range rows {
 		if r.Platform == "edgeX" {
@@ -939,14 +942,15 @@ func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians map[
 	share7dPct, share7dStatus, shareWoWStatus := s.symbolShare7dLocked(symbol)
 	spread10mBp, spread10mStatus := s.edgexSpread10mLocked(symbol)
 	out := map[string]any{
-		"edgex_depth_by_tier":       edge.DepthByTier,
-		"edgex_vs_median_by_tier":   edge.VsMedianByTier,
-		"competitor_median_by_tier": medians,
-		"edgex_spread_bp":           edge.SpreadBP,
-		"edgex_spread_10m_status":   spread10mStatus,
-		"edgex_24h_share_pct":       share,
-		"symbol_share_7d_status":    share7dStatus,
-		"symbol_share_wow_status":   shareWoWStatus,
+		"edgex_depth_by_tier":              edge.DepthByTier,
+		"edgex_vs_median_by_tier":          edge.VsMedianByTier,
+		"competitor_median_by_tier":        medians,
+		"strict_competitor_median_by_tier": strictMedians,
+		"edgex_spread_bp":                  edge.SpreadBP,
+		"edgex_spread_10m_status":          spread10mStatus,
+		"edgex_24h_share_pct":              share,
+		"symbol_share_7d_status":           share7dStatus,
+		"symbol_share_wow_status":          shareWoWStatus,
 	}
 	if share7dStatus == domain.StatusComplete || share7dStatus == domain.StatusPartial {
 		out["symbol_share_7d_pct"] = share7dPct
@@ -1112,13 +1116,25 @@ func (s *Store) edgexSpread10mLocked(symbol string) (float64, string) {
 }
 
 func competitorMedianByTier(rows []domain.PlatformSnapshot) map[string]float64 {
+	return medianByTier(rows, func(row domain.PlatformSnapshot, depth domain.DepthMetrics) bool {
+		return isComparableDepthTier(row, depth)
+	})
+}
+
+func strictCompetitorMedianByTier(rows []domain.PlatformSnapshot) map[string]float64 {
+	return medianByTier(rows, func(row domain.PlatformSnapshot, depth domain.DepthMetrics) bool {
+		return isStrictCompleteDepthTier(row, depth)
+	})
+}
+
+func medianByTier(rows []domain.PlatformSnapshot, include func(domain.PlatformSnapshot, domain.DepthMetrics) bool) map[string]float64 {
 	byTier := map[string][]float64{}
 	for _, row := range rows {
 		if row.Platform == "edgeX" {
 			continue
 		}
 		for tier, depth := range row.DepthByTier {
-			if depth.TotalUSD > 0 && isComparableDepthTier(row, depth) {
+			if depth.TotalUSD > 0 && include(row, depth) {
 				byTier[tier] = append(byTier[tier], depth.TotalUSD)
 			}
 		}
@@ -1185,14 +1201,13 @@ func isComparableDepth(row domain.PlatformSnapshot) bool {
 }
 
 func isComparableDepthTier(row domain.PlatformSnapshot, depth domain.DepthMetrics) bool {
-	switch depth.DepthStatus {
-	case domain.StatusComplete, domain.StatusAggregatedOrderbook:
-		return true
-	case "":
-		return isComparableDepth(row)
-	default:
-		return false
-	}
+	domain.DeriveDepthMetricsDefaults(row.DepthStatus, &depth)
+	return depth.DisplayAvailable
+}
+
+func isStrictCompleteDepthTier(row domain.PlatformSnapshot, depth domain.DepthMetrics) bool {
+	domain.DeriveDepthMetricsDefaults(row.DepthStatus, &depth)
+	return depth.StrictComplete && depth.DisplayAvailable
 }
 
 func comparableTierTotal(row domain.PlatformSnapshot, tier string) float64 {

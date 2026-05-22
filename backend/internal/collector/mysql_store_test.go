@@ -22,6 +22,11 @@ func TestInitSchemaIncludesPersistenceTables(t *testing.T) {
 		"farthest_ask_pct DECIMAL(18,8)",
 		"depth_source VARCHAR(32)",
 		"source_id VARCHAR(64)",
+		"strict_complete TINYINT(1)",
+		"display_available TINYINT(1)",
+		"policy_acceptance VARCHAR(32)",
+		"physical_limit TINYINT(1)",
+		"unofficial_ui_endpoint TINYINT(1)",
 		"aggregation_params_json JSON",
 		"CREATE TABLE IF NOT EXISTS t_symbol_volume_snapshot",
 		"CREATE TABLE IF NOT EXISTS t_collection_status",
@@ -91,6 +96,9 @@ func TestPlatformSnapshotOrderbookRowsArePerTierWithLineage(t *testing.T) {
 	}
 	if deep.BidLevelsReturned != 200 || deep.AskLevelsReturned != 200 || deep.FarthestDistancePct != 2.2 {
 		t.Fatalf("expected level/farthest metrics to be preserved, got %+v", deep)
+	}
+	if !deep.StrictComplete || !deep.DisplayAvailable || deep.PolicyAcceptance != domain.PolicyAggregatedStrict {
+		t.Fatalf("expected strict display contract fields to be derived, got %+v", deep)
 	}
 	if deep.AggregationParamsJSON == "" || !contains(deep.AggregationParamsJSON, "interval") {
 		t.Fatalf("expected aggregation params json, got %+v", deep)
@@ -293,7 +301,7 @@ func TestLiquidityComputesCompetitorMedianRankAndUnsupportedHistory(t *testing.T
 	}
 }
 
-func TestLiquidityMedianAndRankUseTierLevelDepthStatus(t *testing.T) {
+func TestLiquidityMedianAndRankUseTierLevelDisplayAvailability(t *testing.T) {
 	cfg := config.Default()
 	cfg.Platforms = []string{"edgeX", "binance", "okx", "gate"}
 	store := NewStore(cfg)
@@ -356,15 +364,15 @@ func TestLiquidityMedianAndRankUseTierLevelDepthStatus(t *testing.T) {
 	if medians["0.10%"] != 200 {
 		t.Fatalf("expected complete 0.10%% tiers to participate in median, got %+v", medians)
 	}
-	if medians["2.00%"] != 2500 {
-		t.Fatalf("expected partial 2.00%% lower bounds to be excluded from median, got %+v", medians)
+	if medians["2.00%"] != 2000 {
+		t.Fatalf("expected displayable partial 2.00%% lower bounds to participate in median, got %+v", medians)
 	}
 	rows := got["rows"].([]domain.PlatformSnapshot)
 	if rows[0].Rank01 != 4 {
 		t.Fatalf("expected edgeX to be ranked by complete 0.10%% tier even when row is partial, got %+v", rows[0])
 	}
-	if _, ok := rows[0].VsMedianByTier["2.00%"]; ok {
-		t.Fatalf("partial edgeX 2.00%% lower bound must not get vs median ratio, got %+v", rows[0].VsMedianByTier)
+	if math.Abs(rows[0].VsMedianByTier["2.00%"]-0.1) > 0.0001 {
+		t.Fatalf("displayable partial edgeX 2.00%% lower bound should get vs median ratio, got %+v", rows[0].VsMedianByTier)
 	}
 }
 

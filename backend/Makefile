@@ -73,10 +73,12 @@ migrate-up:
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000002_coingecko.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000003_widen_data_source.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000004_edgex_via_coingecko.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000005_depth_contract_fields.up.sql"
 
 migrate-down:
 	@echo "Apply backend/migrations/*.down.sql to MySQL DSN: $(MYSQL_DSN)"
-	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000004_edgex_via_coingecko.down.sql"
+	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000005_depth_contract_fields.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000004_edgex_via_coingecko.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000003_widen_data_source.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000002_coingecko.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000001_init_schema.down.sql"

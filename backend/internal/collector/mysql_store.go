@@ -17,7 +17,7 @@ import (
 const initSchemaSQL = `
 CREATE TABLE IF NOT EXISTS t_symbol_mapping (id BIGINT AUTO_INCREMENT PRIMARY KEY, display_symbol VARCHAR(96) NOT NULL, canonical VARCHAR(32) NOT NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, platform VARCHAR(32) NOT NULL, api_symbol VARCHAR(96) NOT NULL, source_endpoint VARCHAR(255) NOT NULL);
 CREATE TABLE IF NOT EXISTS t_exchange_instrument_catalog (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, api_symbol VARCHAR(96) NOT NULL, status VARCHAR(32) NOT NULL, updated_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
-CREATE TABLE IF NOT EXISTS t_orderbook_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, tier VARCHAR(16) NOT NULL DEFAULT '', bid_usd DECIMAL(28,8), ask_usd DECIMAL(28,8), total_usd DECIMAL(28,8), depth_status VARCHAR(32) NOT NULL, partial_reason VARCHAR(32), depth_source VARCHAR(32), source_id VARCHAR(64), levels_returned INT, bid_levels_returned INT, ask_levels_returned INT, api_level_cap INT, farthest_bid_pct DECIMAL(18,8), farthest_ask_pct DECIMAL(18,8), farthest_distance_pct DECIMAL(18,8), source_endpoint VARCHAR(255), aggregation_params_json JSON, error_message TEXT, depth_json JSON, buy_slippage_json JSON, sell_slippage_json JSON);
+CREATE TABLE IF NOT EXISTS t_orderbook_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, tier VARCHAR(16) NOT NULL DEFAULT '', bid_usd DECIMAL(28,8), ask_usd DECIMAL(28,8), total_usd DECIMAL(28,8), depth_status VARCHAR(32) NOT NULL, partial_reason VARCHAR(32), depth_source VARCHAR(32), source_id VARCHAR(64), levels_returned INT, bid_levels_returned INT, ask_levels_returned INT, api_level_cap INT, farthest_bid_pct DECIMAL(18,8), farthest_ask_pct DECIMAL(18,8), farthest_distance_pct DECIMAL(18,8), source_endpoint VARCHAR(255), aggregation_params_json JSON, strict_complete TINYINT(1) NOT NULL DEFAULT 0, display_available TINYINT(1) NOT NULL DEFAULT 0, policy_acceptance VARCHAR(32), physical_limit TINYINT(1) NOT NULL DEFAULT 0, unofficial_ui_endpoint TINYINT(1) NOT NULL DEFAULT 0, error_message TEXT, depth_json JSON, buy_slippage_json JSON, sell_slippage_json JSON);
 CREATE TABLE IF NOT EXISTS t_book_quality_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, spread_bp DECIMAL(18,8), imbalance_pct DECIMAL(18,8));
 CREATE TABLE IF NOT EXISTS t_symbol_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), error_message TEXT);
 CREATE TABLE IF NOT EXISTS t_platform_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), discount DECIMAL(10,4));
@@ -56,7 +56,44 @@ func ApplyMigrations(db *sql.DB) error {
 			return fmt.Errorf("migration failed at %q: %w", firstLine(stmt), err)
 		}
 	}
-	return nil
+	return ensureOrderbookContractColumns(db)
+}
+
+func ensureOrderbookContractColumns(db *sql.DB) error {
+	columns := []struct {
+		name string
+		ddl  string
+	}{
+		{"strict_complete", "TINYINT(1) NOT NULL DEFAULT 0"},
+		{"display_available", "TINYINT(1) NOT NULL DEFAULT 0"},
+		{"policy_acceptance", "VARCHAR(32) NULL"},
+		{"physical_limit", "TINYINT(1) NOT NULL DEFAULT 0"},
+		{"unofficial_ui_endpoint", "TINYINT(1) NOT NULL DEFAULT 0"},
+	}
+	for _, col := range columns {
+		var count int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 't_orderbook_snapshot' AND COLUMN_NAME = ?`, col.name).Scan(&count); err != nil {
+			return fmt.Errorf("check t_orderbook_snapshot.%s: %w", col.name, err)
+		}
+		if count > 0 {
+			continue
+		}
+		if _, err := db.Exec(`ALTER TABLE t_orderbook_snapshot ADD COLUMN ` + col.name + ` ` + col.ddl); err != nil {
+			return fmt.Errorf("add t_orderbook_snapshot.%s: %w", col.name, err)
+		}
+	}
+	_, err := db.Exec(`UPDATE t_orderbook_snapshot SET
+		strict_complete = CASE WHEN depth_status IN ('complete', 'aggregated_orderbook', 'ws_limited_depth') THEN 1 ELSE 0 END,
+		display_available = CASE WHEN depth_status IN ('complete', 'aggregated_orderbook', 'ws_limited_depth', 'partial') AND physical_limit = 0 THEN 1 ELSE 0 END,
+		policy_acceptance = CASE
+			WHEN policy_acceptance IS NOT NULL AND policy_acceptance <> '' THEN policy_acceptance
+			WHEN depth_status = 'complete' THEN 'raw_strict'
+			WHEN depth_status IN ('aggregated_orderbook', 'ws_limited_depth') THEN 'aggregated_strict'
+			WHEN depth_status = 'partial' THEN 'loose_lower_bound'
+			ELSE policy_acceptance
+		END
+	WHERE policy_acceptance IS NULL OR policy_acceptance = ''`)
+	return err
 }
 
 func (s *Store) AttachDB(db *sql.DB) {
@@ -90,7 +127,7 @@ func (s *Store) persistPlatformSnapshot(ctx context.Context, row domain.Platform
 	rows := platformSnapshotOrderbookRows(row)
 	for _, tier := range sortedOrderbookTiers(rows) {
 		dbRow := rows[tier]
-		_, err := db.ExecContext(ctx, `INSERT INTO t_orderbook_snapshot (platform, display_symbol, snapshot_ts, tier, bid_usd, ask_usd, total_usd, depth_status, partial_reason, depth_source, source_id, levels_returned, bid_levels_returned, ask_levels_returned, api_level_cap, farthest_bid_pct, farthest_ask_pct, farthest_distance_pct, source_endpoint, aggregation_params_json, error_message, depth_json, buy_slippage_json, sell_slippage_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, dbRow.Platform, dbRow.DisplaySymbol, dbRow.SnapshotTS, dbRow.Tier, dbRow.BidUSD, dbRow.AskUSD, dbRow.TotalUSD, dbRow.DepthStatus, nullString(dbRow.PartialReason), nullString(dbRow.DepthSource), nullString(dbRow.SourceID), nullInt(dbRow.LevelsReturned), nullInt(dbRow.BidLevelsReturned), nullInt(dbRow.AskLevelsReturned), nullInt(dbRow.APILevelCap), nullFloat(dbRow.FarthestBidPct), nullFloat(dbRow.FarthestAskPct), nullFloat(dbRow.FarthestDistancePct), dbRow.SourceEndpoint, dbRow.AggregationParamsJSON, nullString(dbRow.Error), dbRow.DepthJSON, dbRow.BuySlippageJSON, dbRow.SellSlippageJSON)
+		_, err := db.ExecContext(ctx, `INSERT INTO t_orderbook_snapshot (platform, display_symbol, snapshot_ts, tier, bid_usd, ask_usd, total_usd, depth_status, partial_reason, depth_source, source_id, levels_returned, bid_levels_returned, ask_levels_returned, api_level_cap, farthest_bid_pct, farthest_ask_pct, farthest_distance_pct, source_endpoint, aggregation_params_json, strict_complete, display_available, policy_acceptance, physical_limit, unofficial_ui_endpoint, error_message, depth_json, buy_slippage_json, sell_slippage_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, dbRow.Platform, dbRow.DisplaySymbol, dbRow.SnapshotTS, dbRow.Tier, dbRow.BidUSD, dbRow.AskUSD, dbRow.TotalUSD, dbRow.DepthStatus, nullString(dbRow.PartialReason), nullString(dbRow.DepthSource), nullString(dbRow.SourceID), nullInt(dbRow.LevelsReturned), nullInt(dbRow.BidLevelsReturned), nullInt(dbRow.AskLevelsReturned), nullInt(dbRow.APILevelCap), nullFloat(dbRow.FarthestBidPct), nullFloat(dbRow.FarthestAskPct), nullFloat(dbRow.FarthestDistancePct), dbRow.SourceEndpoint, dbRow.AggregationParamsJSON, boolToInt(dbRow.StrictComplete), boolToInt(dbRow.DisplayAvailable), nullString(dbRow.PolicyAcceptance), boolToInt(dbRow.PhysicalLimit), boolToInt(dbRow.UnofficialUIEndpoint), nullString(dbRow.Error), dbRow.DepthJSON, dbRow.BuySlippageJSON, dbRow.SellSlippageJSON)
 		if err != nil {
 			return err
 		}
@@ -321,6 +358,13 @@ func boolToTinyInt(b bool) sql.NullInt64 {
 	return sql.NullInt64{Int64: 1, Valid: true}
 }
 
+func boolToInt(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
+}
+
 func defaultString(value, fallback string) string {
 	if value == "" {
 		return fallback
@@ -371,7 +415,7 @@ func (s *Store) LoadLatestFromDB(ctx context.Context) error {
 	if db == nil {
 		return nil
 	}
-	rows, err := db.QueryContext(ctx, `SELECT s.platform, s.display_symbol, s.snapshot_ts, s.tier, COALESCE(s.bid_usd,0), COALESCE(s.ask_usd,0), COALESCE(s.total_usd,0), s.depth_status, COALESCE(s.partial_reason,''), COALESCE(s.depth_source,''), COALESCE(s.source_id,''), COALESCE(s.levels_returned,0), COALESCE(s.bid_levels_returned,0), COALESCE(s.ask_levels_returned,0), COALESCE(s.api_level_cap,0), COALESCE(s.farthest_bid_pct,0), COALESCE(s.farthest_ask_pct,0), COALESCE(s.farthest_distance_pct,0), COALESCE(s.source_endpoint,''), COALESCE(s.aggregation_params_json,'{}'), COALESCE(s.error_message,''), COALESCE(s.depth_json,'{}'), COALESCE(s.buy_slippage_json,'{}'), COALESCE(s.sell_slippage_json,'{}') FROM t_orderbook_snapshot s JOIN (SELECT platform, display_symbol, MAX(snapshot_ts) AS snapshot_ts FROM t_orderbook_snapshot GROUP BY platform, display_symbol) latest ON latest.platform = s.platform AND latest.display_symbol = s.display_symbol AND latest.snapshot_ts = s.snapshot_ts`)
+	rows, err := db.QueryContext(ctx, `SELECT s.platform, s.display_symbol, s.snapshot_ts, s.tier, COALESCE(s.bid_usd,0), COALESCE(s.ask_usd,0), COALESCE(s.total_usd,0), s.depth_status, COALESCE(s.partial_reason,''), COALESCE(s.depth_source,''), COALESCE(s.source_id,''), COALESCE(s.levels_returned,0), COALESCE(s.bid_levels_returned,0), COALESCE(s.ask_levels_returned,0), COALESCE(s.api_level_cap,0), COALESCE(s.farthest_bid_pct,0), COALESCE(s.farthest_ask_pct,0), COALESCE(s.farthest_distance_pct,0), COALESCE(s.source_endpoint,''), COALESCE(s.aggregation_params_json,'{}'), COALESCE(s.strict_complete,0), COALESCE(s.display_available,0), COALESCE(s.policy_acceptance,''), COALESCE(s.physical_limit,0), COALESCE(s.unofficial_ui_endpoint,0), COALESCE(s.error_message,''), COALESCE(s.depth_json,'{}'), COALESCE(s.buy_slippage_json,'{}'), COALESCE(s.sell_slippage_json,'{}') FROM t_orderbook_snapshot s JOIN (SELECT platform, display_symbol, MAX(snapshot_ts) AS snapshot_ts FROM t_orderbook_snapshot GROUP BY platform, display_symbol) latest ON latest.platform = s.platform AND latest.display_symbol = s.display_symbol AND latest.snapshot_ts = s.snapshot_ts`)
 	if err != nil {
 		return err
 	}
@@ -382,8 +426,9 @@ func (s *Store) LoadLatestFromDB(ctx context.Context) error {
 			platform, displaySymbol, tier, status, reason, source, sourceID, sourceEndpoint, aggJSON, errMsg, depthJSON, buyJSON, sellJSON string
 			snapshotTS                                                                                                                     time.Time
 			depth                                                                                                                          domain.DepthMetrics
+			strictComplete, displayAvailable, physicalLimit, unofficialUIEndpoint                                                          int
 		)
-		if err := rows.Scan(&platform, &displaySymbol, &snapshotTS, &tier, &depth.BidUSD, &depth.AskUSD, &depth.TotalUSD, &status, &reason, &source, &sourceID, &depth.LevelsReturned, &depth.BidLevelsReturned, &depth.AskLevelsReturned, &depth.APILevelCap, &depth.FarthestBidPct, &depth.FarthestAskPct, &depth.FarthestDistancePct, &sourceEndpoint, &aggJSON, &errMsg, &depthJSON, &buyJSON, &sellJSON); err != nil {
+		if err := rows.Scan(&platform, &displaySymbol, &snapshotTS, &tier, &depth.BidUSD, &depth.AskUSD, &depth.TotalUSD, &status, &reason, &source, &sourceID, &depth.LevelsReturned, &depth.BidLevelsReturned, &depth.AskLevelsReturned, &depth.APILevelCap, &depth.FarthestBidPct, &depth.FarthestAskPct, &depth.FarthestDistancePct, &sourceEndpoint, &aggJSON, &strictComplete, &displayAvailable, &depth.PolicyAcceptance, &physicalLimit, &unofficialUIEndpoint, &errMsg, &depthJSON, &buyJSON, &sellJSON); err != nil {
 			return err
 		}
 		k := key(platform, displaySymbol)
@@ -406,11 +451,17 @@ func (s *Store) LoadLatestFromDB(ctx context.Context) error {
 			depth.DepthSource = source
 			depth.SourceID = sourceID
 			depth.SourceEndpoint = sourceEndpoint
+			depth.StrictComplete = strictComplete != 0
+			depth.DisplayAvailable = displayAvailable != 0
+			depth.PhysicalLimit = physicalLimit != 0
+			depth.UnofficialUIEndpoint = unofficialUIEndpoint != 0
 			_ = json.Unmarshal([]byte(aggJSON), &depth.AggregationParams)
+			domain.DeriveDepthMetricsDefaults(row.DepthStatus, &depth)
 			row.DepthByTier[tier] = depth
 		} else {
 			_ = json.Unmarshal([]byte(depthJSON), &row.DepthByTier)
 		}
+		domain.NormalizePlatformSnapshot(&row)
 		loaded[k] = row
 	}
 	for _, row := range loaded {
@@ -561,6 +612,11 @@ type orderbookDBRow struct {
 	FarthestDistancePct   float64
 	SourceEndpoint        string
 	AggregationParamsJSON string
+	StrictComplete        bool
+	DisplayAvailable      bool
+	PolicyAcceptance      string
+	PhysicalLimit         bool
+	UnofficialUIEndpoint  bool
 	Error                 string
 	DepthJSON             string
 	BuySlippageJSON       string
@@ -573,6 +629,8 @@ func platformSnapshotOrderbookRows(row domain.PlatformSnapshot) map[string]order
 	sellJSON, _ := json.Marshal(row.SellSlippageBP)
 	out := map[string]orderbookDBRow{}
 	if len(row.DepthByTier) == 0 {
+		depth := domain.DepthMetrics{DepthStatus: row.DepthStatus, PartialReason: row.PartialReason}
+		domain.DeriveDepthMetricsDefaults(row.DepthStatus, &depth)
 		out[""] = orderbookDBRow{
 			Platform:              row.Platform,
 			DisplaySymbol:         row.DisplaySymbol,
@@ -580,6 +638,11 @@ func platformSnapshotOrderbookRows(row domain.PlatformSnapshot) map[string]order
 			DepthStatus:           row.DepthStatus,
 			PartialReason:         row.PartialReason,
 			SourceEndpoint:        row.SourceEndpoint,
+			StrictComplete:        depth.StrictComplete,
+			DisplayAvailable:      depth.DisplayAvailable,
+			PolicyAcceptance:      depth.PolicyAcceptance,
+			PhysicalLimit:         depth.PhysicalLimit,
+			UnofficialUIEndpoint:  depth.UnofficialUIEndpoint,
 			Error:                 row.Error,
 			AggregationParamsJSON: "{}",
 			DepthJSON:             string(depthJSON),
@@ -589,6 +652,7 @@ func platformSnapshotOrderbookRows(row domain.PlatformSnapshot) map[string]order
 		return out
 	}
 	for tier, depth := range row.DepthByTier {
+		domain.DeriveDepthMetricsDefaults(row.DepthStatus, &depth)
 		paramsJSON, _ := json.Marshal(depth.AggregationParams)
 		if string(paramsJSON) == "null" {
 			paramsJSON = []byte("{}")
@@ -622,6 +686,11 @@ func platformSnapshotOrderbookRows(row domain.PlatformSnapshot) map[string]order
 			FarthestDistancePct:   depth.FarthestDistancePct,
 			SourceEndpoint:        sourceEndpoint,
 			AggregationParamsJSON: string(paramsJSON),
+			StrictComplete:        depth.StrictComplete,
+			DisplayAvailable:      depth.DisplayAvailable,
+			PolicyAcceptance:      depth.PolicyAcceptance,
+			PhysicalLimit:         depth.PhysicalLimit,
+			UnofficialUIEndpoint:  depth.UnofficialUIEndpoint,
 			Error:                 row.Error,
 			DepthJSON:             string(depthJSON),
 			BuySlippageJSON:       string(buyJSON),

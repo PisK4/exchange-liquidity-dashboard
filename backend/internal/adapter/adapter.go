@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -777,7 +778,7 @@ func finalizeBook(book domain.OrderBookSnapshot, sourceID, depthSource, sourceEn
 	if book.SourceBooks == nil {
 		book.SourceBooks = map[string]domain.BookView{}
 	}
-	book.SourceBooks[sourceID] = domain.BookView{
+	view := domain.BookView{
 		SourceID:       sourceID,
 		Source:         depthSource,
 		SourceEndpoint: sourceEndpoint,
@@ -786,6 +787,7 @@ func finalizeBook(book domain.OrderBookSnapshot, sourceID, depthSource, sourceEn
 		SnapshotTS:     book.SnapshotTS,
 		APILevelCap:    book.APILevelCap,
 	}
+	book.SourceBooks[sourceID] = enrichBookViewMetrics(view, midPrice(book.Bids, book.Asks))
 	return book
 }
 
@@ -811,26 +813,31 @@ func TierDepthMetrics(book domain.OrderBookSnapshot, tier float64) domain.TierDe
 	bidLevels := len(view.Bids)
 	askLevels := len(view.Asks)
 	levels := bidLevels + askLevels
+	view = enrichBookViewMetrics(view, mid)
 	farBid, farAsk := farthestSideDistancePctFromMid(view.Bids, view.Asks, mid)
 	status, reason := classifyDepthView(view.Source, farBid, farAsk, tier*100, levels, view.APILevelCap)
-	return domain.TierDepthMetrics{
-		BidUSD:              bidUSD,
-		AskUSD:              askUSD,
-		TotalUSD:            bidUSD + askUSD,
-		DepthStatus:         status,
-		PartialReason:       reason,
-		DepthSource:         view.Source,
-		SourceID:            view.SourceID,
-		SourceEndpoint:      view.SourceEndpoint,
-		LevelsReturned:      levels,
-		BidLevelsReturned:   bidLevels,
-		AskLevelsReturned:   askLevels,
-		APILevelCap:         view.APILevelCap,
-		FarthestBidPct:      farBid,
-		FarthestAskPct:      farAsk,
-		FarthestDistancePct: maxFloat(farBid, farAsk),
-		AggregationParams:   view.AggregationParams,
+	metric := domain.TierDepthMetrics{
+		BidUSD:               bidUSD,
+		AskUSD:               askUSD,
+		TotalUSD:             bidUSD + askUSD,
+		DepthStatus:          status,
+		PartialReason:        reason,
+		DepthSource:          view.Source,
+		SourceID:             view.SourceID,
+		SourceEndpoint:       view.SourceEndpoint,
+		LevelsReturned:       levels,
+		BidLevelsReturned:    bidLevels,
+		AskLevelsReturned:    askLevels,
+		APILevelCap:          view.APILevelCap,
+		FarthestBidPct:       farBid,
+		FarthestAskPct:       farAsk,
+		FarthestDistancePct:  maxFloat(farBid, farAsk),
+		AggregationParams:    view.AggregationParams,
+		PolicyAcceptance:     policyAcceptanceForView(view.Source, status),
+		UnofficialUIEndpoint: view.UnofficialUIEndpoint,
 	}
+	domain.DeriveDepthMetricsDefaults(book.DepthStatus, &metric)
+	return metric
 }
 
 func selectBookView(book domain.OrderBookSnapshot, tier float64) domain.BookView {
@@ -928,6 +935,58 @@ func classifyDepthView(source string, farBid, farAsk, targetPct float64, levels,
 	return domain.StatusPartial, domain.ReasonUnknown
 }
 
+func policyAcceptanceForView(source, status string) string {
+	switch status {
+	case domain.StatusComplete:
+		return domain.PolicyRawStrict
+	case domain.StatusAggregatedOrderbook, domain.StatusWSLimitedDepth:
+		return domain.PolicyAggregatedStrict
+	case domain.StatusPartial:
+		if source == domain.SourceAggregatedOrderbook {
+			return domain.PolicyLooseGroupedApprox
+		}
+		return domain.PolicyLooseLowerBound
+	default:
+		return ""
+	}
+}
+
+func enrichBookViewMetrics(view domain.BookView, mid float64) domain.BookView {
+	if view.StepUSD <= 0 {
+		view.StepUSD = medianAdjacentStepUSD(view.Bids, view.Asks)
+	}
+	if view.ResolutionPct <= 0 && view.StepUSD > 0 && mid > 0 {
+		view.ResolutionPct = view.StepUSD / mid * 100
+	}
+	if view.PolicyAcceptance == "" {
+		view.PolicyAcceptance = policyAcceptanceForView(view.Source, "")
+	}
+	return view
+}
+
+func medianAdjacentStepUSD(bids, asks []domain.Level) float64 {
+	diffs := make([]float64, 0, maxInt(len(bids)-1, 0)+maxInt(len(asks)-1, 0))
+	appendDiffs := func(levels []domain.Level) {
+		for i := 1; i < len(levels); i++ {
+			diff := mathAbs(levels[i].Price - levels[i-1].Price)
+			if diff > 0 {
+				diffs = append(diffs, diff)
+			}
+		}
+	}
+	appendDiffs(bids)
+	appendDiffs(asks)
+	if len(diffs) == 0 {
+		return 0
+	}
+	sort.Float64s(diffs)
+	mid := len(diffs) / 2
+	if len(diffs)%2 == 1 {
+		return diffs[mid]
+	}
+	return (diffs[mid-1] + diffs[mid]) / 2
+}
+
 func apiLevelCap(platform string) int {
 	switch platform {
 	case "binance":
@@ -1001,6 +1060,13 @@ func defaultDepthSource(platform string) string {
 }
 
 func maxFloat(a, b float64) float64 {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func maxInt(a, b int) int {
 	if a > b {
 		return a
 	}
