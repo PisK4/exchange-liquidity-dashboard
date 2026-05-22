@@ -15,6 +15,31 @@ slippage_buckets_usd: [50000, 100000, 500000, 1000000]
 volume_discounts:
   mexc: 0.4
   gate: 0.5
+ws_providers:
+  bitget:
+    enabled: true
+    url: wss://stream.bitget.com/public/v1/stream
+    proxy: "http://host.docker.internal:7897"
+    stale_after: 15s
+  mexc:
+    enabled: true
+    url: wss://futures.mexc.com/edge?Trans-Protocol=JSON
+    proxy: "http://host.docker.internal:7897"
+    stale_after: 15s
+  okx:
+    enabled: true
+    url: wss://wspri.okx.com:8443/ws/v5/ipublic
+    stale_after: 15s
+  bybit:
+    enabled: false
+    url: wss://ws2.bybit.com/realtime_w
+    proxy: "http://host.docker.internal:7897"
+    stale_after: 15s
+  bingx:
+    enabled: false
+    url: wss://open-api-swap.bingx.com/swap-market
+    proxy: "http://host.docker.internal:7897"
+    stale_after: 15s
 history:
   enabled_windows: [24h]
   disabled_windows:

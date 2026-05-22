@@ -32,6 +32,12 @@ slippage_buckets_usd: [25000, 75000]
 volume_discounts:
   binance: 0.9
   hyperliquid: 1.0
+ws_providers:
+  bybit:
+    enabled: true
+    url: wss://example.invalid/bybit
+    proxy: http://127.0.0.1:7897
+    stale_after: 22s
 `)
 	mustWrite(t, filepath.Join(dir, "instrument_catalog.yaml"), `
 schema_version: 1
@@ -87,6 +93,10 @@ platforms:
 	}
 	if cfg.Runtime.VolumeDiscounts["binance"] != 0.9 {
 		t.Fatalf("volume discount not loaded: %+v", cfg.Runtime.VolumeDiscounts)
+	}
+	bybitWS := cfg.Runtime.WSProviders["bybit"]
+	if !bybitWS.Enabled || bybitWS.URL != "wss://example.invalid/bybit" || bybitWS.Proxy != "http://127.0.0.1:7897" || bybitWS.StaleAfter != 22*time.Second {
+		t.Fatalf("ws provider override not loaded: %+v", bybitWS)
 	}
 }
 

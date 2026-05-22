@@ -10,16 +10,17 @@ import (
 )
 
 type Runtime struct {
-	CollectionInterval    time.Duration      `json:"collection_interval"`
-	HTTPTimeout           time.Duration      `json:"http_timeout"`
-	ExchangeProxy         string             `json:"exchange_proxy,omitempty"`
-	LighterWSURL          string             `json:"lighter_ws_url"`
-	LighterStaleAfter     time.Duration      `json:"lighter_stale_after"`
-	DisplayFallbackWindow time.Duration      `json:"display_fallback_window"`
-	DepthTiers            []float64          `json:"depth_tiers"`
-	SlippageBucketsUSD    []float64          `json:"slippage_buckets_usd"`
-	VolumeDiscounts       map[string]float64 `json:"volume_discounts"`
-	CoinGecko             CoinGeckoConfig    `json:"coingecko"`
+	CollectionInterval    time.Duration               `json:"collection_interval"`
+	HTTPTimeout           time.Duration               `json:"http_timeout"`
+	ExchangeProxy         string                      `json:"exchange_proxy,omitempty"`
+	LighterWSURL          string                      `json:"lighter_ws_url"`
+	LighterStaleAfter     time.Duration               `json:"lighter_stale_after"`
+	DisplayFallbackWindow time.Duration               `json:"display_fallback_window"`
+	DepthTiers            []float64                   `json:"depth_tiers"`
+	SlippageBucketsUSD    []float64                   `json:"slippage_buckets_usd"`
+	VolumeDiscounts       map[string]float64          `json:"volume_discounts"`
+	CoinGecko             CoinGeckoConfig             `json:"coingecko"`
+	WSProviders           map[string]WSProviderConfig `json:"ws_providers,omitempty"`
 }
 
 // CoinGeckoConfig controls the CoinGecko derivatives ingestion path.
@@ -39,6 +40,13 @@ type CoinGeckoConfig struct {
 	RequestTimeout time.Duration     `json:"request_timeout"`
 	ExchangeID     map[string]string `json:"exchange_id,omitempty"`
 	MarketName     map[string]string `json:"market_name,omitempty"`
+}
+
+type WSProviderConfig struct {
+	Enabled    bool          `json:"enabled"`
+	URL        string        `json:"url"`
+	Proxy      string        `json:"proxy,omitempty"`
+	StaleAfter time.Duration `json:"stale_after"`
 }
 
 type Config struct {
@@ -171,6 +179,37 @@ func Default() Config {
 			SlippageBucketsUSD:    []float64{50_000, 100_000, 500_000, 1_000_000},
 			VolumeDiscounts:       map[string]float64{"mexc": 0.4, "gate": 0.5},
 			CoinGecko:             defaultCoinGeckoConfig(),
+			WSProviders:           defaultWSProviderConfig(),
+		},
+	}
+}
+
+func defaultWSProviderConfig() map[string]WSProviderConfig {
+	return map[string]WSProviderConfig{
+		"bitget": {
+			Enabled:    true,
+			URL:        "wss://stream.bitget.com/public/v1/stream",
+			StaleAfter: 15 * time.Second,
+		},
+		"mexc": {
+			Enabled:    true,
+			URL:        "wss://futures.mexc.com/edge?Trans-Protocol=JSON",
+			StaleAfter: 15 * time.Second,
+		},
+		"okx": {
+			Enabled:    true,
+			URL:        "wss://wspri.okx.com:8443/ws/v5/ipublic",
+			StaleAfter: 15 * time.Second,
+		},
+		"bybit": {
+			Enabled:    false,
+			URL:        "wss://ws2.bybit.com/realtime_w",
+			StaleAfter: 15 * time.Second,
+		},
+		"bingx": {
+			Enabled:    false,
+			URL:        "wss://open-api-swap.bingx.com/swap-market",
+			StaleAfter: 15 * time.Second,
 		},
 	}
 }
@@ -229,16 +268,17 @@ type endpointFile struct {
 }
 
 type runtimeFile struct {
-	CollectionInterval    string             `yaml:"collection_interval"`
-	HTTPTimeout           string             `yaml:"http_timeout"`
-	ExchangeProxy         string             `yaml:"exchange_proxy"`
-	LighterWSURL          string             `yaml:"lighter_ws_url"`
-	LighterStaleAfter     string             `yaml:"lighter_stale_after"`
-	DisplayFallbackWindow string             `yaml:"display_fallback_window"`
-	DepthTiers            []float64          `yaml:"depth_tiers"`
-	SlippageBucketsUSD    []float64          `yaml:"slippage_buckets_usd"`
-	VolumeDiscounts       map[string]float64 `yaml:"volume_discounts"`
-	CoinGecko             *coinGeckoFile     `yaml:"coingecko"`
+	CollectionInterval    string                    `yaml:"collection_interval"`
+	HTTPTimeout           string                    `yaml:"http_timeout"`
+	ExchangeProxy         string                    `yaml:"exchange_proxy"`
+	LighterWSURL          string                    `yaml:"lighter_ws_url"`
+	LighterStaleAfter     string                    `yaml:"lighter_stale_after"`
+	DisplayFallbackWindow string                    `yaml:"display_fallback_window"`
+	DepthTiers            []float64                 `yaml:"depth_tiers"`
+	SlippageBucketsUSD    []float64                 `yaml:"slippage_buckets_usd"`
+	VolumeDiscounts       map[string]float64        `yaml:"volume_discounts"`
+	CoinGecko             *coinGeckoFile            `yaml:"coingecko"`
+	WSProviders           map[string]wsProviderFile `yaml:"ws_providers"`
 }
 
 type coinGeckoFile struct {
@@ -251,6 +291,13 @@ type coinGeckoFile struct {
 	RequestTimeout string            `yaml:"request_timeout"`
 	ExchangeID     map[string]string `yaml:"exchange_id"`
 	MarketName     map[string]string `yaml:"market_name"`
+}
+
+type wsProviderFile struct {
+	Enabled    *bool  `yaml:"enabled"`
+	URL        string `yaml:"url"`
+	Proxy      string `yaml:"proxy"`
+	StaleAfter string `yaml:"stale_after"`
 }
 
 // Catalog mirrors instrument_catalog.yaml. It is the per-(platform, canonical)
@@ -373,7 +420,42 @@ func loadRuntime(path string, base Runtime) (Runtime, error) {
 		}
 		base.CoinGecko = cg
 	}
+	if len(file.WSProviders) > 0 {
+		providers, err := applyWSProviderFile(base.WSProviders, file.WSProviders)
+		if err != nil {
+			return Runtime{}, err
+		}
+		base.WSProviders = providers
+	}
 	return base, nil
+}
+
+func applyWSProviderFile(base map[string]WSProviderConfig, file map[string]wsProviderFile) (map[string]WSProviderConfig, error) {
+	out := make(map[string]WSProviderConfig, len(base)+len(file))
+	for k, v := range base {
+		out[k] = v
+	}
+	for platform, entry := range file {
+		cfg := out[platform]
+		if entry.Enabled != nil {
+			cfg.Enabled = *entry.Enabled
+		}
+		if entry.URL != "" {
+			cfg.URL = entry.URL
+		}
+		if entry.Proxy != "" {
+			cfg.Proxy = entry.Proxy
+		}
+		if entry.StaleAfter != "" {
+			d, err := time.ParseDuration(entry.StaleAfter)
+			if err != nil {
+				return nil, err
+			}
+			cfg.StaleAfter = d
+		}
+		out[platform] = cfg
+	}
+	return out, nil
 }
 
 func applyCoinGeckoFile(base CoinGeckoConfig, file coinGeckoFile) (CoinGeckoConfig, error) {
