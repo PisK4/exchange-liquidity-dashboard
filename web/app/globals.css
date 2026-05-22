@@ -94,6 +94,16 @@ table.tbl th, table.tbl td { padding: 6px 8px; text-align: left; border-bottom: 
 table.tbl thead th { position: sticky; top: 0; z-index: 1; color: var(--text-mute); font-weight: 500; background: #14171b; }
 table.tbl tr:hover td { background: var(--panel-2); }
 td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.tbl th.col-bid, table.tbl td.col-bid { background-color: rgba(108,207,142,.07); }
+table.tbl th.col-ask, table.tbl td.col-ask { background-color: rgba(242,73,92,.07); }
+table.tbl thead th.col-bid { background-color: #14171b; box-shadow: inset 0 -2px 0 rgba(108,207,142,.55); color: rgba(108,207,142,.9); }
+table.tbl thead th.col-ask { background-color: #14171b; box-shadow: inset 0 -2px 0 rgba(242,73,92,.55); color: rgba(242,73,92,.9); }
+table.tbl tr:hover td.col-bid { background-color: rgba(108,207,142,.13); }
+table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
+.approx-mark { color: var(--text-mute); margin-left: 2px; font-size: 11px; cursor: help; }
+.panel-foot-note { text-align: right; padding: 6px 12px 4px; color: var(--text-mute); font-size: 11px; }
+.panel-foot-note .approx-mark { cursor: default; }
+.depth-label-badge { margin-left: 6px; font-variant-numeric: normal; }
 .share-kpi-strip { display: flex; align-items: center; gap: 24px; padding: 8px 12px 14px; border-bottom: 1px solid var(--border); }
 .share-kpi-strip div { min-width: 160px; }
 .share-kpi-strip span { display: block; color: var(--text-mute); font-size: 11px; margin-bottom: 5px; }
