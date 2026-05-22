@@ -190,4 +190,169 @@ symbols:
     aliases:
       bingx: [NCCOWHEAT2USD]
       hyperliquid: [WHEAT]
+
+  # ---- Stocks (synthetic_futures / TRADIFI proxy) ----
+  # On most venues the canonical is the plain ticker (TSLA / AAPL / ...)
+  # but bingx ships TWO product lines: AAPLX-USDT (synthetic equity perp)
+  # and NCSK<TICKER>2USD-USDT (NASDAQ-mirrored synthetic). MEXC suffixes
+  # the synthetic perp with STOCK to avoid conflicting with the underlying
+  # crypto canonical. Gate appends X. The alias list captures the
+  # priority order build-catalog walks, leaving the platforms without an
+  # entry as Unsupported (see the C1 collector contract).
+  - display_symbol: TSLA-USDT (perp)
+    display_name: TSLA-USD
+    canonical: TSLA
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKTSLA2USD]
+      mexc: [TSLASTOCK]
+      gate: [TSLAX]
+  - display_symbol: NVDA-USDT (perp)
+    display_name: NVDA-USD
+    canonical: NVDA
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NVDAX, NCSKNVDA2USD]
+      gate: [NVDAX]
+  - display_symbol: AAPL-USDT (perp)
+    display_name: AAPL-USD
+    canonical: AAPL
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [AAPLX, NCSKAAPL2USD]
+      mexc: [AAPLSTOCK]
+      gate: [AAPLX]
+  - display_symbol: COIN-USDT (perp)
+    display_name: COIN-USD
+    canonical: COIN
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKCOIN2USD]
+      mexc: [COINBASE]
+      gate: [COINX]
+  - display_symbol: AMD-USDT (perp)
+    display_name: AMD-USD
+    canonical: AMD
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKAMD2USD]
+      mexc: [AMDSTOCK]
+  - display_symbol: MSTR-USDT (perp)
+    display_name: MSTR-USD
+    canonical: MSTR
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKMSTR2USD]
+      mexc: [MSTRSTOCK]
+      gate: [MSTRX]
+  - display_symbol: GOOG-USDT (perp)
+    display_name: GOOG-USD
+    canonical: GOOG
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      binance: [GOOGL, GOOG]
+      bybit: [GOOGL, GOOG]
+      bitget: [GOOGL, GOOG]
+      bingx: [NCSKGOOGL2USD]
+      mexc: [GOOGLSTOCK]
+      gate: [GOOGLX]
+      lighter: [GOOGL, GOOG]
+  - display_symbol: AMZN-USDT (perp)
+    display_name: AMZN-USD
+    canonical: AMZN
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKAMZN2USD]
+      mexc: [AMZNSTOCK]
+      gate: [AMZNX]
+  - display_symbol: PLTR-USDT (perp)
+    display_name: PLTR-USD
+    canonical: PLTR
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKPLTR2USD]
+      mexc: [PLTRSTOCK]
+      gate: [PLTRX]
+  - display_symbol: MSFT-USDT (perp)
+    display_name: MSFT-USD
+    canonical: MSFT
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKMSFT2USD]
+      mexc: [MSFTSTOCK]
+  - display_symbol: INTC-USDT (perp)
+    display_name: INTC-USD
+    canonical: INTC
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKINTC2USD]
+      mexc: [INTCSTOCK]
+  - display_symbol: META-USDT (perp)
+    display_name: META-USD
+    canonical: META
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [METAX, NCSKMETA2USD]
+      mexc: [METASTOCK]
+      gate: [METAX]
+  - display_symbol: DRAM-USDT (perp)
+    display_name: DRAM-USD
+    canonical: DRAM
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKDRAM2USD]
+  - display_symbol: SAMSUNG-USDT (perp)
+    display_name: SAMSUNG-USD
+    canonical: SAMSUNG
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKSAMSUNG2USD]
+      mexc: [SAMSUNGSTOCK]
+      lighter: [SAMSUNGUSD]
+  - display_symbol: SKHYNIX-USDT (perp)
+    display_name: SKHYNIX-USD
+    canonical: SKHYNIX
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKSKHYNIX2USD]
+      mexc: [SKHYNIXSTOCK]
+      lighter: [SKHYNIXUSD]
+  - display_symbol: HYUNDAI-USDT (perp)
+    display_name: HYUNDAI-USD
+    canonical: HYUNDAI
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      lighter: [HYUNDAIUSD]
 platforms: [edgeX, binance, okx, bybit, bitget, bingx, mexc, gate, hyperliquid, lighter]
