@@ -631,4 +631,61 @@ symbols:
     instrument_kind: synthetic
     aliases:
       bingx: [NCSIKOSPI2USD]
+
+  # ---- Index/ETF additions in C9b (doc01 §4.2 expansion) ----
+  # Most of these ETFs are only listed on lighter and the occasional
+  # synthetic perp on okx / bingx / mexc. Coverage is intentionally
+  # sparse — sector/theme ETFs are a small but distinct V1 surface.
+  # SLV (iShares Silver Trust): silver ETF, distinct from the SILVER
+  # commodity canonical. No listing observed on any of the 10 tracked
+  # platforms in 2026-05-23 raw dumps -> documented in unresolved.
+  - display_symbol: SLV-USDT (perp)
+    display_name: SLV-USD
+    canonical: SLV
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: URA-USDT (perp)
+    display_name: URA-USD
+    canonical: URA
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: BOTZ-USDT (perp)
+    display_name: BOTZ-USD
+    canonical: BOTZ
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  # MAGS (Roundhill Magnificent Seven ETF). Lighter only.
+  - display_symbol: MAGS-USDT (perp)
+    display_name: MAGS-USD
+    canonical: MAGS
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: SOXX-USDT (perp)
+    display_name: SOXX-USD
+    canonical: SOXX
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  # EWZ (iShares MSCI Brazil ETF). No listing observed on any of the
+  # 10 tracked platforms in 2026-05-23 raw dumps -> documented in
+  # unresolved.
+  - display_symbol: EWZ-USDT (perp)
+    display_name: EWZ-USD
+    canonical: EWZ
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: XLE-USDT (perp)
+    display_name: XLE-USD
+    canonical: XLE
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKXLE2USD]
+
 platforms: [edgeX, binance, okx, bybit, bitget, bingx, mexc, gate, hyperliquid, lighter]

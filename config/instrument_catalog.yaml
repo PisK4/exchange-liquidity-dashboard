@@ -4,7 +4,7 @@
 # Front-end URLs (frontend_url) and url_verified flag MAY be edited by hand
 # after clicking through each link to confirm the trading pair exists.
 schema_version: 1
-generated_at: "2026-05-23T07:55:27Z"
+generated_at: "2026-05-23T08:03:00Z"
 generated_by: backend/scripts/build-catalog
 canonical_whitelist:
   - canonical: BTC
@@ -244,6 +244,34 @@ canonical_whitelist:
     quote: USDT
     confidence: confirmed
   - canonical: KR200
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: SLV
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: URA
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: BOTZ
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: MAGS
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: SOXX
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: EWZ
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: XLE
     market_surface: synthetic_futures
     quote: USDT
     confidence: confirmed
@@ -1327,6 +1355,18 @@ platforms:
       source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
       catalog_status: "25"
       frontend_url: https://bingx.com/zh-cn/perpetual/NCCOWHEAT2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    XLE:
+      api_symbol: NCSKXLE2USD-USDT
+      base_asset: NCSKXLE2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "25"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCSKXLE2USD-USDT/
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -2690,6 +2730,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    SLV:
+      api_symbol: SLVUSD
+      base_asset: SLV
+      quote_asset: USD
+      settle_asset: USDT
+      api_level_cap: 400
+      contract_id: "10000246"
+      source_endpoint: https://pro.edgex.exchange
+      catalog_status: TRADING
+      frontend_url: https://pro.edgex.exchange/en-US/trade/SLVUSD
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     SOL:
       api_symbol: SOLUSD
       base_asset: SOL
@@ -3478,6 +3531,19 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    BOTZ:
+      api_symbol: BOTZ
+      base_asset: BOTZ
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 154
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/BOTZ
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     BTC:
       api_symbol: BTC
       base_asset: BTC
@@ -3683,6 +3749,19 @@ platforms:
       source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
       catalog_status: active
       frontend_url: https://app.lighter.xyz/trade/LITE
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    MAGS:
+      api_symbol: MAGS
+      base_asset: MAGS
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 155
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/MAGS
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -3894,6 +3973,19 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    SOXX:
+      api_symbol: SOXX
+      base_asset: SOXX
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 169
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/SOXX
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     TSLA:
       api_symbol: TSLA
       base_asset: TSLA
@@ -3917,6 +4009,19 @@ platforms:
       source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
       catalog_status: active
       frontend_url: https://app.lighter.xyz/trade/TSM
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    URA:
+      api_symbol: URA
+      base_asset: URA
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 150
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/URA
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -4532,6 +4637,19 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    SOXX:
+      api_symbol: SOXX_USDT
+      base_asset: SOXX
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.01
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/SOXX_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     TSM:
       api_symbol: TSMSTOCK_USDT
       base_asset: TSMSTOCK
@@ -4555,6 +4673,19 @@ platforms:
       source_endpoint: https://contract.mexc.com/api/v1/contract/depth
       catalog_status: "0"
       frontend_url: https://www.mexc.com/futures/SPX_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    XLE:
+      api_symbol: XLE_USDT
+      base_asset: XLE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.01
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/XLE_USDT
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -5050,6 +5181,19 @@ platforms:
       source_endpoint: https://www.okx.com/api/v5/market/books-full
       catalog_status: live
       frontend_url: https://www.okx.com/trade-swap/tsm-usdt-swap
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    XLE:
+      api_symbol: XLE-USDT-SWAP
+      base_asset: XLE
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 1
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/xle-usdt-swap
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
