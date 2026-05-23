@@ -356,6 +356,200 @@ symbols:
     aliases:
       lighter: [HYUNDAIUSD]
 
+  # ---- US equity stocks added in C9a (doc01 §4.2 expansion) ----
+  # All synthetic_futures. bingx exposes NCSK*2USD; mexc *STOCK; gate
+  # uses bare *_USDT for most but X-suffixed for newer listings (CRCLX,
+  # HOODX, ORCLX). Lighter perp uses bare ticker (e.g. "CRCL"). Where
+  # only 1-2 platforms list a name, the alias map stays empty for the
+  # absent platforms; the build-catalog generator then skips them.
+  - display_symbol: CRCL-USDT (perp)
+    display_name: CRCL-USD
+    canonical: CRCL
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKCRCL2USD, CRCLX]
+      mexc: [CRCLSTOCK]
+      gate: [CRCLX]
+  - display_symbol: HOOD-USDT (perp)
+    display_name: HOOD-USD
+    canonical: HOOD
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKHOOD2USD]
+      gate: [HOODX]
+  - display_symbol: AVGO-USDT (perp)
+    display_name: AVGO-USD
+    canonical: AVGO
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKAVGO2USD]
+      mexc: [AVGOSTOCK]
+  - display_symbol: MU-USDT (perp)
+    display_name: MU-USD
+    canonical: MU
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKMU2USD]
+      mexc: [MUSTOCK]
+  - display_symbol: SNDK-USDT (perp)
+    display_name: SNDK-USD
+    canonical: SNDK
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKSNDK2USD]
+      mexc: [SNDKSTOCK]
+  - display_symbol: HIMS-USDT (perp)
+    display_name: HIMS-USD
+    canonical: HIMS
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      mexc: [HIMSSTOCK]
+  - display_symbol: BABA-USDT (perp)
+    display_name: BABA-USD
+    canonical: BABA
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      mexc: [BABASTOCK]
+  # TSM on bingx is "NCSKTSMU2USD" (note "TSMU" suffix), not the canonical
+  # NCSKTSM2USD pattern — observed via raw dump 2026-05-22.
+  - display_symbol: TSM-USDT (perp)
+    display_name: TSM-USD
+    canonical: TSM
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKTSMU2USD]
+      mexc: [TSMSTOCK]
+  - display_symbol: CRWV-USDT (perp)
+    display_name: CRWV-USD
+    canonical: CRWV
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      mexc: [CRWVSTOCK]
+  - display_symbol: LITE-USDT (perp)
+    display_name: LITE-USD
+    canonical: LITE
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKLITE2USD]
+      mexc: [LITESTOCK]
+  - display_symbol: GME-USDT (perp)
+    display_name: GME-USD
+    canonical: GME
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKGME2USD]
+      mexc: [GMESTOCK]
+  - display_symbol: RKLB-USDT (perp)
+    display_name: RKLB-USD
+    canonical: RKLB
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKRKLB2USD]
+      mexc: [RKLBSTOCK]
+  # NFLX on bingx is "NCSKNETFLIX2USD" (full word), not "NCSKNFLX2USD".
+  - display_symbol: NFLX-USDT (perp)
+    display_name: NFLX-USD
+    canonical: NFLX
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKNETFLIX2USD]
+      mexc: [NFLXSTOCK]
+  - display_symbol: MRVL-USDT (perp)
+    display_name: MRVL-USD
+    canonical: MRVL
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKMRVL2USD]
+      mexc: [MRVLSTOCK]
+  # ZM (Zoom Communications): no listing observed on any of the 10
+  # tracked platforms in 2026-05-22 raw dumps. Imported per §4.2 but
+  # documented in unresolved_symbols.yaml for ops review.
+  - display_symbol: ZM-USDT (perp)
+    display_name: ZM-USD
+    canonical: ZM
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  # RIVN (Rivian Automotive): no listing observed on any of the 10
+  # tracked platforms in 2026-05-22 raw dumps. Same status as ZM.
+  - display_symbol: RIVN-USDT (perp)
+    display_name: RIVN-USD
+    canonical: RIVN
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: LLY-USDT (perp)
+    display_name: LLY-USD
+    canonical: LLY
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      mexc: [LLYSTOCK]
+  - display_symbol: COST-USDT (perp)
+    display_name: COST-USD
+    canonical: COST
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      mexc: [COSTSTOCK]
+  # BX (Blackstone): no listing observed on any of the 10 tracked
+  # platforms in 2026-05-22 raw dumps. The 2-letter ticker also makes
+  # it ambiguous against crypto pairs, so the empty alias list is
+  # intentional (do not gamble on BX matching some unrelated coin).
+  - display_symbol: BX-USDT (perp)
+    display_name: BX-USD
+    canonical: BX
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  # DKNG (DraftKings): no listing observed; same status as ZM/RIVN/BX.
+  - display_symbol: DKNG-USDT (perp)
+    display_name: DKNG-USD
+    canonical: DKNG
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: ORCL-USDT (perp)
+    display_name: ORCL-USD
+    canonical: ORCL
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKORCL2USD]
+      mexc: [ORCLSTOCK]
+      gate: [ORCLX]
+
   # ---- Index / ETF (synthetic_futures) ----
   # US500 wraps the S&P 500 family of representations: SPX (cash index),
   # SPY (ETF) and ES (CME futures). Lighter lists "US500" verbatim.

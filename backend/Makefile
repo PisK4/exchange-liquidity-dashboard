@@ -7,6 +7,25 @@ BACKFILL_DAYS ?= 30
 COINGECKO_API_KEY_ENV ?= COINGECKO_DEMO_API_KEY
 COINGECKO_PROXY ?=
 
+# build-catalog network controls. CATALOG_PROXY is forwarded via --proxy
+# to every per-platform adapter; CATALOG_TIMEOUT bounds each adapter's
+# fetch. Both default empty / 60s; set them on the make command line to
+# refresh from a non-direct network:
+#   make catalog CATALOG_PROXY=http://127.0.0.1:7897
+CATALOG_PROXY ?=
+CATALOG_TIMEOUT ?= 60s
+CATALOG_ARGS = --whitelist ../config/symbol_mapping.yaml \
+               --output ../config/instrument_catalog.yaml \
+               --raw-dir docs/raw-instruments \
+               --timeout $(CATALOG_TIMEOUT)
+ifneq ($(strip $(CATALOG_PROXY)),)
+CATALOG_ARGS += --proxy $(CATALOG_PROXY)
+endif
+
+# prune-snapshots controls. DAYS is required and must be >= 7. The script
+# defaults to dry-run; only the *-confirm target adds --confirm.
+DAYS ?= 30
+
 test:
 	go test ./...
 
@@ -85,27 +104,46 @@ migrate-down:
 
 # Regenerate config/instrument_catalog.yaml + backend/docs/raw-instruments/*.
 # Run monthly (or any time an exchange ships a catalog change). Must be run
-# from a network that can reach all 10 exchange APIs.
+# from a network that can reach all 10 exchange APIs; pass CATALOG_PROXY
+# when the build host cannot reach the exchanges directly.
 catalog:
-	go run ./scripts/build-catalog \
-	    --whitelist ../config/symbol_mapping.yaml \
-	    --output ../config/instrument_catalog.yaml \
-	    --raw-dir docs/raw-instruments
+	go run ./scripts/build-catalog $(CATALOG_ARGS)
 
 # Refresh raw-instruments snapshots only, without touching the catalog yaml.
 # Use this when you only have partial network access and just want to update
 # the audit trail for the exchanges you can reach.
 catalog-raw:
-	go run ./scripts/build-catalog \
-	    --whitelist ../config/symbol_mapping.yaml \
-	    --raw-dir docs/raw-instruments \
-	    --raw-only
+	go run ./scripts/build-catalog $(CATALOG_ARGS) --raw-only
 
 # CI guard: dry-run the crawler and fail if the produced catalog differs
 # (semantically, excluding generated_at) from the committed file.
 catalog-diff:
-	go run ./scripts/build-catalog \
-	    --whitelist ../config/symbol_mapping.yaml \
-	    --raw-dir docs/raw-instruments \
+	go run ./scripts/build-catalog $(CATALOG_ARGS) \
 	    --dry-run \
 	    --diff-against ../config/instrument_catalog.yaml
+
+# Manual snapshot retention. Default mode is dry-run: prints estimated
+# row counts per table for the configured cutoff, no DELETE issued.
+# *-confirm performs the deletion in batches of 10000. DAYS must be >= 7
+# (the script refuses smaller windows). Snapshots older than DAYS days
+# from t_orderbook_snapshot, t_book_quality_snapshot,
+# t_symbol_volume_snapshot, t_platform_volume_snapshot,
+# t_collection_status, t_coingecko_platform_volume_snapshot are eligible.
+# t_top30_snapshot is intentionally excluded — it has its own 30-day
+# retention inside the collector.
+prune-snapshots-dry:
+	DASHBOARD_MYSQL_DSN="$(MYSQL_DSN)" \
+	go run ./scripts/prune-snapshots --days $(DAYS)
+prune-snapshots-confirm:
+	DASHBOARD_MYSQL_DSN="$(MYSQL_DSN)" \
+	go run ./scripts/prune-snapshots --days $(DAYS) --confirm
+
+# One-off audit: HEAD/GET each frontend_url in instrument_catalog.yaml,
+# write a verification report to config/url_verification_report.yaml,
+# and update url_verified flags via build-catalog merge-preserve. Honors
+# CATALOG_PROXY for environments behind an HTTP proxy.
+verify-urls:
+	go run ./scripts/verify-frontend-urls \
+	    --catalog ../config/instrument_catalog.yaml \
+	    --report ../config/url_verification_report.yaml \
+	    $(if $(strip $(CATALOG_PROXY)),--proxy $(CATALOG_PROXY))

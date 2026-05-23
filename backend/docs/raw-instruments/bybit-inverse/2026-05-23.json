@@ -1,0 +1,1187 @@
+{
+  "category": "inverse",
+  "pages": [
+    {
+      "result": {
+        "category": "inverse",
+        "list": [
+          {
+            "baseCoin": "AAVE",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741333341000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "50000",
+              "maxOrderQty": "250000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "250000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "199999.98",
+              "minPrice": "0.01",
+              "tickSize": "0.01"
+            },
+            "priceScale": "2",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "AAVE",
+            "status": "Trading",
+            "symbol": "AAVEUSD",
+            "symbolId": 2232,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "ADA",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1648080000000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "50.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "80000",
+              "maxOrderQty": "400000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "400000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.01",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999.9998",
+              "minPrice": "0.0001",
+              "tickSize": "0.0001"
+            },
+            "priceScale": "4",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "ADA",
+            "status": "Trading",
+            "symbol": "ADAUSD",
+            "symbolId": 93,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.01"
+          },
+          {
+            "baseCoin": "APT",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741333290000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "50000",
+              "maxOrderQty": "250000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "250000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999.9998",
+              "minPrice": "0.0001",
+              "tickSize": "0.0001"
+            },
+            "priceScale": "4",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "APT",
+            "status": "Trading",
+            "symbol": "APTUSD",
+            "symbolId": 2231,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "AVAX",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741155899000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "100000",
+              "maxOrderQty": "500000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "500000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "19999.998",
+              "minPrice": "0.001",
+              "tickSize": "0.001"
+            },
+            "priceScale": "3",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "AVAX",
+            "status": "Trading",
+            "symbol": "AVAXUSD",
+            "symbolId": 2242,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "BCH",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741155967000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "50000",
+              "maxOrderQty": "250000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "250000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999999.80",
+              "minPrice": "0.10",
+              "tickSize": "0.10"
+            },
+            "priceScale": "2",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "BCH",
+            "status": "Trading",
+            "symbol": "BCHUSD",
+            "symbolId": 2229,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "BTC",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1542211200000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "100.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "5000000",
+              "maxOrderQty": "25000000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "25000000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.005",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999999.80",
+              "minPrice": "0.10",
+              "tickSize": "0.10"
+            },
+            "priceScale": "2",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.03",
+              "priceLimitRatioY": "0.05"
+            },
+            "settleCoin": "BTC",
+            "status": "Trading",
+            "symbol": "BTCUSD",
+            "symbolId": 1,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.005"
+          },
+          {
+            "baseCoin": "BTC",
+            "contractType": "InverseFutures",
+            "copyTrading": "none",
+            "deliveryFeeRate": "0.0005",
+            "deliveryTime": "1782460800000",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 0,
+            "isPreListing": false,
+            "launchTime": "1765526400000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "100.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "1000000",
+              "maxOrderQty": "5000000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "5000000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "0",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "9999999.00",
+              "minPrice": "0.50",
+              "tickSize": "0.50"
+            },
+            "priceScale": "2",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "BTC",
+            "status": "Trading",
+            "symbol": "BTCUSDM26",
+            "symbolId": 2529,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0"
+          },
+          {
+            "baseCoin": "BTC",
+            "contractType": "InverseFutures",
+            "copyTrading": "none",
+            "deliveryFeeRate": "0.0005",
+            "deliveryTime": "1790323200000",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 0,
+            "isPreListing": false,
+            "launchTime": "1773388800000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "100.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "1000000",
+              "maxOrderQty": "5000000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "5000000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "0",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "9999999.00",
+              "minPrice": "0.50",
+              "tickSize": "0.50"
+            },
+            "priceScale": "2",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "BTC",
+            "status": "Trading",
+            "symbol": "BTCUSDU26",
+            "symbolId": 2591,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0"
+          },
+          {
+            "baseCoin": "DOGE",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741155587000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "25.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "300000",
+              "maxOrderQty": "1500000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "1500000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.02",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "199.99998",
+              "minPrice": "0.00001",
+              "tickSize": "0.00001"
+            },
+            "priceScale": "5",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "DOGE",
+            "status": "Trading",
+            "symbol": "DOGEUSD",
+            "symbolId": 2236,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.02"
+          },
+          {
+            "baseCoin": "DOT",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1634083200000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "50.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "20000",
+              "maxOrderQty": "100000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "100000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.01",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999.9998",
+              "minPrice": "0.0001",
+              "tickSize": "0.0001"
+            },
+            "priceScale": "4",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "DOT",
+            "status": "Trading",
+            "symbol": "DOTUSD",
+            "symbolId": 50,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.01"
+          },
+          {
+            "baseCoin": "ETC",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741333729000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "40000",
+              "maxOrderQty": "200000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "200000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "19999.998",
+              "minPrice": "0.001",
+              "tickSize": "0.001"
+            },
+            "priceScale": "3",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "ETC",
+            "status": "Trading",
+            "symbol": "ETCUSD",
+            "symbolId": 2234,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "ETH",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1546300800000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "100.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "2000000",
+              "maxOrderQty": "10000000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "10000000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.005",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "199999.98",
+              "minPrice": "0.01",
+              "tickSize": "0.01"
+            },
+            "priceScale": "2",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.03",
+              "priceLimitRatioY": "0.05"
+            },
+            "settleCoin": "ETH",
+            "status": "Trading",
+            "symbol": "ETHUSD",
+            "symbolId": 2,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.005"
+          },
+          {
+            "baseCoin": "ETH",
+            "contractType": "InverseFutures",
+            "copyTrading": "none",
+            "deliveryFeeRate": "0.0005",
+            "deliveryTime": "1782460800000",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 0,
+            "isPreListing": false,
+            "launchTime": "1765526400000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "50.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "1000000",
+              "maxOrderQty": "5000000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "5000000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "0",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "999999.90",
+              "minPrice": "0.05",
+              "tickSize": "0.05"
+            },
+            "priceScale": "2",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "ETH",
+            "status": "Trading",
+            "symbol": "ETHUSDM26",
+            "symbolId": 2530,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0"
+          },
+          {
+            "baseCoin": "ETH",
+            "contractType": "InverseFutures",
+            "copyTrading": "none",
+            "deliveryFeeRate": "0.0005",
+            "deliveryTime": "1790323200000",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 0,
+            "isPreListing": false,
+            "launchTime": "1773388800000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "50.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "1000000",
+              "maxOrderQty": "5000000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "5000000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "0",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "999999.90",
+              "minPrice": "0.05",
+              "tickSize": "0.05"
+            },
+            "priceScale": "2",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "ETH",
+            "status": "Trading",
+            "symbol": "ETHUSDU26",
+            "symbolId": 2592,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0"
+          },
+          {
+            "baseCoin": "FIL",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741155726000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "50000",
+              "maxOrderQty": "250000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "250000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999.9998",
+              "minPrice": "0.0001",
+              "tickSize": "0.0001"
+            },
+            "priceScale": "4",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "FIL",
+            "status": "Trading",
+            "symbol": "FILUSD",
+            "symbolId": 2237,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "LINK",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741155790000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "100000",
+              "maxOrderQty": "500000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "500000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "19999.998",
+              "minPrice": "0.001",
+              "tickSize": "0.001"
+            },
+            "priceScale": "3",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "LINK",
+            "status": "Trading",
+            "symbol": "LINKUSD",
+            "symbolId": 2238,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "LTC",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1648684800000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "50.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "80000",
+              "maxOrderQty": "400000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "400000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.01",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "199999.98",
+              "minPrice": "0.01",
+              "tickSize": "0.01"
+            },
+            "priceScale": "2",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "LTC",
+            "status": "Trading",
+            "symbol": "LTCUSD",
+            "symbolId": 97,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.01"
+          },
+          {
+            "baseCoin": "MNT",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741333414000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "50.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "50000",
+              "maxOrderQty": "250000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "250000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.02",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999.9998",
+              "minPrice": "0.0001",
+              "tickSize": "0.0001"
+            },
+            "priceScale": "4",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "MNT",
+            "status": "Trading",
+            "symbol": "MNTUSD",
+            "symbolId": 2233,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.02"
+          },
+          {
+            "baseCoin": "NEAR",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1740982898000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "50000",
+              "maxOrderQty": "250000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "250000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999.9998",
+              "minPrice": "0.0001",
+              "tickSize": "0.0001"
+            },
+            "priceScale": "4",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "NEAR",
+            "status": "Trading",
+            "symbol": "NEARUSD",
+            "symbolId": 2248,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "OP",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741250463000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "10000",
+              "maxOrderQty": "50000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "50000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "199.99998",
+              "minPrice": "0.00001",
+              "tickSize": "0.00001"
+            },
+            "priceScale": "5",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "OP",
+            "status": "Trading",
+            "symbol": "OPUSD",
+            "symbolId": 2230,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "SOL",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1712714400000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "50.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "1000000",
+              "maxOrderQty": "1000000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "1000000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.01",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "199999.98",
+              "minPrice": "0.01",
+              "tickSize": "0.01"
+            },
+            "priceScale": "2",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "SOL",
+            "status": "Trading",
+            "symbol": "SOLUSD",
+            "symbolId": 94,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.01"
+          },
+          {
+            "baseCoin": "SUI",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741250124000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "100000",
+              "maxOrderQty": "500000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "500000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999.9998",
+              "minPrice": "0.0001",
+              "tickSize": "0.0001"
+            },
+            "priceScale": "4",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "SUI",
+            "status": "Trading",
+            "symbol": "SUIUSD",
+            "symbolId": 2241,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "TON",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741333483000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "50000",
+              "maxOrderQty": "250000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "250000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999.9998",
+              "minPrice": "0.0001",
+              "tickSize": "0.0001"
+            },
+            "priceScale": "4",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "TON",
+            "status": "Trading",
+            "symbol": "TONUSD",
+            "symbolId": 2235,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "UNI",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741250371000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "50000",
+              "maxOrderQty": "250000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "250000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "19999.998",
+              "minPrice": "0.001",
+              "tickSize": "0.001"
+            },
+            "priceScale": "3",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "UNI",
+            "status": "Trading",
+            "symbol": "UNIUSD",
+            "symbolId": 2240,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "XLM",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1741250583000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "20.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "50000",
+              "maxOrderQty": "250000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "250000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.025",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "199.99998",
+              "minPrice": "0.00001",
+              "tickSize": "0.00001"
+            },
+            "priceScale": "5",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "XLM",
+            "status": "Trading",
+            "symbol": "XLMUSD",
+            "symbolId": 2243,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.025"
+          },
+          {
+            "baseCoin": "XRP",
+            "contractType": "InversePerpetual",
+            "copyTrading": "none",
+            "deliveryFeeRate": "",
+            "deliveryTime": "0",
+            "displayName": "",
+            "forbidUplWithdrawal": false,
+            "fundingInterval": 480,
+            "isPreListing": false,
+            "launchTime": "1555927080000",
+            "leverageFilter": {
+              "leverageStep": "0.01",
+              "maxLeverage": "50.00",
+              "minLeverage": "1"
+            },
+            "lotSizeFilter": {
+              "maxMktOrderQty": "1000000",
+              "maxOrderQty": "1000000",
+              "minNotionalValue": "5",
+              "minOrderQty": "1",
+              "postOnlyMaxOrderQty": "1000000",
+              "qtyStep": "1"
+            },
+            "lowerFundingRate": "-0.01",
+            "preListingInfo": null,
+            "priceFilter": {
+              "maxPrice": "1999.9998",
+              "minPrice": "0.0001",
+              "tickSize": "0.0001"
+            },
+            "priceScale": "4",
+            "quoteCoin": "USD",
+            "riskParameters": {
+              "priceLimitRatioX": "0.05",
+              "priceLimitRatioY": "0.1"
+            },
+            "settleCoin": "XRP",
+            "status": "Trading",
+            "symbol": "XRPUSD",
+            "symbolId": 4,
+            "symbolType": "",
+            "unifiedMarginTrade": true,
+            "upperFundingRate": "0.01"
+          }
+        ],
+        "nextPageCursor": ""
+      },
+      "retCode": 0,
+      "retExtInfo": {},
+      "retMsg": "OK",
+      "time": 1779522931334
+    }
+  ]
+}

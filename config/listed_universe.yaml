@@ -4,7 +4,7 @@
 # Consumed at runtime by the CoinGecko collector to fill the
 # "edgeX 已上线?" column on the Top30 tab.
 schema_version: 1
-generated_at: "2026-05-22T12:34:01Z"
+generated_at: "2026-05-23T07:55:27Z"
 generated_by: backend/scripts/build-catalog
 platforms:
   binance:
@@ -971,7 +971,6 @@ platforms:
       - FIDA
       - FIGHTID
       - FIL
-      - FIR
       - FLIP
       - FLOCK
       - FLOKI
@@ -1203,70 +1202,19 @@ platforms:
       - MYX
       - NAORIS
       - NAVX
-      - NCCO1OILBRENT2USD
       - NCCO1OILWTI2USD
       - NCCO7241NATGAS2USD
       - NCCO7241OILBRENT2USD
       - NCCO7241OILWTI2USD
       - NCCO724COPPER2USD
-      - NCCOALUMINIUM2USD
-      - NCCOCOCOA2USD
-      - NCCOCOFFEE2USD
-      - NCCOCOPPER2USD
-      - NCCOCOTTON2USD
-      - NCCOGASOLINE2USD
       - NCCOGOLD2USD
-      - NCCOHEATINGOIL2USD
-      - NCCOLEAD2USD
-      - NCCONATURALGAS2USD
-      - NCCONICKEL2USD
-      - NCCOPALLADIUM2USD
-      - NCCOSOYBEANS2USD
-      - NCCOSUGAR2USD
-      - NCCOWHEAT2USD
       - NCCOXAG2USD
-      - NCCOXAUAUD2USD
-      - NCCOXAUEUR2USD
-      - NCCOXAUJPY2USD
       - NCCOXPT2USD
-      - NCCOZINC2USD
-      - NCFXAUD2JPY
-      - NCFXAUD2USD
-      - NCFXCAD2JPY
-      - NCFXEUR2CAD
-      - NCFXEUR2CHF
-      - NCFXEUR2GBP
-      - NCFXEUR2JPY
-      - NCFXEUR2USD
-      - NCFXEURSGD2USD
-      - NCFXGBP2CHF
-      - NCFXGBP2JPY
-      - NCFXGBP2USD
-      - NCFXGBPSGD2USD
-      - NCFXNZD2JPY
-      - NCFXNZD2USD
-      - NCFXUSD2CAD
-      - NCFXUSD2CHF
-      - NCFXUSD2DKK
-      - NCFXUSD2ILS
-      - NCFXUSD2JPY
-      - NCFXUSD2MXN
-      - NCFXUSD2NOK
-      - NCFXUSD2SEK
-      - NCFXUSD2TRY
-      - NCFXUSD2ZAR
-      - NCFXUSDSGD2USD
       - NCSI724NASDAQ1002USD
       - NCSI724SP5002USD
-      - NCSIDOWJONES2USD
-      - NCSIDXY2USD
       - NCSIEWJ2USD
       - NCSIEWY2USD
       - NCSIKOSPI2USD
-      - NCSINASDAQ1002USD
-      - NCSINIKKEI2252USD
-      - NCSIRUSSELL20002USD
-      - NCSISP5002USD
       - NCSKAAOI2USD
       - NCSKAAPL2USD
       - NCSKAMAT2USD
@@ -1341,6 +1289,7 @@ platforms:
       - NOMINA
       - NOT
       - NPC
+      - NST
       - NUM
       - NUSD
       - NVDAON
@@ -1588,7 +1537,6 @@ platforms:
       - TRB
       - TREE
       - TRIA
-      - TRIO
       - TROLLSOL
       - TRUMPSOL
       - TRUST
@@ -1603,7 +1551,6 @@ platforms:
       - TUSD
       - TUT
       - TWT
-      - U
       - U2U
       - UAI
       - UB
@@ -4849,7 +4796,6 @@ platforms:
       - BOBA
       - BOBACAT
       - BOBER
-      - BOBMEME
       - BOBO
       - BOMB
       - BOME
@@ -4931,7 +4877,6 @@ platforms:
       - CHEEMS
       - CHEQ
       - CHEX
-      - CHIBI
       - CHILLGUY
       - CHIP
       - CHIRP
@@ -5090,7 +5035,6 @@ platforms:
       - DOVU
       - DPENGU
       - DPN
-      - DRAGON404
       - DRG
       - DRIFT
       - DRN
@@ -5268,7 +5212,6 @@ platforms:
       - GHX
       - GIGA
       - GIGGLE
-      - GINI
       - GITLAWB
       - GIZA
       - GLDON
@@ -5506,7 +5449,6 @@ platforms:
       - LDO
       - LEARN
       - LEE
-      - LEOX
       - LETSBONK
       - LFI
       - LIF3
@@ -5616,7 +5558,6 @@ platforms:
       - MENGO
       - MERL
       - MET
-      - META
       - METAL
       - METANIA
       - METAON
@@ -5627,7 +5568,6 @@ platforms:
       - MEZO
       - MGO
       - MGT
-      - MICHI
       - MIGGLES
       - MIH
       - MILLI
@@ -5667,7 +5607,6 @@ platforms:
       - MOODENG
       - MOODENGETH
       - MOONED
-      - MORE
       - MORI
       - MORPHO
       - MOVA
@@ -5739,7 +5678,6 @@ platforms:
       - NIZA
       - NKEON
       - NKN
-      - NLINK
       - NLS
       - NMR
       - NMT
@@ -5908,7 +5846,6 @@ platforms:
       - POLYX
       - POND
       - PONKE
-      - POP
       - POPCAT
       - POR
       - PORK
@@ -6198,7 +6135,6 @@ platforms:
       - SQT
       - SRC
       - SRDS
-      - SRM
       - SRX
       - SSV
       - ST
@@ -6271,7 +6207,6 @@ platforms:
       - TBK
       - TCAPY
       - TCOM
-      - TCT
       - TEAFI
       - TEL
       - TEN
