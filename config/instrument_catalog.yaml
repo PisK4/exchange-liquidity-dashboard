@@ -4,7 +4,7 @@
 # Front-end URLs (frontend_url) and url_verified flag MAY be edited by hand
 # after clicking through each link to confirm the trading pair exists.
 schema_version: 1
-generated_at: "2026-05-23T08:03:00Z"
+generated_at: "2026-05-23T08:07:16Z"
 generated_by: backend/scripts/build-catalog
 canonical_whitelist:
   - canonical: BTC
@@ -272,6 +272,10 @@ canonical_whitelist:
     quote: USDT
     confidence: confirmed
   - canonical: XLE
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: URNM
     market_surface: synthetic_futures
     quote: USDT
     confidence: confirmed
@@ -5181,6 +5185,19 @@ platforms:
       source_endpoint: https://www.okx.com/api/v5/market/books-full
       catalog_status: live
       frontend_url: https://www.okx.com/trade-swap/tsm-usdt-swap
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    URNM:
+      api_symbol: URNM-USDT-SWAP
+      base_asset: URNM
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 1
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/urnm-usdt-swap
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic

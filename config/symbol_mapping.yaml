@@ -688,4 +688,19 @@ symbols:
     aliases:
       bingx: [NCSKXLE2USD]
 
+  # ---- C9c URNM (commodity, ops review pending) ----
+  # URNM (uranium miners ETF). doc16 §6 explicitly warns "URNM 未确认
+  # 且 URNM != URA". Imported per doc01 §4.2 but has thin coverage
+  # (okx-swap only as URNM-USDT-SWAP) and an outstanding ops question
+  # about whether it should be a sibling of URA (uranium ETF) or
+  # treated as its own commodity surface. Documented in
+  # unresolved_symbols.yaml during C10 -- staying as commodity for V1
+  # consistent with the original §4.2 listing.
+  - display_symbol: URNM-USDT (perp)
+    display_name: URNM-USD
+    canonical: URNM
+    asset_category: commodity
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+
 platforms: [edgeX, binance, okx, bybit, bitget, bingx, mexc, gate, hyperliquid, lighter]

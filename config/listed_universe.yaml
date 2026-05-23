@@ -4,7 +4,7 @@
 # Consumed at runtime by the CoinGecko collector to fill the
 # "edgeX 已上线?" column on the Top30 tab.
 schema_version: 1
-generated_at: "2026-05-23T08:03:00Z"
+generated_at: "2026-05-23T08:07:16Z"
 generated_by: backend/scripts/build-catalog
 platforms:
   binance:
