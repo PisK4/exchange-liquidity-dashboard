@@ -5,14 +5,31 @@ COPY backend/go.sum ./backend/go.sum
 WORKDIR /src/backend
 RUN go mod download
 COPY backend/ ./
-RUN CGO_ENABLED=0 go build -o /out/dashboard ./cmd/dashboard
+# BUILD_VERSION is forwarded by deploy/Makefile from `git describe`. It
+# is embedded into main.version (and therefore api.Version + the
+# /api/health JSON) via -ldflags so operators can identify which build
+# is running in production without exec-ing into the container.
+ARG BUILD_VERSION=dev
+RUN CGO_ENABLED=0 go build \
+        -ldflags "-X main.version=${BUILD_VERSION}" \
+        -o /out/dashboard ./cmd/dashboard
 RUN CGO_ENABLED=0 go build -o /out/coingecko-backfill ./cmd/coingecko-backfill
 
 FROM alpine:3.20
 WORKDIR /app
+# wget powers the HEALTHCHECK below; ca-certificates is needed for
+# outbound HTTPS to the exchange APIs and CoinGecko.
+RUN apk add --no-cache ca-certificates wget
+# nonroot user is fixed at uid/gid 65532 to match the docker-compose
+# `user: "65532:65532"` pin so file permissions on bind-mounted configs
+# behave consistently across hosts.
+RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
 COPY --from=build /out/dashboard /app/dashboard
 COPY --from=build /out/coingecko-backfill /app/coingecko-backfill
 COPY config/ /config/
 COPY backend/docs/raw-instruments/ /app/docs/raw-instruments/
+USER nonroot
 EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
+    CMD wget -qO- http://127.0.0.1:8080/api/health || exit 1
 CMD ["/app/dashboard", "--role=all", "--addr=:8080"]

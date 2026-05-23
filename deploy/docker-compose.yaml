@@ -2,15 +2,23 @@ services:
   mysql:
     image: mysql:8.0
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: edgex_dashboard
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-edgex_dashboard}
+    # Bind to localhost only by default; override with MYSQL_PUBLISH_HOST
+    # in .env when the operator deliberately wants MySQL exposed outside
+    # the Docker host (highly discouraged in production).
     ports:
-      - "3306:3306"
+      - "${MYSQL_PUBLISH_HOST:-127.0.0.1}:${MYSQL_PUBLISH_PORT:-3306}:3306"
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-p${MYSQL_ROOT_PASSWORD:-root}"]
       interval: 5s
       timeout: 3s
       retries: 20
+    restart: unless-stopped
+    mem_limit: ${MYSQL_MEM_LIMIT:-1g}
+    cpus: ${MYSQL_CPUS:-1.0}
+    volumes:
+      - mysql-data:/var/lib/mysql
 
   backend:
     build:
@@ -18,27 +26,61 @@ services:
       dockerfile: deploy/Dockerfile.backend
     command: ["/app/dashboard", "--role=all", "--addr=:8080"]
     environment:
-      DASHBOARD_MYSQL_DSN: root:root@tcp(mysql:3306)/edgex_dashboard?parseTime=true
+      DASHBOARD_MYSQL_DSN: ${DASHBOARD_MYSQL_DSN:-root:root@tcp(mysql:3306)/edgex_dashboard?parseTime=true}
+      # HTTP_PROXY / HTTPS_PROXY are intentionally empty by default in
+      # production. Set them in .env when the deployment sits behind a
+      # corporate egress proxy. Leaving them empty makes the backend
+      # call exchanges directly.
+      HTTP_PROXY: ${HTTP_PROXY:-}
+      HTTPS_PROXY: ${HTTPS_PROXY:-}
+      NO_PROXY: ${NO_PROXY:-}
     ports:
-      - "8080:8080"
+      - "${BACKEND_PUBLISH_HOST:-127.0.0.1}:${BACKEND_PUBLISH_PORT:-8080}:8080"
     depends_on:
       mysql:
         condition: service_healthy
+    healthcheck:
+      # Liveness only -- /api/health always returns 200 once the process
+      # is responsive. Pointing healthcheck at /api/readiness would put
+      # the container into a restart loop during transient upstream
+      # outages.
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    mem_limit: ${BACKEND_MEM_LIMIT:-512m}
+    cpus: ${BACKEND_CPUS:-1.0}
+    user: "65532:65532"
+    read_only: true
+    tmpfs:
+      - /tmp:rw,nosuid,nodev
+    security_opt:
+      - no-new-privileges:true
 
   web:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.web
       args:
-        # NEXT_PUBLIC_* is inlined into the client JS bundle at build time;
-        # it must be a URL the end-user's browser can reach, not a Docker
-        # network hostname. The host publishes backend on 127.0.0.1:8080.
-        NEXT_PUBLIC_API_BASE: http://127.0.0.1:8080
+        # NEXT_PUBLIC_* is inlined into the client JS bundle at build
+        # time; it must be a URL the end-user's browser can reach, not
+        # a Docker network hostname.
+        NEXT_PUBLIC_API_BASE: ${NEXT_PUBLIC_API_BASE:-http://127.0.0.1:8080}
     environment:
       # Used only by Next.js SSR inside the container; can stay on the
       # Docker internal network hostname.
-      SERVER_API_BASE: http://backend:8080
+      SERVER_API_BASE: ${SERVER_API_BASE:-http://backend:8080}
     ports:
-      - "3001:3000"
+      - "${WEB_PUBLISH_HOST:-127.0.0.1}:${WEB_PUBLISH_PORT:-3001}:3000"
     depends_on:
       - backend
+    restart: unless-stopped
+    mem_limit: ${WEB_MEM_LIMIT:-512m}
+    cpus: ${WEB_CPUS:-1.0}
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  mysql-data:

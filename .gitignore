@@ -16,3 +16,7 @@ docs
 !backend/docs/
 !backend/docs/raw-instruments/
 !backend/docs/raw-instruments/**
+
+# Production .env (operator-supplied secrets); the .template companion
+# stays tracked so new deployments have a starting point.
+deploy/.env
