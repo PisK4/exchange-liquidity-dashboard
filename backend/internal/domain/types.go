@@ -1,6 +1,11 @@
 package domain
 
-import "time"
+import (
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+)
 
 const (
 	StatusComplete            = "complete"
@@ -20,8 +25,9 @@ const (
 	ReasonSparseBook  = "sparse_book"
 	ReasonUnknown     = "unknown"
 
-	ReasonFeedTruncation        = "feed_truncation"
-	ReasonMaxPrecisionShortfall = "max_precision_shortfall"
+	ReasonFeedTruncation         = "feed_truncation"
+	ReasonMaxPrecisionShortfall  = "max_precision_shortfall"
+	ReasonMonotonicityLowerBound = "monotonicity_lower_bound"
 
 	PolicyRawStrict          = "raw_strict"
 	PolicyAggregatedStrict   = "aggregated_strict"
@@ -268,6 +274,89 @@ func NormalizePlatformSnapshot(row *PlatformSnapshot) {
 		DeriveDepthMetricsDefaults(row.DepthStatus, &depth)
 		row.DepthByTier[tier] = depth
 	}
+	EnforceTierMonotonicity(row)
+}
+
+// EnforceTierMonotonicity clamps each tier's bid_usd and ask_usd to be at
+// least as large as the previous (narrower) tier's. The cumulative depth
+// inside ±N% must by definition include everything inside ±(N-Δ)%, but multi-
+// endpoint adapters (e.g. bitget's /merge-depth, gate's /order_book with
+// different `interval` query params) can return mutually inconsistent
+// snapshots that violate this. When we detect a violation we treat the
+// narrower tier's value as a verified lower bound for the wider tier and
+// transfer it forward, downgrading the affected metric to partial /
+// loose_lower_bound and tagging partial_reason with
+// ReasonMonotonicityLowerBound so the UI surfaces it as approximate.
+//
+// Tiers that are not display-available (unsupported/stale/error/etc.) are
+// skipped without resetting the running lower bound, so a missing middle
+// tier still keeps the constraint between the surrounding tiers.
+func EnforceTierMonotonicity(row *PlatformSnapshot) {
+	if row == nil || len(row.DepthByTier) == 0 {
+		return
+	}
+	tiers := make([]string, 0, len(row.DepthByTier))
+	for tier := range row.DepthByTier {
+		tiers = append(tiers, tier)
+	}
+	sort.Slice(tiers, func(i, j int) bool { return tierFraction(tiers[i]) < tierFraction(tiers[j]) })
+
+	var prevBid, prevAsk float64
+	havePrev := false
+	for _, tier := range tiers {
+		d, ok := row.DepthByTier[tier]
+		if !ok {
+			continue
+		}
+		if !d.DisplayAvailable {
+			continue
+		}
+		corrected := false
+		if havePrev && d.BidUSD+1e-9 < prevBid {
+			d.BidUSD = prevBid
+			corrected = true
+		}
+		if havePrev && d.AskUSD+1e-9 < prevAsk {
+			d.AskUSD = prevAsk
+			corrected = true
+		}
+		if corrected {
+			d.TotalUSD = d.BidUSD + d.AskUSD
+			d.StrictComplete = false
+			if d.DepthStatus == StatusComplete || d.DepthStatus == StatusAggregatedOrderbook || d.DepthStatus == StatusWSLimitedDepth {
+				d.DepthStatus = StatusPartial
+			}
+			if d.PolicyAcceptance == PolicyRawStrict || d.PolicyAcceptance == PolicyAggregatedStrict || d.PolicyAcceptance == "" {
+				d.PolicyAcceptance = PolicyLooseLowerBound
+			}
+			d.PartialReason = appendPartialReason(d.PartialReason, ReasonMonotonicityLowerBound)
+			row.DepthByTier[tier] = d
+		}
+		prevBid = d.BidUSD
+		prevAsk = d.AskUSD
+		havePrev = true
+	}
+}
+
+func tierFraction(tier string) float64 {
+	trimmed := strings.TrimSuffix(strings.TrimSpace(tier), "%")
+	f, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil {
+		return 0
+	}
+	return f
+}
+
+func appendPartialReason(existing, addition string) string {
+	if existing == "" {
+		return addition
+	}
+	for _, part := range strings.Split(existing, ",") {
+		if strings.TrimSpace(part) == addition {
+			return existing
+		}
+	}
+	return existing + "," + addition
 }
 
 func DeriveDepthMetricsDefaults(rowStatus string, metric *TierDepthMetrics) {
