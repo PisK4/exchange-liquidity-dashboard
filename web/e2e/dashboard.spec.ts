@@ -43,12 +43,37 @@ test('depth detail table shows depth values without per-cell source labels', asy
 });
 
 test('monitor KPI cards hide status badges for 7d share and 10min spread', async ({ page }) => {
+  // Seed the localStorage cache for both the canonical (?symbol=BTC) and
+  // the legacy display_symbol (?symbol=BTC-USDT%20(perp)) lookup keys.
+  // dashboard-client builds the fetch path from query.symbol verbatim,
+  // and page.tsx defaults query.symbol to 'BTC' on the bare '/' route,
+  // so the canonical key is the one the cache fallback actually consults
+  // when the API stub returns 503. The legacy key is kept as well so a
+  // future test that navigates to /?symbol=BTC-USDT%20(perp) still works.
   await page.addInitScript(() => {
     const now = new Date().toISOString();
     const depth = { bid_usd: 1000000, ask_usd: 1000000, total_usd: 2000000, depth_status: 'complete', strict_complete: true, display_available: true };
-    window.localStorage.setItem('edgex-dashboard:v1:/api/dashboard/meta', JSON.stringify({ ts: Date.now(), data: { tabs: ['monitor', 'quality', 'share', 'top30'], platforms: ['edgeX'], symbols: ['BTC-USDT (perp)'], windows: ['24h', '7d'], depth_tiers: [0.0005, 0.001, 0.01, 0.02], slippage_buckets_usd: [50000, 100000, 500000, 1000000], refresh_interval_sec: 30, volume_discounts: {} } }));
-    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/liquidity?symbol=BTC-USDT%20(perp)', JSON.stringify({ ts: Date.now(), data: { symbol: 'BTC-USDT (perp)', snapshot_ts: now, rows: [{ platform: 'edgeX', display_symbol: 'BTC-USDT (perp)', snapshot_ts: now, source_endpoint: '', depth_status: 'complete', depth_by_tier: { '0.05%': depth, '0.10%': depth, '1.00%': depth, '2.00%': depth }, vs_median_by_tier: { '0.10%': 1.2 }, buy_slippage_bp: {}, sell_slippage_bp: {}, worst_slippage_bp: {} }], kpis: { symbol_share_7d_pct: 12.34, symbol_share_7d_status: 'partial', edgex_spread_10m_bp: 1.23, edgex_spread_10m_status: 'complete', edgex_spread_bp: 1.1, edgex_24h_share_pct: 10.5 } } }));
-    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=BTC-USDT%20(perp)', JSON.stringify({ ts: Date.now(), data: { symbol: 'BTC-USDT (perp)', snapshot_ts: now, slippage_buckets_usd: [50000, 100000, 500000, 1000000], rows: [] } }));
+    const liquidityPayload = JSON.stringify({ ts: Date.now(), data: { symbol: 'BTC-USDT (perp)', snapshot_ts: now, rows: [{ platform: 'edgeX', display_symbol: 'BTC-USDT (perp)', snapshot_ts: now, source_endpoint: '', depth_status: 'complete', depth_by_tier: { '0.05%': depth, '0.10%': depth, '1.00%': depth, '2.00%': depth }, vs_median_by_tier: { '0.10%': 1.2 }, buy_slippage_bp: {}, sell_slippage_bp: {}, worst_slippage_bp: {} }], kpis: { symbol_share_7d_pct: 12.34, symbol_share_7d_status: 'partial', edgex_spread_10m_bp: 1.23, edgex_spread_10m_status: 'complete', edgex_spread_bp: 1.1, edgex_24h_share_pct: 10.5 } } });
+    const qualityPayload = JSON.stringify({ ts: Date.now(), data: { symbol: 'BTC-USDT (perp)', snapshot_ts: now, slippage_buckets_usd: [50000, 100000, 500000, 1000000], rows: [] } });
+    window.localStorage.setItem('edgex-dashboard:v1:/api/dashboard/meta', JSON.stringify({ ts: Date.now(), data: {
+      tabs: ['monitor', 'quality', 'share', 'top30'],
+      platforms: ['edgeX'],
+      symbols: ['BTC-USDT (perp)'],
+      categories: [
+        { key: 'crypto', label: '加密货币', symbols: [
+          { canonical: 'BTC', display_name: 'BTC-USD', display_symbol: 'BTC-USDT (perp)', asset_category: 'crypto', instrument_kind: 'canonical', market_surface: 'perp', supported_platform_count: 10 },
+        ] },
+      ],
+      windows: ['24h', '7d'],
+      depth_tiers: [0.0005, 0.001, 0.01, 0.02],
+      slippage_buckets_usd: [50000, 100000, 500000, 1000000],
+      refresh_interval_sec: 30,
+      volume_discounts: {},
+    } }));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/liquidity?symbol=BTC', liquidityPayload);
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/liquidity?symbol=BTC-USDT%20(perp)', liquidityPayload);
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=BTC', qualityPayload);
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=BTC-USDT%20(perp)', qualityPayload);
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/share?window=7d', JSON.stringify({ ts: Date.now(), data: { window: '7d', snapshot_ts: now, rows: [] } }));
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/top30?surface=perp&platform=binance', JSON.stringify({ ts: Date.now(), data: { surface: 'perp', platform: 'binance', snapshot_ts: now, rows: [] } }));
   });
