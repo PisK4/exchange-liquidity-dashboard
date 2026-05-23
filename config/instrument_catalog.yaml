@@ -4,7 +4,7 @@
 # Front-end URLs (frontend_url) and url_verified flag MAY be edited by hand
 # after clicking through each link to confirm the trading pair exists.
 schema_version: 1
-generated_at: "2026-05-23T08:07:16Z"
+generated_at: "2026-05-23T08:10:37Z"
 generated_by: backend/scripts/build-catalog
 canonical_whitelist:
   - canonical: BTC
@@ -276,6 +276,30 @@ canonical_whitelist:
     quote: USDT
     confidence: confirmed
   - canonical: URNM
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: ANTHROPIC
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: SPACEX
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: OPENAI
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: BIRD
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: CBPS
+    market_surface: synthetic_futures
+    quote: USDT
+    confidence: confirmed
+  - canonical: XYZ100
     market_surface: synthetic_futures
     quote: USDT
     confidence: confirmed
@@ -1182,6 +1206,18 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    OPENAI:
+      api_symbol: NCSKOPENAIV2USD-USDT
+      base_asset: NCSKOPENAIV2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCSKOPENAIV2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     ORCL:
       api_symbol: NCSKORCL2USD-USDT
       base_asset: NCSKORCL2USD
@@ -1314,6 +1350,18 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    SPACEX:
+      api_symbol: NCSKSPACEXV2USD-USDT
+      base_asset: NCSKSPACEXV2USD
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      source_endpoint: https://open-api.bingx.com/openApi/swap/v2/quote/depth
+      catalog_status: "1"
+      frontend_url: https://bingx.com/zh-cn/perpetual/NCSKSPACEXV2USD-USDT/
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     TSLA:
       api_symbol: NCSKTSLA2USD-USDT
       base_asset: NCSKTSLA2USD
@@ -2839,6 +2887,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    ANTHROPIC:
+      api_symbol: ANTHROPIC_USDT
+      base_asset: ANTHROPIC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.01
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/ANTHROPIC_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     AVGO:
       api_symbol: AVGO_USDT
       base_asset: AVGO
@@ -3229,6 +3290,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    OPENAI:
+      api_symbol: OPENAI_USDT
+      base_asset: OPENAI
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.01
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/OPENAI_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     ORCL:
       api_symbol: ORCLX_USDT
       base_asset: ORCLX
@@ -3333,6 +3407,19 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    SPACEX:
+      api_symbol: SPACEX_USDT
+      base_asset: SPACEX
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 400
+      quanto_multiplier: 0.01
+      source_endpoint: https://api.gateio.ws/api/v4/futures/usdt/order_book
+      catalog_status: trading
+      frontend_url: https://www.gate.io/futures/USDT/SPACEX_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     TSLA:
       api_symbol: TSLAX_USDT
       base_asset: TSLAX
@@ -3990,6 +4077,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    SPACEX:
+      api_symbol: SPACEX
+      base_asset: SPACEX
+      quote_asset: USDC
+      settle_asset: USDC
+      api_level_cap: 0
+      market_id: 173
+      source_endpoint: https://mainnet.zklighter.elliot.ai/api/v1/orderBooks
+      catalog_status: active
+      frontend_url: https://app.lighter.xyz/trade/SPACEX
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     TSLA:
       api_symbol: TSLA
       base_asset: TSLA
@@ -4105,6 +4205,19 @@ platforms:
       source_endpoint: https://contract.mexc.com/api/v1/contract/depth
       catalog_status: "0"
       frontend_url: https://www.mexc.com/futures/AMZNSTOCK_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    ANTHROPIC:
+      api_symbol: ANTHROPIC_USDT
+      base_asset: ANTHROPIC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.001
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/ANTHROPIC_USDT
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -4498,6 +4611,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    OPENAI:
+      api_symbol: OPENAI_USDT
+      base_asset: OPENAI
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.001
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/OPENAI_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     ORCL:
       api_symbol: ORCLSTOCK_USDT
       base_asset: ORCLSTOCK
@@ -4654,6 +4780,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    SPACEX:
+      api_symbol: SPACEX_USDT
+      base_asset: SPACEX
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 2000
+      contract_size: 0.001
+      source_endpoint: https://contract.mexc.com/api/v1/contract/depth
+      catalog_status: "0"
+      frontend_url: https://www.mexc.com/futures/SPACEX_USDT
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     TSM:
       api_symbol: TSMSTOCK_USDT
       base_asset: TSMSTOCK
@@ -4743,6 +4882,19 @@ platforms:
       source_endpoint: https://www.okx.com/api/v5/market/books-full
       catalog_status: live
       frontend_url: https://www.okx.com/trade-swap/amzn-usdt-swap
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
+    ANTHROPIC:
+      api_symbol: ANTHROPIC-USDT-SWAP
+      base_asset: ANTHROPIC
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 1
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/anthropic-usdt-swap
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
@@ -5084,6 +5236,19 @@ platforms:
       url_verified: false
       market_surface: synthetic_futures
       instrument_kind: synthetic
+    OPENAI:
+      api_symbol: OPENAI-USDT-SWAP
+      base_asset: OPENAI
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 1
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/openai-usdt-swap
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     ORCL:
       api_symbol: ORCL-USDT-SWAP
       base_asset: ORCL
@@ -5162,6 +5327,19 @@ platforms:
       url_verified: false
       market_surface: perp
       instrument_kind: canonical
+    SPACEX:
+      api_symbol: SPACEX-USDT-SWAP
+      base_asset: SPACEX
+      quote_asset: USDT
+      settle_asset: USDT
+      api_level_cap: 10000
+      contract_size: 1
+      source_endpoint: https://www.okx.com/api/v5/market/books-full
+      catalog_status: live
+      frontend_url: https://www.okx.com/trade-swap/spacex-usdt-swap
+      url_verified: false
+      market_surface: synthetic_futures
+      instrument_kind: synthetic
     TSLA:
       api_symbol: TSLA-USDT-SWAP
       base_asset: TSLA

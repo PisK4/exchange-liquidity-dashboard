@@ -4,7 +4,7 @@
 # Consumed at runtime by the CoinGecko collector to fill the
 # "edgeX 已上线?" column on the Top30 tab.
 schema_version: 1
-generated_at: "2026-05-23T08:07:16Z"
+generated_at: "2026-05-23T08:10:37Z"
 generated_by: backend/scripts/build-catalog
 platforms:
   binance:
@@ -1230,7 +1230,6 @@ platforms:
       - NCSKCOHR2USD
       - NCSKCOIN2USD
       - NCSKCRCL2USD
-      - NCSKFLY2USD
       - NCSKGE2USD
       - NCSKGLW2USD
       - NCSKGME2USD
@@ -1262,7 +1261,6 @@ platforms:
       - NCSKSMCI2USD
       - NCSKSNDK2USD
       - NCSKSOXL2USD
-      - NCSKSPACEXP2USD
       - NCSKSPACEXV2USD
       - NCSKSPCX2USD
       - NCSKSPY2USD

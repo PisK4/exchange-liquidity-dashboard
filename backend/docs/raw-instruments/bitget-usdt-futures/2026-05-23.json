@@ -19128,7 +19128,7 @@
       "deliveryStartTime": "",
       "deliveryTime": "",
       "feeRateUpRatio": "0.005",
-      "fundInterval": "1",
+      "fundInterval": "4",
       "isRwa": "NO",
       "launchTime": "",
       "limitOpenTime": "-1",
@@ -22603,5 +22603,5 @@
     }
   ],
   "msg": "success",
-  "requestTime": 1779523646884
+  "requestTime": 1779523843308
 }

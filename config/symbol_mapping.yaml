@@ -703,4 +703,57 @@ symbols:
     market_surface: synthetic_futures
     instrument_kind: synthetic
 
+  # ---- C10 §4.3 ambiguous tickers (pre-IPO / unverified) ----
+  # All entries here are imported per the user's "全部尽力导入"
+  # directive but flagged in unresolved_symbols.yaml for ops review.
+  # ANTHROPIC, SPACEX, OPENAI: pre-IPO private companies; the listings
+  # below are synthetic perp contracts that proxy expected post-IPO
+  # valuations (bingx 'V'/Vintel, gate, mexc, okx). Treat as stocks.
+  - display_symbol: ANTHROPIC-USDT (perp)
+    display_name: ANTHROPIC-USD
+    canonical: ANTHROPIC
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: SPACEX-USDT (perp)
+    display_name: SPACEX-USD
+    canonical: SPACEX
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKSPACEXV2USD, NCSKSPACEXP2USD]
+  - display_symbol: OPENAI-USDT (perp)
+    display_name: OPENAI-USD
+    canonical: OPENAI
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      bingx: [NCSKOPENAIV2USD]
+  # BIRD, CBPS, XYZ100: no listing observed on any of the 10 tracked
+  # platforms in 2026-05-23 raw dumps. The doc01 §4.3 entries are
+  # explicitly flagged as "可能未在公开市场找到" -- imported with
+  # empty aliases purely to surface them in the UI dropdown so ops
+  # can confirm or rename. Categories follow §4.3 guesses: BIRD/CBPS
+  # are equity-like (stock), XYZ100 looks like an index.
+  - display_symbol: BIRD-USDT (perp)
+    display_name: BIRD-USD
+    canonical: BIRD
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: CBPS-USDT (perp)
+    display_name: CBPS-USD
+    canonical: CBPS
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+  - display_symbol: XYZ100-USDT (perp)
+    display_name: XYZ100-USD
+    canonical: XYZ100
+    asset_category: index_etf
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+
 platforms: [edgeX, binance, okx, bybit, bitget, bingx, mexc, gate, hyperliquid, lighter]

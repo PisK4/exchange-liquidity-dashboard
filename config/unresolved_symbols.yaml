@@ -1,3 +1,237 @@
-items:
+# unresolved_symbols.yaml -- ops review backlog (V1 phase 9)
+#
+# Covers two distinct concerns:
+#   1. platform_issues  -- exchange-level technical questions
+#                          (e.g. lighter REST semantics, adapter quirks)
+#   2. canonical_issues -- symbol-level business / coverage questions:
+#                            * zero-platform canonicals
+#                            * ambiguous tickers (multiple plausible
+#                              underlying instruments)
+#                            * single-platform coverage that risks
+#                              biased liquidity comparisons
+#                            * non-standard tickers from doc01 §4.3
+#
+# Workflow: ops/PM reviews canonical_issues, decides per row:
+#   - confirm : keep canonical and aliases as-is
+#   - rename  : adjust canonical or aliases (V1.1 follow-up)
+#   - disable : remove from symbol_mapping.yaml (V1.1 follow-up)
+# After review the rows that get sign-off are deleted from this file.
+
+platform_issues:
   - platform: lighter
     issue: REST orderbook URL and market id semantics need official confirmation; V1 reports unsupported instead of fabricating data.
+
+canonical_issues:
+  # ---- 0-platform canonicals ----------------------------------------
+  - canonical: ZM
+    asset_category: stock
+    source_doc: "doc01 §4.2"
+    catalog_status: 0_platforms
+    questions:
+      - "Is Zoom Communications (ZM) intentional? No listing observed on any of the 10 tracked platforms in 2026-05-23 raw dumps."
+      - "If yes, expected to remain 0-platform until an exchange lists it; should the dropdown still surface it?"
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 0
+      similar_candidates: []
+    suggested_resolution: "Confirm intent. If V1 should not display empty 0-platform symbols, disable in V1.1."
+
+  - canonical: RIVN
+    asset_category: stock
+    source_doc: "doc01 §4.2"
+    catalog_status: 0_platforms
+    questions:
+      - "Is Rivian (RIVN) intentional? No listing observed on any of the 10 tracked platforms in 2026-05-23 raw dumps."
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 0
+      similar_candidates: []
+    suggested_resolution: "Confirm intent."
+
+  - canonical: BX
+    asset_category: stock
+    source_doc: "doc01 §4.2"
+    catalog_status: 0_platforms
+    questions:
+      - "Is Blackstone (BX) intentional? The 2-letter ticker is also ambiguous against crypto pairs, so empty aliases are intentional to avoid false matches."
+      - "If kept, should we add an explicit blocklist for BX-like crypto tokens to prevent accidental aliasing?"
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 0
+      similar_candidates: []
+    suggested_resolution: "Confirm intent. Discuss aliasing safety for short tickers."
+
+  - canonical: DKNG
+    asset_category: stock
+    source_doc: "doc01 §4.2"
+    catalog_status: 0_platforms
+    questions:
+      - "Is DraftKings (DKNG) intentional? No listing observed on any of the 10 tracked platforms."
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 0
+      similar_candidates: []
+    suggested_resolution: "Confirm intent."
+
+  - canonical: EWZ
+    asset_category: index_etf
+    source_doc: "doc01 §4.2"
+    catalog_status: 0_platforms
+    questions:
+      - "Is iShares MSCI Brazil ETF (EWZ) intentional? No listing observed on any of the 10 tracked platforms."
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 0
+      similar_candidates: []
+    suggested_resolution: "Confirm intent."
+
+  - canonical: BIRD
+    asset_category: stock
+    source_doc: "doc01 §4.3 (ambiguous list)"
+    catalog_status: 0_platforms
+    questions:
+      - "What does BIRD refer to? Bird Global (de-listed)? AB Volvo (BIRD-A)? Some BIRD-themed crypto?"
+      - "If a specific company, please provide the desired underlying ticker so aliases can be configured."
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 0
+      similar_candidates: []
+    suggested_resolution: "Need ops disambiguation."
+
+  - canonical: CBPS
+    asset_category: stock
+    source_doc: "doc01 §4.3 (ambiguous list)"
+    catalog_status: 0_platforms
+    questions:
+      - "Is CBPS a known equity ticker? No matches in any 2026-05-23 raw dump. Possible typo for CBOE / CBPI / CBSH?"
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 0
+      similar_candidates: []
+    suggested_resolution: "Need ops disambiguation -- could be a typo."
+
+  - canonical: XYZ100
+    asset_category: index_etf
+    source_doc: "doc01 §4.3 (ambiguous list)"
+    catalog_status: 0_platforms
+    questions:
+      - "doc01 §4.3 says 'XYZ100 未在公开市场找到对应标的, 疑似内部命名'. Is this an internal index requirement, or a typo for XBI100 / XSP100 / similar?"
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 0
+      similar_candidates: []
+    suggested_resolution: "Need business clarification on naming."
+
+  # ---- single-platform / sparse coverage ---------------------------
+  - canonical: URNM
+    asset_category: commodity
+    source_doc: "doc01 §4.2 + doc16 §6 警告"
+    catalog_status: 1_platform
+    questions:
+      - "doc16 §6 says URNM != URA. Currently URNM is on okx-swap only (URNM-USDT-SWAP); URA is on lighter. Does ops accept the URNM/URA distinction with this thin coverage?"
+      - "Should URNM and URA appear as siblings in the UI, or be merged into one canonical with a quote-by-source aggregation?"
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 1
+      matched_aliases:
+        okx: [URNM-USDT-SWAP]
+    suggested_resolution: "Confirm the URNM/URA split is the desired V1 surface; otherwise rename / merge in V1.1."
+
+  - canonical: SLV
+    asset_category: index_etf
+    source_doc: "doc01 §4.2"
+    catalog_status: 1_platform
+    questions:
+      - "SLV (silver ETF) currently only lists on edgeX-perp-v1 (api_symbol SLVUSD, USD-quoted). Does ops expect SLV to appear next to SILVER (commodity) in the UI, or be merged?"
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 1
+      matched_aliases:
+        edgeX: [SLVUSD]
+    suggested_resolution: "Confirm SLV is its own canonical; otherwise alias to SILVER in V1.1."
+
+  - canonical: URA
+    asset_category: index_etf
+    source_doc: "doc01 §4.2"
+    catalog_status: 1_platform
+    questions:
+      - "URA only lists on lighter perp (bare 'URA' ticker). With single-source coverage, the 'depth median' indicator is degenerate. Does ops accept this for V1?"
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 1
+      matched_aliases:
+        lighter: [URA]
+    suggested_resolution: "Confirm V1 acceptance of single-platform indicators. Consider hiding median for single-source canonicals in V1.1."
+
+  - canonical: BOTZ
+    asset_category: index_etf
+    source_doc: "doc01 §4.2"
+    catalog_status: 1_platform
+    questions:
+      - "BOTZ (robotics theme ETF) only lists on lighter perp. Same single-source consideration as URA."
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 1
+      matched_aliases:
+        lighter: [BOTZ]
+    suggested_resolution: "Same as URA."
+
+  - canonical: MAGS
+    asset_category: index_etf
+    source_doc: "doc01 §4.2"
+    catalog_status: 1_platform
+    questions:
+      - "MAGS (Roundhill Magnificent Seven) only lists on lighter perp. Same single-source consideration."
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 1
+      matched_aliases:
+        lighter: [MAGS]
+    suggested_resolution: "Same as URA."
+
+  # ---- ambiguous / non-standard tickers ----------------------------
+  - canonical: DRAM
+    asset_category: stock
+    source_doc: "doc01 §4.3 (also imported in C7)"
+    catalog_status: 1_platform
+    questions:
+      - "Which company does DRAM refer to? doc01 §4.3 marks it 'non-standard ticker'. Currently the only listing is bingx NCSKDRAM2USD (memory industry proxy). If ops wants Micron specifically, that maps to MU instead."
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 1
+      matched_aliases:
+        bingx: [NCSKDRAM2USD]
+    suggested_resolution: "Confirm whether DRAM is a memory industry proxy or should be aliased to MU."
+
+  - canonical: ANTHROPIC
+    asset_category: stock
+    source_doc: "doc01 §4.3 (ambiguous list)"
+    catalog_status: 3_platforms
+    questions:
+      - "Anthropic is a private company (no public stock). Listed perpetuals (gate ANTHROPIC_USDT, mexc ANTHROPIC_USDT, okx ANTHROPIC-USDT-SWAP) are pre-IPO valuation derivatives. Does ops want this as 'stock' or a separate 'pre-IPO' category in V1.1?"
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 3
+    suggested_resolution: "Decide whether pre-IPO derivatives need their own asset_category in V1.1."
+
+  - canonical: SPACEX
+    asset_category: stock
+    source_doc: "doc01 §4.3 (ambiguous list)"
+    catalog_status: 5_platforms
+    questions:
+      - "SPACEX is private; listed perpetuals are pre-IPO valuation derivatives. bingx exposes both NCSKSPACEXV2USD (Vintel) and NCSKSPACEXP2USD (Pre-IPO) variants -- imported as a multi-alias. Should V1 surface them as one canonical (current) or split (SPACEXV / SPACEXP)?"
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 5
+    suggested_resolution: "Confirm aggregated SPACEX is the right surface."
+
+  - canonical: OPENAI
+    asset_category: stock
+    source_doc: "doc01 §4.3 (ambiguous list)"
+    catalog_status: 4_platforms
+    questions:
+      - "OpenAI is private; same pre-IPO consideration as ANTHROPIC. bingx uses NCSKOPENAIV2USD (Vintel)."
+    probe_summary:
+      platforms_searched: 10
+      matches_found: 4
+    suggested_resolution: "Same as ANTHROPIC."

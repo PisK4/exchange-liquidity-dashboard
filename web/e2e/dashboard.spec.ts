@@ -108,7 +108,9 @@ function stubMultiCategoryMeta(page: import('@playwright/test').Page) {
           { key: 'stock', label: '股票', symbols: [
             { canonical: 'TSLA', display_name: 'TSLA-USD', display_symbol: 'TSLA-USDT (perp)', asset_category: 'stock', instrument_kind: 'synthetic', market_surface: 'synthetic_futures', supported_platform_count: 4 },
           ] },
-          { key: 'index_etf', label: '指数 / ETF', symbols: [] },
+          { key: 'index_etf', label: '指数 / ETF', symbols: [
+            { canonical: 'XYZ100', display_name: 'XYZ100-USD', display_symbol: 'XYZ100-USDT (perp)', asset_category: 'index_etf', instrument_kind: 'synthetic', market_surface: 'synthetic_futures', supported_platform_count: 0 },
+          ] },
         ],
         windows: ['24h', '7d'],
         depth_tiers: [0.0005, 0.001, 0.01, 0.02],
@@ -125,6 +127,13 @@ function stubMultiCategoryMeta(page: import('@playwright/test').Page) {
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=BTC-USDT%20(perp)', empty('BTC-USDT (perp)'));
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/liquidity?symbol=GOLD', liquidity('GOLD-USDT (perp)'));
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=GOLD', empty('GOLD-USDT (perp)'));
+    // XYZ100 stands in for a 0-platform canonical (doc01 §4.3 ambiguous).
+    // The backend returns rows: [] and the UI must render the empty state
+    // without crashing.
+    const noPlatforms = (sym: string) => JSON.stringify({ ts: Date.now(), data: { symbol: sym, snapshot_ts: now, rows: [], kpis: {} } });
+    const noPlatformsQuality = (sym: string) => JSON.stringify({ ts: Date.now(), data: { symbol: sym, snapshot_ts: now, slippage_buckets_usd: [50000, 100000, 500000, 1000000], rows: [] } });
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/liquidity?symbol=XYZ100', noPlatforms('XYZ100-USDT (perp)'));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=XYZ100', noPlatformsQuality('XYZ100-USDT (perp)'));
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/share?window=7d', JSON.stringify({ ts: Date.now(), data: { window: '7d', snapshot_ts: now, rows: [] } }));
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/top30?surface=perp&platform=binance', JSON.stringify({ ts: Date.now(), data: { surface: 'perp', platform: 'binance', snapshot_ts: now, rows: [] } }));
   });
@@ -172,6 +181,25 @@ test('legacy display_symbol URL still loads the canonical view', async ({ page }
   // label even though the URL itself is left untouched (so existing
   // bookmarks keep working without forced redirects).
   await expect(page.getByTestId('symbol-select-trigger')).toContainText('BTC-USD');
+});
+
+test('zero-platform canonical renders without crashing the dashboard', async ({ page }) => {
+  await stubMultiCategoryMeta(page);
+  await page.route('**/api/**', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
+
+  const errors: string[] = [];
+  page.on('console', msg => { if (msg.type() === 'error') errors.push(msg.text()); });
+  page.on('pageerror', err => { errors.push(err.message); });
+
+  await page.goto('/?symbol=XYZ100');
+
+  // Trigger reflects the canonical even though no platform serves data.
+  await expect(page.getByTestId('symbol-select-trigger')).toContainText('XYZ100-USD');
+  // Body still mounts without React error boundaries firing.
+  await expect(page.locator('body')).toContainText('流动性 & 深度监控面板');
+  // No uncaught console errors / page errors (e.g. cannot read .length of
+  // undefined).
+  expect(errors.filter(e => !/^Failed to load resource/i.test(e) && !/503/.test(e))).toEqual([]);
 });
 
 test('quality charts match the reference labels and signed imbalance treatment', async ({ page }) => {
