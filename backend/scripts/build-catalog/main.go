@@ -31,17 +31,18 @@ import (
 )
 
 type cliFlags struct {
-	whitelistPath      string
-	catalogPath        string
-	listedUniversePath string
-	rawDir             string
-	dryRun             bool
-	diffAgainst        string
-	timeout            time.Duration
-	platforms          string
-	allowPartial       bool
-	rawOnly            bool
-	proxy              string
+	whitelistPath       string
+	catalogPath         string
+	listedUniversePath  string
+	rawDir              string
+	dryRun              bool
+	diffAgainst         string
+	timeout             time.Duration
+	platforms           string
+	allowPartial        bool
+	rawOnly             bool
+	proxy               string
+	preserveURLVerified bool
 }
 
 func main() {
@@ -64,6 +65,7 @@ func run() error {
 	flag.BoolVar(&f.allowPartial, "allow-partial", false, "write catalog yaml even if some platforms failed (default: refuse, to avoid silently shrinking the catalog)")
 	flag.BoolVar(&f.rawOnly, "raw-only", false, "write raw dumps only; do not touch instrument_catalog.yaml (useful for partial-network audit refreshes)")
 	flag.StringVar(&f.proxy, "proxy", "", "optional HTTP/HTTPS proxy URL (e.g. http://127.0.0.1:7897); when blank, falls back to direct connection. Per-platform exchange APIs reuse this proxy uniformly.")
+	flag.BoolVar(&f.preserveURLVerified, "preserve-url-verified", true, "when --output already exists, copy its url_verified=true flags forward to entries with the same (platform, canonical, frontend_url) tuple; defaults to true so verify-frontend-urls approvals survive a catalog rebuild")
 	flag.Parse()
 
 	wl, err := loadSymbolWhitelist(f.whitelistPath)
@@ -96,6 +98,13 @@ func run() error {
 	}
 
 	catalog := buildCatalog(now, wl, results)
+	if f.preserveURLVerified {
+		if prior, err := loadPriorCatalog(f.catalogPath); err == nil {
+			mergeURLVerifiedFromPrior(&catalog, prior)
+		} else if !os.IsNotExist(err) {
+			return fmt.Errorf("read prior catalog for --preserve-url-verified: %w", err)
+		}
+	}
 	listedUniverse := buildListedUniverse(now, results)
 
 	if f.dryRun {
@@ -509,6 +518,55 @@ func sourceEndpointFor(platform string) string {
 		return "https://mainnet.zklighter.elliot.ai/api/v1/orderBooks"
 	}
 	return ""
+}
+
+// loadPriorCatalog reads an existing instrument_catalog.yaml so the
+// generator can preserve operator-set url_verified flags across
+// re-generations. Returns os.IsNotExist when the file is absent (the
+// first-ever build) so the caller can distinguish "no prior data" from
+// "read failed".
+func loadPriorCatalog(path string) (config.Catalog, error) {
+	body, err := os.ReadFile(path)
+	if err != nil {
+		return config.Catalog{}, err
+	}
+	var prior config.Catalog
+	if err := yaml.Unmarshal(body, &prior); err != nil {
+		return config.Catalog{}, fmt.Errorf("unmarshal prior catalog: %w", err)
+	}
+	return prior, nil
+}
+
+// mergeURLVerifiedFromPrior copies url_verified=true forward from the
+// prior catalog into freshly-generated entries. The match key is the
+// (platform, canonical, frontend_url) tuple -- if any of those three
+// values change the verified flag is reset to false because the
+// approval was for a *specific* URL the operator inspected. This is
+// the merge-preserve discipline the spec calls out.
+func mergeURLVerifiedFromPrior(cat *config.Catalog, prior config.Catalog) {
+	if cat == nil || len(prior.Platforms) == 0 {
+		return
+	}
+	for platform, byCanon := range cat.Platforms {
+		priorByCanon, ok := prior.Platforms[platform]
+		if !ok {
+			continue
+		}
+		for canonical, sym := range byCanon {
+			priorSym, ok := priorByCanon[canonical]
+			if !ok {
+				continue
+			}
+			if !priorSym.URLVerified {
+				continue
+			}
+			if priorSym.FrontendURL != sym.FrontendURL {
+				continue
+			}
+			sym.URLVerified = true
+			cat.Platforms[platform][canonical] = sym
+		}
+	}
 }
 
 func writeCatalogYAML(path string, cat config.Catalog) error {
