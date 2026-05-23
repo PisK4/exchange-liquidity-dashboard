@@ -16,6 +16,13 @@ type Collector struct {
 	cfg      config.Config
 	store    *Store
 	adapters map[string]adapter.ExchangeAdapter
+
+	// cooldownMu guards cooldown / consecFails. Both maps are keyed by
+	// "{platform}|{canonical}" and hold per-pair retry state.
+	cooldownMu  sync.Mutex
+	cooldown    map[string]time.Time
+	consecFails map[string]int
+	cooldownNow func() time.Time
 }
 
 func NewCollector(cfg config.Config, store *Store) *Collector {
@@ -27,7 +34,68 @@ func NewCollectorWithLighter(cfg config.Config, store *Store, lighter adapter.Li
 	for _, p := range cfg.Platforms {
 		adapters[p] = adapter.NewWithLighterAndProxy(p, cfg.Runtime.HTTPTimeout, lighter, cfg.Runtime.ExchangeProxy)
 	}
-	return &Collector{cfg: cfg, store: store, adapters: adapters}
+	return &Collector{
+		cfg:         cfg,
+		store:       store,
+		adapters:    adapters,
+		cooldown:    map[string]time.Time{},
+		consecFails: map[string]int{},
+		cooldownNow: time.Now,
+	}
+}
+
+// cooldownKey is the (platform, canonical) tuple identifier used for
+// per-pair retry state. Falls back to display_symbol when the canonical
+// is empty (legacy V1 BTC/ETH/SOL pre-schema-v2 surfaces).
+func cooldownKey(sub domain.SymbolSub) string {
+	canon := sub.Canonical
+	if canon == "" {
+		canon = sub.DisplaySymbol
+	}
+	return sub.Platform + "|" + canon
+}
+
+// shouldSkipForCooldown reports whether a (platform, canonical) tuple is
+// currently inside its cooldown window. Cooldown is opted-in via the
+// runtime CooldownFailureThreshold/CooldownDuration knobs; if either is
+// non-positive cooldown is disabled and this always returns false.
+func (c *Collector) shouldSkipForCooldown(sub domain.SymbolSub) bool {
+	if c.cfg.Runtime.CooldownFailureThreshold <= 0 || c.cfg.Runtime.CooldownDuration <= 0 {
+		return false
+	}
+	c.cooldownMu.Lock()
+	defer c.cooldownMu.Unlock()
+	until, ok := c.cooldown[cooldownKey(sub)]
+	if !ok {
+		return false
+	}
+	if c.cooldownNow().Before(until) {
+		return true
+	}
+	delete(c.cooldown, cooldownKey(sub))
+	return false
+}
+
+// recordCollectionResult updates per-pair consecutive-failure state.
+// Tally is bumped on hard error / unsupported; reset on a usable
+// snapshot. Once the configured threshold is reached the pair is parked
+// in the cooldown map until now+CooldownDuration.
+func (c *Collector) recordCollectionResult(sub domain.SymbolSub, ok bool) {
+	if c.cfg.Runtime.CooldownFailureThreshold <= 0 || c.cfg.Runtime.CooldownDuration <= 0 {
+		return
+	}
+	key := cooldownKey(sub)
+	c.cooldownMu.Lock()
+	defer c.cooldownMu.Unlock()
+	if ok {
+		delete(c.consecFails, key)
+		delete(c.cooldown, key)
+		return
+	}
+	c.consecFails[key]++
+	if c.consecFails[key] >= c.cfg.Runtime.CooldownFailureThreshold {
+		c.cooldown[key] = c.cooldownNow().Add(c.cfg.Runtime.CooldownDuration)
+	}
 }
 
 func (c *Collector) CollectOnce(ctx context.Context) error {
@@ -59,9 +127,34 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 					mu.Unlock()
 				}
 			}()
+			if c.shouldSkipForCooldown(sub) {
+				now := time.Now().UTC()
+				mu.Lock()
+				statuses = append(statuses, domain.CollectionStatus{
+					Platform:       sub.Platform,
+					DisplaySymbol:  sub.DisplaySymbol,
+					Collector:      "rest_orderbook",
+					SourceEndpoint: sub.SourceEndpoint,
+					Status:         domain.StatusUnsupported,
+					Error:          "skipped: pair in cooldown after consecutive failures",
+					SnapshotTS:     now,
+				})
+				statuses = append(statuses, domain.CollectionStatus{
+					Platform:       sub.Platform,
+					DisplaySymbol:  sub.DisplaySymbol,
+					Collector:      "rest_ticker",
+					SourceEndpoint: sub.SourceEndpoint,
+					Status:         domain.StatusUnsupported,
+					Error:          "skipped: pair in cooldown after consecutive failures",
+					SnapshotTS:     now,
+				})
+				mu.Unlock()
+				return
+			}
 			adapter := c.adapters[sub.Platform]
 			begin := time.Now()
 			book, err := adapter.FetchOrderBook(ctx, sub)
+			orderbookOK := false
 			status := domain.StatusComplete
 			if err != nil {
 				status = book.DepthStatus
@@ -71,6 +164,7 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 			} else if book.DepthStatus == domain.StatusUnsupported {
 				status = domain.StatusUnsupported
 			} else {
+				orderbookOK = true
 				mu.Lock()
 				success++
 				mu.Unlock()
@@ -83,6 +177,7 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 			begin = time.Now()
 			vol, verr := adapter.FetchTicker(ctx, sub)
 			vstatus := vol.Status
+			tickerOK := false
 			if verr != nil {
 				mu.Lock()
 				failed++
@@ -90,6 +185,7 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 			} else if vstatus == domain.StatusUnsupported {
 				// expected for (platform, canonical) pairs with no catalog entry
 			} else {
+				tickerOK = true
 				mu.Lock()
 				success++
 				mu.Unlock()
@@ -98,6 +194,8 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 			statuses = append(statuses, domain.CollectionStatus{Platform: sub.Platform, DisplaySymbol: sub.DisplaySymbol, Collector: "rest_ticker", SourceEndpoint: sub.SourceEndpoint, Status: vstatus, Error: vol.Error, SnapshotTS: vol.SnapshotTS, LatencyMS: time.Since(begin).Milliseconds()})
 			mu.Unlock()
 			c.store.SaveVolume(vol)
+
+			c.recordCollectionResult(sub, orderbookOK || tickerOK)
 		}()
 	}
 	wg.Wait()

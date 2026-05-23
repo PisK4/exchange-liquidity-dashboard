@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"time"
@@ -22,6 +23,44 @@ type Runtime struct {
 	CoinGecko             CoinGeckoConfig             `json:"coingecko"`
 	WSProviders           map[string]WSProviderConfig `json:"ws_providers,omitempty"`
 	Backfill              BackfillConfig              `json:"backfill"`
+	// StalenessByCategory configures per-asset_category snapshot freshness
+	// thresholds. Crypto markets trade 24/7 so a 30s threshold is
+	// reasonable; commodity / stock / index_etf surfaces are exposed via
+	// synthetic perpetuals whose tick rate is dominated by the
+	// underlying market hours, so much wider thresholds avoid false
+	// "stale" flags during after-hours.
+	StalenessByCategory map[string]time.Duration `json:"staleness_by_category,omitempty"`
+	// CooldownFailureThreshold is the number of consecutive failures for a
+	// (platform, canonical) pair before the collector pauses collecting
+	// it. CooldownDuration is the pause length. Both default to safe
+	// values (3 / 5m) and can be overridden in runtime.yaml.
+	CooldownFailureThreshold int           `json:"cooldown_failure_threshold,omitempty"`
+	CooldownDuration         time.Duration `json:"cooldown_duration,omitempty"`
+}
+
+// StaleThresholdFor returns the configured freshness threshold for the
+// given asset_category, falling back through commodity/stock/index_etf
+// chain and ultimately to a 5min default. An empty string is treated as
+// crypto for backwards compatibility with V1 BTC/ETH/SOL surfaces that
+// were created before asset_category existed.
+func (r Runtime) StaleThresholdFor(category string) time.Duration {
+	if category == "" {
+		category = "crypto"
+	}
+	if r.StalenessByCategory != nil {
+		if d, ok := r.StalenessByCategory[category]; ok && d > 0 {
+			return d
+		}
+	}
+	switch category {
+	case "crypto":
+		return 30 * time.Second
+	case "commodity":
+		return 300 * time.Second
+	case "stock", "index_etf":
+		return 600 * time.Second
+	}
+	return 300 * time.Second
 }
 
 // BackfillConfig drives the Top30 daily kline backfill. Defaults are tuned
@@ -211,6 +250,14 @@ func Default() Config {
 			CoinGecko:             defaultCoinGeckoConfig(),
 			WSProviders:           defaultWSProviderConfig(),
 			Backfill:              defaultBackfillConfig(),
+			StalenessByCategory: map[string]time.Duration{
+				"crypto":    30 * time.Second,
+				"commodity": 300 * time.Second,
+				"stock":     600 * time.Second,
+				"index_etf": 600 * time.Second,
+			},
+			CooldownFailureThreshold: 3,
+			CooldownDuration:         5 * time.Minute,
 		},
 	}
 }
@@ -317,18 +364,21 @@ type endpointFile struct {
 }
 
 type runtimeFile struct {
-	CollectionInterval    string                    `yaml:"collection_interval"`
-	HTTPTimeout           string                    `yaml:"http_timeout"`
-	ExchangeProxy         string                    `yaml:"exchange_proxy"`
-	LighterWSURL          string                    `yaml:"lighter_ws_url"`
-	LighterStaleAfter     string                    `yaml:"lighter_stale_after"`
-	DisplayFallbackWindow string                    `yaml:"display_fallback_window"`
-	DepthTiers            []float64                 `yaml:"depth_tiers"`
-	SlippageBucketsUSD    []float64                 `yaml:"slippage_buckets_usd"`
-	VolumeDiscounts       map[string]float64        `yaml:"volume_discounts"`
-	CoinGecko             *coinGeckoFile            `yaml:"coingecko"`
-	WSProviders           map[string]wsProviderFile `yaml:"ws_providers"`
-	Backfill              *backfillFile             `yaml:"backfill"`
+	CollectionInterval       string                    `yaml:"collection_interval"`
+	HTTPTimeout              string                    `yaml:"http_timeout"`
+	ExchangeProxy            string                    `yaml:"exchange_proxy"`
+	LighterWSURL             string                    `yaml:"lighter_ws_url"`
+	LighterStaleAfter        string                    `yaml:"lighter_stale_after"`
+	DisplayFallbackWindow    string                    `yaml:"display_fallback_window"`
+	DepthTiers               []float64                 `yaml:"depth_tiers"`
+	SlippageBucketsUSD       []float64                 `yaml:"slippage_buckets_usd"`
+	VolumeDiscounts          map[string]float64        `yaml:"volume_discounts"`
+	CoinGecko                *coinGeckoFile            `yaml:"coingecko"`
+	WSProviders              map[string]wsProviderFile `yaml:"ws_providers"`
+	Backfill                 *backfillFile             `yaml:"backfill"`
+	StalenessByCategory      map[string]string         `yaml:"staleness_by_category"`
+	CooldownFailureThreshold *int                      `yaml:"cooldown_failure_threshold"`
+	CooldownDuration         string                    `yaml:"cooldown_duration"`
 }
 
 type coinGeckoFile struct {
@@ -496,6 +546,33 @@ func loadRuntime(path string, base Runtime) (Runtime, error) {
 	}
 	if file.Backfill != nil {
 		base.Backfill = applyBackfillFile(base.Backfill, *file.Backfill)
+	}
+	if len(file.StalenessByCategory) > 0 {
+		merged := map[string]time.Duration{}
+		for k, v := range base.StalenessByCategory {
+			merged[k] = v
+		}
+		for k, raw := range file.StalenessByCategory {
+			if raw == "" {
+				continue
+			}
+			duration, err := time.ParseDuration(raw)
+			if err != nil {
+				return Runtime{}, fmt.Errorf("staleness_by_category[%q]: %w", k, err)
+			}
+			merged[k] = duration
+		}
+		base.StalenessByCategory = merged
+	}
+	if file.CooldownFailureThreshold != nil && *file.CooldownFailureThreshold > 0 {
+		base.CooldownFailureThreshold = *file.CooldownFailureThreshold
+	}
+	if file.CooldownDuration != "" {
+		duration, err := time.ParseDuration(file.CooldownDuration)
+		if err != nil {
+			return Runtime{}, fmt.Errorf("cooldown_duration: %w", err)
+		}
+		base.CooldownDuration = duration
 	}
 	return base, nil
 }

@@ -253,8 +253,21 @@ func shouldRetry(statusCode int, err error) bool {
 	return statusCode == http.StatusRequestTimeout || statusCode == http.StatusTooManyRequests || statusCode >= 500
 }
 
+// retryBackoff returns an exponential-ish backoff with up-to 25% jitter.
+// The jitter prevents 10 platform goroutines from synchronising their
+// retries on the same upstream when an exchange returns 429/5xx.
 func retryBackoff(attempt int) time.Duration {
-	return time.Duration(attempt*attempt) * 300 * time.Millisecond
+	base := time.Duration(attempt*attempt) * 300 * time.Millisecond
+	jitter := time.Duration(retryJitterFracBP(attempt)) * base / 10000
+	return base + jitter
+}
+
+// retryJitterFracBP returns the per-attempt jitter slice in basis points
+// (0 - 2500 = 0 - 25%). It is split out so unit tests can stub randomness
+// deterministically; the production path uses time.Now().UnixNano() as
+// the entropy source which is good enough for retry de-syncing.
+var retryJitterFracBP = func(attempt int) int {
+	return int(time.Now().UnixNano() % 2501) // [0, 2500]
 }
 
 func sleepWithContext(ctx context.Context, duration time.Duration) error {

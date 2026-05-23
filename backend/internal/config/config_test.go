@@ -497,3 +497,82 @@ endpoints:
 		t.Fatalf("missing catalog should not populate per-platform fields, got %+v", got)
 	}
 }
+
+func TestRuntimeStaleThresholdForReturnsCategoryDefaults(t *testing.T) {
+	r := Runtime{}
+	cases := []struct {
+		category string
+		want     time.Duration
+	}{
+		{"crypto", 30 * time.Second},
+		{"commodity", 300 * time.Second},
+		{"stock", 600 * time.Second},
+		{"index_etf", 600 * time.Second},
+		{"", 30 * time.Second}, // empty falls back to crypto
+		{"unknown", 300 * time.Second},
+	}
+	for _, c := range cases {
+		got := r.StaleThresholdFor(c.category)
+		if got != c.want {
+			t.Errorf("StaleThresholdFor(%q) = %v, want %v", c.category, got, c.want)
+		}
+	}
+}
+
+func TestRuntimeStaleThresholdForRespectsConfiguredOverride(t *testing.T) {
+	r := Runtime{StalenessByCategory: map[string]time.Duration{
+		"crypto":    45 * time.Second,
+		"commodity": 10 * time.Minute,
+	}}
+	if got, want := r.StaleThresholdFor("crypto"), 45*time.Second; got != want {
+		t.Errorf("crypto override = %v, want %v", got, want)
+	}
+	if got, want := r.StaleThresholdFor("commodity"), 10*time.Minute; got != want {
+		t.Errorf("commodity override = %v, want %v", got, want)
+	}
+	// uncategorised must still fall back to baked-in defaults
+	if got, want := r.StaleThresholdFor("stock"), 600*time.Second; got != want {
+		t.Errorf("stock fallback = %v, want %v", got, want)
+	}
+}
+
+func TestLoadAppliesStalenessAndCooldownOverrides(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
+symbols:
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+    market_surface: perp
+    instrument_kind: canonical
+platforms: [edgeX]
+`)
+	mustWrite(t, filepath.Join(dir, "runtime.yaml"), `
+collection_interval: 5m
+http_timeout: 5s
+staleness_by_category:
+  crypto: 60s
+  commodity: 600s
+cooldown_failure_threshold: 5
+cooldown_duration: 10m
+`)
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load error = %v", err)
+	}
+	if got := cfg.Runtime.StaleThresholdFor("crypto"); got != 60*time.Second {
+		t.Errorf("crypto threshold = %v, want 60s", got)
+	}
+	if got := cfg.Runtime.StaleThresholdFor("commodity"); got != 10*time.Minute {
+		t.Errorf("commodity threshold = %v, want 10m", got)
+	}
+	// stock should still fall back to default 600s since not overridden
+	if got := cfg.Runtime.StaleThresholdFor("stock"); got != 600*time.Second {
+		t.Errorf("stock threshold = %v, want 600s default", got)
+	}
+	if got := cfg.Runtime.CooldownFailureThreshold; got != 5 {
+		t.Errorf("cooldown threshold = %d, want 5", got)
+	}
+	if got := cfg.Runtime.CooldownDuration; got != 10*time.Minute {
+		t.Errorf("cooldown duration = %v, want 10m", got)
+	}
+}
