@@ -13,6 +13,13 @@ This repo (`edgex-dashboard`) implements the EdgeX 平台核心交易对流动�
 
 This workspace object implements the EdgeX platform liquidity Dashboard V1. Backend code lives in `backend/`: `cmd/dashboard` is the entrypoint, `internal/api` serves HTTP routes, `internal/collector` coordinates collection and persistence, `internal/adapter` contains exchange REST adapters, and `internal/indicators` computes depth/spread/slippage metrics. Frontend code lives in `web/` using Next.js App Router; pages are under `web/app`, shared UI under `web/components`, API helpers under `web/lib`. Runtime source-of-truth config is in `config/*.yaml`; Docker assets are in `deploy/`; helper scripts are in `scripts/`.
 
+## Operator Documentation
+
+V1 production tooling and procedures live under `backend/docs/`:
+- `runbook.md`: health/readiness probes, common symptoms, catalog re-generation, release procedure, backup/restore.
+- `coverage-matrix.md`: 74 canonicals × 10 platforms support matrix; 8 zero-platform canonicals tracked in `config/unresolved_symbols.yaml`.
+- `release-notes-v1.md`: per-feature release notes for v1.0.0.
+
 ## Build, Test, and Development Commands
 
 - Backend: `cd backend && make test` runs `go test ./...`.
