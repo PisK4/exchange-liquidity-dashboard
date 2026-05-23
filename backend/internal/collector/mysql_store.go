@@ -122,6 +122,86 @@ func (s *Store) AttachDB(db *sql.DB) {
 	s.db = db
 }
 
+// MySQLBacked reports whether the store has a live MySQL connection
+// attached. The /api/health and /api/readiness endpoints use this to
+// decide whether to surface MySQL-specific status fields.
+func (s *Store) MySQLBacked() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.db != nil
+}
+
+// PingDB verifies the MySQL connection is live. Used by the readiness
+// gate. Returns nil when not MySQL-backed (in-memory mode is its own
+// state -- readiness still passes for it).
+func (s *Store) PingDB(ctx context.Context) error {
+	s.mu.RLock()
+	db := s.db
+	s.mu.RUnlock()
+	if db == nil {
+		return nil
+	}
+	return db.PingContext(ctx)
+}
+
+// snapshotRowCountTables enumerates the per-snapshot tables whose rough
+// row counts the operator wants surfaced via /api/health. We use
+// information_schema.TABLE_ROWS (an estimate) rather than COUNT(*) so
+// the call stays O(1) regardless of table size.
+var snapshotRowCountTables = []string{
+	"t_orderbook_snapshot",
+	"t_book_quality_snapshot",
+	"t_symbol_volume_snapshot",
+	"t_platform_volume_snapshot",
+	"t_collection_status",
+	"t_coingecko_platform_volume_snapshot",
+	"t_top30_snapshot",
+	"t_daily_volume_aggregate",
+}
+
+// SnapshotRowCounts returns INFORMATION_SCHEMA-derived row count
+// estimates for the snapshot tables. Each value is the value the MySQL
+// optimiser uses for cardinality estimates -- it can drift from the
+// exact COUNT(*) by up to ANALYZE TABLE granularity, which is fine for
+// the health-check use case where the goal is "is data flowing?", not
+// "how many rows exactly?". Returns (nil, nil) when not MySQL-backed.
+func (s *Store) SnapshotRowCounts(ctx context.Context) (map[string]int64, error) {
+	s.mu.RLock()
+	db := s.db
+	s.mu.RUnlock()
+	if db == nil {
+		return nil, nil
+	}
+	rows, err := db.QueryContext(ctx, `SELECT TABLE_NAME, TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (?, ?, ?, ?, ?, ?, ?, ?)`,
+		"t_orderbook_snapshot",
+		"t_book_quality_snapshot",
+		"t_symbol_volume_snapshot",
+		"t_platform_volume_snapshot",
+		"t_collection_status",
+		"t_coingecko_platform_volume_snapshot",
+		"t_top30_snapshot",
+		"t_daily_volume_aggregate",
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]int64{}
+	for rows.Next() {
+		var name string
+		var n sql.NullInt64
+		if err := rows.Scan(&name, &n); err != nil {
+			return nil, err
+		}
+		if n.Valid {
+			out[name] = n.Int64
+		} else {
+			out[name] = 0
+		}
+	}
+	return out, rows.Err()
+}
+
 func (s *Store) persistSymbolMappingsLocked(ctx context.Context, tx *sql.Tx) error {
 	if _, err := tx.ExecContext(ctx, `DELETE FROM t_symbol_mapping`); err != nil {
 		return err

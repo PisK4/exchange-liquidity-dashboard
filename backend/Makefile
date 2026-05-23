@@ -1,4 +1,4 @@
-.PHONY: test run smoke-api smoke-adapters smoke-coingecko backfill-share swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci
+.PHONY: build test run smoke-api smoke-adapters smoke-coingecko backfill-share swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci prune-snapshots-dry prune-snapshots-confirm verify-urls
 
 PORT ?= 18080
 SYMBOL ?= BTC-USDT
@@ -40,8 +40,17 @@ lint:
 
 ci: lint test
 
+# Resolve the build version from git. Used by `make build` and `make run`
+# to inject the same value the production Docker image will see at link
+# time. Falls back to "dev" outside a git checkout.
+BUILD_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS = -X main.version=$(BUILD_VERSION)
+
+build:
+	go build -ldflags "$(LDFLAGS)" -o bin/dashboard ./cmd/dashboard
+
 run:
-	go run ./cmd/dashboard --role=all --addr=:$${PORT:-$(PORT)}
+	go run -ldflags "$(LDFLAGS)" ./cmd/dashboard --role=all --addr=:$${PORT:-$(PORT)}
 
 smoke-api:
 	tmp_bin=$$(mktemp -t edgex-dashboard-smoke.XXXXXX); \

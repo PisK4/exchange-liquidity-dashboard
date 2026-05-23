@@ -16,6 +16,12 @@ import (
 	"edgex-dashboard/backend/internal/marketdata/coingecko"
 )
 
+// version is set at link time via -ldflags. Falls back to "dev" for
+// local `go run` invocations.
+//
+//nolint:gochecknoglobals  // ldflags-injected build identifier
+var version = "dev"
+
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	role := flag.String("role", "all", "role: api, collector, or all")
@@ -24,7 +30,14 @@ func main() {
 	configDir := flag.String("config-dir", "../config", "directory containing dashboard yaml configs")
 	catalogReloadInterval := flag.Duration("catalog-reload-interval", 2*time.Second, "polling interval for instrument_catalog.yaml hot reload; 0 disables the watcher")
 	rawInstrumentsDir := flag.String("raw-instruments-dir", "docs/raw-instruments", "directory containing per-platform raw instrument dumps used by Top30 backfill")
+	showVersion := flag.Bool("version", false, "print the embedded build version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		log.Printf("edgex-dashboard %s", version)
+		os.Exit(0)
+	}
+	api.Version = version
 
 	cfg, err := config.Load(*configDir)
 	if err != nil {
