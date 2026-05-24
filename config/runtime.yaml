@@ -58,8 +58,8 @@ coingecko:
   base_url: https://api.coingecko.com/api/v3
   api_key_env: COINGECKO_DEMO_API_KEY
   proxy: "http://host.docker.internal:7897"
-  pull_interval: 15m
-  cache_ttl: 5m
+  pull_interval: 5m
+  cache_ttl: 0s
   request_timeout: 30s
   exchange_id:
     edgeX: edgex

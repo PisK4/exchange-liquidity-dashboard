@@ -202,6 +202,22 @@ collection_interval: 90s
 	}
 }
 
+func TestCommittedRuntimeAlignsCoinGeckoCadence(t *testing.T) {
+	cfg, err := Load("../../../config")
+	if err != nil {
+		t.Fatalf("Load committed config: %v", err)
+	}
+	if cfg.Runtime.CoinGecko.PullInterval != cfg.Runtime.CollectionInterval {
+		t.Fatalf("CoinGecko pull_interval = %s, want collection_interval %s", cfg.Runtime.CoinGecko.PullInterval, cfg.Runtime.CollectionInterval)
+	}
+	if cfg.Runtime.CoinGecko.PullInterval != 5*time.Minute {
+		t.Fatalf("CoinGecko pull_interval = %s, want 5m", cfg.Runtime.CoinGecko.PullInterval)
+	}
+	if cfg.Runtime.CoinGecko.CacheTTL != 0 {
+		t.Fatalf("CoinGecko cache_ttl = %s, want disabled cache", cfg.Runtime.CoinGecko.CacheTTL)
+	}
+}
+
 func mustWrite(t *testing.T, path, content string) {
 	t.Helper()
 	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {

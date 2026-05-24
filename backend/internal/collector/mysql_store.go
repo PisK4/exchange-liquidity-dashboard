@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS t_symbol_mapping (id BIGINT AUTO_INCREMENT PRIMARY KE
 CREATE TABLE IF NOT EXISTS t_orderbook_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, tier VARCHAR(16) NOT NULL DEFAULT '', bid_usd DECIMAL(28,8), ask_usd DECIMAL(28,8), total_usd DECIMAL(28,8), depth_status VARCHAR(32) NOT NULL, partial_reason VARCHAR(128), depth_source VARCHAR(32), source_id VARCHAR(64), levels_returned INT, bid_levels_returned INT, ask_levels_returned INT, api_level_cap INT, farthest_bid_pct DECIMAL(18,8), farthest_ask_pct DECIMAL(18,8), farthest_distance_pct DECIMAL(18,8), source_endpoint VARCHAR(255), aggregation_params_json JSON, strict_complete TINYINT(1) NOT NULL DEFAULT 0, display_available TINYINT(1) NOT NULL DEFAULT 0, policy_acceptance VARCHAR(32), physical_limit TINYINT(1) NOT NULL DEFAULT 0, unofficial_ui_endpoint TINYINT(1) NOT NULL DEFAULT 0, error_message TEXT, depth_json JSON, buy_slippage_json JSON, sell_slippage_json JSON);
 CREATE TABLE IF NOT EXISTS t_book_quality_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, spread_bp DECIMAL(18,8), imbalance_pct DECIMAL(18,8));
 CREATE TABLE IF NOT EXISTS t_symbol_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), error_message TEXT);
-CREATE TABLE IF NOT EXISTS t_top30_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, symbol VARCHAR(96) NOT NULL, rank_no INT NOT NULL, volume_24h_usd DECIMAL(28,8), volume_7d_usd DECIMAL(28,8) NULL, delta_7d_pct DECIMAL(10,4) NULL, coverage_count INT NULL, edgex_listed TINYINT(1) NULL, suggested_action VARCHAR(64) NULL, data_source VARCHAR(32) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NULL, status VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL);
+CREATE TABLE IF NOT EXISTS t_top30_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, symbol VARCHAR(96) NOT NULL, rank_no INT NOT NULL, volume_24h_usd DECIMAL(28,8), volume_7d_usd DECIMAL(28,8) NULL, delta_7d_pct DECIMAL(10,4) NULL, coverage_count INT NULL, edgex_listed TINYINT(1) NULL, suggested_action VARCHAR(64) NULL, data_source VARCHAR(32) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NULL, status VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, UNIQUE KEY uk_top30_platform_symbol_ts (platform, symbol, snapshot_ts));
 CREATE TABLE IF NOT EXISTS t_daily_volume_aggregate (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), day DATE NOT NULL, volume_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, data_source VARCHAR(32) NOT NULL DEFAULT 'native', source_endpoint VARCHAR(255) NULL, snapshot_ts TIMESTAMP NULL, UNIQUE KEY uk_day_platform_symbol_source (day, platform, display_symbol, data_source));
 CREATE TABLE IF NOT EXISTS t_coingecko_platform_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,2), open_interest_usd DECIMAL(28,2), data_source VARCHAR(32) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NOT NULL, status VARCHAR(32) NOT NULL, INDEX idx_cg_platform_ts (platform, snapshot_ts));
 CREATE TABLE IF NOT EXISTS t_collection_run (id BIGINT AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, started_at TIMESTAMP NOT NULL, completed_at TIMESTAMP, success_count INT, failed_count INT);
@@ -351,7 +351,18 @@ func (s *Store) persistTop30(ctx context.Context, platform string, rows []domain
 	stmt, err := tx.PrepareContext(ctx,
 		`INSERT INTO t_top30_snapshot
 		   (platform, symbol, rank_no, volume_24h_usd, volume_7d_usd, delta_7d_pct, coverage_count, edgex_listed, suggested_action, data_source, source_endpoint, status, snapshot_ts)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   rank_no = VALUES(rank_no),
+		   volume_24h_usd = VALUES(volume_24h_usd),
+		   volume_7d_usd = VALUES(volume_7d_usd),
+		   delta_7d_pct = VALUES(delta_7d_pct),
+		   coverage_count = VALUES(coverage_count),
+		   edgex_listed = VALUES(edgex_listed),
+		   suggested_action = VALUES(suggested_action),
+		   data_source = VALUES(data_source),
+		   source_endpoint = VALUES(source_endpoint),
+		   status = VALUES(status)`,
 	)
 	if err != nil {
 		return err

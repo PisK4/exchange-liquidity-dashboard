@@ -2,6 +2,8 @@ package collector
 
 import (
 	"math"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -31,6 +33,7 @@ func TestInitSchemaIncludesPersistenceTables(t *testing.T) {
 		"CREATE TABLE IF NOT EXISTS t_symbol_volume_snapshot",
 		"CREATE TABLE IF NOT EXISTS t_collection_status",
 		"CREATE TABLE IF NOT EXISTS t_collection_run",
+		"UNIQUE KEY uk_top30_platform_symbol_ts",
 	}
 	for _, snippet := range required {
 		if !contains(initSchemaSQL, snippet) {
@@ -44,6 +47,25 @@ func TestInitSchemaIncludesPersistenceTables(t *testing.T) {
 	} {
 		if contains(initSchemaSQL, forbidden) {
 			t.Fatalf("init schema must not create unused empty table %q", forbidden)
+		}
+	}
+}
+
+func TestTop30UniqueKeyMigrationDeduplicatesBeforeAddingKey(t *testing.T) {
+	body, err := os.ReadFile(filepath.Join("..", "..", "migrations", "000009_top30_unique_key.up.sql"))
+	if err != nil {
+		t.Fatalf("read top30 unique key migration: %v", err)
+	}
+	sql := string(body)
+	for _, required := range []string{
+		"DELETE t1 FROM t_top30_snapshot t1",
+		"t1.platform = t2.platform",
+		"t1.symbol = t2.symbol",
+		"t1.snapshot_ts = t2.snapshot_ts",
+		"ADD UNIQUE KEY uk_top30_platform_symbol_ts",
+	} {
+		if !contains(sql, required) {
+			t.Fatalf("migration missing %q:\n%s", required, sql)
 		}
 	}
 }
