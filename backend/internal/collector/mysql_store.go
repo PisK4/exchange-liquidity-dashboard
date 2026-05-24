@@ -16,17 +16,14 @@ import (
 
 const initSchemaSQL = `
 CREATE TABLE IF NOT EXISTS t_symbol_mapping (id BIGINT AUTO_INCREMENT PRIMARY KEY, display_symbol VARCHAR(96) NOT NULL, canonical VARCHAR(32) NOT NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, platform VARCHAR(32) NOT NULL, api_symbol VARCHAR(96) NOT NULL, source_endpoint VARCHAR(255) NOT NULL);
-CREATE TABLE IF NOT EXISTS t_exchange_instrument_catalog (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, api_symbol VARCHAR(96) NOT NULL, status VARCHAR(32) NOT NULL, updated_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE IF NOT EXISTS t_orderbook_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, tier VARCHAR(16) NOT NULL DEFAULT '', bid_usd DECIMAL(28,8), ask_usd DECIMAL(28,8), total_usd DECIMAL(28,8), depth_status VARCHAR(32) NOT NULL, partial_reason VARCHAR(128), depth_source VARCHAR(32), source_id VARCHAR(64), levels_returned INT, bid_levels_returned INT, ask_levels_returned INT, api_level_cap INT, farthest_bid_pct DECIMAL(18,8), farthest_ask_pct DECIMAL(18,8), farthest_distance_pct DECIMAL(18,8), source_endpoint VARCHAR(255), aggregation_params_json JSON, strict_complete TINYINT(1) NOT NULL DEFAULT 0, display_available TINYINT(1) NOT NULL DEFAULT 0, policy_acceptance VARCHAR(32), physical_limit TINYINT(1) NOT NULL DEFAULT 0, unofficial_ui_endpoint TINYINT(1) NOT NULL DEFAULT 0, error_message TEXT, depth_json JSON, buy_slippage_json JSON, sell_slippage_json JSON);
 CREATE TABLE IF NOT EXISTS t_book_quality_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, spread_bp DECIMAL(18,8), imbalance_pct DECIMAL(18,8));
 CREATE TABLE IF NOT EXISTS t_symbol_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), error_message TEXT);
-CREATE TABLE IF NOT EXISTS t_platform_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), discount DECIMAL(10,4));
 CREATE TABLE IF NOT EXISTS t_top30_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, symbol VARCHAR(96) NOT NULL, rank_no INT NOT NULL, volume_24h_usd DECIMAL(28,8), volume_7d_usd DECIMAL(28,8) NULL, delta_7d_pct DECIMAL(10,4) NULL, coverage_count INT NULL, edgex_listed TINYINT(1) NULL, suggested_action VARCHAR(64) NULL, data_source VARCHAR(32) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NULL, status VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL);
 CREATE TABLE IF NOT EXISTS t_daily_volume_aggregate (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), day DATE NOT NULL, volume_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, data_source VARCHAR(32) NOT NULL DEFAULT 'native', source_endpoint VARCHAR(255) NULL, snapshot_ts TIMESTAMP NULL, UNIQUE KEY uk_day_platform_symbol_source (day, platform, display_symbol, data_source));
 CREATE TABLE IF NOT EXISTS t_coingecko_platform_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,2), open_interest_usd DECIMAL(28,2), data_source VARCHAR(32) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NOT NULL, status VARCHAR(32) NOT NULL, INDEX idx_cg_platform_ts (platform, snapshot_ts));
 CREATE TABLE IF NOT EXISTS t_collection_run (id BIGINT AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, started_at TIMESTAMP NOT NULL, completed_at TIMESTAMP, success_count INT, failed_count INT);
 CREATE TABLE IF NOT EXISTS t_collection_status (id BIGINT AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), collector VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), status VARCHAR(32) NOT NULL, error_message TEXT, snapshot_ts TIMESTAMP NOT NULL, latency_ms BIGINT NOT NULL DEFAULT 0);
-CREATE TABLE IF NOT EXISTS t_runtime_config (id BIGINT AUTO_INCREMENT PRIMARY KEY, config_key VARCHAR(96) NOT NULL UNIQUE, config_value TEXT NOT NULL, updated_ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP);
 `
 
 func OpenMySQL(dsn string) (*sql.DB, error) {
@@ -56,64 +53,7 @@ func ApplyMigrations(db *sql.DB) error {
 			return fmt.Errorf("migration failed at %q: %w", firstLine(stmt), err)
 		}
 	}
-	if err := ensureOrderbookContractColumns(db); err != nil {
-		return err
-	}
-	return ensureOrderbookPartialReasonWidth(db)
-}
-
-// ensureOrderbookPartialReasonWidth widens t_orderbook_snapshot.partial_reason
-// to VARCHAR(128) on pre-existing databases so multiple comma-joined reasons
-// fit (e.g. "max_precision_shortfall,monotonicity_lower_bound" = 48 chars).
-func ensureOrderbookPartialReasonWidth(db *sql.DB) error {
-	var charLen sql.NullInt64
-	if err := db.QueryRow(`SELECT CHARACTER_MAXIMUM_LENGTH FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 't_orderbook_snapshot' AND COLUMN_NAME = 'partial_reason'`).Scan(&charLen); err != nil {
-		return fmt.Errorf("inspect t_orderbook_snapshot.partial_reason: %w", err)
-	}
-	if charLen.Valid && charLen.Int64 >= 128 {
-		return nil
-	}
-	if _, err := db.Exec(`ALTER TABLE t_orderbook_snapshot MODIFY partial_reason VARCHAR(128)`); err != nil {
-		return fmt.Errorf("widen t_orderbook_snapshot.partial_reason: %w", err)
-	}
 	return nil
-}
-
-func ensureOrderbookContractColumns(db *sql.DB) error {
-	columns := []struct {
-		name string
-		ddl  string
-	}{
-		{"strict_complete", "TINYINT(1) NOT NULL DEFAULT 0"},
-		{"display_available", "TINYINT(1) NOT NULL DEFAULT 0"},
-		{"policy_acceptance", "VARCHAR(32) NULL"},
-		{"physical_limit", "TINYINT(1) NOT NULL DEFAULT 0"},
-		{"unofficial_ui_endpoint", "TINYINT(1) NOT NULL DEFAULT 0"},
-	}
-	for _, col := range columns {
-		var count int
-		if err := db.QueryRow(`SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 't_orderbook_snapshot' AND COLUMN_NAME = ?`, col.name).Scan(&count); err != nil {
-			return fmt.Errorf("check t_orderbook_snapshot.%s: %w", col.name, err)
-		}
-		if count > 0 {
-			continue
-		}
-		if _, err := db.Exec(`ALTER TABLE t_orderbook_snapshot ADD COLUMN ` + col.name + ` ` + col.ddl); err != nil {
-			return fmt.Errorf("add t_orderbook_snapshot.%s: %w", col.name, err)
-		}
-	}
-	_, err := db.Exec(`UPDATE t_orderbook_snapshot SET
-		strict_complete = CASE WHEN depth_status IN ('complete', 'aggregated_orderbook', 'ws_limited_depth') THEN 1 ELSE 0 END,
-		display_available = CASE WHEN depth_status IN ('complete', 'aggregated_orderbook', 'ws_limited_depth', 'partial') AND physical_limit = 0 THEN 1 ELSE 0 END,
-		policy_acceptance = CASE
-			WHEN policy_acceptance IS NOT NULL AND policy_acceptance <> '' THEN policy_acceptance
-			WHEN depth_status = 'complete' THEN 'raw_strict'
-			WHEN depth_status IN ('aggregated_orderbook', 'ws_limited_depth') THEN 'aggregated_strict'
-			WHEN depth_status = 'partial' THEN 'loose_lower_bound'
-			ELSE policy_acceptance
-		END
-	WHERE policy_acceptance IS NULL OR policy_acceptance = ''`)
-	return err
 }
 
 func (s *Store) AttachDB(db *sql.DB) {
@@ -152,7 +92,6 @@ var snapshotRowCountTables = []string{
 	"t_orderbook_snapshot",
 	"t_book_quality_snapshot",
 	"t_symbol_volume_snapshot",
-	"t_platform_volume_snapshot",
 	"t_collection_status",
 	"t_coingecko_platform_volume_snapshot",
 	"t_top30_snapshot",
@@ -172,16 +111,8 @@ func (s *Store) SnapshotRowCounts(ctx context.Context) (map[string]int64, error)
 	if db == nil {
 		return nil, nil
 	}
-	rows, err := db.QueryContext(ctx, `SELECT TABLE_NAME, TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (?, ?, ?, ?, ?, ?, ?, ?)`,
-		"t_orderbook_snapshot",
-		"t_book_quality_snapshot",
-		"t_symbol_volume_snapshot",
-		"t_platform_volume_snapshot",
-		"t_collection_status",
-		"t_coingecko_platform_volume_snapshot",
-		"t_top30_snapshot",
-		"t_daily_volume_aggregate",
-	)
+	placeholders, args := buildInClauseArgs(snapshotRowCountTables)
+	rows, err := db.QueryContext(ctx, `SELECT TABLE_NAME, TABLE_ROWS FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN (`+placeholders+`)`, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +524,7 @@ func (s *Store) LoadLatestFromDB(ctx context.Context) error {
 	}
 	for _, row := range loaded {
 		row.DepthStatus, row.PartialReason = summarizeDepthStatus(row.DepthByTier, row.DepthStatus, row.PartialReason)
-		s.SavePlatformSnapshot(row)
+		s.hydratePlatformSnapshot(row)
 	}
 	volRows, err := db.QueryContext(ctx, `SELECT platform, display_symbol, snapshot_ts, COALESCE(source_endpoint,''), volume_24h_usd, status, COALESCE(error_message,'') FROM t_symbol_volume_snapshot s WHERE id IN (SELECT MAX(id) FROM t_symbol_volume_snapshot GROUP BY platform, display_symbol)`)
 	if err != nil {
@@ -605,7 +536,7 @@ func (s *Store) LoadLatestFromDB(ctx context.Context) error {
 		if err := volRows.Scan(&row.Platform, &row.DisplaySymbol, &row.SnapshotTS, &row.SourceEndpoint, &row.Volume24HUSD, &row.Status, &row.Error); err != nil {
 			return err
 		}
-		s.SaveVolume(row)
+		s.hydrateVolume(row)
 	}
 	if err := s.loadCoinGeckoPlatformVolumes(ctx, db); err != nil {
 		return err
@@ -639,7 +570,7 @@ func (s *Store) loadCoinGeckoPlatformVolumes(ctx context.Context, db *sql.DB) er
 		batch = append(batch, row)
 	}
 	if len(batch) > 0 {
-		s.SaveCoinGeckoPlatformVolumes(batch)
+		s.hydrateCoinGeckoPlatformVolumes(batch)
 	}
 	return rows.Err()
 }
@@ -665,7 +596,7 @@ func (s *Store) loadDailyVolumeAggregates(ctx context.Context, db *sql.DB) error
 		batch = append(batch, row)
 	}
 	if len(batch) > 0 {
-		s.SaveDailyVolumeAggregates(batch)
+		s.hydrateDailyVolumeAggregates(batch)
 	}
 	return rows.Err()
 }
@@ -713,7 +644,7 @@ func (s *Store) loadTop30(ctx context.Context, db *sql.DB) error {
 		byPlatform[row.Platform] = append(byPlatform[row.Platform], row)
 	}
 	for platform, list := range byPlatform {
-		s.SaveTop30(platform, list)
+		s.hydrateTop30(platform, list)
 	}
 	return rows.Err()
 }

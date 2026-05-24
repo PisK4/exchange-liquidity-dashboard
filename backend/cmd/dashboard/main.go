@@ -66,13 +66,16 @@ func main() {
 		go store.WatchCatalog(ctx, catalogPath, *catalogReloadInterval)
 		log.Printf("watching %s for frontend metadata hot reload (interval=%s)", catalogPath, *catalogReloadInterval)
 	}
-	lighterProvider := adapter.NewLighterWSProviderWithProxy(cfg.Runtime.LighterWSURL, cfg.Runtime.LighterStaleAfter, cfg.Runtime.ExchangeProxy)
-	go lighterProvider.Run(ctx, adapter.LighterMarketIDs())
-	waitForLighter(ctx, lighterProvider)
-	c := collector.NewCollectorWithLighter(cfg, store, lighterProvider)
-	backfiller := collector.NewSymbolBackfiller(cfg, store, lighterProvider)
+	var lighterProvider *adapter.LighterWSProvider
+	if roleStartsLiveProviders(*role) {
+		lighterProvider = adapter.NewLighterWSProviderWithProxy(cfg.Runtime.LighterWSURL, cfg.Runtime.LighterStaleAfter, cfg.Runtime.ExchangeProxy)
+		go lighterProvider.Run(ctx, adapter.LighterMarketIDs())
+		waitForLighter(ctx, lighterProvider)
+	}
 
 	if *role == "collector" || *role == "all" {
+		c := collector.NewCollectorWithLighter(cfg, store, lighterProvider)
+		backfiller := collector.NewSymbolBackfiller(cfg, store, lighterProvider)
 		if err := c.CollectOnce(ctx); err != nil {
 			log.Printf("initial collection completed with errors: %v", err)
 		}
@@ -144,6 +147,10 @@ func main() {
 	if err := http.ListenAndServe(*addr, server.Routes()); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func roleStartsLiveProviders(role string) bool {
+	return role == "collector" || role == "all"
 }
 
 // buildCoinGeckoCollector wires the CoinGecko client + mapping using the

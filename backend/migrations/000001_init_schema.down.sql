@@ -1,11 +1,8 @@
-DROP TABLE IF EXISTS t_runtime_config;
 DROP TABLE IF EXISTS t_collection_status;
 DROP TABLE IF EXISTS t_collection_run;
 DROP TABLE IF EXISTS t_daily_volume_aggregate;
 DROP TABLE IF EXISTS t_top30_snapshot;
-DROP TABLE IF EXISTS t_platform_volume_snapshot;
 DROP TABLE IF EXISTS t_symbol_volume_snapshot;
 DROP TABLE IF EXISTS t_book_quality_snapshot;
 DROP TABLE IF EXISTS t_orderbook_snapshot;
-DROP TABLE IF EXISTS t_exchange_instrument_catalog;
 DROP TABLE IF EXISTS t_symbol_mapping;

@@ -6,9 +6,7 @@
 // Excluded from pruning:
 //   - t_top30_snapshot          : has its own 30d auto-prune in the writer
 //   - t_collection_run          : per-run summary, used by audits
-//   - t_runtime_config          : current-config snapshot, not history
 //   - t_symbol_mapping          : current catalog, not history
-//   - t_exchange_instrument_catalog : current catalog, not history
 //
 // Each successful run writes a JSON prune-history record under
 // $DASHBOARD_DATA_DIR/prune-history/<RFC3339>.json so operators can
@@ -136,7 +134,6 @@ func planPrune(days int, now time.Time) ([]prunePlan, error) {
 		{Table: "t_orderbook_snapshot", TimeColumn: "snapshot_ts", Cutoff: cutoff},
 		{Table: "t_book_quality_snapshot", TimeColumn: "snapshot_ts", Cutoff: cutoff},
 		{Table: "t_symbol_volume_snapshot", TimeColumn: "snapshot_ts", Cutoff: cutoff},
-		{Table: "t_platform_volume_snapshot", TimeColumn: "snapshot_ts", Cutoff: cutoff},
 		{Table: "t_collection_status", TimeColumn: "snapshot_ts", Cutoff: cutoff},
 		{Table: "t_coingecko_platform_volume_snapshot", TimeColumn: "snapshot_ts", Cutoff: cutoff},
 		{Table: "t_daily_volume_aggregate", TimeColumn: "day", Cutoff: cutoff},
@@ -227,7 +224,6 @@ func isAllowedTable(name string) bool {
 	case "t_orderbook_snapshot",
 		"t_book_quality_snapshot",
 		"t_symbol_volume_snapshot",
-		"t_platform_volume_snapshot",
 		"t_collection_status",
 		"t_coingecko_platform_volume_snapshot",
 		"t_daily_volume_aggregate":

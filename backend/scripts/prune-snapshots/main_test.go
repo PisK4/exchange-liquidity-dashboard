@@ -56,7 +56,6 @@ func TestPruneScriptUsesSnapshotTsForSnapshotTablesAndDayForDailyAggregate(t *te
 		"t_orderbook_snapshot":                 "snapshot_ts",
 		"t_book_quality_snapshot":              "snapshot_ts",
 		"t_symbol_volume_snapshot":             "snapshot_ts",
-		"t_platform_volume_snapshot":           "snapshot_ts",
 		"t_collection_status":                  "snapshot_ts",
 		"t_coingecko_platform_volume_snapshot": "snapshot_ts",
 		"t_daily_volume_aggregate":             "day",
@@ -83,6 +82,7 @@ func TestPruneScriptUsesSnapshotTsForSnapshotTablesAndDayForDailyAggregate(t *te
 		"t_runtime_config",
 		"t_symbol_mapping",
 		"t_exchange_instrument_catalog",
+		"t_platform_volume_snapshot",
 	} {
 		if _, ok := got[excluded]; ok {
 			t.Errorf("excluded table %q must not be in plan", excluded)

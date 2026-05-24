@@ -37,6 +37,15 @@ func TestInitSchemaIncludesPersistenceTables(t *testing.T) {
 			t.Fatalf("init schema missing %q", snippet)
 		}
 	}
+	for _, forbidden := range []string{
+		"t_exchange_instrument_catalog",
+		"t_platform_volume_snapshot",
+		"t_runtime_config",
+	} {
+		if contains(initSchemaSQL, forbidden) {
+			t.Fatalf("init schema must not create unused empty table %q", forbidden)
+		}
+	}
 }
 
 func TestPlatformSnapshotOrderbookRowsArePerTierWithLineage(t *testing.T) {
@@ -217,6 +226,90 @@ func TestLiquidityDoesNotFallbackPastDisplayWindow(t *testing.T) {
 	row := got["rows"].([]domain.PlatformSnapshot)[0]
 	if row.DepthStatus != domain.StatusError {
 		t.Fatalf("expected latest error after fallback window expires, got %+v", row)
+	}
+}
+
+func TestSavePlatformSnapshotPrunesHistoryOutsideFallbackWindow(t *testing.T) {
+	cfg := config.Default()
+	cfg.Platforms = []string{"edgeX"}
+	cfg.Runtime.DisplayFallbackWindow = 30 * time.Minute
+	store := NewStore(cfg)
+	now := time.Now().UTC()
+
+	store.SavePlatformSnapshot(domain.PlatformSnapshot{
+		Platform:      "edgeX",
+		DisplaySymbol: "BTC-USDT (perp)",
+		SnapshotTS:    now.Add(-45 * time.Minute),
+		DepthStatus:   domain.StatusComplete,
+		DepthByTier:   map[string]domain.DepthMetrics{"0.10%": {TotalUSD: 1}},
+	})
+	store.SavePlatformSnapshot(domain.PlatformSnapshot{
+		Platform:      "edgeX",
+		DisplaySymbol: "BTC-USDT (perp)",
+		SnapshotTS:    now.Add(-20 * time.Minute),
+		DepthStatus:   domain.StatusComplete,
+		DepthByTier:   map[string]domain.DepthMetrics{"0.10%": {TotalUSD: 2}},
+	})
+	store.SavePlatformSnapshot(domain.PlatformSnapshot{
+		Platform:      "edgeX",
+		DisplaySymbol: "BTC-USDT (perp)",
+		SnapshotTS:    now,
+		DepthStatus:   domain.StatusError,
+		DepthByTier:   map[string]domain.DepthMetrics{},
+	})
+
+	history := store.platformHistory[key("edgeX", "BTC-USDT (perp)")]
+	if len(history) != 2 {
+		t.Fatalf("expected history to be pruned to 2 rows, got %d: %+v", len(history), history)
+	}
+	if !history[0].SnapshotTS.Equal(now.Add(-20 * time.Minute)) {
+		t.Fatalf("expected oldest retained row at -20m, got %+v", history[0].SnapshotTS)
+	}
+}
+
+func TestHydrateHelpersPopulateMemoryWithoutPersistencePath(t *testing.T) {
+	cfg := config.Default()
+	store := NewStore(cfg)
+	now := time.Now().UTC()
+
+	store.hydratePlatformSnapshot(domain.PlatformSnapshot{
+		Platform:      "edgeX",
+		DisplaySymbol: "BTC-USDT (perp)",
+		SnapshotTS:    now,
+		DepthStatus:   domain.StatusComplete,
+		DepthByTier:   map[string]domain.DepthMetrics{"0.10%": {TotalUSD: 10}},
+	})
+	store.hydrateVolume(domain.VolumeSnapshot{
+		Platform:      "edgeX",
+		DisplaySymbol: "BTC-USDT (perp)",
+		SnapshotTS:    now,
+		Volume24HUSD:  100,
+		Status:        domain.StatusComplete,
+	})
+	store.hydrateCoinGeckoPlatformVolumes([]domain.PlatformVolumeAggregate{
+		{Platform: "binance", SnapshotTS: now, Volume24HUSD: 200, Status: domain.StatusComplete},
+	})
+	store.hydrateDailyVolumeAggregates([]domain.DailyVolumeAggregate{
+		{Platform: "binance", DisplaySymbol: "BTC-USD (perp)", Day: now, Volume24HUSD: 300, Status: domain.StatusComplete},
+	})
+	store.hydrateTop30("binance", []domain.Top30Row{
+		{Platform: "binance", Symbol: "BTC-USDT (perp)", Rank: 1, Volume24HUSD: 400, Status: domain.StatusComplete, SnapshotTS: now},
+	})
+
+	if _, ok := store.platforms[key("edgeX", "BTC-USDT (perp)")]; !ok {
+		t.Fatal("expected platform snapshot in memory")
+	}
+	if got := store.volumes[key("edgeX", "BTC-USDT (perp)")].Volume24HUSD; got != 100 {
+		t.Fatalf("expected hydrated volume 100, got %v", got)
+	}
+	if got := store.cgPlatformVolumes["binance"].Volume24HUSD; got != 200 {
+		t.Fatalf("expected hydrated CoinGecko volume 200, got %v", got)
+	}
+	if _, ok := store.dailySymbolVolumes[key("binance", "BTC-USDT (perp)")]; !ok {
+		t.Fatal("expected daily symbol volume to be canonicalized and hydrated")
+	}
+	if got := store.top30ByPlatform["binance"]; len(got) != 1 || got[0].Symbol != "BTC-USDT (perp)" {
+		t.Fatalf("expected hydrated top30 row, got %+v", got)
 	}
 }
 

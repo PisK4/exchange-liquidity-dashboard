@@ -102,10 +102,16 @@ migrate-up:
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000003_widen_data_source.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000004_edgex_via_coingecko.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000005_depth_contract_fields.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000006_widen_partial_reason.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000007_snapshot_ts_indexes.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000008_drop_empty_tables.up.sql"
 
 migrate-down:
 	@echo "Apply backend/migrations/*.down.sql to MySQL DSN: $(MYSQL_DSN)"
-	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000005_depth_contract_fields.down.sql"
+	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000008_drop_empty_tables.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000007_snapshot_ts_indexes.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000006_widen_partial_reason.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000005_depth_contract_fields.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000004_edgex_via_coingecko.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000003_widen_data_source.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000002_coingecko.down.sql"
@@ -136,8 +142,8 @@ catalog-diff:
 # *-confirm performs the deletion in batches of 10000. DAYS must be >= 7
 # (the script refuses smaller windows). Snapshots older than DAYS days
 # from t_orderbook_snapshot, t_book_quality_snapshot,
-# t_symbol_volume_snapshot, t_platform_volume_snapshot,
-# t_collection_status, t_coingecko_platform_volume_snapshot are eligible.
+# t_symbol_volume_snapshot, t_collection_status,
+# t_coingecko_platform_volume_snapshot are eligible.
 # t_top30_snapshot is intentionally excluded — it has its own 30-day
 # retention inside the collector.
 prune-snapshots-dry:

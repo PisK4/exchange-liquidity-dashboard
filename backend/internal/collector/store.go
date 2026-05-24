@@ -181,25 +181,39 @@ func (s *Store) WatchCatalog(ctx context.Context, path string, interval time.Dur
 func key(platform, symbol string) string { return platform + "|" + symbol }
 
 func (s *Store) SavePlatformSnapshot(row domain.PlatformSnapshot) {
-	domain.NormalizePlatformSnapshot(&row)
-	s.mu.Lock()
-	s.savePlatformSnapshotLocked(row)
-	s.mu.Unlock()
+	row = s.hydratePlatformSnapshot(row)
 	if err := s.persistPlatformSnapshot(context.Background(), row); err != nil {
 		log.Printf("persist platform snapshot: %v", err)
 	}
 }
 
+func (s *Store) hydratePlatformSnapshot(row domain.PlatformSnapshot) domain.PlatformSnapshot {
+	domain.NormalizePlatformSnapshot(&row)
+	s.mu.Lock()
+	s.savePlatformSnapshotLocked(row)
+	s.mu.Unlock()
+	return row
+}
+
 func (s *Store) savePlatformSnapshotLocked(row domain.PlatformSnapshot) {
 	k := key(row.Platform, row.DisplaySymbol)
 	s.platforms[k] = row
-	s.platformHistory[k] = append(s.platformHistory[k], row)
+	history := append(s.platformHistory[k], row)
+	if window := s.cfg.Runtime.DisplayFallbackWindow; window > 0 && !row.SnapshotTS.IsZero() {
+		cutoff := row.SnapshotTS.Add(-window)
+		kept := history[:0]
+		for _, item := range history {
+			if !item.SnapshotTS.Before(cutoff) {
+				kept = append(kept, item)
+			}
+		}
+		history = kept
+	}
+	s.platformHistory[k] = history
 }
 
 func (s *Store) SaveVolume(row domain.VolumeSnapshot) {
-	s.mu.Lock()
-	s.volumes[key(row.Platform, row.DisplaySymbol)] = row
-	s.mu.Unlock()
+	s.hydrateVolume(row)
 	if err := s.persistVolume(context.Background(), row); err != nil {
 		log.Printf("persist volume snapshot: %v", err)
 	}
@@ -211,28 +225,18 @@ func (s *Store) SaveVolume(row domain.VolumeSnapshot) {
 	// aggregate cannot be decomposed.
 }
 
+func (s *Store) hydrateVolume(row domain.VolumeSnapshot) {
+	s.mu.Lock()
+	s.volumes[key(row.Platform, row.DisplaySymbol)] = row
+	s.mu.Unlock()
+}
+
 // SaveCoinGeckoPlatformVolumes records the latest CoinGecko-sourced 24h
 // volume per competitor platform. The store keeps this map strictly separate
 // from `volumes` so Share(24h) for the 9 competitors never reads native
 // per-symbol numbers (R3: prevents Lighter / Hyperliquid double-counting).
 func (s *Store) SaveCoinGeckoPlatformVolumes(rows []domain.PlatformVolumeAggregate) {
-	if len(rows) == 0 {
-		return
-	}
-	s.mu.Lock()
-	for _, row := range rows {
-		if row.Platform == "" {
-			continue
-		}
-		if row.DataSource == "" {
-			row.DataSource = domain.DataSourceCoinGecko
-		}
-		s.cgPlatformVolumes[row.Platform] = row
-		if row.SnapshotTS.After(s.cgLastPullTS) {
-			s.cgLastPullTS = row.SnapshotTS
-		}
-	}
-	s.mu.Unlock()
+	rows = s.hydrateCoinGeckoPlatformVolumes(rows)
 	for _, row := range rows {
 		if row.Platform == "" {
 			continue
@@ -243,42 +247,35 @@ func (s *Store) SaveCoinGeckoPlatformVolumes(rows []domain.PlatformVolumeAggrega
 	}
 }
 
-// SaveDailyVolumeAggregates inserts or replaces per-day rollups. Volume24HUSD
-// is always raw USD; AdjustedVolume() is applied only at query time so
-// MEXC×0.4 / Gate×0.5 discounts cannot accidentally leak into stored values.
-func (s *Store) SaveDailyVolumeAggregates(rows []domain.DailyVolumeAggregate) {
+func (s *Store) hydrateCoinGeckoPlatformVolumes(rows []domain.PlatformVolumeAggregate) []domain.PlatformVolumeAggregate {
 	if len(rows) == 0 {
-		return
+		return nil
 	}
-	// Canonicalise per-symbol rows up-front so every storage layer (in-
-	// memory map keyed by (platform, display_symbol), and the MySQL
-	// UPSERT keyed by the same tuple) uses the single canonical
-	// 'BASE-USDT (perp)' form. edgeX writes 'BTC-USD (perp)' and bingx
-	// occasionally writes 'BTC-USDC (perp)'; without this collapse the
-	// Liquidity-tab 7d KPI (which queries by canonical name from
-	// cfg.Symbols) would see fragmented rows and degrade to 'partial'.
-	for i := range rows {
-		if rows[i].DisplaySymbol != "" {
-			rows[i].DisplaySymbol = canonicalDailyKey(rows[i].DisplaySymbol)
-		}
-	}
+	normalized := append([]domain.PlatformVolumeAggregate(nil), rows...)
 	s.mu.Lock()
-	for _, row := range rows {
+	for i := range normalized {
+		row := normalized[i]
 		if row.Platform == "" {
 			continue
 		}
 		if row.DataSource == "" {
-			row.DataSource = domain.DataSourceNative
+			row.DataSource = domain.DataSourceCoinGecko
+			normalized[i].DataSource = row.DataSource
 		}
-		row.Day = startOfUTCDay(row.Day)
-		if row.DisplaySymbol == "" {
-			s.dailyPlatformVolumes[row.Platform] = mergeDailyAggregate(s.dailyPlatformVolumes[row.Platform], row)
-		} else {
-			k := key(row.Platform, row.DisplaySymbol)
-			s.dailySymbolVolumes[k] = mergeDailyAggregate(s.dailySymbolVolumes[k], row)
+		s.cgPlatformVolumes[row.Platform] = row
+		if row.SnapshotTS.After(s.cgLastPullTS) {
+			s.cgLastPullTS = row.SnapshotTS
 		}
 	}
 	s.mu.Unlock()
+	return normalized
+}
+
+// SaveDailyVolumeAggregates inserts or replaces per-day rollups. Volume24HUSD
+// is always raw USD; AdjustedVolume() is applied only at query time so
+// MEXC×0.4 / Gate×0.5 discounts cannot accidentally leak into stored values.
+func (s *Store) SaveDailyVolumeAggregates(rows []domain.DailyVolumeAggregate) {
+	rows = s.hydrateDailyVolumeAggregates(rows)
 	for _, row := range rows {
 		if row.Platform == "" {
 			continue
@@ -290,6 +287,46 @@ func (s *Store) SaveDailyVolumeAggregates(rows []domain.DailyVolumeAggregate) {
 	}
 }
 
+func (s *Store) hydrateDailyVolumeAggregates(rows []domain.DailyVolumeAggregate) []domain.DailyVolumeAggregate {
+	if len(rows) == 0 {
+		return nil
+	}
+	normalized := append([]domain.DailyVolumeAggregate(nil), rows...)
+	// Canonicalise per-symbol rows up-front so every storage layer (in-
+	// memory map keyed by (platform, display_symbol), and the MySQL
+	// UPSERT keyed by the same tuple) uses the single canonical
+	// 'BASE-USDT (perp)' form. edgeX writes 'BTC-USD (perp)' and bingx
+	// occasionally writes 'BTC-USDC (perp)'; without this collapse the
+	// Liquidity-tab 7d KPI (which queries by canonical name from
+	// cfg.Symbols) would see fragmented rows and degrade to 'partial'.
+	for i := range normalized {
+		if normalized[i].DisplaySymbol != "" {
+			normalized[i].DisplaySymbol = canonicalDailyKey(normalized[i].DisplaySymbol)
+		}
+	}
+	s.mu.Lock()
+	for i := range normalized {
+		row := normalized[i]
+		if row.Platform == "" {
+			continue
+		}
+		if row.DataSource == "" {
+			row.DataSource = domain.DataSourceNative
+			normalized[i].DataSource = row.DataSource
+		}
+		row.Day = startOfUTCDay(row.Day)
+		normalized[i].Day = row.Day
+		if row.DisplaySymbol == "" {
+			s.dailyPlatformVolumes[row.Platform] = mergeDailyAggregate(s.dailyPlatformVolumes[row.Platform], row)
+		} else {
+			k := key(row.Platform, row.DisplaySymbol)
+			s.dailySymbolVolumes[k] = mergeDailyAggregate(s.dailySymbolVolumes[k], row)
+		}
+	}
+	s.mu.Unlock()
+	return normalized
+}
+
 // SaveTop30 replaces the cached Top30 ranking for the given (platform) key.
 // CoinGecko delivers all rows in a single response, so callers pass the full
 // slice for one platform at a time.
@@ -299,8 +336,15 @@ func (s *Store) SaveDailyVolumeAggregates(rows []domain.DailyVolumeAggregate) {
 // carries the values for cold-start hydration; Top30() re-derives on read
 // so daily aggregates arriving between SaveTop30 rounds also surface.
 func (s *Store) SaveTop30(platform string, rows []domain.Top30Row) {
+	dup := s.hydrateTop30(platform, rows)
+	if err := s.persistTop30(context.Background(), platform, dup); err != nil {
+		log.Printf("persist top30: %v", err)
+	}
+}
+
+func (s *Store) hydrateTop30(platform string, rows []domain.Top30Row) []domain.Top30Row {
 	if platform == "" {
-		return
+		return nil
 	}
 	dup := make([]domain.Top30Row, len(rows))
 	copy(dup, rows)
@@ -308,9 +352,7 @@ func (s *Store) SaveTop30(platform string, rows []domain.Top30Row) {
 	enrichTop30With7dWindowLocked(s, platform, dup)
 	s.top30ByPlatform[platform] = dup
 	s.mu.Unlock()
-	if err := s.persistTop30(context.Background(), platform, dup); err != nil {
-		log.Printf("persist top30: %v", err)
-	}
+	return dup
 }
 
 func (s *Store) SaveStatus(rows []domain.CollectionStatus, run RunSummary) {
