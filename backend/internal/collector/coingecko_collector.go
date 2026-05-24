@@ -28,12 +28,17 @@ import (
 // Concurrency: the collector itself runs single-threaded; the Store APIs it
 // calls are responsible for their own locking.
 type CoinGeckoCollector struct {
-	cfg      config.CoinGeckoConfig
-	client   *coingecko.Client
-	mapping  *coingecko.Mapping
-	cache    *coingecko.TickerCache
-	store    *Store
-	universe *config.ListedUniverse
+	cfg              config.CoinGeckoConfig
+	client           *coingecko.Client
+	mapping          *coingecko.Mapping
+	cache            *coingecko.TickerCache
+	store            *Store
+	universe         *config.ListedUniverse
+	top30BackfillJob Top30BackfillScheduler
+}
+
+type Top30BackfillScheduler interface {
+	EnqueueTop30Backfill(context.Context, map[string][]RosterEntry)
 }
 
 // NewCoinGeckoCollector constructs a collector. client may be nil if the
@@ -74,6 +79,10 @@ func (c *CoinGeckoCollector) configuredDisplaySymbols() map[string]struct{} {
 // Safe to call before CollectOnce; subsequent calls overwrite.
 func (c *CoinGeckoCollector) SetListedUniverse(u *config.ListedUniverse) {
 	c.universe = u
+}
+
+func (c *CoinGeckoCollector) SetTop30BackfillScheduler(scheduler Top30BackfillScheduler) {
+	c.top30BackfillJob = scheduler
 }
 
 // Run starts the periodic /derivatives pull loop until ctx is cancelled.
@@ -291,12 +300,60 @@ func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
 	//    only (BTC vs BTC-USD/USDT/USDC etc all collapse to the same base).
 	coverage := buildCompetitorCoverage(top30ByPlatform)
 	enrichTop30Rows(top30ByPlatform, coverage, c.universe)
+	var previousRoster map[string][]RosterEntry
+	if c.top30BackfillJob != nil {
+		previousRoster = c.store.Top30RosterUnion()
+	}
 	for platform, rows := range top30ByPlatform {
 		c.store.SaveTop30(platform, rows)
+	}
+	if c.top30BackfillJob != nil {
+		if entries := newTop30RosterEntries(previousRoster, top30ByPlatform); len(entries) > 0 {
+			c.top30BackfillJob.EnqueueTop30Backfill(ctx, entries)
+		}
 	}
 
 	c.store.RecordCoinGeckoPullSuccess(now)
 	return nil
+}
+
+func newTop30RosterEntries(previous map[string][]RosterEntry, current map[string][]domain.Top30Row) map[string][]RosterEntry {
+	seen := map[string]map[string]struct{}{}
+	for platform, entries := range previous {
+		if seen[platform] == nil {
+			seen[platform] = map[string]struct{}{}
+		}
+		for _, entry := range entries {
+			base := strings.ToUpper(strings.TrimSpace(entry.BaseAsset))
+			if base != "" {
+				seen[platform][base] = struct{}{}
+			}
+		}
+	}
+	out := map[string][]RosterEntry{}
+	for platform, rows := range current {
+		added := map[string]struct{}{}
+		for _, row := range rows {
+			base := baseAssetFromSymbol(row.Symbol)
+			if base == "" {
+				continue
+			}
+			if _, ok := seen[platform][base]; ok {
+				continue
+			}
+			if _, ok := added[base]; ok {
+				continue
+			}
+			added[base] = struct{}{}
+			out[platform] = append(out[platform], RosterEntry{BaseAsset: base, DisplaySymbol: row.Symbol})
+		}
+		if len(out[platform]) == 0 {
+			delete(out, platform)
+			continue
+		}
+		sort.Slice(out[platform], func(i, j int) bool { return out[platform][i].BaseAsset < out[platform][j].BaseAsset })
+	}
+	return out
 }
 
 // buildCompetitorCoverage counts, for every full normalised symbol observed

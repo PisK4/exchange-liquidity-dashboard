@@ -48,6 +48,13 @@ type Top30Backfiller struct {
 	schedMin  int
 }
 
+const (
+	top30BackfillSkipSymbolUnsupported  = "symbol_unsupported"
+	top30BackfillSkipInstrumentNotFound = "instrument_not_found"
+	top30BackfillSkipFetchFailure       = "fetch_failure"
+	top30BackfillSkipPartialDays        = "partial_days"
+)
+
 // NewTop30Backfiller wires the per-platform REST adapters using the same
 // proxy / lighter WS provider the live collector uses, so the back-fill
 // stream is indistinguishable from the live one at the network layer.
@@ -141,7 +148,16 @@ func (b *Top30Backfiller) RunOnce(ctx context.Context) error {
 	if len(roster) == 0 {
 		return errors.New("top30 backfill: roster empty (no Top30 data yet)")
 	}
+	return b.RunRosterOnce(ctx, roster)
+}
 
+func (b *Top30Backfiller) RunRosterOnce(ctx context.Context, roster map[string][]RosterEntry) error {
+	if b.resolver == nil {
+		return errors.New("top30 backfill: catalog resolver not configured")
+	}
+	if len(roster) == 0 {
+		return errors.New("top30 backfill: roster empty (no Top30 data yet)")
+	}
 	type platformResult struct {
 		platform string
 		rows     int
@@ -183,9 +199,25 @@ func (b *Top30Backfiller) RunOnce(ctx context.Context) error {
 	return firstErr
 }
 
+func (b *Top30Backfiller) EnqueueTop30Backfill(ctx context.Context, roster map[string][]RosterEntry) {
+	if len(roster) == 0 {
+		return
+	}
+	roster = copyTop30Roster(roster)
+	go func() {
+		if err := b.RunRosterOnce(ctx, roster); err != nil {
+			log.Printf("top30 backfill: incremental run failed: %v", err)
+		}
+	}()
+}
+
 // runPlatform processes one platform's roster with bounded concurrency.
 func (b *Top30Backfiller) runPlatform(ctx context.Context, platform string, entries []RosterEntry, fetcher adapter.DailyVolumeHistoryFetcher) (rows int, errCount int) {
-	sem := make(chan struct{}, b.perPlatN)
+	concurrency := b.perPlatN
+	if concurrency <= 0 {
+		concurrency = 1
+	}
+	sem := make(chan struct{}, concurrency)
 	var (
 		mu    sync.Mutex
 		wg    sync.WaitGroup
@@ -228,9 +260,11 @@ func (b *Top30Backfiller) runOne(ctx context.Context, platform, base, displaySym
 		// Unsupported on this platform — silently skip. ErrSymbolUnsupported
 		// is the only expected branch here.
 		if errors.Is(err, ErrSymbolUnsupported) {
+			b.recordSkip(platform, top30BackfillSkipSymbolUnsupported)
 			return 0, nil
 		}
 		log.Printf("top30 backfill: %s %s resolve: %v", platform, base, err)
+		b.recordSkip(platform, top30BackfillSkipFetchFailure)
 		return 0, err
 	}
 	days := b.decideFetchDays(ctx, platform, displaySymbol)
@@ -244,17 +278,40 @@ func (b *Top30Backfiller) runOne(ctx context.Context, platform, base, displaySym
 		// don't have a USDT-base alias on the REST API, so retrying is
 		// pointless and the warning would just spam every backfill round.
 		if errors.Is(err, adapter.ErrInstrumentNotFound) {
+			b.recordSkip(platform, top30BackfillSkipInstrumentNotFound)
 			return 0, nil
 		}
 		log.Printf("top30 backfill: %s %s fetch %dd: %v", platform, base, days, err)
+		b.recordSkip(platform, top30BackfillSkipFetchFailure)
 		return 0, err
 	}
 	rows := filterRecentBackfillRows(klines, days)
 	if len(rows) == 0 {
+		b.recordSkip(platform, top30BackfillSkipPartialDays)
 		return 0, nil
+	}
+	if len(rows) < days {
+		b.recordSkip(platform, top30BackfillSkipPartialDays)
 	}
 	b.store.SaveDailyVolumeAggregates(rows)
 	return len(rows), nil
+}
+
+func (b *Top30Backfiller) recordSkip(platform, reason string) {
+	if b.store != nil {
+		b.store.RecordTop30BackfillSkip(platform, reason)
+	}
+}
+
+func copyTop30Roster(in map[string][]RosterEntry) map[string][]RosterEntry {
+	out := make(map[string][]RosterEntry, len(in))
+	for platform, entries := range in {
+		if len(entries) == 0 {
+			continue
+		}
+		out[platform] = append([]RosterEntry(nil), entries...)
+	}
+	return out
 }
 
 // decideFetchDays returns the smallest backfill window that closes the

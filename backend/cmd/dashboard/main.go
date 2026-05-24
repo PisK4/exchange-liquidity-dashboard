@@ -76,6 +76,7 @@ func main() {
 	if *role == "collector" || *role == "all" {
 		c := collector.NewCollectorWithLighter(cfg, store, lighterProvider)
 		backfiller := collector.NewSymbolBackfiller(cfg, store, lighterProvider)
+		var top30bf *collector.Top30Backfiller
 		if err := c.CollectOnce(ctx); err != nil {
 			log.Printf("initial collection completed with errors: %v", err)
 		}
@@ -100,7 +101,7 @@ func main() {
 		// land before issuing kline pulls.
 		if cfg.Runtime.Backfill.Enabled && !*runOnce {
 			resolver := collector.NewCatalogResolver(*rawInstrumentsDir)
-			top30bf := collector.NewTop30Backfiller(cfg, store, lighterProvider, resolver)
+			top30bf = collector.NewTop30Backfiller(cfg, store, lighterProvider, resolver)
 			top30bf.Run(ctx)
 			log.Printf("top30 backfill scheduled (cold_start=%dd, daily=%02d:%02d UTC, concurrency=%d, rate=%d/s)",
 				cfg.Runtime.Backfill.ColdStartDays,
@@ -123,6 +124,9 @@ func main() {
 						len(universe.Platforms), len(universe.BaseAssets("edgeX")))
 				}
 				cgCollector.SetListedUniverse(universe)
+				if top30bf != nil {
+					cgCollector.SetTop30BackfillScheduler(top30bf)
+				}
 				if *runOnce {
 					if err := cgCollector.CollectOnce(ctx); err != nil {
 						log.Printf("coingecko initial collection failed: %v", err)

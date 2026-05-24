@@ -119,6 +119,64 @@ func TestCoinGeckoCollectorBuildsTop30PerPlatform(t *testing.T) {
 	}
 }
 
+type fakeTop30BackfillScheduler struct {
+	entries map[string][]RosterEntry
+}
+
+func (f *fakeTop30BackfillScheduler) EnqueueTop30Backfill(ctx context.Context, entries map[string][]RosterEntry) {
+	f.entries = entries
+}
+
+func TestCoinGeckoCollectorQueuesIncrementalBackfillForNewTop30Symbols(t *testing.T) {
+	payload := `[
+	  {"market":"Binance (Futures)","symbol":"BTCUSDT","volume_24h":1000,"open_interest":500,"converted_volume":{"usd":1000}},
+	  {"market":"Binance (Futures)","symbol":"ETHUSDT","volume_24h":800,"open_interest":300,"converted_volume":{"usd":800}}
+	]`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(payload))
+	}))
+	defer srv.Close()
+
+	cfg := config.Default()
+	cfg.Platforms = []string{"binance"}
+	cfg.Runtime.CoinGecko.Enabled = true
+	cfg.Runtime.CoinGecko.BaseURL = srv.URL
+	cfg.Runtime.CoinGecko.MarketName = map[string]string{"binance": "Binance (Futures)"}
+	cfg.Runtime.CoinGecko.ExchangeID = map[string]string{"binance": "binance_futures"}
+	store := NewStore(cfg)
+	store.SaveTop30("binance", []domain.Top30Row{
+		{Platform: "binance", Symbol: "BTC-USDT (perp)", Rank: 1, Volume24HUSD: 1000, Status: domain.StatusComplete, SnapshotTS: time.Now().UTC()},
+	})
+	client, err := coingecko.New(coingecko.Config{BaseURL: srv.URL, RequestTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	mapping := coingecko.NewMapping(cfg.Runtime.CoinGecko.ExchangeID, cfg.Runtime.CoinGecko.MarketName)
+	col := NewCoinGeckoCollector(cfg.Runtime.CoinGecko, store, client, mapping)
+	scheduler := &fakeTop30BackfillScheduler{}
+	col.SetTop30BackfillScheduler(scheduler)
+
+	if err := col.CollectOnce(context.Background()); err != nil {
+		t.Fatalf("CollectOnce: %v", err)
+	}
+
+	entries := scheduler.entries["binance"]
+	if len(entries) != 1 {
+		t.Fatalf("expected one new binance roster entry, got %+v", scheduler.entries)
+	}
+	if entries[0].BaseAsset != "ETH" || entries[0].DisplaySymbol != "ETH-USDT (perp)" {
+		t.Fatalf("expected ETH incremental backfill entry, got %+v", entries[0])
+	}
+
+	scheduler.entries = nil
+	if err := col.CollectOnce(context.Background()); err != nil {
+		t.Fatalf("CollectOnce(2): %v", err)
+	}
+	if scheduler.entries != nil {
+		t.Fatalf("unchanged roster should not enqueue another backfill, got %+v", scheduler.entries)
+	}
+}
+
 func TestCoinGeckoCollectorEmitsDailyUPSERT(t *testing.T) {
 	col, store, srv := newTestCoinGeckoCollector(t)
 	defer srv.Close()

@@ -178,6 +178,111 @@ func TestRunOnceSkipsUnsupportedAndPersistsRest(t *testing.T) {
 	}
 }
 
+func TestRunRosterOnceUsesExplicitEntries(t *testing.T) {
+	cfg := config.Default()
+	cfg.Platforms = []string{"binance"}
+	store := NewStore(cfg)
+	resolver := NewCatalogResolver(t.TempDir())
+	today := startOfUTCDay(time.Now().UTC())
+	fetcher := &fakeFetcher{
+		rowsFn: func(sub domain.SymbolSub, days int) []domain.DailyVolumeAggregate {
+			return []domain.DailyVolumeAggregate{{
+				Platform:      sub.Platform,
+				DisplaySymbol: sub.DisplaySymbol,
+				Day:           today,
+				Volume24HUSD:  100,
+				Status:        domain.StatusComplete,
+				DataSource:    domain.DataSourceNativeBackfill,
+			}}
+		},
+	}
+	bf := &Top30Backfiller{
+		cfg:       cfg,
+		store:     store,
+		resolver:  resolver,
+		adapters:  map[string]adapter.ExchangeAdapter{"binance": &adapterStub{fetcher: fetcher}},
+		limiters:  map[string]*rateLimiter{"binance": nil},
+		perPlatN:  1,
+		coldDays:  14,
+		repairDay: 3,
+	}
+	err := bf.RunRosterOnce(context.Background(), map[string][]RosterEntry{
+		"binance": []RosterEntry{
+			{BaseAsset: "ETH", DisplaySymbol: "ETH-USDT (perp)"},
+		},
+	})
+	if err != nil {
+		t.Fatalf("RunRosterOnce: %v", err)
+	}
+	if len(fetcher.calls) != 1 {
+		t.Fatalf("calls=%d want 1", len(fetcher.calls))
+	}
+	if fetcher.calls[0].apiSymbol != "ETHUSDT" {
+		t.Fatalf("apiSymbol=%q want ETHUSDT", fetcher.calls[0].apiSymbol)
+	}
+	if last := store.DailySymbolHistoryLatest("binance", "ETH-USDT (perp)"); last.IsZero() {
+		t.Fatalf("explicit roster row was not persisted")
+	}
+}
+
+func TestRunOneRecordsBackfillSkipReasons(t *testing.T) {
+	cfg := config.Default()
+	store := NewStore(cfg)
+	resolver := NewCatalogResolver(t.TempDir())
+	fetcher := &fakeFetcher{
+		errOnSym: map[string]error{"BTCUSDT": adapter.ErrInstrumentNotFound},
+	}
+	bf := &Top30Backfiller{store: store, resolver: resolver, coldDays: 14, repairDay: 3}
+
+	rows, err := bf.runOne(context.Background(), "binance", "BTC", "BTC-USDT (perp)", fetcher)
+	if err != nil {
+		t.Fatalf("instrument not found should be a permanent skip, got %v", err)
+	}
+	if rows != 0 {
+		t.Fatalf("rows=%d want 0", rows)
+	}
+	counts := store.Top30BackfillSkipCounts()
+	if counts["binance"]["instrument_not_found"] != 1 {
+		t.Fatalf("instrument_not_found skip count missing: %+v", counts)
+	}
+
+	rows, err = bf.runOne(context.Background(), "unknown", "BTC", "BTC-USDT (perp)", fetcher)
+	if err != nil {
+		t.Fatalf("unsupported symbol should be a permanent skip, got %v", err)
+	}
+	if rows != 0 {
+		t.Fatalf("rows=%d want 0", rows)
+	}
+	counts = store.Top30BackfillSkipCounts()
+	if counts["unknown"]["symbol_unsupported"] != 1 {
+		t.Fatalf("symbol_unsupported skip count missing: %+v", counts)
+	}
+
+	partialFetcher := &fakeFetcher{
+		rowsFn: func(sub domain.SymbolSub, days int) []domain.DailyVolumeAggregate {
+			return []domain.DailyVolumeAggregate{{
+				Platform:      sub.Platform,
+				DisplaySymbol: sub.DisplaySymbol,
+				Day:           startOfUTCDay(time.Now().UTC()),
+				Volume24HUSD:  100,
+				Status:        domain.StatusComplete,
+				DataSource:    domain.DataSourceNativeBackfill,
+			}}
+		},
+	}
+	rows, err = bf.runOne(context.Background(), "binance", "ETH", "ETH-USDT (perp)", partialFetcher)
+	if err != nil {
+		t.Fatalf("partial days should persist available rows without failing, got %v", err)
+	}
+	if rows != 1 {
+		t.Fatalf("rows=%d want 1", rows)
+	}
+	counts = store.Top30BackfillSkipCounts()
+	if counts["binance"]["partial_days"] != 1 {
+		t.Fatalf("partial_days skip count missing: %+v", counts)
+	}
+}
+
 // TestRunOnceRosterEmpty surfaces the early-return path when SaveTop30
 // has not yet been called.
 func TestRunOnceRosterEmpty(t *testing.T) {

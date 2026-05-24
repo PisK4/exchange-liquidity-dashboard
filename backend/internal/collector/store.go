@@ -52,7 +52,8 @@ type Store struct {
 	// Top30 ranking per platform, refreshed on every CoinGecko collector
 	// run. Top30 returns the slice as-is once filled; empty slice keeps the
 	// existing "unsupported" fallback.
-	top30ByPlatform map[string][]domain.Top30Row
+	top30ByPlatform         map[string][]domain.Top30Row
+	top30BackfillSkipCounts map[string]map[string]int
 
 	cgLastPullTS time.Time
 }
@@ -67,14 +68,15 @@ type RunSummary struct {
 
 func NewStore(cfg config.Config) *Store {
 	s := &Store{
-		cfg:                  cfg,
-		platforms:            map[string]domain.PlatformSnapshot{},
-		platformHistory:      map[string][]domain.PlatformSnapshot{},
-		volumes:              map[string]domain.VolumeSnapshot{},
-		cgPlatformVolumes:    map[string]domain.PlatformVolumeAggregate{},
-		dailyPlatformVolumes: map[string][]domain.DailyVolumeAggregate{},
-		dailySymbolVolumes:   map[string][]domain.DailyVolumeAggregate{},
-		top30ByPlatform:      map[string][]domain.Top30Row{},
+		cfg:                     cfg,
+		platforms:               map[string]domain.PlatformSnapshot{},
+		platformHistory:         map[string][]domain.PlatformSnapshot{},
+		volumes:                 map[string]domain.VolumeSnapshot{},
+		cgPlatformVolumes:       map[string]domain.PlatformVolumeAggregate{},
+		dailyPlatformVolumes:    map[string][]domain.DailyVolumeAggregate{},
+		dailySymbolVolumes:      map[string][]domain.DailyVolumeAggregate{},
+		top30ByPlatform:         map[string][]domain.Top30Row{},
+		top30BackfillSkipCounts: map[string]map[string]int{},
 	}
 	initial := append([]domain.SymbolSub(nil), cfg.Symbols...)
 	s.liveSymbols.Store(&initial)
@@ -1674,6 +1676,33 @@ func (s *Store) Top30RosterUnion() map[string][]RosterEntry {
 		if len(entries) > 0 {
 			sort.Slice(entries, func(i, j int) bool { return entries[i].BaseAsset < entries[j].BaseAsset })
 			out[platform] = entries
+		}
+	}
+	return out
+}
+
+func (s *Store) RecordTop30BackfillSkip(platform, reason string) {
+	platform = strings.TrimSpace(platform)
+	reason = strings.TrimSpace(reason)
+	if platform == "" || reason == "" {
+		return
+	}
+	s.mu.Lock()
+	if s.top30BackfillSkipCounts[platform] == nil {
+		s.top30BackfillSkipCounts[platform] = map[string]int{}
+	}
+	s.top30BackfillSkipCounts[platform][reason]++
+	s.mu.Unlock()
+}
+
+func (s *Store) Top30BackfillSkipCounts() map[string]map[string]int {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make(map[string]map[string]int, len(s.top30BackfillSkipCounts))
+	for platform, counts := range s.top30BackfillSkipCounts {
+		out[platform] = make(map[string]int, len(counts))
+		for reason, count := range counts {
+			out[platform][reason] = count
 		}
 	}
 	return out
