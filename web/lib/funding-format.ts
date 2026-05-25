@@ -77,7 +77,8 @@ export function fundingPeriodTooltip(row?: PlatformFundingRate | null): string {
   }
   const period = typeof row.period_hours === 'number' && row.period_hours > 0 ? `${row.period_hours}h` : '—';
   const native = typeof row.rate_native === 'number' && Number.isFinite(row.rate_native) ? formatFundingRate8h(row.rate_native) : '—';
-  return `${row.platform} · 原始 ${native} / ${period}（已折算为 8h 当量）`;
+  // return `${row.platform} · 原始 ${native} / ${period}（已折算为 8h 当量）`;
+  return "";
 }
 
 // fundingDisplayStatus returns the ApiStatus value the UI should render
