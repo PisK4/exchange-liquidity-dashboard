@@ -1,4 +1,5 @@
 import { DashboardClient } from '@/components/dashboard-client';
+import { parseURLWatchlist } from '@/lib/watchlist';
 
 export const dynamic = 'force-dynamic';
 
@@ -23,6 +24,11 @@ export default function Page({ searchParams }: { searchParams: SearchParams }) {
     category: scalar(searchParams.category),
     coreOnly: scalar(searchParams.coreOnly),
   };
+  // SSR-only resolution: localStorage is intentionally NOT touched here;
+  // DashboardClient re-resolves once the browser mounts and uses
+  // replaceState to backfill the URL when localStorage carries a
+  // different list. This split keeps Next.js hydration deterministic.
+  const watchlist = parseURLWatchlist(scalar(searchParams.watchlist));
 
-  return <DashboardClient query={query} />;
+  return <DashboardClient query={query} initialWatchlist={watchlist} />;
 }

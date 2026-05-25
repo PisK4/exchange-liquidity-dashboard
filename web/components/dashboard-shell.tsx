@@ -7,9 +7,12 @@ import { ShareTrendChart, type ShareTrendPoint } from '@/components/share-trend-
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { QualityFundingRow } from '@/components/quality-funding-row';
+import { WatchlistCard } from '@/components/watchlist-card';
+import { WatchlistToolbar } from '@/components/watchlist-toolbar';
 import { resolveSymbolContext, type SymbolContext } from '@/components/lib/symbol-context';
 import { bp, money, moneyAuto, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformFundingRate, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
 import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingRate8h, fundingPeriodTooltip } from '@/lib/funding-format';
+import { WATCHLIST_DEFAULT_FALLBACK, normalizeSymbol } from '@/lib/watchlist';
 
 type Query = Record<string, string | undefined>;
 
@@ -20,6 +23,8 @@ type DashboardData = {
   share: ShareSnapshot;
   top30: Top30Snapshot;
   lookup: FrontendURLLookup;
+  liquidityByCanonical: Record<string, LiquiditySnapshot>;
+  watchlist: string[];
 };
 
 const tabs = [
@@ -222,7 +227,17 @@ function DepthCell({ row, tier, side }: { row: PlatformRow; tier: string; side: 
   );
 }
 
-export function DashboardShell({ query, data }: { query: Query; data: DashboardData }) {
+export function DashboardShell({
+  query,
+  data,
+  watchlist,
+  onWatchlistChange,
+}: {
+  query: Query;
+  data: DashboardData;
+  watchlist: string[];
+  onWatchlistChange: (next: string[]) => void;
+}) {
   const tab = query.tab ?? 'monitor';
   const symbolCtx = resolveSymbolContext(data.meta, query.symbol ?? data.meta.symbols[0] ?? 'BTC');
   const tier = query.tier ?? '0.10%';
@@ -253,7 +268,16 @@ export function DashboardShell({ query, data }: { query: Query; data: DashboardD
         {tab === 'quality' ? <QualityTab data={data} query={query} bucket={bucket} symbolCtx={symbolCtx} /> : null}
         {tab === 'share' ? <ShareTab data={data.share} query={query} /> : null}
         {tab === 'top30' ? <Top30Tab data={data.top30} query={query} platform={platform} /> : null}
-        {tab === 'monitor' ? <LiquidityTab data={data} query={query} tier={tier} symbolCtx={symbolCtx} /> : null}
+        {tab === 'monitor' ? (
+          <LiquidityTab
+            data={data}
+            query={query}
+            tier={tier}
+            symbolCtx={symbolCtx}
+            watchlist={watchlist}
+            onWatchlistChange={onWatchlistChange}
+          />
+        ) : null}
       </main>
       <footer className="footer">edgeX Liquidity Monitor · 正式版</footer>
     </>
@@ -291,7 +315,52 @@ function FundingCell({ funding }: { funding?: PlatformFundingRate | null }) {
   );
 }
 
-function LiquidityTab({ data, query, tier, symbolCtx }: { data: DashboardData; query: Query; tier: string; symbolCtx: SymbolContext }) {
+function LiquidityTab({
+  data,
+  query,
+  tier,
+  symbolCtx,
+  watchlist,
+  onWatchlistChange,
+}: {
+  data: DashboardData;
+  query: Query;
+  tier: string;
+  symbolCtx: SymbolContext;
+  watchlist: string[];
+  onWatchlistChange: (next: string[]) => void;
+}) {
+  const allSymbols = (data.meta.categories ?? []).flatMap(c => c.symbols);
+  const watchlistMode = watchlist.length > 1;
+
+  if (watchlistMode) {
+    return (
+      <div className="page-content active">
+        <div className="section-bar">
+          <span>3.2 · <b>自选清单</b></span>
+          <div className="line" />
+          <span>{watchlist.length} 个标的 · 摘要视图</span>
+        </div>
+        <WatchlistToolbar items={watchlist} symbols={allSymbols} onChange={onWatchlistChange} />
+        <div className="grid">
+          {watchlist.map(symbol => {
+            const canonical = normalizeSymbol(symbol);
+            const meta = allSymbols.find(s => s.canonical.toUpperCase() === canonical);
+            const snap = data.liquidityByCanonical[canonical] ?? null;
+            return (
+              <WatchlistCard
+                key={canonical}
+                canonical={canonical}
+                displayName={meta?.display_name ?? symbol}
+                snapshot={snap}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   const rows = data.liquidity.rows ?? [];
   const edge = rows.find(row => row.platform === 'edgeX');
   const edgeDepth = edge && depthDisplayAvailable(edge, tier) ? edge.depth_by_tier?.[tier]?.total_usd : undefined;
@@ -301,6 +370,7 @@ function LiquidityTab({ data, query, tier, symbolCtx }: { data: DashboardData; q
   return (
     <div className="page-content active">
       <div className="section-bar"><span>3.2 · <b>深度对比</b></span><div className="line" /><span>{symbolCtx.displayName} · 4 档深度</span></div>
+      <WatchlistToolbar items={watchlist} symbols={allSymbols} onChange={onWatchlistChange} />
       <div className="grid">
         <section className="panel span-6 row-h-sm">
           <div className="panel-head">

@@ -143,4 +143,21 @@ table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
 .platform-link .ext-icon { color: var(--text-mute); margin-left: 3px; font-size: 11px; }
 .platform-link:hover .ext-icon { color: var(--accent); }
 .footer { color: var(--text-mute); border-top: 1px solid var(--border); padding: 12px 16px 18px; font-size: 11px; text-align: center; }
-@media (max-width: 1100px) { .span-6, .span-8, .span-12 { grid-column: span 24; } .topbar { align-items: flex-start; height: auto; flex-wrap: wrap; padding: 8px 12px; } .tabs { top: 0; overflow-x: auto; } .share-kpi-strip { align-items: flex-start; flex-direction: column; gap: 12px; } .share-kpi-note { margin-left: 0; text-align: left; } }
+.info-icon { color: var(--text-mute); font-size: 11px; cursor: help; margin-left: 2px; }
+.info-icon:hover { color: var(--accent); }
+.watchlist-toolbar { display: flex; align-items: center; gap: 10px; padding: 10px 12px; margin: 12px 0; border: 1px solid var(--border); border-radius: 6px; background: var(--panel-2); flex-wrap: wrap; }
+.watchlist-toolbar-label { color: var(--text-mute); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+.watchlist-chips { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; flex: 1; }
+.watchlist-chip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 8px; border-radius: 999px; background: #2c3038; border: 1px solid var(--border); font-size: 12px; }
+.watchlist-chip.muted { color: var(--text-mute); }
+.watchlist-chip-label { color: inherit; }
+.watchlist-chip-remove { background: none; border: none; color: var(--text-mute); cursor: pointer; padding: 0 0 0 4px; font-size: 14px; line-height: 1; }
+.watchlist-chip-remove:hover { color: var(--bad); }
+.watchlist-add { position: relative; }
+.watchlist-add-trigger:disabled { opacity: 0.4; cursor: not-allowed; }
+.watchlist-card .watchlist-kpis { display: grid; grid-template-columns: 1fr 1fr; gap: 10px 18px; padding: 8px 12px 12px; margin: 0; }
+.watchlist-card .watchlist-kpis div { display: flex; flex-direction: column; gap: 2px; }
+.watchlist-card .watchlist-kpis dt { color: var(--text-mute); font-size: 11px; }
+.watchlist-card .watchlist-kpis dd { margin: 0; color: var(--text); font-size: 16px; font-variant-numeric: tabular-nums; }
+.watchlist-funding-delta { margin-left: 6px; font-size: 11px; }
+@media (max-width: 1100px) { .span-6, .span-8, .span-12 { grid-column: span 24; } .topbar { align-items: flex-start; height: auto; flex-wrap: wrap; padding: 8px 12px; } .tabs { top: 0; overflow-x: auto; } .share-kpi-strip { align-items: flex-start; flex-direction: column; gap: 12px; } .share-kpi-note { margin-left: 0; text-align: left; } .watchlist-card .watchlist-kpis { grid-template-columns: 1fr; } }
