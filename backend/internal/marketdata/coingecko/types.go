@@ -46,22 +46,22 @@ func flexibleFloat(v any) (float64, bool) {
 // FlexibleTime to absorb either int seconds or RFC3339 strings, because
 // CoinGecko has flipped the format in the past for some markets.
 type Ticker struct {
-	Market         string         `json:"market"`
-	Symbol         string         `json:"symbol"`
-	IndexID        string         `json:"index_id,omitempty"`
-	Index          float64        `json:"index,omitempty"`
-	BasisRaw       FlexibleNumber `json:"basis,omitempty"`
-	Price          FlexibleNumber `json:"price"`
-	PriceUSD       FlexibleNumber `json:"price_usd,omitempty"`
-	Spread         FlexibleNumber `json:"spread,omitempty"`
-	BidAskSpread   FlexibleNumber `json:"bid_ask_spread,omitempty"`
-	FundingRate    FlexibleNumber `json:"funding_rate,omitempty"`
-	OpenInterest   FlexibleNumber `json:"open_interest,omitempty"`
-	Volume24H      FlexibleNumber `json:"volume_24h"`
-	ContractType   string         `json:"contract_type,omitempty"`
-	ExpiredAtRaw   FlexibleTime   `json:"expired_at,omitempty"`
-	LastTradedAt   FlexibleTime   `json:"last_traded_at,omitempty"`
-	ConvertedVolMS map[string]any `json:"converted_volume,omitempty"`
+	Market         string                 `json:"market"`
+	Symbol         string                 `json:"symbol"`
+	IndexID        string                 `json:"index_id,omitempty"`
+	Index          float64                `json:"index,omitempty"`
+	BasisRaw       FlexibleNumber         `json:"basis,omitempty"`
+	Price          FlexibleNumber         `json:"price"`
+	PriceUSD       FlexibleNumber         `json:"price_usd,omitempty"`
+	Spread         FlexibleNumber         `json:"spread,omitempty"`
+	BidAskSpread   FlexibleNumber         `json:"bid_ask_spread,omitempty"`
+	FundingRate    OptionalFlexibleNumber `json:"funding_rate,omitempty"`
+	OpenInterest   FlexibleNumber         `json:"open_interest,omitempty"`
+	Volume24H      FlexibleNumber         `json:"volume_24h"`
+	ContractType   string                 `json:"contract_type,omitempty"`
+	ExpiredAtRaw   FlexibleTime           `json:"expired_at,omitempty"`
+	LastTradedAt   FlexibleTime           `json:"last_traded_at,omitempty"`
+	ConvertedVolMS map[string]any         `json:"converted_volume,omitempty"`
 }
 
 // Volume24HUSD returns the raw 24h notional as float64. CoinGecko's
@@ -81,6 +81,68 @@ func (t Ticker) Volume24HUSD() float64 {
 // OpenInterestUSD returns open_interest as float64. CoinGecko emits this in
 // USD for derivatives tickers.
 func (t Ticker) OpenInterestUSD() float64 { return float64(t.OpenInterest) }
+
+// OptionalFlexibleNumber is the nullable sibling of FlexibleNumber: it
+// preserves the distinction between "the field was missing / null in the
+// upstream payload" and "the field was explicitly 0". CoinGecko's
+// /derivatives endpoint marks funding-less perps (and any cross-margined
+// venue at the instant between settlements) with funding_rate: null, and
+// our downstream comparison view needs to render those as "—" rather than
+// a misleading 0% bar, which is the only way to keep the watchlist
+// readable when some venues legitimately drop in and out of the dataset.
+//
+// Unmarshalling rules match FlexibleNumber for present values (numeric
+// literal OR stringified number, both stripped of whitespace), but
+// `null`, missing keys, and empty strings produce Valid=false instead of
+// silently collapsing to 0.
+type OptionalFlexibleNumber struct {
+	Valid bool
+	Value float64
+}
+
+func (f *OptionalFlexibleNumber) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 || string(data) == "null" {
+		f.Valid = false
+		f.Value = 0
+		return nil
+	}
+	if data[0] == '"' {
+		var s string
+		if err := json.Unmarshal(data, &s); err != nil {
+			return err
+		}
+		if s == "" {
+			f.Valid = false
+			f.Value = 0
+			return nil
+		}
+		v, err := strconv.ParseFloat(s, 64)
+		if err != nil {
+			return err
+		}
+		f.Valid = true
+		f.Value = v
+		return nil
+	}
+	var v float64
+	if err := json.Unmarshal(data, &v); err != nil {
+		return err
+	}
+	f.Valid = true
+	f.Value = v
+	return nil
+}
+
+// Ptr returns a *float64 view: nil when Valid is false, otherwise a
+// pointer to a copy of Value. Useful for plumbing into APIs whose contract
+// is "absent or float".
+func (f OptionalFlexibleNumber) Ptr() *float64 {
+	if !f.Valid {
+		return nil
+	}
+	v := f.Value
+	return &v
+}
 
 // FlexibleNumber accepts both numeric JSON literals and stringified numbers,
 // because CoinGecko occasionally emits the latter for very large derivatives
