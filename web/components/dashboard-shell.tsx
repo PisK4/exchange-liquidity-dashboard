@@ -517,9 +517,12 @@ function QualityTab({ data, query, bucket, symbolCtx, watchlist, allSymbols, onW
 
 function ShareTab({ data, query }: { data: ShareSnapshot; query: Query }) {
   const activeWindow = query.window ?? data.window ?? '24h';
+  const rawDenominator = data.rows.reduce((sum, row) => sum + (row.raw_volume_usd ?? 0), 0);
+  const edgexRaw = data.rows.find(row => row.platform === 'edgeX')?.raw_volume_usd;
+  const edgexRawShare = rawDenominator > 0 && typeof edgexRaw === 'number' ? edgexRaw / rawDenominator * 100 : undefined;
   return (
     <div className="page-content active">
-      <div className="section-bar"><span>3.4 · <b>edgeX 平台总交易量市占率</b></span><div className="line" /><span>全平台 perp 合计 · mexc×0.4, gate×0.5</span></div>
+      <div className="section-bar"><span>3.4 · <b>edgeX 平台总交易量市占率</b></span><div className="line" /><span>全平台 perp 合计</span></div>
       <section className="panel">
         <div className="panel-head">
           <span className="panel-title">edgeX 平台总交易量市占率明细表</span>
@@ -528,25 +531,23 @@ function ShareTab({ data, query }: { data: ShareSnapshot; query: Query }) {
         </div>
         {data.status === 'unsupported' ? <StatusEmptyState status="unsupported" message={data.reason ?? '当前统计窗口尚未实现'} /> : <>
           <div className="share-kpi-strip">
-            <div className="share-primary"><span>当前 edgeX share {activeWindow}</span><b>{pct(data.kpis?.edgex_share_pct)}</b></div>
-            <div><span>edgeX 平台总成交量</span><b>{money(data.kpis?.edgex_total_volume_usd)}</b></div>
-            <div><span>分母合计 (含 edgeX, mexc×0.4, gate×0.5)</span><b>{money(data.kpis?.denominator_usd ?? data.denominator_usd)}</b></div>
+            <div className="share-primary"><span>当前 edgeX share {activeWindow}</span><b>{pct(edgexRawShare)}</b></div>
+            <div><span>edgeX 平台总成交量</span><b>{money(data.kpis?.edgex_total_volume_usd ?? edgexRaw)}</b></div>
+            <div><span>分母合计 (含 edgeX)</span><b>{money(rawDenominator)}</b></div>
             <p className="share-kpi-note">
-              数据=全平台所有 perp 合计成交量;<br />
-              其他平台原始 vol 与折算后 vol 区别仅作用于 mexc / gate;<br />
+              数据=全平台所有 perp 合计成交量真实值;<br />
               edgeX 自身也计入分母。
             </p>
           </div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>#</th><th>平台</th><th className="num">原始成交量 (USD)</th><th className="num">折算系数</th><th className="num">折算后 (USD)</th><th className="num">在分母中占比</th><th>占比可视化</th></tr></thead><tbody>{data.rows.map(row => {
-            const share = row.denominator_pct ?? row.share_pct;
-            const discount = row.discount ?? 1;
+          <div className="table-wrap"><table className="tbl"><thead><tr><th>#</th><th>平台</th><th className="num">成交量 (USD)</th><th className="num">在分母中占比</th><th>占比可视化</th></tr></thead><tbody>{data.rows.map(row => {
+            const share = typeof row.raw_volume_usd === 'number' && rawDenominator > 0
+              ? row.raw_volume_usd / rawDenominator * 100
+              : undefined;
             return (
               <tr key={row.platform}>
                 <td>{row.rank ?? '—'}</td>
                 <td><span className={row.platform === 'edgeX' ? 'platform-self' : undefined}>{platformDisplayName(row.platform)}</span></td>
-                <td className="num">{moneyAuto(row.raw_volume_usd)}</td>
-                <td className="num">{discount < 1 ? <span className="badge b-warn">×{discount}</span> : <span className="muted">—</span>}</td>
-                <td className="num"><b>{moneyAuto(row.adjusted_volume_usd ?? row.adjusted_volume_24h_usd)}</b></td>
+                <td className="num"><b>{moneyAuto(row.raw_volume_usd)}</b></td>
                 <td className="num">{pct(share)}</td>
                 <td>
                   <div className="share-ratio-track" data-testid="share-ratio-bar" aria-label={`${row.platform} denominator share ${pct(share)}`}>
