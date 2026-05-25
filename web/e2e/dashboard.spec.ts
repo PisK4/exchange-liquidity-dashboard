@@ -1,4 +1,9 @@
 import { expect, test } from '@playwright/test';
+import { routeDashboardAPI } from './fixtures';
+
+test.beforeEach(async ({ page }) => {
+  await routeDashboardAPI(page);
+});
 
 for (const path of ['/', '/liquidity', '/quality', '/share', '/top30']) {
   test(`${path} renders the formal dashboard without mock wording`, async ({ page }) => {
@@ -14,6 +19,19 @@ for (const path of ['/', '/liquidity', '/quality', '/share', '/top30']) {
     expect(errors).toEqual([]);
   });
 }
+
+test('legacy tab URLs preserve deep-link query parameters', async ({ page }) => {
+  await page.goto('/top30?platform=okx&symbol=ETH&bucket=500000');
+  await expect(page).toHaveURL(/tab=top30/);
+  await expect(page).toHaveURL(/platform=okx/);
+  await expect(page).toHaveURL(/symbol=ETH/);
+  await expect(page).toHaveURL(/bucket=500000/);
+
+  await page.goto('/share?window=30d&symbol=BTC');
+  await expect(page).toHaveURL(/tab=share/);
+  await expect(page).toHaveURL(/window=30d/);
+  await expect(page).toHaveURL(/symbol=BTC/);
+});
 
 test('monitor depth curves render Chart.js canvases with hover detail tooltips', async ({ page }) => {
   const errors: string[] = [];

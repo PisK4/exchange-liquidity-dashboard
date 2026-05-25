@@ -1,4 +1,6 @@
-import { loadCached, saveCached } from './cache';
+import { getJSONWithFallback } from './fetcher';
+
+export { getJSON, getJSONWithFallback } from './fetcher';
 
 export type ApiStatus = 'complete' | 'partial' | 'aggregated_orderbook' | 'ws_limited_depth' | 'stale' | 'unsupported' | 'error' | 'insufficient_history';
 export type DataFreshness = 'live' | 'delayed';
@@ -228,31 +230,6 @@ export type Top30Snapshot = {
   status?: ApiStatus;
   rows: Top30Row[];
 };
-
-const SERVER_API_BASE = process.env.SERVER_API_BASE ?? process.env.NEXT_PUBLIC_API_BASE ?? 'http://127.0.0.1:8080';
-const BROWSER_API_BASE = process.env.NEXT_PUBLIC_API_BASE ?? '';
-
-function apiBase(): string {
-  return typeof window === 'undefined' ? SERVER_API_BASE : BROWSER_API_BASE;
-}
-
-export async function getJSON<T>(path: string): Promise<T> {
-  const res = await fetch(`${apiBase()}${path}`, { cache: 'no-store' });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json() as Promise<T>;
-}
-
-export async function getJSONWithFallback<T>(path: string, key: string = path): Promise<T> {
-  try {
-    const data = await getJSON<T>(path);
-    saveCached(key, data);
-    return data;
-  } catch (err) {
-    const cached = loadCached<T>(key);
-    if (cached !== null) return cached;
-    throw err;
-  }
-}
 
 export const symbols = ['BTC-USDT (perp)', 'ETH-USDT (perp)', 'SOL-USDT (perp)'];
 

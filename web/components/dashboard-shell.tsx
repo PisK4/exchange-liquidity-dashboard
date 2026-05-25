@@ -6,40 +6,8 @@ import { PlatformCell, platformDisplayName } from '@/components/platform-cell';
 import { ShareTrendChart, type ShareTrendPoint } from '@/components/share-trend-chart';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
+import { resolveSymbolContext, type SymbolContext } from '@/components/lib/symbol-context';
 import { bp, money, moneyAuto, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
-
-type SymbolContext = {
-  canonical: string;
-  displayName: string;
-  // displaySymbol is the legacy "BTC-USDT (perp)" form retained as the
-  // store-internal key. It is still used for PlatformCell lookups and
-  // the api/snapshot/* requests; the resolver logic on the backend
-  // accepts either canonical or display_symbol.
-  displaySymbol: string;
-  category: string;
-};
-
-// resolveSymbolContext maps the URL ?symbol= parameter (which may be a
-// canonical like "BTC" or a legacy display_symbol like "BTC-USDT (perp)")
-// to the trio of values the dashboard needs: canonical for routing /
-// dropdowns, display_name for headers / labels, and display_symbol for
-// platform-cell / lookup tables. When the parameter does not match any
-// known symbol we fall back to using it verbatim so legacy bookmarks keep
-// loading something the API can still resolve server-side.
-function resolveSymbolContext(meta: DashboardMeta, raw: string): SymbolContext {
-  const all = meta.categories?.flatMap(c => c.symbols.map(s => ({ ...s, _category: c.key }))) ?? [];
-  const upper = (raw ?? '').trim().toUpperCase();
-  const byCanon = all.find(s => s.canonical.toUpperCase() === upper);
-  if (byCanon) {
-    return { canonical: byCanon.canonical, displayName: byCanon.display_name, displaySymbol: byCanon.display_symbol, category: byCanon._category };
-  }
-  const byDisplay = all.find(s => s.display_symbol.toUpperCase() === upper);
-  if (byDisplay) {
-    return { canonical: byDisplay.canonical, displayName: byDisplay.display_name, displaySymbol: byDisplay.display_symbol, category: byDisplay._category };
-  }
-  // Fallback: caller supplied something unknown. Treat as legacy display_symbol.
-  return { canonical: raw, displayName: raw, displaySymbol: raw, category: 'crypto' };
-}
 
 type Query = Record<string, string | undefined>;
 
