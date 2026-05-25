@@ -72,6 +72,21 @@ test('multi-symbol URL switches to card grid and adds a 查看明细 expand butt
   await expect(page.locator('text=深度明细 · 平台 × 档位 (USD)')).toHaveCount(0);
 });
 
+test('each card embeds a mini depth chart that toggles between BID, ASK and 合计 (live data)', async ({ page }) => {
+  await page.goto('/?watchlist=BTC,ETH');
+  for (const sym of ['BTC', 'ETH']) {
+    await expect(page.getByTestId(`watchlist-card-chart-${sym}`)).toBeVisible({ timeout: 15_000 });
+    const canvas = page.getByTestId(`watchlist-card-chart-${sym}`).locator('canvas');
+    await expect(canvas).toHaveAttribute('aria-label', new RegExp(`${sym}.*合计深度曲线 BID \\+ ASK`));
+  }
+  // Per-card side toggle is independent: clicking BTC's BID must not
+  // change ETH's selection (this catches a future regression where a
+  // shared store accidentally merges the per-card toggle state).
+  await page.getByTestId('watchlist-card-side-BTC-bid_usd').click();
+  await expect(page.getByTestId('watchlist-card-chart-BTC').locator('canvas')).toHaveAttribute('aria-label', /BTC.*买盘深度曲线 BID/);
+  await expect(page.getByTestId('watchlist-card-chart-ETH').locator('canvas')).toHaveAttribute('aria-label', /ETH.*合计深度曲线 BID \+ ASK/);
+});
+
 test('clicking 查看明细 collapses to single-symbol view and persists', async ({ page }) => {
   await page.goto('/?watchlist=BTC,ETH');
   await page.getByTestId('watchlist-card-expand-ETH').click();

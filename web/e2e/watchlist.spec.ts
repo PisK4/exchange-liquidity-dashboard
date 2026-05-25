@@ -141,6 +141,28 @@ test('watchlist cards render one section per symbol with distinct depth values',
   await expect(eth).toContainText('1.61M');
 });
 
+test('each watchlist card renders a mini depth chart with a BID/ASK/合计 toggle and chart aria-label updates on click', async ({ page }) => {
+  await page.goto('/?watchlist=BTC,ETH,SOL');
+  for (const sym of ['BTC', 'ETH', 'SOL']) {
+    // Chart container present per card.
+    await expect(page.getByTestId(`watchlist-card-chart-${sym}`)).toBeVisible();
+    // Default side is 合计.
+    const canvas = page.getByTestId(`watchlist-card-chart-${sym}`).locator('canvas');
+    await expect(canvas).toHaveAttribute('aria-label', new RegExp(`${sym}.*合计深度曲线 BID \\+ ASK`));
+    // Three side toggle buttons present.
+    await expect(page.getByTestId(`watchlist-card-side-${sym}-total_usd`)).toBeVisible();
+    await expect(page.getByTestId(`watchlist-card-side-${sym}-bid_usd`)).toBeVisible();
+    await expect(page.getByTestId(`watchlist-card-side-${sym}-ask_usd`)).toBeVisible();
+  }
+  // Switch BTC to BID — aria-label flips, other cards stay on 合计.
+  await page.getByTestId('watchlist-card-side-BTC-bid_usd').click();
+  await expect(page.getByTestId('watchlist-card-chart-BTC').locator('canvas')).toHaveAttribute('aria-label', /BTC.*买盘深度曲线 BID/);
+  await expect(page.getByTestId('watchlist-card-chart-ETH').locator('canvas')).toHaveAttribute('aria-label', /ETH.*合计深度曲线 BID \+ ASK/);
+  // Switch BTC again to ASK.
+  await page.getByTestId('watchlist-card-side-BTC-ask_usd').click();
+  await expect(page.getByTestId('watchlist-card-chart-BTC').locator('canvas')).toHaveAttribute('aria-label', /BTC.*卖盘深度曲线 ASK/);
+});
+
 test('clicking 查看明细 on a card collapses the watchlist to that single symbol and reveals the V1 detail view', async ({ page }) => {
   await page.goto('/?watchlist=BTC,ETH,SOL');
   // Multi-symbol → card grid; depth detail table must be hidden.

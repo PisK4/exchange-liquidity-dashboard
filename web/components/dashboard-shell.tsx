@@ -34,7 +34,12 @@ const tabs = [
   ['top30', 'Top30 成交量'],
 ] as const;
 
-const tierLabels = ['0.05%', '0.10%', '1.00%', '2.00%'];
+// tierLabels / tierSeries / displayTierLabel are exported so the
+// WatchlistCard mini chart can render the exact same x-axis and series
+// shape as the V1 single-symbol detail view. Keeping one definition
+// avoids the two surfaces drifting (e.g. someone adding ±5% here but
+// not there).
+export const tierLabels = ['0.05%', '0.10%', '1.00%', '2.00%'];
 const edgexAccent = '#6ccf8e';
 const shareWindowItems = [
   { label: '日 (24h)', value: '24h' },
@@ -64,7 +69,7 @@ function snapshotTime(data: DashboardData, tab: string) {
   return ts ? new Date(ts).toLocaleString('zh-CN', { hour12: false }) : '—';
 }
 
-function tierSeries(rows: PlatformRow[], side: 'bid_usd' | 'ask_usd' | 'total_usd') {
+export function tierSeries(rows: PlatformRow[], side: 'bid_usd' | 'ask_usd' | 'total_usd') {
   return rows.map(row => ({
     label: row.platform,
     values: tierLabels.map(tier => {
@@ -76,7 +81,7 @@ function tierSeries(rows: PlatformRow[], side: 'bid_usd' | 'ask_usd' | 'total_us
   }));
 }
 
-function displayTierLabel(tier: string) {
+export function displayTierLabel(tier: string) {
   const value = Number.parseFloat(tier);
   return Number.isFinite(value) ? `±${value}%` : `±${tier}`;
 }

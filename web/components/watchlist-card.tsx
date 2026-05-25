@@ -1,6 +1,23 @@
+'use client';
+
+import { useState } from 'react';
+import { displayTierLabel, tierLabels, tierSeries } from '@/components/dashboard-shell';
+import { LineChart } from '@/components/line-chart';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { bp, moneyAuto, pct, ratio, type LiquiditySnapshot } from '@/lib/api/client';
 import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingRate8h } from '@/lib/funding-format';
+
+// DepthSide enumerates the three sides the V1 detail view shows as
+// three separate charts (BID / ASK / 合计). The watchlist mini chart
+// collapses these into one chart slot with a small pill-group toggle,
+// so the operator can flip between them without giving up vertical
+// space for three stacked charts per card.
+type DepthSide = 'bid_usd' | 'ask_usd' | 'total_usd';
+const SIDE_ITEMS: Array<{ value: DepthSide; label: string; aria: string }> = [
+  { value: 'total_usd', label: '合计', aria: '合计深度曲线 BID + ASK' },
+  { value: 'bid_usd', label: 'BID', aria: '买盘深度曲线 BID' },
+  { value: 'ask_usd', label: 'ASK', aria: '卖盘深度曲线 ASK' },
+];
 
 // WatchlistCard renders one symbol's vitals as a compact summary tile.
 // The grid layout mirrors the per-row content of the existing single-
@@ -35,6 +52,13 @@ export function WatchlistCard({
   snapshot: LiquiditySnapshot | null;
   onExpand?: () => void;
 }) {
+  // Each card owns its own DepthSide state so the operator can land on
+  // BTC's ASK chart and ETH's 合计 chart simultaneously without one
+  // toggle commandeering the others. The hook must run before any
+  // early return to satisfy React's rules-of-hooks (same order every
+  // render), so we declare it at the very top of the component body.
+  const [side, setSide] = useState<DepthSide>('total_usd');
+
   if (!snapshot) {
     return (
       <section className="panel watchlist-card span-8 row-h-md" data-testid={`watchlist-card-${canonical}`}>
@@ -49,7 +73,8 @@ export function WatchlistCard({
 
   const kpis = snapshot.kpis;
   const tier = '0.10%';
-  const edgeRow = snapshot.rows?.find(r => r.platform === 'edgeX');
+  const rows = snapshot.rows ?? [];
+  const edgeRow = rows.find(r => r.platform === 'edgeX');
   const edgeDepth = edgeRow?.depth_by_tier?.[tier]?.total_usd;
   const edgeRatio = edgeRow?.vs_median_by_tier?.[tier];
   const fundingDelta =
@@ -57,6 +82,9 @@ export function WatchlistCard({
       ? kpis.edgex_funding_rate_8h - kpis.competitor_funding_rate_median_8h
       : null;
   const fundingMedianAvailable = kpis?.competitor_funding_rate_median_8h_status === 'complete';
+  const sideItem = SIDE_ITEMS.find(item => item.value === side) ?? SIDE_ITEMS[0];
+  const chartSeries = tierSeries(rows, side);
+  const chartHasData = chartSeries.some(s => s.values.some(v => typeof v === 'number'));
 
   return (
     <section className="panel watchlist-card span-8 row-h-md" data-testid={`watchlist-card-${canonical}`}>
@@ -108,6 +136,36 @@ export function WatchlistCard({
           </dd>
         </div>
       </dl>
+      <div className="watchlist-card-chart-head">
+        <span className="watchlist-card-chart-title">深度曲线</span>
+        <span className="pill-group pill-group-mini" role="tablist" aria-label={`${displayName} 深度曲线方向`}>
+          {SIDE_ITEMS.map(item => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={item.value === side}
+              className={`pill pill-mini ${item.value === side ? 'active' : ''}`}
+              onClick={() => setSide(item.value)}
+              data-testid={`watchlist-card-side-${canonical}-${item.value}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </span>
+      </div>
+      <div className="watchlist-card-chart" data-testid={`watchlist-card-chart-${canonical}`}>
+        {chartHasData ? (
+          <LineChart
+            compact
+            ariaLabel={`${canonical} ${sideItem.aria}`}
+            labels={tierLabels.map(displayTierLabel)}
+            series={chartSeries}
+          />
+        ) : (
+          <div className="watchlist-card-chart-empty muted">该标的暂无可绘制的深度数据</div>
+        )}
+      </div>
     </section>
   );
 }

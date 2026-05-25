@@ -18,6 +18,14 @@ type LineChartProps = {
   labels: string[];
   series: Series[];
   unit?: string;
+  // compact=true tunes the chart for a dense card surface (WatchlistCard
+  // mini chart): the legend is collapsed to a single horizontal row of
+  // small swatches, axis titles are dropped, font sizes shrink to 9px,
+  // and the y-axis tick formatter still uses moneyAuto so 12,345,678
+  // never renders raw. Everything else (color rules, edgeX accent,
+  // dashed-for-loose, tooltip path) stays identical to the default
+  // mode so the visual language is consistent with the V1 detail view.
+  compact?: boolean;
 };
 
 function renderExternalTooltip(chart: Chart, tooltip: TooltipModel<'line'>) {
@@ -63,7 +71,7 @@ function renderExternalTooltip(chart: Chart, tooltip: TooltipModel<'line'>) {
   tooltipEl.style.top = `${canvasRect.top - parentRect.top + tooltip.caretY}px`;
 }
 
-export function LineChart({ ariaLabel, labels, series, unit = 'USD' }: LineChartProps) {
+export function LineChart({ ariaLabel, labels, series, unit = 'USD', compact = false }: LineChartProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartRef = useRef<Chart<'line', Array<number | null>, string> | null>(null);
 
@@ -84,13 +92,13 @@ export function LineChart({ ariaLabel, labels, series, unit = 'USD' }: LineChart
             data: item.values.map(value => (typeof value === 'number' ? value : null)),
             borderColor: color,
             backgroundColor: rgba(color, isSelf ? 0.35 : 0.12),
-            borderWidth: isSelf ? 3 : 1.6,
-            pointRadius: isSelf ? 4 : 2,
-            pointHoverRadius: isSelf ? 5 : 3,
+            borderWidth: isSelf ? (compact ? 2 : 3) : (compact ? 1 : 1.6),
+            pointRadius: isSelf ? (compact ? 2.5 : 4) : (compact ? 1.2 : 2),
+            pointHoverRadius: isSelf ? (compact ? 3.5 : 5) : (compact ? 2 : 3),
             pointBackgroundColor: color,
             pointBorderColor: color,
             tension: 0.35,
-            fill: true,
+            fill: !compact,
             spanGaps: false,
           };
         }),
@@ -101,15 +109,17 @@ export function LineChart({ ariaLabel, labels, series, unit = 'USD' }: LineChart
         interaction: { mode: 'index', intersect: false },
         scales: {
           x: {
-            title: { display: true, text: '价差档位', color: '#8e8f91' },
-            grid: { color: '#2c3038' },
-            ticks: { color: '#8e8f91' },
+            title: { display: !compact, text: '价差档位', color: '#8e8f91' },
+            grid: { color: '#2c3038', display: !compact },
+            ticks: { color: '#8e8f91', font: compact ? { size: 9 } : undefined },
           },
           y: {
-            title: { display: true, text: `深度 (${unit})`, color: '#8e8f91' },
+            title: { display: !compact, text: `深度 (${unit})`, color: '#8e8f91' },
             grid: { color: '#2c3038' },
             ticks: {
               color: '#8e8f91',
+              font: compact ? { size: 9 } : undefined,
+              maxTicksLimit: compact ? 4 : undefined,
               callback: value => moneyAuto(typeof value === 'number' ? value : Number(value)),
             },
           },
@@ -117,6 +127,7 @@ export function LineChart({ ariaLabel, labels, series, unit = 'USD' }: LineChart
         plugins: {
           legend: {
             position: 'bottom',
+            display: !compact,
             labels: { boxWidth: 10, color: '#8e8f91', font: { size: 10 } },
           },
           tooltip: {
@@ -141,7 +152,7 @@ export function LineChart({ ariaLabel, labels, series, unit = 'USD' }: LineChart
       chartRef.current?.destroy();
       chartRef.current = null;
     };
-  }, [ariaLabel, labels, series, unit]);
+  }, [ariaLabel, labels, series, unit, compact]);
 
   return (
     <div className="chart-frame">
