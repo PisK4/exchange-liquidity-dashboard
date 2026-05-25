@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -92,6 +93,68 @@ func TestFetchBinanceInstrumentsParsesThreeMarkets(t *testing.T) {
 	if m := byType["spot"]; len(m.Instruments) != 1 || m.Instruments[0].SettleAsset != "USDT" {
 		t.Fatalf("spot settle fallback to quote failed: %+v", m.Instruments)
 	}
+}
+
+func TestFetchBinanceInstrumentsParsesRawInstrumentFixtures(t *testing.T) {
+	fixtures := map[string]string{
+		"/api/v3/exchangeInfo":  latestRawInstrumentFixture(t, "binance-spot"),
+		"/fapi/v1/exchangeInfo": latestRawInstrumentFixture(t, "binance-usd-m"),
+		"/dapi/v1/exchangeInfo": latestRawInstrumentFixture(t, "binance-coin-m"),
+	}
+	mux := http.NewServeMux()
+	for path, file := range fixtures {
+		file := file
+		mux.HandleFunc(path, func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, file)
+		})
+	}
+	srv := httptest.NewServer(mux)
+	defer srv.Close()
+	a := RESTAdapter{
+		Platform:    "binance",
+		Client:      &http.Client{Transport: rewritingTransport{upstream: http.DefaultTransport, targetURL: srv.URL}, Timeout: 5 * time.Second},
+		MaxAttempts: 1,
+	}
+	res, err := a.FetchInstruments(context.Background())
+	if err != nil {
+		t.Fatalf("FetchInstruments with raw fixtures: %v", err)
+	}
+	if len(res.Markets) != 3 {
+		t.Fatalf("expected 3 markets from raw fixtures, got %d", len(res.Markets))
+	}
+	if !catalogResultHasSymbol(res, "usd-m", "BTCUSDT") {
+		t.Fatalf("usd-m raw fixture should parse BTCUSDT, got %+v", res.Markets)
+	}
+	if !catalogResultHasSymbol(res, "coin-m", "BTCUSD_PERP") {
+		t.Fatalf("coin-m raw fixture should parse BTCUSD_PERP, got %+v", res.Markets)
+	}
+}
+
+func latestRawInstrumentFixture(t *testing.T, marketDir string) string {
+	t.Helper()
+	pattern := filepath.Join("..", "..", "docs", "raw-instruments", marketDir, "*.json")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		t.Fatalf("glob %s: %v", pattern, err)
+	}
+	if len(matches) == 0 {
+		t.Skipf("raw instrument fixture missing for %s", marketDir)
+	}
+	return matches[len(matches)-1]
+}
+
+func catalogResultHasSymbol(res CatalogResult, marketType, apiSymbol string) bool {
+	for _, market := range res.Markets {
+		if market.MarketType != marketType {
+			continue
+		}
+		for _, inst := range market.Instruments {
+			if inst.APISymbol == apiSymbol {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func TestFetchGateInstrumentsExtractsQuantoMultiplier(t *testing.T) {

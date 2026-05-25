@@ -7,8 +7,8 @@ import (
 	"runtime"
 	"time"
 
-	"edgex-dashboard/backend/internal/collector"
 	"edgex-dashboard/backend/internal/config"
+	"edgex-dashboard/backend/internal/domain"
 )
 
 // Version is the human-readable build identifier surfaced by the
@@ -18,10 +18,26 @@ var Version = "dev"
 
 type Server struct {
 	cfg   config.Config
-	store *collector.Store
+	store StoreReader
 }
 
-func NewServer(cfg config.Config, store *collector.Store) *Server {
+type StoreReader interface {
+	MySQLBacked() bool
+	PingDB(context.Context) error
+	SnapshotRowCounts(context.Context) (map[string]int64, error)
+	Symbols() []string
+	SymbolMappings() []domain.SymbolSub
+	DashboardMeta() map[string]any
+	Coverage() map[string]any
+	Liquidity(string) map[string]any
+	Quality(string) map[string]any
+	Share(string) map[string]any
+	Top30(string, string) map[string]any
+	CollectionStatus() map[string]any
+	RuntimeConfig() config.Runtime
+}
+
+func NewServer(cfg config.Config, store StoreReader) *Server {
 	return &Server{cfg: cfg, store: store}
 }
 

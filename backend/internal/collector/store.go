@@ -36,6 +36,7 @@ type Store struct {
 	// contract_id, market_id, contract_size, quanto_multiplier,
 	// api_level_cap) cannot change mid-cycle.
 	liveSymbols atomic.Pointer[[]domain.SymbolSub]
+	snapshot    atomic.Pointer[StoreSnapshot]
 
 	// CoinGecko-only path (R3: strictly segregated from native volumes map).
 	// cgPlatformVolumes holds the latest /derivatives 24h aggregate per
@@ -80,6 +81,7 @@ func NewStore(cfg config.Config) *Store {
 	}
 	initial := append([]domain.SymbolSub(nil), cfg.Symbols...)
 	s.liveSymbols.Store(&initial)
+	s.publishSnapshot()
 	return s
 }
 
@@ -133,6 +135,7 @@ func (s *Store) ReloadCatalogFrontendMeta(cat config.Catalog) int {
 		changed = len(base)
 	}
 	s.liveSymbols.Store(&base)
+	s.publishSnapshot()
 	return changed
 }
 
@@ -193,6 +196,7 @@ func (s *Store) hydratePlatformSnapshot(row domain.PlatformSnapshot) domain.Plat
 	domain.NormalizePlatformSnapshot(&row)
 	s.mu.Lock()
 	s.savePlatformSnapshotLocked(row)
+	s.publishSnapshotLocked()
 	s.mu.Unlock()
 	return row
 }
@@ -230,6 +234,7 @@ func (s *Store) SaveVolume(row domain.VolumeSnapshot) {
 func (s *Store) hydrateVolume(row domain.VolumeSnapshot) {
 	s.mu.Lock()
 	s.volumes[key(row.Platform, row.DisplaySymbol)] = row
+	s.publishSnapshotLocked()
 	s.mu.Unlock()
 }
 
@@ -269,6 +274,7 @@ func (s *Store) hydrateCoinGeckoPlatformVolumes(rows []domain.PlatformVolumeAggr
 			s.cgLastPullTS = row.SnapshotTS
 		}
 	}
+	s.publishSnapshotLocked()
 	s.mu.Unlock()
 	return normalized
 }
@@ -325,6 +331,7 @@ func (s *Store) hydrateDailyVolumeAggregates(rows []domain.DailyVolumeAggregate)
 			s.dailySymbolVolumes[k] = mergeDailyAggregate(s.dailySymbolVolumes[k], row)
 		}
 	}
+	s.publishSnapshotLocked()
 	s.mu.Unlock()
 	return normalized
 }
@@ -353,6 +360,7 @@ func (s *Store) hydrateTop30(platform string, rows []domain.Top30Row) []domain.T
 	s.mu.Lock()
 	enrichTop30With7dWindowLocked(s, platform, dup)
 	s.top30ByPlatform[platform] = dup
+	s.publishSnapshotLocked()
 	s.mu.Unlock()
 	return dup
 }
@@ -361,6 +369,7 @@ func (s *Store) SaveStatus(rows []domain.CollectionStatus, run RunSummary) {
 	s.mu.Lock()
 	s.status = rows
 	s.run = run
+	s.publishSnapshotLocked()
 	s.mu.Unlock()
 	if err := s.persistStatus(context.Background(), rows, run); err != nil {
 		log.Printf("persist collection status: %v", err)
@@ -410,11 +419,10 @@ func (s *Store) SymbolMappings() []domain.SymbolSub {
 }
 
 func (s *Store) Coverage() map[string]any {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
+	snap := s.Snapshot()
 	rows := []map[string]any{}
-	for _, sub := range s.symbolSnapshot() {
-		p, ok := s.platforms[key(sub.Platform, sub.DisplaySymbol)]
+	for _, sub := range snap.Symbols {
+		p, ok := snap.Platforms[key(sub.Platform, sub.DisplaySymbol)]
 		status := domain.StatusStale
 		if ok {
 			status = p.DepthStatus
@@ -438,9 +446,7 @@ func (s *Store) DashboardMeta() map[string]any {
 	}
 	cg := s.cfg.Runtime.CoinGecko
 	if cg.Enabled {
-		s.mu.RLock()
-		lastPull := s.cgLastPullTS
-		s.mu.RUnlock()
+		lastPull := s.Snapshot().CoinGeckoLastPullTS
 		ids := make([]string, 0, len(cg.ExchangeID))
 		for _, id := range cg.ExchangeID {
 			if id != "" {
@@ -1110,12 +1116,11 @@ func isDisplayableSnapshot(row domain.PlatformSnapshot) bool {
 }
 
 func (s *Store) CollectionStatus() map[string]any {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	return map[string]any{"last_run": s.run, "rows": s.status}
+	snap := s.Snapshot()
+	return map[string]any{"last_run": snap.Run, "rows": snap.Status}
 }
 
-func (s *Store) RuntimeConfig() config.Runtime { return s.cfg.Runtime }
+func (s *Store) RuntimeConfig() config.Runtime { return s.Snapshot().Config.Runtime }
 
 func missingPlatform(platform, symbol string) domain.PlatformSnapshot {
 	return domain.PlatformSnapshot{Platform: platform, DisplaySymbol: symbol, SnapshotTS: time.Now().UTC(), DepthStatus: domain.StatusStale, Error: "no collection result yet", DepthByTier: map[string]domain.DepthMetrics{}, BuySlippageBP: map[string]float64{}, SellSlippageBP: map[string]float64{}}
@@ -1692,20 +1697,12 @@ func (s *Store) RecordTop30BackfillSkip(platform, reason string) {
 		s.top30BackfillSkipCounts[platform] = map[string]int{}
 	}
 	s.top30BackfillSkipCounts[platform][reason]++
+	s.publishSnapshotLocked()
 	s.mu.Unlock()
 }
 
 func (s *Store) Top30BackfillSkipCounts() map[string]map[string]int {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	out := make(map[string]map[string]int, len(s.top30BackfillSkipCounts))
-	for platform, counts := range s.top30BackfillSkipCounts {
-		out[platform] = make(map[string]int, len(counts))
-		for reason, count := range counts {
-			out[platform][reason] = count
-		}
-	}
-	return out
+	return s.Snapshot().Top30BackfillSkipCounts
 }
 
 // DailySymbolHistoryLatest returns the most recent UTC Day for which a
