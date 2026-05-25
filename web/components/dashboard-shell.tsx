@@ -547,11 +547,22 @@ function renderCoverageCell(row: Top30Row) {
   return `${row.competitor_top30_coverage ?? 0} / ${COMPETITOR_TOTAL}`;
 }
 
+const ACTION_CLASS: Record<string, string> = {
+  '考虑拉新活动': 'action-hot',
+  '优先上架': 'action-listing-prio',
+  '评估上架': 'action-listing-eval',
+  '保持': 'action-hold',
+  '观望': 'action-wait',
+};
+
 function renderActionCell(row: Top30Row) {
   if (row.suggested_action_status && !isResolvedStatus(row.suggested_action_status)) {
     return <StatusBadge status={row.suggested_action_status} />;
   }
-  return row.suggested_action ?? '';
+  const action = row.suggested_action ?? '';
+  if (!action) return '';
+  const variant = ACTION_CLASS[action];
+  return <span className={variant ? `action-cell ${variant}` : 'action-cell'}>{action}</span>;
 }
 
 function Top30Tab({ data, query, platform }: { data: Top30Snapshot; query: Query; platform: string }) {

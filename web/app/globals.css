@@ -138,6 +138,11 @@ table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
 .muted { color: var(--text-mute); }
 .error { color: var(--bad); }
 .platform-self { color: var(--accent); font-weight: 600; }
+.action-cell { font-weight: 500; }
+.action-cell.action-hot { color: var(--bad); }
+.action-cell.action-listing-prio { color: var(--ok); }
+.action-cell.action-listing-eval { color: var(--ok); }
+.action-cell.action-hold, .action-cell.action-wait { color: var(--text-mute); font-weight: 400; }
 .platform-link { color: inherit; text-decoration: none; border-bottom: 1px dotted rgba(143,161,182,.5); }
 .platform-link:hover { color: var(--accent); border-bottom-color: var(--accent); }
 .platform-link .ext-icon { color: var(--text-mute); margin-left: 3px; font-size: 11px; }
