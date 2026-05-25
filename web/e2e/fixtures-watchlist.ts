@@ -194,6 +194,18 @@ const top30 = {
   rows: [{ rank: 1, platform: 'binance', symbol: 'BTC-USDT (perp)', volume_24h_usd: 2_000_000_000, volume_7d_usd: 12_000_000_000, delta_7d_pct: 3.2, edgex_listed: true, status: 'complete', data_source: 'coingecko' }],
 };
 
+const top30Divergence = {
+  snapshot_ts: now,
+  status: 'complete',
+  cex_platforms: ['binance', 'okx', 'bybit', 'bitget', 'mexc', 'gate', 'bingx'],
+  dex_platforms: ['hyperliquid', 'lighter', 'edgeX'],
+  significant_rank_delta: 10,
+  cex_top30: [],
+  dex_top30: [],
+  divergence_rows: [],
+  kpi: { cex_only_count: 0, dex_only_count: 0, heavy_count: 0, aligned_count: 0, edgex_gap_count: 0 },
+};
+
 export async function routeWatchlistAPI(page: Page) {
   await page.route('**/api/**', async (route: Route) => {
     const url = new URL(route.request().url());
@@ -211,6 +223,7 @@ export async function routeWatchlistAPI(page: Page) {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(qualityFor(symbol)) });
     }
     if (url.pathname === '/api/snapshot/share') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(share) });
+    if (url.pathname === '/api/snapshot/top30/divergence') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(top30Divergence) });
     if (url.pathname === '/api/snapshot/top30') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(top30) });
     if (url.pathname === '/api/collection-status') return route.fulfill({ status: 200, contentType: 'application/json', body: '{"last_run":{"run_id":"fixture","success":2,"failed":0},"rows":[]}' });
     if (url.pathname === '/api/runtime-config') return route.fulfill({ status: 200, contentType: 'application/json', body: '{"collection_interval":"30s"}' });

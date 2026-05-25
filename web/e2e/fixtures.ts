@@ -102,6 +102,31 @@ const top30 = {
   rows: [{ rank: 1, platform: 'binance', symbol: 'BTC-USDT (perp)', volume_24h_usd: 2_000_000_000, volume_7d_usd: 12_000_000_000, delta_7d_pct: 3.2, edgex_listed: true, status: 'complete', data_source: 'coingecko' }],
 };
 
+const top30Divergence = {
+  snapshot_ts: now,
+  status: 'complete',
+  cex_platforms: ['binance', 'okx', 'bybit', 'bitget', 'mexc', 'gate', 'bingx'],
+  dex_platforms: ['hyperliquid', 'lighter', 'edgeX'],
+  significant_rank_delta: 10,
+  cex_top30: [
+    { rank: 1, symbol: 'BTC', adjusted_volume_24h_usd: 5_000_000_000, raw_volume_24h_usd: 5_400_000_000, platform_count: 7 },
+    { rank: 2, symbol: 'ETH', adjusted_volume_24h_usd: 3_000_000_000, raw_volume_24h_usd: 3_200_000_000, platform_count: 7 },
+    { rank: 3, symbol: 'PEPE', adjusted_volume_24h_usd: 800_000_000, raw_volume_24h_usd: 900_000_000, platform_count: 5 },
+  ],
+  dex_top30: [
+    { rank: 1, symbol: 'BTC', adjusted_volume_24h_usd: 1_500_000_000, raw_volume_24h_usd: 1_500_000_000, platform_count: 3 },
+    { rank: 2, symbol: 'HYPE', adjusted_volume_24h_usd: 900_000_000, raw_volume_24h_usd: 900_000_000, platform_count: 2 },
+    { rank: 3, symbol: 'ETH', adjusted_volume_24h_usd: 600_000_000, raw_volume_24h_usd: 600_000_000, platform_count: 3 },
+  ],
+  divergence_rows: [
+    { symbol: 'PEPE', cex_rank: 3, cex_adjusted_volume_24h_usd: 800_000_000, dex_rank: null, dex_adjusted_volume_24h_usd: null, rank_delta: null, category: 'cex_only', edgex_listed: false, edgex_listed_status: 'complete' },
+    { symbol: 'HYPE', cex_rank: null, cex_adjusted_volume_24h_usd: null, dex_rank: 2, dex_adjusted_volume_24h_usd: 900_000_000, rank_delta: null, category: 'dex_only', edgex_listed: false, edgex_listed_status: 'complete' },
+    { symbol: 'BTC', cex_rank: 1, cex_adjusted_volume_24h_usd: 5_000_000_000, dex_rank: 1, dex_adjusted_volume_24h_usd: 1_500_000_000, rank_delta: 0, category: 'aligned', edgex_listed: true, edgex_listed_status: 'complete' },
+    { symbol: 'ETH', cex_rank: 2, cex_adjusted_volume_24h_usd: 3_000_000_000, dex_rank: 3, dex_adjusted_volume_24h_usd: 600_000_000, rank_delta: 1, category: 'aligned', edgex_listed: true, edgex_listed_status: 'complete' },
+  ],
+  kpi: { cex_only_count: 1, dex_only_count: 1, heavy_count: 0, aligned_count: 2, edgex_gap_count: 0 },
+};
+
 export async function routeDashboardAPI(page: Page) {
   await page.route('**/api/**', async (route: Route) => {
     const url = new URL(route.request().url());
@@ -112,6 +137,7 @@ export async function routeDashboardAPI(page: Page) {
       url.pathname === '/api/snapshot/liquidity' ? liquidity() :
       url.pathname === '/api/snapshot/quality' ? quality() :
       url.pathname === '/api/snapshot/share' ? share(url.searchParams.get('window') ?? '24h') :
+      url.pathname === '/api/snapshot/top30/divergence' ? top30Divergence :
       url.pathname === '/api/snapshot/top30' ? top30 :
       url.pathname === '/api/collection-status' ? { last_run: { run_id: 'fixture', success: 2, failed: 0 }, rows: [] } :
       url.pathname === '/api/runtime-config' ? { collection_interval: '30s' } :

@@ -70,14 +70,14 @@ func cloneMap(in map[string]any) map[string]any {
 
 func TestSnapshotHandlersReadThroughStoreReader(t *testing.T) {
 	store := fakeStoreReader{
-		meta:             map[string]any{"service": "meta"},
-		symbols:          []string{"BTC-USDT (perp)"},
-		mappings:         []domain.SymbolSub{{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)"}},
-		coverage:         map[string]any{"rows": []any{}},
-		liquidity:        map[string]any{"kind": "liquidity"},
-		quality:          map[string]any{"kind": "quality"},
-		share:            map[string]any{"kind": "share"},
-		top30:            map[string]any{"kind": "top30"},
+		meta:      map[string]any{"service": "meta"},
+		symbols:   []string{"BTC-USDT (perp)"},
+		mappings:  []domain.SymbolSub{{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)"}},
+		coverage:  map[string]any{"rows": []any{}},
+		liquidity: map[string]any{"kind": "liquidity"},
+		quality:   map[string]any{"kind": "quality"},
+		share:     map[string]any{"kind": "share"},
+		top30:     map[string]any{"kind": "top30"},
 		top30Divergence: domain.Top30DivergenceSnapshot{
 			Status:               domain.StatusComplete,
 			CEXPlatforms:         []string{"binance", "okx"},

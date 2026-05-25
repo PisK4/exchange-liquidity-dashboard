@@ -94,6 +94,7 @@ test('monitor KPI cards hide status badges for 7d share and 10min spread', async
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=BTC-USDT%20(perp)', qualityPayload);
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/share?window=7d', JSON.stringify({ ts: Date.now(), data: { window: '7d', snapshot_ts: now, rows: [] } }));
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/top30?surface=perp&platform=binance', JSON.stringify({ ts: Date.now(), data: { surface: 'perp', platform: 'binance', snapshot_ts: now, rows: [] } }));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/top30/divergence', JSON.stringify({ ts: Date.now(), data: { snapshot_ts: now, status: 'complete', cex_platforms: [], dex_platforms: [], significant_rank_delta: 10, cex_top30: [], dex_top30: [], divergence_rows: [], kpi: { cex_only_count: 0, dex_only_count: 0, heavy_count: 0, aligned_count: 0, edgex_gap_count: 0 } } }));
   });
   await page.route('**/api/**', route => route.fulfill({ status: 503, contentType: 'application/json', body: '{}' }));
   await page.goto('/');
@@ -179,6 +180,7 @@ function stubMultiCategoryMeta(page: import('@playwright/test').Page) {
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/quality?symbol=XYZ100', noPlatformsQuality('XYZ100-USDT (perp)'));
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/share?window=7d', JSON.stringify({ ts: Date.now(), data: { window: '7d', snapshot_ts: now, rows: [] } }));
     window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/top30?surface=perp&platform=binance', JSON.stringify({ ts: Date.now(), data: { surface: 'perp', platform: 'binance', snapshot_ts: now, rows: [] } }));
+    window.localStorage.setItem('edgex-dashboard:v1:/api/snapshot/top30/divergence', JSON.stringify({ ts: Date.now(), data: { snapshot_ts: now, status: 'complete', cex_platforms: [], dex_platforms: [], significant_rank_delta: 10, cex_top30: [], dex_top30: [], divergence_rows: [], kpi: { cex_only_count: 0, dex_only_count: 0, heavy_count: 0, aligned_count: 0, edgex_gap_count: 0 } } }));
   });
 }
 
@@ -268,4 +270,38 @@ test('quality charts match the reference labels and signed imbalance treatment',
   await expect(detailPanel.locator('thead')).toContainText('滑点 50K (bp)');
   await expect(detailPanel.locator('tbody')).toContainText('edgeX ★');
   await expect(detailPanel.locator('.badge').first()).toContainText(/健康|关注|较差/);
+});
+
+test('Top30 tab exposes a CEX vs DEX divergence sub-view with KPIs, dual aggregate tables and detail rows', async ({ page }) => {
+  await page.goto('/?tab=top30');
+  const subviewPills = page.locator('span.pill-group[aria-label="Top30 子视图"]');
+  await expect(subviewPills).toBeVisible();
+  await expect(subviewPills.locator('a.pill', { hasText: '各平台 Top30' })).toHaveClass(/active/);
+
+  await subviewPills.locator('a.pill', { hasText: 'CEX vs DEX 对比' }).click();
+  await expect(page).toHaveURL(/view=divergence/);
+
+  const kpiStrip = page.locator('.share-kpi-strip').first();
+  await expect(kpiStrip).toBeVisible();
+  await expect(kpiStrip).toContainText('CEX 独有热门');
+  await expect(kpiStrip).toContainText('DEX 独有热门');
+  await expect(kpiStrip).toContainText('显著分歧');
+  await expect(kpiStrip).toContainText('阵营对齐');
+  await expect(kpiStrip).toContainText('edgeX 待补');
+
+  const cexPanel = page.locator('section.panel').filter({ hasText: 'CEX 阵营 Top30' });
+  const dexPanel = page.locator('section.panel').filter({ hasText: 'DEX 阵营 Top30' });
+  await expect(cexPanel).toBeVisible();
+  await expect(dexPanel).toBeVisible();
+  await expect(cexPanel.locator('tbody')).toContainText('PEPE');
+  await expect(dexPanel.locator('tbody')).toContainText('HYPE');
+
+  const detailPanel = page.locator('section.panel').filter({ hasText: '阵营分歧明细' });
+  await expect(detailPanel).toBeVisible();
+  await expect(detailPanel.locator('tbody')).toContainText('PEPE');
+  await expect(detailPanel.locator('tbody')).toContainText('HYPE');
+
+  await detailPanel.locator('button.pill', { hasText: '仅 CEX 阵营' }).click();
+  await expect(detailPanel.locator('tbody')).toContainText('PEPE');
+  await expect(detailPanel.locator('tbody')).not.toContainText('HYPE');
 });

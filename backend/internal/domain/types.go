@@ -287,19 +287,19 @@ type Top30AggregateRow struct {
 // legitimate #1). RankDelta is the absolute difference, only set when both
 // ranks exist; the renderer uses nil to know whether to show a Δ column.
 type Top30DivergenceRow struct {
-	Symbol                string   `json:"symbol"`
-	CEXRank               *int     `json:"cex_rank,omitempty"`
-	DEXRank               *int     `json:"dex_rank,omitempty"`
-	CEXAdjustedVolUSD     *float64 `json:"cex_adjusted_volume_24h_usd,omitempty"`
-	DEXAdjustedVolUSD     *float64 `json:"dex_adjusted_volume_24h_usd,omitempty"`
-	CEXRawVolUSD          *float64 `json:"cex_raw_volume_24h_usd,omitempty"`
-	DEXRawVolUSD          *float64 `json:"dex_raw_volume_24h_usd,omitempty"`
-	CEXPlatformCount      int      `json:"cex_platform_count"`
-	DEXPlatformCount      int      `json:"dex_platform_count"`
-	RankDelta             *int     `json:"rank_delta,omitempty"`
-	Category              string   `json:"category"`
-	EdgexListed           bool     `json:"edgex_listed"`
-	EdgexListedStatus     string   `json:"edgex_listed_status,omitempty"`
+	Symbol            string   `json:"symbol"`
+	CEXRank           *int     `json:"cex_rank,omitempty"`
+	DEXRank           *int     `json:"dex_rank,omitempty"`
+	CEXAdjustedVolUSD *float64 `json:"cex_adjusted_volume_24h_usd,omitempty"`
+	DEXAdjustedVolUSD *float64 `json:"dex_adjusted_volume_24h_usd,omitempty"`
+	CEXRawVolUSD      *float64 `json:"cex_raw_volume_24h_usd,omitempty"`
+	DEXRawVolUSD      *float64 `json:"dex_raw_volume_24h_usd,omitempty"`
+	CEXPlatformCount  int      `json:"cex_platform_count"`
+	DEXPlatformCount  int      `json:"dex_platform_count"`
+	RankDelta         *int     `json:"rank_delta,omitempty"`
+	Category          string   `json:"category"`
+	EdgexListed       bool     `json:"edgex_listed"`
+	EdgexListedStatus string   `json:"edgex_listed_status,omitempty"`
 }
 
 // Top30DivergenceKPI is the headline strip the Top30 divergence view
