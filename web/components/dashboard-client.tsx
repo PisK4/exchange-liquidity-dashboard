@@ -73,6 +73,14 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
   dataRef.current = data;
 
   // Post-mount: pull localStorage and reconcile with the SSR list.
+  // pendingHydrationRef tells the side-effect bus to skip its very
+  // next watchlist-driven run because that run was caused by the
+  // hydration useEffect below (restoring a localStorage list on mount),
+  // not by a user gesture. Without this gate the bus would re-write
+  // ?symbol= to whatever localStorage held — clobbering a legitimate
+  // deep-link like /share?symbol=BTC when localStorage happens to
+  // carry an unrelated value from a prior session/test.
+  const pendingHydrationRef = useRef(false);
   useEffect(() => {
     const stored = loadFromLocalStorage();
     const resolved = resolveWatchlist({
@@ -83,10 +91,13 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
     setWatchlist(prev => {
       const same = prev.length === resolved.items.length && prev.every((v, i) => normalizeSymbol(v) === resolved.items[i]);
       if (same) return prev;
+      pendingHydrationRef.current = true;
       return resolved.items;
     });
     // Mirror the resolved list back into URL + localStorage so the
-    // session converges on a single source of truth.
+    // session converges on a single source of truth. Pass syncSymbol
+    // off (default) so a deep-link ?symbol=… isn't overwritten by a
+    // stale localStorage chip.
     saveToLocalStorage(resolved.items);
     if (resolved.source !== 'url') {
       applyURLState(resolved.items);
@@ -118,8 +129,20 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
       hasMountedRef.current = true;
       return;
     }
+    // Hydration just re-set watchlist from localStorage; the hydration
+    // useEffect already wrote URL + localStorage with the correct
+    // (no-syncSymbol) semantics. Skip this run so we don't clobber
+    // ?symbol= with the hydrated chip.
+    if (pendingHydrationRef.current) {
+      pendingHydrationRef.current = false;
+      return;
+    }
     saveToLocalStorage(watchlist);
-    applyURLState(watchlist);
+    // syncSymbol:true so that when the user collapses to a single chip
+    // (via toolbar chip-remove or WatchlistCard expand button) the
+    // ?symbol= URL param tracks watchlist[0]; otherwise the V1 detail
+    // panels would render whichever symbol's data was last fetched.
+    applyURLState(watchlist, { syncSymbol: true });
   }, [watchlist]);
 
   // Single-chip mode preserves the V1 deep-link contract: clicking a
@@ -146,7 +169,32 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
   // watchlist work landed. The watchlist is fanned out in parallel
   // into liquidityByCanonical so per-card rendering can read each
   // symbol independently without dragging the headline view along.
-  const paths = buildPaths(query);
+  //
+  // effectiveSymbol couples the headline fetch to watchlist[0] when
+  // the watchlist holds a single chip. applyURLState already rewrites
+  // ?symbol= in that case so refreshes / share-links land on the same
+  // view, but the live React tree won't pick up the URL change until
+  // the next Next.js navigation — so we override query.symbol here too
+  // and let the buildPaths memoization drive a refetch on collapse.
+  // Multi-chip mode falls through to query.symbol unchanged because
+  // there is no headline symbol in that mode (the QualityTab and
+  // LiquidityTab both render card grids and ignore data.{liquidity,
+  // quality} in that branch).
+  //
+  // When the single chip and query.symbol are merely a case-folding of
+  // each other (e.g. query.symbol='BTC-USDT (perp)' vs watchlist[0]=
+  // 'BTC-USDT (PERP)' after normalizeSymbol), we prefer query.symbol
+  // verbatim. resolveSymbolContext is case-sensitive on legacy
+  // display_symbols, so uppercasing them through normalizeSymbol
+  // breaks the BTC-USDT (perp) → BTC canonical mapping that legacy
+  // bookmarks rely on.
+  const effectiveSymbol = watchlist.length === 1
+    ? (normalizeSymbol(watchlist[0]) === normalizeSymbol(query.symbol ?? '')
+        ? query.symbol
+        : watchlist[0])
+    : query.symbol;
+  const effectiveQuery = useMemo(() => ({ ...query, symbol: effectiveSymbol }), [query, effectiveSymbol]);
+  const paths = buildPaths(effectiveQuery);
   const watchlistKey = useMemo(() => watchlist.join(','), [watchlist]);
   const { meta: metaPath, liquidity: liquidityPath, quality: qualityPath, share: sharePath, top30: top30Path, top30Divergence: top30DivergencePath } = paths;
 
@@ -189,8 +237,10 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
         if (cancelled || controller.signal.aborted) return;
         // Ensure the headline snapshot is always reachable via the
         // per-symbol map so card-mode consumers don't need to special-
-        // case the first entry.
-        const headlineCanonical = normalizeSymbol(query.symbol);
+        // case the first entry. Use effectiveSymbol so the mapping key
+        // tracks the actual symbol whose data was just fetched (vs the
+        // possibly-stale query.symbol from SSR props).
+        const headlineCanonical = normalizeSymbol(effectiveSymbol);
         if (!liquidityByCanonical[headlineCanonical]) {
           liquidityByCanonical[headlineCanonical] = liquidity;
         }
@@ -226,7 +276,7 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
 
   return (
     <DashboardShell
-      query={query}
+      query={effectiveQuery}
       data={data}
       watchlist={watchlist}
       onWatchlistChange={setWatchlist}

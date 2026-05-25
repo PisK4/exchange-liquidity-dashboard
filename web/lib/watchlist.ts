@@ -18,6 +18,7 @@ export const MAX_WATCHLIST = 10;
 export const WATCHLIST_DEFAULT_FALLBACK = 'BTC';
 
 const URL_WATCHLIST_PARAM = 'watchlist';
+const URL_SYMBOL_PARAM = 'symbol';
 
 // normalizeSymbol uppercases and trims. The frontend stores canonical
 // tickers (BTC / ETH / SOL), not the long-form 'BTC-USDT (perp)', because
@@ -148,7 +149,29 @@ export function removeSymbol(items: string[], symbol: string): string[] {
 // applyURLState performs the replaceState side-effect with the canonical
 // URL shape. Pulled out so unit tests can assert the param mutation
 // without involving the actual browser History API.
-export function applyURLState(items: string[]): void {
+//
+// When `opts.syncSymbol` is true AND items collapses to a single chip,
+// this also rewrites ?symbol= so the headline fetch in DashboardClient
+// (which is keyed on query.symbol) lines up with the lone chip. Without
+// this coupling the V1 detail panels would render data for whichever
+// symbol was last in ?symbol= — e.g. the default 'BTC' — even though
+// the toolbar chip shows the user-picked symbol.
+//
+// `syncSymbol` defaults to false because the post-mount hydration call
+// (which restores a localStorage watchlist on an otherwise bare URL)
+// must NOT overwrite a legitimate deep-link ?symbol= value: doing so
+// would break ?symbol=BTC-USDT (perp) style legacy bookmarks (case
+// re-normalization), and would let stale localStorage leak across test
+// runs that deep-link to a different headline symbol. The side-effect
+// bus inside DashboardClient passes syncSymbol=true because that path
+// is reached only when the watchlist mutates from a user action (chip
+// add/remove, WatchlistCard expand), which IS the right moment to
+// align ?symbol= with the lone chip.
+//
+// Multi-chip mode always leaves ?symbol= untouched because there is no
+// "headline symbol" in that mode and preserving the prior value keeps
+// category-pill / dropdown deep-links roundtripping correctly.
+export function applyURLState(items: string[], opts: { syncSymbol?: boolean } = {}): void {
   if (typeof window === 'undefined') return;
   const url = new URL(window.location.href);
   const value = formatWatchlistParam(items);
@@ -156,6 +179,9 @@ export function applyURLState(items: string[]): void {
     url.searchParams.delete(URL_WATCHLIST_PARAM);
   } else {
     url.searchParams.set(URL_WATCHLIST_PARAM, value);
+  }
+  if (opts.syncSymbol && items.length === 1) {
+    url.searchParams.set(URL_SYMBOL_PARAM, normalizeSymbol(items[0]));
   }
   // Strip a trailing '?' so empty-query URLs render cleanly.
   const search = url.searchParams.toString();

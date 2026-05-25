@@ -2,18 +2,19 @@
 
 import { BarChart } from '@/components/chart-primitives';
 import { StatusEmptyState } from '@/components/status-empty-state';
-import { bp, moneyAuto, pct, type LiquiditySnapshot } from '@/lib/api/client';
+import { bp, pct, type LiquiditySnapshot } from '@/lib/api/client';
 import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingRate8h } from '@/lib/funding-format';
 
-// QualityCard mirrors WatchlistCard but for the 盘口质量 tab. It runs
-// entirely off the LiquiditySnapshot already fetched for that symbol —
-// PlatformRow on a liquidity snapshot carries spread_bp, mid_price,
-// imbalance_pct, worst_slippage_bp (per USD bucket), verdict, and
-// funding, which is the exact same set of fields the V1 quality
-// detail table consumes. Doing it this way avoids fan-out-ing a
-// second /api/snapshot/quality request per symbol and keeps the
-// quality-side card grid feeling instantaneous after a watchlist
-// change.
+// QualityCard reads a LiquiditySnapshot-shaped object: that snapshot
+// type owns the spread / share KPIs the card surfaces, while
+// PlatformRow (shared between liquidity and quality) carries the
+// per-bucket worst_slippage_bp + verdict the bar chart needs.
+//
+// In production the liquidity endpoint leaves worst_slippage_bp /
+// verdict null — only /api/snapshot/quality fills them — so the
+// caller is expected to merge the quality fan-out's rows into the
+// liquidity snapshot before handing it to the card. See
+// dashboard-shell.tsx → buildQualityCardSnapshot for the merge.
 //
 // Bucket selection is global — the toolbar above the card grid owns
 // query.bucket so 'compare 滑点 across symbols at the same volume tier'
@@ -204,8 +205,8 @@ export function QualityCard({
         </div>
       </dl>
       <div className="watchlist-card-chart-head">
-        <span className="watchlist-card-chart-title">edgeX 滑点 by bucket</span>
-        <span className="muted" style={{ fontSize: 10 }}>USD 桶</span>
+        <span className="watchlist-card-chart-title">edgeX 滑点</span>
+        <span className="muted" style={{ fontSize: 10 }}>USD</span>
       </div>
       <div className="quality-card-chart" data-testid={`quality-card-chart-${canonical}`}>
         {slippageChartRows.some(r => typeof r.value === 'number') ? (
@@ -221,8 +222,6 @@ export function QualityCard({
         mid {typeof edgeRow?.mid_price === 'number' ? `$${edgeRow.mid_price.toLocaleString()}` : '—'}
         {' · '}
         竞品中位数 @ {bucketShortLabel(bucket)}: {typeof competitorMedian === 'number' ? `${competitorMedian.toFixed(2)} bp` : '—'}
-        {' · '}
-        总深度 {moneyAuto(edgeRow?.depth_by_tier?.['0.10%']?.total_usd)}
       </div>
     </section>
   );
