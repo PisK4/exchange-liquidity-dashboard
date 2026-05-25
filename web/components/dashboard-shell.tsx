@@ -298,7 +298,7 @@ function FundingKpiPanel({ kpis }: { kpis?: LiquiditySnapshot['kpis'] }) {
     <section className="panel span-6 row-h-sm">
       <div className="panel-head">
         <span className="panel-title">
-          edgeX 资金费率 (8h 当量)
+          edgeX 资金费率
           <span className="info-icon" aria-label="资金费率 sign convention" title={FUNDING_SIGN_CONVENTION_TOOLTIP}> ⓘ</span>
         </span>
         <span className="panel-tag">latest</span>

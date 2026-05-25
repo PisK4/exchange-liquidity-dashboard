@@ -89,7 +89,7 @@ test('funding KPI panel shows edgeX 8h rate with sign and tooltip', async ({ pag
   // The KPI card sits next to spread / share and renders the 4dp percent
   // figure. Fixtures (CoinGecko percent units): edgex_funding_rate_8h
   // = 0.0050 → "+0.0050%".
-  const fundingCard = page.locator('section.panel').filter({ hasText: 'edgeX 资金费率 (8h 当量)' });
+  const fundingCard = page.locator('section.panel').filter({ hasText: 'edgeX 资金费率' });
   await expect(fundingCard).toBeVisible();
   await expect(fundingCard).toContainText('+0.0050%');
   // vs-median delta: 0.0050 - 0.0090 = -0.0040 → "-0.0040%".
@@ -109,7 +109,7 @@ test('Liquidity detail table includes a 资金费率 (8h) column with per-row va
 
 test('Quality tab renders the span-24 funding panel with median footnote', async ({ page }) => {
   await page.goto('/?tab=quality');
-  const fundingPanel = page.locator('section.panel.span-24').filter({ hasText: '资金费率 (8h 当量) 跨平台对比' });
+  const fundingPanel = page.locator('section.panel.span-24').filter({ hasText: '资金费率 跨平台对比' });
   await expect(fundingPanel).toBeVisible();
   // Footer note must reference the competitor median value when status
   // is complete (3 samples in our fixture).

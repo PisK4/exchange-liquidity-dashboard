@@ -40,7 +40,7 @@ export function QualityFundingRow({ rows, kpis }: { rows: PlatformRow[]; kpis?: 
       <section className="panel span-24">
         <div className="panel-head">
           <span className="panel-title">
-            资金费率 (8h 当量) 跨平台对比
+            资金费率 跨平台对比
             <span className="info-icon" aria-label="资金费率 sign convention" title={FUNDING_SIGN_CONVENTION_TOOLTIP}> ⓘ</span>
           </span>
           <span className="panel-sub">· CoinGecko /derivatives · 5min 刷新</span>
@@ -54,7 +54,7 @@ export function QualityFundingRow({ rows, kpis }: { rows: PlatformRow[]; kpis?: 
     <section className="panel span-24">
       <div className="panel-head">
         <span className="panel-title">
-          资金费率 (8h 当量) 跨平台对比
+          资金费率 跨平台对比
           <span className="info-icon" aria-label="资金费率 sign convention" title={FUNDING_SIGN_CONVENTION_TOOLTIP}> ⓘ</span>
         </span>
         <span className="panel-sub">

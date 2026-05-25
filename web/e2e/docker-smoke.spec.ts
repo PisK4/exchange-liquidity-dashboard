@@ -23,12 +23,12 @@ test('default visit renders Liquidity tab with watchlist toolbar and BTC chip', 
   await expect(page.getByTestId('watchlist-toolbar')).toBeVisible({ timeout: 15_000 });
   await expect(page.getByTestId('watchlist-chip-BTC')).toBeVisible();
   // Funding KPI panel sits in the headline row.
-  await expect(page.locator('section.panel').filter({ hasText: 'edgeX 资金费率 (8h 当量)' })).toBeVisible();
+  await expect(page.locator('section.panel').filter({ hasText: 'edgeX 资金费率' })).toBeVisible();
 });
 
 test('funding values render in sane range (|rate| < 0.5% per 8h) with 4dp format', async ({ page }) => {
   await page.goto('/');
-  const kpi = page.locator('section.panel').filter({ hasText: 'edgeX 资金费率 (8h 当量)' });
+  const kpi = page.locator('section.panel').filter({ hasText: 'edgeX 资金费率' });
   await expect(kpi).toBeVisible({ timeout: 15_000 });
   const text = await kpi.locator('.big-number').first().innerText();
   // Match either '—' (no data) or a signed 4dp percent.
@@ -58,7 +58,7 @@ test('Liquidity detail table includes 资金费率 (8h) column with at least one
 
 test('Quality tab shows the span-24 funding cross-platform chart', async ({ page }) => {
   await page.goto('/?tab=quality');
-  const panel = page.locator('section.panel.span-24').filter({ hasText: '资金费率 (8h 当量) 跨平台对比' });
+  const panel = page.locator('section.panel.span-24').filter({ hasText: '资金费率 跨平台对比' });
   await expect(panel).toBeVisible({ timeout: 15_000 });
 });
 

@@ -125,7 +125,7 @@ export function WatchlistCard({
         </div>
         <div>
           <dt>
-            资金费率 (8h 当量)
+            资金费率
             <span className="info-icon" aria-label="资金费率 sign convention" title={FUNDING_SIGN_CONVENTION_TOOLTIP}> ⓘ</span>
           </dt>
           <dd>
