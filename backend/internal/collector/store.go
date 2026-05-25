@@ -697,7 +697,7 @@ func (s *Store) Quality(symbol string) map[string]any {
 	fundingMedian, fundingSamples, fundingMedianStatus := competitorFundingMedian8h(rows)
 	rows = enrichFundingVsMedianRows(rows, fundingMedian, fundingMedianStatus)
 	kpis := map[string]any{
-		"competitor_funding_rate_median_8h_status": fundingMedianStatus,
+		"competitor_funding_rate_median_8h_status":  fundingMedianStatus,
 		"competitor_funding_rate_median_8h_samples": fundingSamples,
 	}
 	if fundingMedianStatus == domain.StatusComplete {

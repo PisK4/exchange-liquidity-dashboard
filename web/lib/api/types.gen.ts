@@ -563,6 +563,21 @@ export interface components {
             sell_slippage_bp: components["schemas"]["NumberMap"];
             worst_slippage_bp?: components["schemas"]["NumberMap"];
             verdict?: string;
+            funding?: components["schemas"]["PlatformFundingRate"];
+        };
+        PlatformFundingRate: {
+            platform: string;
+            display_symbol?: string;
+            rate_8h?: number | null;
+            rate_native?: number | null;
+            period_hours?: number;
+            status: components["schemas"]["ApiStatus"];
+            source?: string;
+            source_endpoint?: string;
+            /** Format: date-time */
+            snapshot_ts?: string;
+            vs_median_8h?: number | null;
+            rank?: number;
         };
         LiquidityKPIs: {
             edgex_depth_by_tier?: {
@@ -578,6 +593,21 @@ export interface components {
             symbol_share_7d_pct?: number;
             symbol_share_7d_status?: components["schemas"]["ApiStatus"];
             symbol_share_wow_status?: components["schemas"]["ApiStatus"];
+            edgex_funding_rate_8h?: number | null;
+            edgex_funding_rate_8h_status?: components["schemas"]["ApiStatus"];
+            edgex_funding_rate_period_hours?: number;
+            edgex_funding_rate_vs_median_8h?: number | null;
+            competitor_funding_rate_median_8h?: number | null;
+            competitor_funding_rate_median_8h_status?: components["schemas"]["ApiStatus"];
+            competitor_funding_rate_median_8h_samples?: number;
+        };
+        QualityKPIs: {
+            edgex_funding_rate_8h?: number | null;
+            edgex_funding_rate_8h_status?: components["schemas"]["ApiStatus"];
+            edgex_funding_rate_period_hours?: number;
+            competitor_funding_rate_median_8h?: number | null;
+            competitor_funding_rate_median_8h_status?: components["schemas"]["ApiStatus"];
+            competitor_funding_rate_median_8h_samples?: number;
         };
         LiquiditySnapshot: {
             symbol: string;
@@ -594,6 +624,7 @@ export interface components {
             snapshot_ts: string;
             slippage_buckets_usd: number[];
             rows: components["schemas"]["PlatformRow"][];
+            kpis?: components["schemas"]["QualityKPIs"];
         };
         ShareRow: {
             rank?: number;

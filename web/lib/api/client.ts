@@ -50,3 +50,20 @@ export function moneyAuto(value?: number) {
 export function pct(value?: number) { return typeof value === 'number' ? `${value.toFixed(2)}%` : '—'; }
 export function bp(value?: number) { return typeof value === 'number' && value > 0 ? `${value.toFixed(2)} bp` : '—'; }
 export function ratio(value?: number) { return typeof value === 'number' && value > 0 ? `${value.toFixed(2)}×` : '—'; }
+
+export function fundingRatePct(value?: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  const formatted = (value * 100).toFixed(4);
+  return value >= 0 ? `+${formatted}%` : `${formatted}%`;
+}
+
+export function fundingRateDeltaPct(value?: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+  const formatted = (value * 100).toFixed(4);
+  return value >= 0 ? `+${formatted}%` : `${formatted}%`;
+}
+
+export function fundingPeriodLabel(periodHours?: number): string {
+  if (!periodHours || periodHours <= 0) return '—';
+  return `${periodHours}h`;
+}

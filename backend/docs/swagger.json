@@ -785,6 +785,55 @@
           },
           "verdict": {
             "type": "string"
+          },
+          "funding": {
+            "$ref": "#/components/schemas/PlatformFundingRate"
+          }
+        }
+      },
+      "PlatformFundingRate": {
+        "type": "object",
+        "required": [
+          "platform",
+          "status"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "display_symbol": {
+            "type": "string"
+          },
+          "rate_8h": {
+            "type": "number",
+            "nullable": true
+          },
+          "rate_native": {
+            "type": "number",
+            "nullable": true
+          },
+          "period_hours": {
+            "type": "integer"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "source": {
+            "type": "string"
+          },
+          "source_endpoint": {
+            "type": "string"
+          },
+          "snapshot_ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "vs_median_8h": {
+            "type": "number",
+            "nullable": true
+          },
+          "rank": {
+            "type": "integer"
           }
         }
       },
@@ -826,6 +875,55 @@
           },
           "symbol_share_wow_status": {
             "$ref": "#/components/schemas/ApiStatus"
+          },
+          "edgex_funding_rate_8h": {
+            "type": "number",
+            "nullable": true
+          },
+          "edgex_funding_rate_8h_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "edgex_funding_rate_period_hours": {
+            "type": "integer"
+          },
+          "edgex_funding_rate_vs_median_8h": {
+            "type": "number",
+            "nullable": true
+          },
+          "competitor_funding_rate_median_8h": {
+            "type": "number",
+            "nullable": true
+          },
+          "competitor_funding_rate_median_8h_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "competitor_funding_rate_median_8h_samples": {
+            "type": "integer"
+          }
+        }
+      },
+      "QualityKPIs": {
+        "type": "object",
+        "properties": {
+          "edgex_funding_rate_8h": {
+            "type": "number",
+            "nullable": true
+          },
+          "edgex_funding_rate_8h_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "edgex_funding_rate_period_hours": {
+            "type": "integer"
+          },
+          "competitor_funding_rate_median_8h": {
+            "type": "number",
+            "nullable": true
+          },
+          "competitor_funding_rate_median_8h_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "competitor_funding_rate_median_8h_samples": {
+            "type": "integer"
           }
         }
       },
@@ -888,6 +986,9 @@
             "items": {
               "$ref": "#/components/schemas/PlatformRow"
             }
+          },
+          "kpis": {
+            "$ref": "#/components/schemas/QualityKPIs"
           }
         }
       },
