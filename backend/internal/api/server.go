@@ -33,6 +33,7 @@ type StoreReader interface {
 	Quality(string) map[string]any
 	Share(string) map[string]any
 	Top30(string, string) map[string]any
+	Top30Divergence() domain.Top30DivergenceSnapshot
 	CollectionStatus() map[string]any
 	RuntimeConfig() config.Runtime
 }
@@ -52,6 +53,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/snapshot/quality", s.quality)
 	mux.HandleFunc("/api/snapshot/share", s.share)
 	mux.HandleFunc("/api/snapshot/top30", s.top30)
+	mux.HandleFunc("/api/snapshot/top30/divergence", s.top30Divergence)
 	mux.HandleFunc("/api/collection-status", s.collectionStatus)
 	mux.HandleFunc("/api/runtime-config", s.runtimeConfig)
 	return cors(mux)
@@ -170,6 +172,9 @@ func (s *Server) share(w http.ResponseWriter, r *http.Request) {
 }
 func (s *Server) top30(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.store.Top30(r.URL.Query().Get("surface"), r.URL.Query().Get("platform")))
+}
+func (s *Server) top30Divergence(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.store.Top30Divergence())
 }
 func (s *Server) collectionStatus(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.store.CollectionStatus())

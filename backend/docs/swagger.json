@@ -207,6 +207,22 @@
         }
       }
     },
+    "/api/snapshot/top30/divergence": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "top30 CEX vs DEX divergence",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Top30DivergenceSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/collection-status": {
       "get": {
         "responses": {
@@ -1219,6 +1235,190 @@
             "items": {
               "$ref": "#/components/schemas/Top30Row"
             }
+          }
+        }
+      },
+      "Top30AggregateRow": {
+        "type": "object",
+        "required": [
+          "rank",
+          "symbol",
+          "adjusted_volume_24h_usd",
+          "raw_volume_24h_usd",
+          "platform_count"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "adjusted_volume_24h_usd": {
+            "type": "number"
+          },
+          "raw_volume_24h_usd": {
+            "type": "number"
+          },
+          "platform_count": {
+            "type": "integer"
+          },
+          "contributing_platforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "Top30DivergenceRow": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "category",
+          "edgex_listed",
+          "cex_platform_count",
+          "dex_platform_count"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "cex_rank": {
+            "type": "integer",
+            "nullable": true
+          },
+          "dex_rank": {
+            "type": "integer",
+            "nullable": true
+          },
+          "cex_adjusted_volume_24h_usd": {
+            "type": "number",
+            "nullable": true
+          },
+          "dex_adjusted_volume_24h_usd": {
+            "type": "number",
+            "nullable": true
+          },
+          "cex_raw_volume_24h_usd": {
+            "type": "number",
+            "nullable": true
+          },
+          "dex_raw_volume_24h_usd": {
+            "type": "number",
+            "nullable": true
+          },
+          "cex_platform_count": {
+            "type": "integer"
+          },
+          "dex_platform_count": {
+            "type": "integer"
+          },
+          "rank_delta": {
+            "type": "integer",
+            "nullable": true
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "cex_only",
+              "dex_only",
+              "cex_heavy",
+              "dex_heavy",
+              "aligned"
+            ]
+          },
+          "edgex_listed": {
+            "type": "boolean"
+          },
+          "edgex_listed_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          }
+        }
+      },
+      "Top30DivergenceKPI": {
+        "type": "object",
+        "required": [
+          "cex_only_count",
+          "dex_only_count",
+          "heavy_count",
+          "aligned_count",
+          "edgex_gap_count"
+        ],
+        "properties": {
+          "cex_only_count": {
+            "type": "integer"
+          },
+          "dex_only_count": {
+            "type": "integer"
+          },
+          "heavy_count": {
+            "type": "integer"
+          },
+          "aligned_count": {
+            "type": "integer"
+          },
+          "edgex_gap_count": {
+            "type": "integer"
+          }
+        }
+      },
+      "Top30DivergenceSnapshot": {
+        "type": "object",
+        "required": [
+          "snapshot_ts",
+          "status",
+          "cex_platforms",
+          "dex_platforms",
+          "significant_rank_delta",
+          "cex_top30",
+          "dex_top30",
+          "divergence_rows",
+          "kpi"
+        ],
+        "properties": {
+          "snapshot_ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "cex_platforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dex_platforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "significant_rank_delta": {
+            "type": "integer"
+          },
+          "cex_top30": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Top30AggregateRow"
+            }
+          },
+          "dex_top30": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Top30AggregateRow"
+            }
+          },
+          "divergence_rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Top30DivergenceRow"
+            }
+          },
+          "kpi": {
+            "$ref": "#/components/schemas/Top30DivergenceKPI"
           }
         }
       },

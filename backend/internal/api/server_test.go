@@ -21,6 +21,7 @@ type fakeStoreReader struct {
 	quality          map[string]any
 	share            map[string]any
 	top30            map[string]any
+	top30Divergence  domain.Top30DivergenceSnapshot
 	collectionStatus map[string]any
 	runtime          config.Runtime
 }
@@ -55,8 +56,9 @@ func (f fakeStoreReader) Top30(surface, platform string) map[string]any {
 	out["requested_platform"] = platform
 	return out
 }
-func (f fakeStoreReader) CollectionStatus() map[string]any { return f.collectionStatus }
-func (f fakeStoreReader) RuntimeConfig() config.Runtime    { return f.runtime }
+func (f fakeStoreReader) Top30Divergence() domain.Top30DivergenceSnapshot { return f.top30Divergence }
+func (f fakeStoreReader) CollectionStatus() map[string]any                { return f.collectionStatus }
+func (f fakeStoreReader) RuntimeConfig() config.Runtime                   { return f.runtime }
 
 func cloneMap(in map[string]any) map[string]any {
 	out := make(map[string]any, len(in))
@@ -76,6 +78,22 @@ func TestSnapshotHandlersReadThroughStoreReader(t *testing.T) {
 		quality:          map[string]any{"kind": "quality"},
 		share:            map[string]any{"kind": "share"},
 		top30:            map[string]any{"kind": "top30"},
+		top30Divergence: domain.Top30DivergenceSnapshot{
+			Status:               domain.StatusComplete,
+			CEXPlatforms:         []string{"binance", "okx"},
+			DEXPlatforms:         []string{"hyperliquid", "edgeX"},
+			SignificantRankDelta: 10,
+			CEXTop30: []domain.Top30AggregateRow{
+				{Rank: 1, Symbol: "BTC", AdjustedVolume24HUSD: 100, RawVolume24HUSD: 100, PlatformCount: 2},
+			},
+			DEXTop30: []domain.Top30AggregateRow{
+				{Rank: 1, Symbol: "BTC", AdjustedVolume24HUSD: 80, RawVolume24HUSD: 80, PlatformCount: 2},
+			},
+			Divergence: []domain.Top30DivergenceRow{
+				{Symbol: "BTC", Category: domain.Top30DivergenceAligned, EdgexListed: true, EdgexListedStatus: domain.StatusComplete},
+			},
+			KPI: domain.Top30DivergenceKPI{AlignedCount: 1},
+		},
 		collectionStatus: map[string]any{"success": 1},
 		runtime:          config.Runtime{Collection: config.CollectionConfig{PerPlatformConcurrency: 3}},
 	}
@@ -93,6 +111,7 @@ func TestSnapshotHandlersReadThroughStoreReader(t *testing.T) {
 		{name: "quality", path: "/api/snapshot/quality?symbol=ETH", want: map[string]any{"kind": "quality", "requested_symbol": "ETH"}},
 		{name: "share", path: "/api/snapshot/share?window=7d", want: map[string]any{"kind": "share", "requested_window": "7d"}},
 		{name: "top30", path: "/api/snapshot/top30?surface=perp&platform=binance", want: map[string]any{"kind": "top30", "requested_surface": "perp", "requested_platform": "binance"}},
+		{name: "top30_divergence", path: "/api/snapshot/top30/divergence", want: map[string]any{"status": "complete", "significant_rank_delta": float64(10)}},
 		{name: "collection", path: "/api/collection-status", want: map[string]any{"success": float64(1)}},
 	}
 
