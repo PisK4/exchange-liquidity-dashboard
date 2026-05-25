@@ -661,16 +661,19 @@ func (s *Store) Liquidity(symbol string) map[string]any {
 			rows = append(rows, missingPlatform(p, symbol))
 		}
 	}
+	rows = s.attachFundingLocked(rows)
 	medians := competitorMedianByTier(rows)
 	strictMedians := strictCompetitorMedianByTier(rows)
 	rows = enrichLiquidityRows(rows, medians)
+	fundingMedian, fundingSamples, fundingMedianStatus := competitorFundingMedian8h(rows)
+	rows = enrichFundingVsMedianRows(rows, fundingMedian, fundingMedianStatus)
 	return map[string]any{
 		"symbol":                           symbol,
 		"snapshot_ts":                      latestTS(rows),
 		"rows":                             rows,
 		"competitor_median_by_tier":        medians,
 		"strict_competitor_median_by_tier": strictMedians,
-		"kpis":                             s.liquidityKPIsLocked(rows, medians, strictMedians, symbol),
+		"kpis":                             s.liquidityKPIsLocked(rows, medians, strictMedians, symbol, fundingMedian, fundingSamples, fundingMedianStatus),
 	}
 }
 
@@ -689,8 +692,34 @@ func (s *Store) Quality(symbol string) map[string]any {
 			rows = append(rows, missingPlatform(p, symbol))
 		}
 	}
+	rows = s.attachFundingLocked(rows)
 	rows = enrichQualityRows(rows)
-	return map[string]any{"symbol": symbol, "snapshot_ts": latestTS(rows), "slippage_buckets_usd": s.cfg.Runtime.SlippageBucketsUSD, "rows": rows}
+	fundingMedian, fundingSamples, fundingMedianStatus := competitorFundingMedian8h(rows)
+	rows = enrichFundingVsMedianRows(rows, fundingMedian, fundingMedianStatus)
+	kpis := map[string]any{
+		"competitor_funding_rate_median_8h_status": fundingMedianStatus,
+		"competitor_funding_rate_median_8h_samples": fundingSamples,
+	}
+	if fundingMedianStatus == domain.StatusComplete {
+		kpis["competitor_funding_rate_median_8h"] = fundingMedian
+	}
+	if edge := findPlatformRow(rows, "edgeX"); edge != nil && edge.Funding != nil && edge.Funding.Rate8h != nil {
+		kpis["edgex_funding_rate_8h"] = *edge.Funding.Rate8h
+		kpis["edgex_funding_rate_8h_status"] = edge.Funding.Status
+		kpis["edgex_funding_rate_period_hours"] = edge.Funding.PeriodHours
+	} else if edge != nil && edge.Funding != nil {
+		kpis["edgex_funding_rate_8h_status"] = edge.Funding.Status
+		kpis["edgex_funding_rate_period_hours"] = edge.Funding.PeriodHours
+	} else {
+		kpis["edgex_funding_rate_8h_status"] = domain.StatusStale
+	}
+	return map[string]any{
+		"symbol":               symbol,
+		"snapshot_ts":          latestTS(rows),
+		"slippage_buckets_usd": s.cfg.Runtime.SlippageBucketsUSD,
+		"rows":                 rows,
+		"kpis":                 kpis,
+	}
 }
 
 func (s *Store) Share(window string) map[string]any {
@@ -1187,8 +1216,11 @@ func latestTS(rows []domain.PlatformSnapshot) time.Time {
 }
 
 // liquidityKPIsLocked builds the per-symbol KPIs for the Liquidity tab. The
-// caller already holds s.mu (RLock).
-func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians, strictMedians map[string]float64, symbol string) map[string]any {
+// caller already holds s.mu (RLock). fundingMedian / fundingSamples /
+// fundingMedianStatus are computed once by the caller and threaded through
+// instead of recomputed here so the median is identical to the one already
+// stitched onto each row via enrichFundingVsMedianRows.
+func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians, strictMedians map[string]float64, symbol string, fundingMedian float64, fundingSamples int, fundingMedianStatus string) map[string]any {
 	var edge domain.PlatformSnapshot
 	for _, r := range rows {
 		if r.Platform == "edgeX" {
@@ -1230,6 +1262,28 @@ func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians, str
 	}
 	if spread10mStatus == domain.StatusComplete || spread10mStatus == domain.StatusPartial {
 		out["edgex_spread_10m_bp"] = spread10mBp
+	}
+
+	// Funding KPIs. The competitor median is computed in collector-space
+	// (post-8h normalisation, edgeX excluded) so the bar-chart axis on
+	// every tab agrees on a single anchor. Samples < 3 → stale per
+	// decision F; UI is expected to render '—' rather than the numeric.
+	out["competitor_funding_rate_median_8h_status"] = fundingMedianStatus
+	out["competitor_funding_rate_median_8h_samples"] = fundingSamples
+	if fundingMedianStatus == domain.StatusComplete {
+		out["competitor_funding_rate_median_8h"] = fundingMedian
+	}
+	if edge.Funding != nil {
+		out["edgex_funding_rate_8h_status"] = edge.Funding.Status
+		out["edgex_funding_rate_period_hours"] = edge.Funding.PeriodHours
+		if edge.Funding.Rate8h != nil {
+			out["edgex_funding_rate_8h"] = *edge.Funding.Rate8h
+		}
+		if edge.Funding.VsMedian8h != nil {
+			out["edgex_funding_rate_vs_median_8h"] = *edge.Funding.VsMedian8h
+		}
+	} else {
+		out["edgex_funding_rate_8h_status"] = domain.StatusStale
 	}
 	return out
 }
@@ -1386,6 +1440,88 @@ func (s *Store) edgexSpread10mLocked(symbol string) (float64, string) {
 		return avg, domain.StatusPartial
 	}
 	return avg, domain.StatusComplete
+}
+
+// attachFundingLocked stitches each row's funding observation (if any) from
+// s.funding onto the row in-place. Caller MUST hold s.mu (RLock or Lock).
+// Rows with no funding entry keep Funding=nil so the JSON encoder omits
+// the field instead of emitting a placeholder.
+func (s *Store) attachFundingLocked(rows []domain.PlatformSnapshot) []domain.PlatformSnapshot {
+	for i := range rows {
+		if f := s.fundingForLocked(rows[i].Platform, rows[i].DisplaySymbol); f != nil {
+			rows[i].Funding = f
+		}
+	}
+	return rows
+}
+
+// competitorFundingMedian8h returns the median 8h-normalised funding rate
+// across non-edgeX rows with complete funding samples, plus the sample
+// count and the status the UI should display.
+//
+//   - status=complete when samples >= competitorFundingMinSamples
+//   - status=stale otherwise (UI renders '—' per decision F: < 3 stale)
+//
+// edgeX is excluded from the median per the spec so a single venue cannot
+// drag its own benchmark; the rationale mirrors competitorMedianByTier
+// (depth medians also exclude edgeX). Samples with VsMedian8h-bearing
+// status != complete are skipped because storing a sanity-rejected or
+// missing value in the population would silently bias the median.
+func competitorFundingMedian8h(rows []domain.PlatformSnapshot) (float64, int, string) {
+	values := make([]float64, 0, len(rows))
+	for _, row := range rows {
+		if row.Platform == "edgeX" {
+			continue
+		}
+		f := row.Funding
+		if f == nil || f.Rate8h == nil || f.Status != domain.StatusComplete {
+			continue
+		}
+		values = append(values, *f.Rate8h)
+	}
+	if len(values) < competitorFundingMinSamples {
+		return 0, len(values), domain.StatusStale
+	}
+	return median(values), len(values), domain.StatusComplete
+}
+
+// competitorFundingMinSamples is the minimum number of non-edgeX
+// complete-status funding samples required before we'll publish the
+// competitor median. Decision F locked this at 3: below that the median
+// becomes too sensitive to the specific venues that happened to publish
+// a rate in the current poll, and a flapping median is materially worse
+// than no median at all (operators learn to ignore it).
+const competitorFundingMinSamples = 3
+
+// enrichFundingVsMedianRows mutates each row's Funding.VsMedian8h to
+// (row.Rate8h - median) when both the row and the median are complete.
+// Rows whose Funding is nil or whose Rate8h is missing pass through
+// untouched. edgeX is included on purpose: VsMedian8h is the primary
+// readout in the summary card ("edgeX vs 竞品 median +0.0091%"), and
+// computing it per row keeps the JSON shape uniform across platforms.
+func enrichFundingVsMedianRows(rows []domain.PlatformSnapshot, median float64, medianStatus string) []domain.PlatformSnapshot {
+	if medianStatus != domain.StatusComplete {
+		return rows
+	}
+	for i := range rows {
+		f := rows[i].Funding
+		if f == nil || f.Rate8h == nil {
+			continue
+		}
+		delta := *f.Rate8h - median
+		f.VsMedian8h = &delta
+		rows[i].Funding = f
+	}
+	return rows
+}
+
+func findPlatformRow(rows []domain.PlatformSnapshot, platform string) *domain.PlatformSnapshot {
+	for i := range rows {
+		if rows[i].Platform == platform {
+			return &rows[i]
+		}
+	}
+	return nil
 }
 
 func competitorMedianByTier(rows []domain.PlatformSnapshot) map[string]float64 {
