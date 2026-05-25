@@ -201,6 +201,23 @@ func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
 	c.store.SaveCoinGeckoPlatformVolumes(platformAggs)
 	c.store.SaveDailyVolumeAggregates(dailyRows)
 
+	// 2c) Funding-rate observations per (platform, canonical_display).
+	//     CoinGecko emits funding_rate as a percent value in the
+	//     ticker's native settlement period. We normalise every observed
+	//     row to 8h-equivalent using fundingPeriodHours so the
+	//     cross-platform comparison view can stack venues with different
+	//     periods on the same axis without the renderer doing math.
+	//
+	//     For configured V1 symbols (BTC/ETH/SOL perp) we pick the
+	//     highest-volume ticker per (platform, canonical_display) so a
+	//     platform listing both BTC-USDT and BTC-USDC contributes its
+	//     deeper book. Tickers whose 8h-normalised rate fails
+	//     SanityCheckRate8h (|rate| > 0.5%) are demoted to status=stale
+	//     because such magnitudes almost always indicate a CoinGecko unit
+	//     drift rather than a real reading.
+	fundingRows := buildFundingRows(byPlatformSymbol, c.configuredDisplaySymbols(), endpoint, now)
+	c.store.SaveFundingRates(fundingRows)
+
 	// 2b) Per-symbol daily aggregates for the V1 configured display
 	//     symbols (BTC/ETH/SOL perp). Each (platform, display_symbol) is
 	//     UPSERTed once per UTC day; the in-memory mergeDailyAggregate
@@ -702,6 +719,108 @@ func bucketLatestVolumeByDay(pts []coingecko.VolumeChartPoint) map[time.Time]flo
 		}
 	}
 	return out
+}
+
+// buildFundingRows projects the (platform, displaySymbol → bestTicker)
+// nested map into one PlatformFundingRate per (platform, canonical
+// display) for every configured V1 display symbol. canonicalDailyKey
+// collapses USD / USDC / USDT quote variants onto a single canonical
+// 'BASE-USDT (perp)' key so the dashboard's symbol resolver lines up
+// without per-platform special-casing.
+//
+// Ranking semantics: when multiple tickers within the same platform
+// share a canonical display symbol (e.g. edgeX listing BTC-USD alongside
+// BTC-USDT in some future migration), we keep the highest-volume
+// observation because it is the one operators are actually looking at.
+//
+// Status table:
+//   - StatusComplete: funding_rate was Valid in CoinGecko AND survives
+//     SanityCheckRate8h once normalised
+//   - StatusStale: funding_rate was either absent / null upstream, or
+//     present but blocked by the sanity gate (unit drift detection)
+//   - StatusUnsupported: the platform itself is not in the period table
+//     (should never fire for V1 because every configured platform is
+//     known, but kept for forward-compatibility and easier debugging)
+//
+// Tickers belonging to a platform that maps to no canonical V1 symbol
+// are silently dropped. Tickers whose canonical_display falls outside
+// the configuredV1Symbols set are also dropped; we don't speculatively
+// store funding for the long-tail because V1 only renders V1 symbols
+// and the medium-term cost (memory + MySQL writes) is non-trivial.
+func buildFundingRows(byPlatformSymbol map[string]map[string]coingecko.Ticker, configuredV1Symbols map[string]struct{}, sourceEndpoint string, now time.Time) []domain.PlatformFundingRate {
+	if len(byPlatformSymbol) == 0 || len(configuredV1Symbols) == 0 {
+		return nil
+	}
+	type pickKey struct {
+		platform string
+		display  string
+	}
+	type pick struct {
+		ticker  coingecko.Ticker
+		display string
+	}
+	bestByKey := map[pickKey]pick{}
+	for platform, symbols := range byPlatformSymbol {
+		for raw, t := range symbols {
+			canonical := canonicalDailyKey(raw)
+			if _, ok := configuredV1Symbols[canonical]; !ok {
+				continue
+			}
+			k := pickKey{platform: platform, display: canonical}
+			if existing, ok := bestByKey[k]; !ok || t.Volume24HUSD() > existing.ticker.Volume24HUSD() {
+				bestByKey[k] = pick{ticker: t, display: canonical}
+			}
+		}
+	}
+	if len(bestByKey) == 0 {
+		return nil
+	}
+	rows := make([]domain.PlatformFundingRate, 0, len(bestByKey))
+	for k, p := range bestByKey {
+		row := domain.PlatformFundingRate{
+			Platform:       k.platform,
+			DisplaySymbol:  p.display,
+			Source:         domain.DataSourceCoinGecko,
+			SourceEndpoint: sourceEndpoint,
+		}
+		ts := now
+		row.SnapshotTS = &ts
+
+		period, periodKnown := FundingPeriodHours(k.platform)
+		if !periodKnown {
+			row.Status = domain.StatusUnsupported
+			rows = append(rows, row)
+			continue
+		}
+		row.PeriodHours = period
+
+		if !p.ticker.FundingRate.Valid {
+			row.Status = domain.StatusStale
+			rows = append(rows, row)
+			continue
+		}
+		native := p.ticker.FundingRate.Value
+		rate8h := NormalizeTo8h(native, period)
+		if !SanityCheckRate8h(rate8h) {
+			row.Status = domain.StatusStale
+			row.RateNative = &native
+			rows = append(rows, row)
+			continue
+		}
+		row.Status = domain.StatusComplete
+		nativeCopy := native
+		rate8hCopy := rate8h
+		row.RateNative = &nativeCopy
+		row.Rate8h = &rate8hCopy
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Platform == rows[j].Platform {
+			return rows[i].DisplaySymbol < rows[j].DisplaySymbol
+		}
+		return rows[i].Platform < rows[j].Platform
+	})
+	return rows
 }
 
 func flattenByVolume(bucket map[string]coingecko.Ticker) []coingecko.Ticker {

@@ -182,6 +182,41 @@ type PlatformSnapshot struct {
 	SellSlippageBP       map[string]float64      `json:"sell_slippage_bp"`
 	WorstSlippageBP      map[string]float64      `json:"worst_slippage_bp,omitempty"`
 	Verdict              string                  `json:"verdict,omitempty"`
+	Funding              *PlatformFundingRate    `json:"funding,omitempty"`
+}
+
+// PlatformFundingRate carries the funding-rate observation for a single
+// (platform, display_symbol) at a single CoinGecko poll. The view layer
+// reads Rate8h to render the comparison axis; the raw RateNative and
+// PeriodHours are kept on the same object so the UI can build a tooltip
+// such as "0.005% per 4h (edgeX native settlement)" without re-deriving
+// the period table client-side.
+//
+// Rate8h / RateNative are pointers so the wire format distinguishes
+// "funding unsupported / not yet observed" from "funding observed at
+// exactly 0%". Status carries the categorical reason an absent value is
+// absent (StatusComplete / StatusStale / StatusUnsupported); the renderer
+// fans this out into "—" vs error styles.
+//
+// Source is the upstream provider (currently always
+// DataSourceCoinGecko); SourceEndpoint is the exact URL we last hit, kept
+// for parity with the volume / depth contract and for the operator's
+// debug pane. SnapshotTS is the wall-clock time at which the poll that
+// observed this row completed; it may differ from the surrounding
+// PlatformSnapshot.SnapshotTS because the funding poll runs on its own
+// 5min cron while the depth collector runs faster.
+type PlatformFundingRate struct {
+	Platform       string     `json:"platform"`
+	DisplaySymbol  string     `json:"display_symbol,omitempty"`
+	Rate8h         *float64   `json:"rate_8h,omitempty"`
+	RateNative     *float64   `json:"rate_native,omitempty"`
+	PeriodHours    int        `json:"period_hours,omitempty"`
+	Status         string     `json:"status"`
+	Source         string     `json:"source,omitempty"`
+	SourceEndpoint string     `json:"source_endpoint,omitempty"`
+	SnapshotTS     *time.Time `json:"snapshot_ts,omitempty"`
+	VsMedian8h     *float64   `json:"vs_median_8h,omitempty"`
+	Rank           int        `json:"rank,omitempty"`
 }
 
 type VolumeSnapshot struct {

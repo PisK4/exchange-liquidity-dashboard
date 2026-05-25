@@ -56,6 +56,14 @@ type Store struct {
 	top30ByPlatform         map[string][]domain.Top30Row
 	top30BackfillSkipCounts map[string]map[string]int
 
+	// funding holds the latest CoinGecko-sourced funding-rate observation
+	// per (platform, display_symbol). The Liquidity / Quality views read
+	// this map at query time and merge it onto each PlatformSnapshot
+	// (Funding field). Writes happen exclusively from the CoinGecko
+	// collector's 5min cron via SaveFundingRates so the depth / volume
+	// paths cannot accidentally drift it.
+	funding map[string]domain.PlatformFundingRate
+
 	cgLastPullTS time.Time
 }
 
@@ -78,6 +86,7 @@ func NewStore(cfg config.Config) *Store {
 		dailySymbolVolumes:      map[string][]domain.DailyVolumeAggregate{},
 		top30ByPlatform:         map[string][]domain.Top30Row{},
 		top30BackfillSkipCounts: map[string]map[string]int{},
+		funding:                 map[string]domain.PlatformFundingRate{},
 	}
 	initial := append([]domain.SymbolSub(nil), cfg.Symbols...)
 	s.liveSymbols.Store(&initial)
@@ -277,6 +286,47 @@ func (s *Store) hydrateCoinGeckoPlatformVolumes(rows []domain.PlatformVolumeAggr
 	s.publishSnapshotLocked()
 	s.mu.Unlock()
 	return normalized
+}
+
+// SaveFundingRates records the latest CoinGecko-sourced funding-rate
+// observation per (platform, display_symbol). Each call REPLACES (does
+// not merge with) the existing entry for that key — the funding rate is
+// a point-in-time reading, not an aggregate, and replaying an older
+// value would surface as a sudden jump on the comparison chart.
+//
+// Rows with an empty Platform or DisplaySymbol are ignored. Status is
+// preserved verbatim from the caller so the collector can distinguish
+// complete / stale / unsupported without the store overwriting its
+// decision.
+func (s *Store) SaveFundingRates(rows []domain.PlatformFundingRate) {
+	if len(rows) == 0 {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, row := range rows {
+		if row.Platform == "" || row.DisplaySymbol == "" {
+			continue
+		}
+		s.funding[key(row.Platform, row.DisplaySymbol)] = row
+	}
+	s.publishSnapshotLocked()
+}
+
+// fundingForLocked returns a pointer copy of the funding observation for
+// the given (platform, display_symbol). Returns nil when no row exists;
+// the caller is expected to leave PlatformSnapshot.Funding nil rather
+// than synthesise an empty placeholder so the JSON contract distinguishes
+// "we have not observed funding yet for this row" from "we have observed
+// it and the value is missing / stale / unsupported".
+//
+// Caller MUST hold s.mu (RLock or Lock).
+func (s *Store) fundingForLocked(platform, symbol string) *domain.PlatformFundingRate {
+	if row, ok := s.funding[key(platform, symbol)]; ok {
+		dup := row
+		return &dup
+	}
+	return nil
 }
 
 // SaveDailyVolumeAggregates inserts or replaces per-day rollups. Volume24HUSD
