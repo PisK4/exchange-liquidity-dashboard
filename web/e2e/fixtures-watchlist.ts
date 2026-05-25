@@ -1,0 +1,213 @@
+import type { Page, Route } from '@playwright/test';
+
+// fixtures-watchlist.ts mirrors the shape of fixtures.ts but extends it
+// with the v2.1 fields the watchlist + funding tests need:
+//   1. multiple canonical symbols in meta.categories so the toolbar
+//      dropdown has real options to filter against.
+//   2. per-symbol Liquidity snapshots that vary depth + funding values
+//      so a card grid visibly differentiates symbols and a regression
+//      that points all cards at the same data would be caught.
+//   3. funding fields on each PlatformRow + kpis.* so the Liquidity KPI
+//      panel, the table column, the Quality span-24 row and the per-
+//      card funding line all have data to render.
+//
+// We keep this in a dedicated file (instead of extending fixtures.ts)
+// because the legacy dashboard.spec.ts tests assert specific values
+// (e.g. 'spread 1.23 bp') we don't want to perturb. Each new spec file
+// imports its own fixture entry point.
+
+const now = '2026-05-25T00:00:00.000Z';
+
+const depthBase = {
+  bid_usd: 1_200_000,
+  ask_usd: 1_100_000,
+  total_usd: 2_300_000,
+  depth_status: 'complete',
+  strict_complete: true,
+  display_available: true,
+};
+
+function depthByTier(scale: number) {
+  return {
+    '0.05%': { ...depthBase, total_usd: 900_000 * scale },
+    '0.10%': { ...depthBase, total_usd: 2_300_000 * scale },
+    '1.00%': { ...depthBase, total_usd: 4_800_000 * scale },
+    '2.00%': { ...depthBase, total_usd: 8_400_000 * scale },
+  };
+}
+
+// Each symbol gets a per-platform funding payload. We exercise four
+// concrete states the UI must render distinctly:
+//   1. edgeX with a native 4h period folded into 8h (×2)
+//   2. binance with the canonical 8h period (×1)
+//   3. okx with a positive rate distinct from binance (drives the
+//      median above edgeX so the delta is negative and visible)
+//   4. unsupported platform that must surface as '—' and grey.
+function fundingFor(platform: string, symbol: string) {
+  if (platform === 'edgeX') {
+    return { platform, period_hours: 4, rate_native: 0.000125, rate_8h: 0.00025, status: 'complete', snapshot_ts: now };
+  }
+  if (platform === 'binance') {
+    return { platform, period_hours: 8, rate_native: 0.00045, rate_8h: 0.00045, status: 'complete', snapshot_ts: now };
+  }
+  if (platform === 'okx') {
+    return { platform, period_hours: 8, rate_native: 0.00060, rate_8h: 0.00060, status: 'complete', snapshot_ts: now };
+  }
+  if (platform === 'bybit') {
+    return { platform, period_hours: 8, rate_native: 0.00030, rate_8h: 0.00030, status: 'complete', snapshot_ts: now };
+  }
+  // bingx in the v2.1 catalog is marked unsupported for funding; that
+  // status must propagate through to the UI as muted '—'.
+  if (platform === 'bingx') {
+    return { platform, period_hours: null, rate_native: null, rate_8h: null, status: 'unsupported', snapshot_ts: now };
+  }
+  void symbol;
+  return null;
+}
+
+const platforms = ['edgeX', 'binance', 'okx', 'bybit', 'bingx'];
+
+const categorySymbols = [
+  { canonical: 'BTC', display_name: 'BTC-USD', display_symbol: 'BTC-USDT (perp)', asset_category: 'crypto', instrument_kind: 'canonical', market_surface: 'perp', supported_platform_count: platforms.length },
+  { canonical: 'ETH', display_name: 'ETH-USD', display_symbol: 'ETH-USDT (perp)', asset_category: 'crypto', instrument_kind: 'canonical', market_surface: 'perp', supported_platform_count: platforms.length },
+  { canonical: 'SOL', display_name: 'SOL-USD', display_symbol: 'SOL-USDT (perp)', asset_category: 'crypto', instrument_kind: 'canonical', market_surface: 'perp', supported_platform_count: platforms.length },
+  { canonical: 'GOLD', display_name: 'GOLD-USD', display_symbol: 'GOLD-USDT (perp)', asset_category: 'commodity', instrument_kind: 'canonical', market_surface: 'perp', supported_platform_count: platforms.length },
+];
+
+const mappings = categorySymbols.flatMap(s =>
+  platforms.map(platform => ({
+    platform,
+    display_symbol: s.display_symbol,
+    display_name: s.display_name,
+    canonical: s.canonical,
+    asset_category: s.asset_category,
+    market_surface: 'perp',
+    instrument_kind: 'canonical',
+    api_symbol: `${s.canonical}USDT`,
+    base_asset: s.canonical,
+    quote_asset: 'USDT',
+    settle_asset: 'USDT',
+    source_endpoint: 'fixture',
+  })),
+);
+
+const meta = {
+  tabs: ['monitor', 'quality', 'share', 'top30'],
+  platforms,
+  symbols: categorySymbols.map(s => s.display_symbol),
+  categories: [
+    { key: 'crypto', label: '加密货币', symbols: categorySymbols.filter(s => s.asset_category === 'crypto') },
+    { key: 'commodity', label: '大宗商品', symbols: categorySymbols.filter(s => s.asset_category === 'commodity') },
+  ],
+  windows: ['24h', '7d', '30d'],
+  depth_tiers: [0.0005, 0.001, 0.01, 0.02],
+  slippage_buckets_usd: [50_000, 100_000, 500_000, 1_000_000],
+  refresh_interval_sec: 30,
+  volume_discounts: { mexc: 0.4, gate: 0.5 },
+};
+
+// Per-symbol depth scaling keeps every card visually distinct so the
+// snapshot fan-out can be visually verified.
+const depthScale: Record<string, number> = { BTC: 1.0, ETH: 0.7, SOL: 0.4, GOLD: 0.25 };
+
+// Per-symbol headline 7d share, so the WatchlistCard 7d share row is
+// not identical across cards (regression guard: a bad reducer that
+// keyed everything off the first response would surface here).
+const sevenDayShare: Record<string, number> = { BTC: 12.34, ETH: 8.7, SOL: 4.2, GOLD: 1.1 };
+
+function liquidityFor(symbolDisplay: string) {
+  const meta = categorySymbols.find(s => s.display_symbol === symbolDisplay || s.canonical === symbolDisplay);
+  const canonical = meta?.canonical ?? 'BTC';
+  const scale = depthScale[canonical] ?? 1;
+  const rows = platforms.map((platform, i) => ({
+    platform,
+    display_symbol: meta?.display_symbol ?? symbolDisplay,
+    snapshot_ts: now,
+    source_endpoint: 'fixture',
+    depth_status: 'complete',
+    mid_price: 68_000 + i * 10,
+    spread_bp: 1.1 + i * 0.4,
+    imbalance_pct: platform === 'edgeX' ? 6.25 : -3.5,
+    depth_by_tier: depthByTier(scale),
+    vs_median_by_tier: { '0.10%': platform === 'edgeX' ? 1.2 : 0.9 },
+    buy_slippage_bp: { '50000': 0.8, '100000': 1.3, '500000': 4.2, '1000000': 8.5 },
+    sell_slippage_bp: { '50000': 0.9, '100000': 1.4, '500000': 4.5, '1000000': 8.9 },
+    worst_slippage_bp: { '50000': 0.9, '100000': 1.4, '500000': 4.5, '1000000': 8.9 },
+    verdict: '健康',
+    funding: fundingFor(platform, canonical),
+  }));
+  // Median is computed across the three complete competitor rows
+  // (binance 0.00045, okx 0.00060, bybit 0.00030) = 0.00045.
+  return {
+    symbol: meta?.display_symbol ?? symbolDisplay,
+    snapshot_ts: now,
+    rows,
+    competitor_median_by_tier: { '0.10%': 1_900_000 * scale },
+    strict_competitor_median_by_tier: { '0.10%': 1_900_000 * scale },
+    kpis: {
+      edgex_24h_share_pct: 10.5,
+      symbol_share_7d_pct: sevenDayShare[canonical] ?? 5,
+      edgex_spread_bp: 1.1,
+      edgex_spread_10m_bp: 1.23,
+      edgex_funding_rate_8h: 0.00025,
+      competitor_funding_rate_median_8h: 0.00045,
+      competitor_funding_rate_median_8h_status: 'complete',
+      competitor_funding_rate_median_8h_samples: 3,
+    },
+  };
+}
+
+function qualityFor(symbolDisplay: string) {
+  const liq = liquidityFor(symbolDisplay);
+  return {
+    symbol: liq.symbol,
+    snapshot_ts: now,
+    slippage_buckets_usd: [50_000, 100_000, 500_000, 1_000_000],
+    rows: liq.rows,
+    kpis: liq.kpis,
+  };
+}
+
+const share = {
+  window: '7d',
+  snapshot_ts: now,
+  denominator_usd: 12_000_000_000,
+  rows: [
+    { rank: 1, platform: 'binance', raw_volume_usd: 9_000_000_000, adjusted_volume_usd: 9_000_000_000, share_pct: 75, status: 'complete', data_source: 'coingecko' },
+    { rank: 2, platform: 'edgeX', raw_volume_usd: 3_000_000_000, adjusted_volume_usd: 3_000_000_000, share_pct: 25, status: 'complete', data_source: 'coingecko' },
+  ],
+  kpis: { edgex_share_pct: 25, edgex_total_volume_usd: 3_000_000_000, denominator_usd: 12_000_000_000 },
+  trend: { status: 'complete', points: [{ day: '2026-05-24', edgex_share_pct: 20 }, { day: '2026-05-25', edgex_share_pct: 25 }] },
+};
+
+const top30 = {
+  surface: 'perp',
+  platform: 'binance',
+  snapshot_ts: now,
+  status: 'complete',
+  rows: [{ rank: 1, platform: 'binance', symbol: 'BTC-USDT (perp)', volume_24h_usd: 2_000_000_000, volume_7d_usd: 12_000_000_000, delta_7d_pct: 3.2, edgex_listed: true, status: 'complete', data_source: 'coingecko' }],
+};
+
+export async function routeWatchlistAPI(page: Page) {
+  await page.route('**/api/**', async (route: Route) => {
+    const url = new URL(route.request().url());
+    if (url.pathname === '/api/dashboard/meta') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(meta) });
+    if (url.pathname === '/api/symbols') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ symbols: meta.symbols, mappings }) });
+    if (url.pathname === '/api/symbols/coverage') {
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ snapshot_ts: now, rows: mappings.map(m => ({ platform: m.platform, display_symbol: m.display_symbol, depth_status: 'complete', source_endpoint: 'fixture' })) }) });
+    }
+    if (url.pathname === '/api/snapshot/liquidity') {
+      const symbol = url.searchParams.get('symbol') ?? 'BTC';
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(liquidityFor(symbol)) });
+    }
+    if (url.pathname === '/api/snapshot/quality') {
+      const symbol = url.searchParams.get('symbol') ?? 'BTC';
+      return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(qualityFor(symbol)) });
+    }
+    if (url.pathname === '/api/snapshot/share') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(share) });
+    if (url.pathname === '/api/snapshot/top30') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(top30) });
+    if (url.pathname === '/api/collection-status') return route.fulfill({ status: 200, contentType: 'application/json', body: '{"last_run":{"run_id":"fixture","success":2,"failed":0},"rows":[]}' });
+    if (url.pathname === '/api/runtime-config') return route.fulfill({ status: 200, contentType: 'application/json', body: '{"collection_interval":"30s"}' });
+    return route.fulfill({ status: 404, contentType: 'application/json', body: '{}' });
+  });
+}

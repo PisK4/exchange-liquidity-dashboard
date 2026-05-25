@@ -91,14 +91,43 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Primary fetch path: still uses query.symbol for share / top30 /
-  // meta (those are watchlist-agnostic) and the first watchlist entry
-  // for the headline liquidity/quality view. The full fan-out is
-  // performed in parallel into liquidityByCanonical so per-card
-  // rendering can read each symbol independently.
-  const headlineSymbol = watchlist[0] ?? query.symbol;
-  const effectiveQuery: Query = useMemo(() => ({ ...query, symbol: headlineSymbol }), [query, headlineSymbol]);
-  const paths = buildPaths(effectiveQuery);
+  // Decision E: removing the last chip must not leave the operator with
+  // a blank dashboard. We re-seed the BTC fallback when the watchlist
+  // empties out, regardless of how it got there (chip-remove, an empty
+  // ?watchlist= URL, or a corrupted localStorage value). The toolbar
+  // intentionally stays a pure 'emit the new array' control — the
+  // fallback policy belongs in the resolver layer, here.
+  useEffect(() => {
+    if (watchlist.length === 0) {
+      setWatchlist([normalizeSymbol(WATCHLIST_DEFAULT_FALLBACK)]);
+    }
+  }, [watchlist]);
+
+  // Single-chip mode preserves the V1 deep-link contract: clicking a
+  // category pill or picking from the symbol dropdown sets ?symbol=X
+  // without touching ?watchlist=. When the operator hasn't pinned a
+  // multi-symbol list (initialWatchlist empty) we follow the URL so the
+  // headline and the lone chip stay in lockstep. This effect is a
+  // no-op when ?watchlist= is explicitly provided — that branch keeps
+  // its own state untouched even if ?symbol= happens to disagree.
+  useEffect(() => {
+    if (initialWatchlist.length > 0) return;
+    if (watchlist.length !== 1) return;
+    const target = normalizeSymbol(query.symbol || WATCHLIST_DEFAULT_FALLBACK);
+    if (watchlist[0] !== target) {
+      setWatchlist([target]);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query.symbol]);
+
+  // Primary fetch path: query.symbol drives the headline liquidity /
+  // quality / share / top30 calls — preserving the V1 ?symbol= deep-
+  // link contract so category pills, symbol-dropdown clicks, and
+  // legacy share URLs keep behaving exactly as they did before the
+  // watchlist work landed. The watchlist is fanned out in parallel
+  // into liquidityByCanonical so per-card rendering can read each
+  // symbol independently without dragging the headline view along.
+  const paths = buildPaths(query);
   const watchlistKey = useMemo(() => watchlist.join(','), [watchlist]);
   const { meta: metaPath, liquidity: liquidityPath, quality: qualityPath, share: sharePath, top30: top30Path } = paths;
 
@@ -141,7 +170,7 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
         // Ensure the headline snapshot is always reachable via the
         // per-symbol map so card-mode consumers don't need to special-
         // case the first entry.
-        const headlineCanonical = normalizeSymbol(headlineSymbol);
+        const headlineCanonical = normalizeSymbol(query.symbol);
         if (!liquidityByCanonical[headlineCanonical]) {
           liquidityByCanonical[headlineCanonical] = liquidity;
         }
@@ -177,7 +206,7 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
 
   return (
     <DashboardShell
-      query={effectiveQuery}
+      query={query}
       data={data}
       watchlist={watchlist}
       onWatchlistChange={setWatchlist}
