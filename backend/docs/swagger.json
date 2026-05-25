@@ -1,15 +1,1192 @@
 {
   "openapi": "3.0.3",
-  "info": { "title": "EdgeX Liquidity Dashboard V1 API", "version": "0.1.0" },
+  "info": {
+    "title": "EdgeX Liquidity Dashboard V1 API",
+    "version": "0.1.0"
+  },
   "paths": {
-    "/api/health": { "get": { "responses": { "200": { "description": "health" } } } },
-    "/api/symbols": { "get": { "responses": { "200": { "description": "symbol mappings" } } } },
-    "/api/symbols/coverage": { "get": { "responses": { "200": { "description": "coverage matrix" } } } },
-    "/api/snapshot/liquidity": { "get": { "parameters": [{ "name": "symbol", "in": "query", "schema": { "type": "string" } }], "responses": { "200": { "description": "liquidity tab" } } } },
-    "/api/snapshot/quality": { "get": { "parameters": [{ "name": "symbol", "in": "query", "schema": { "type": "string" } }], "responses": { "200": { "description": "quality tab" } } } },
-    "/api/snapshot/share": { "get": { "parameters": [{ "name": "window", "in": "query", "schema": { "type": "string", "enum": ["24h", "7d", "30d"] } }], "responses": { "200": { "description": "market share tab" } } } },
-    "/api/snapshot/top30": { "get": { "parameters": [{ "name": "surface", "in": "query", "schema": { "type": "string" } }, { "name": "platform", "in": "query", "schema": { "type": "string" } }], "responses": { "200": { "description": "top30 tab" } } } },
-    "/api/collection-status": { "get": { "responses": { "200": { "description": "collector status" } } } },
-    "/api/runtime-config": { "get": { "responses": { "200": { "description": "runtime config" } } } }
+    "/api/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/readiness": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "not ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReadinessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/dashboard/meta": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "dashboard metadata",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DashboardMeta"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/symbols": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "symbol mappings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SymbolsResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/symbols/coverage": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "coverage matrix",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CoverageResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/snapshot/liquidity": {
+      "get": {
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "liquidity tab",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LiquiditySnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/snapshot/quality": {
+      "get": {
+        "parameters": [
+          {
+            "name": "symbol",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "quality tab",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/QualitySnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/snapshot/share": {
+      "get": {
+        "parameters": [
+          {
+            "name": "window",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "24h",
+                "7d",
+                "30d"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "market share tab",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ShareSnapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/snapshot/top30": {
+      "get": {
+        "parameters": [
+          {
+            "name": "surface",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "platform",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "top30 tab",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Top30Snapshot"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/collection-status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "collector status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionStatusResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/runtime-config": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "runtime config",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RuntimeConfig"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ApiStatus": {
+        "type": "string",
+        "enum": [
+          "complete",
+          "partial",
+          "aggregated_orderbook",
+          "ws_limited_depth",
+          "stale",
+          "unsupported",
+          "error",
+          "insufficient_history"
+        ]
+      },
+      "DataFreshness": {
+        "type": "string",
+        "enum": [
+          "live",
+          "delayed"
+        ]
+      },
+      "NumberMap": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "number"
+        }
+      },
+      "StringMap": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "ok",
+          "service",
+          "mode",
+          "build_version",
+          "deps"
+        ],
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "service": {
+            "type": "string"
+          },
+          "mode": {
+            "type": "string"
+          },
+          "build_version": {
+            "type": "string"
+          },
+          "deps": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "ReadinessResponse": {
+        "type": "object",
+        "required": [
+          "ready",
+          "build_version",
+          "checks"
+        ],
+        "properties": {
+          "ready": {
+            "type": "boolean"
+          },
+          "build_version": {
+            "type": "string"
+          },
+          "checks": {
+            "type": "object",
+            "additionalProperties": true
+          }
+        }
+      },
+      "SymbolMapping": {
+        "type": "object",
+        "required": [
+          "display_symbol",
+          "canonical",
+          "platform",
+          "api_symbol",
+          "base_asset",
+          "quote_asset",
+          "settle_asset",
+          "source_endpoint",
+          "market_surface",
+          "instrument_kind"
+        ],
+        "properties": {
+          "display_symbol": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "canonical": {
+            "type": "string"
+          },
+          "asset_category": {
+            "type": "string"
+          },
+          "market_surface": {
+            "type": "string"
+          },
+          "instrument_kind": {
+            "type": "string"
+          },
+          "lineage": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "api_symbol": {
+            "type": "string"
+          },
+          "base_asset": {
+            "type": "string"
+          },
+          "quote_asset": {
+            "type": "string"
+          },
+          "settle_asset": {
+            "type": "string"
+          },
+          "source_endpoint": {
+            "type": "string"
+          },
+          "contract_id": {
+            "type": "string"
+          },
+          "market_id": {
+            "type": "integer"
+          },
+          "contract_size": {
+            "type": "number"
+          },
+          "quanto_multiplier": {
+            "type": "number"
+          },
+          "api_level_cap": {
+            "type": "integer"
+          },
+          "frontend_url": {
+            "type": "string"
+          },
+          "url_verified": {
+            "type": "boolean"
+          },
+          "catalog_status": {
+            "type": "string"
+          }
+        }
+      },
+      "SymbolsResponse": {
+        "type": "object",
+        "required": [
+          "symbols",
+          "mappings"
+        ],
+        "properties": {
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "mappings": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SymbolMapping"
+            }
+          }
+        }
+      },
+      "CoverageRow": {
+        "type": "object",
+        "required": [
+          "platform",
+          "display_symbol",
+          "depth_status",
+          "source_endpoint"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "display_symbol": {
+            "type": "string"
+          },
+          "depth_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "source_endpoint": {
+            "type": "string"
+          }
+        }
+      },
+      "CoverageResponse": {
+        "type": "object",
+        "required": [
+          "rows",
+          "snapshot_ts"
+        ],
+        "properties": {
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CoverageRow"
+            }
+          },
+          "snapshot_ts": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DashboardCategorySymbol": {
+        "type": "object",
+        "required": [
+          "canonical",
+          "display_name",
+          "display_symbol",
+          "asset_category",
+          "instrument_kind",
+          "market_surface",
+          "supported_platform_count"
+        ],
+        "properties": {
+          "canonical": {
+            "type": "string"
+          },
+          "display_name": {
+            "type": "string"
+          },
+          "display_symbol": {
+            "type": "string"
+          },
+          "asset_category": {
+            "type": "string"
+          },
+          "instrument_kind": {
+            "type": "string"
+          },
+          "market_surface": {
+            "type": "string"
+          },
+          "lineage": {
+            "type": "string"
+          },
+          "supported_platform_count": {
+            "type": "integer"
+          }
+        }
+      },
+      "DashboardCategory": {
+        "type": "object",
+        "required": [
+          "key",
+          "label",
+          "symbols"
+        ],
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "symbols": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardCategorySymbol"
+            }
+          }
+        }
+      },
+      "CoinGeckoLineage": {
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "properties": {
+          "enabled": {
+            "type": "boolean"
+          },
+          "exchange_ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "market_names": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "pull_interval": {
+            "type": "string"
+          },
+          "last_pull_ts": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "DataSources": {
+        "type": "object",
+        "properties": {
+          "coingecko": {
+            "$ref": "#/components/schemas/CoinGeckoLineage"
+          }
+        }
+      },
+      "DashboardMeta": {
+        "type": "object",
+        "required": [
+          "tabs",
+          "platforms",
+          "symbols",
+          "windows",
+          "depth_tiers",
+          "slippage_buckets_usd",
+          "refresh_interval_sec",
+          "volume_discounts"
+        ],
+        "properties": {
+          "tabs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "platforms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "symbols": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "categories": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DashboardCategory"
+            }
+          },
+          "windows": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "depth_tiers": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "slippage_buckets_usd": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "refresh_interval_sec": {
+            "type": "integer"
+          },
+          "volume_discounts": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
+          "data_sources": {
+            "$ref": "#/components/schemas/DataSources"
+          }
+        }
+      },
+      "DepthTierMetrics": {
+        "type": "object",
+        "required": [
+          "bid_usd",
+          "ask_usd",
+          "total_usd"
+        ],
+        "properties": {
+          "bid_usd": {
+            "type": "number"
+          },
+          "ask_usd": {
+            "type": "number"
+          },
+          "total_usd": {
+            "type": "number"
+          },
+          "depth_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "partial_reason": {
+            "type": "string"
+          },
+          "depth_source": {
+            "type": "string"
+          },
+          "source_id": {
+            "type": "string"
+          },
+          "source_endpoint": {
+            "type": "string"
+          },
+          "levels_returned": {
+            "type": "integer"
+          },
+          "bid_levels_returned": {
+            "type": "integer"
+          },
+          "ask_levels_returned": {
+            "type": "integer"
+          },
+          "api_level_cap": {
+            "type": "integer"
+          },
+          "farthest_bid_pct": {
+            "type": "number"
+          },
+          "farthest_ask_pct": {
+            "type": "number"
+          },
+          "farthest_distance_pct": {
+            "type": "number"
+          },
+          "aggregation_params": {
+            "$ref": "#/components/schemas/StringMap"
+          },
+          "strict_complete": {
+            "type": "boolean"
+          },
+          "display_available": {
+            "type": "boolean"
+          },
+          "policy_acceptance": {
+            "type": "string"
+          },
+          "physical_limit": {
+            "type": "boolean"
+          },
+          "unofficial_ui_endpoint": {
+            "type": "boolean"
+          }
+        }
+      },
+      "PlatformRow": {
+        "type": "object",
+        "required": [
+          "platform",
+          "display_symbol",
+          "snapshot_ts",
+          "source_endpoint",
+          "depth_status",
+          "depth_by_tier",
+          "buy_slippage_bp",
+          "sell_slippage_bp"
+        ],
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "display_symbol": {
+            "type": "string"
+          },
+          "snapshot_ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "source_endpoint": {
+            "type": "string"
+          },
+          "depth_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "partial_reason": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "data_freshness": {
+            "$ref": "#/components/schemas/DataFreshness"
+          },
+          "last_collection_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "last_collection_error": {
+            "type": "string"
+          },
+          "last_collection_ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "mid_price": {
+            "type": "number"
+          },
+          "spread_bp": {
+            "type": "number"
+          },
+          "imbalance_pct": {
+            "type": "number"
+          },
+          "depth_by_tier": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DepthTierMetrics"
+            }
+          },
+          "vs_median_by_tier": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
+          "rank_0_1": {
+            "type": "integer"
+          },
+          "depth_status_label": {
+            "type": "string"
+          },
+          "buy_slippage_bp": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
+          "sell_slippage_bp": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
+          "worst_slippage_bp": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
+          "verdict": {
+            "type": "string"
+          }
+        }
+      },
+      "LiquidityKPIs": {
+        "type": "object",
+        "properties": {
+          "edgex_depth_by_tier": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/DepthTierMetrics"
+            }
+          },
+          "edgex_vs_median_by_tier": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
+          "strict_competitor_median_by_tier": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
+          "competitor_median_by_tier": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
+          "edgex_spread_bp": {
+            "type": "number"
+          },
+          "edgex_spread_10m_bp": {
+            "type": "number"
+          },
+          "edgex_spread_10m_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "edgex_24h_share_pct": {
+            "type": "number"
+          },
+          "symbol_share_7d_pct": {
+            "type": "number"
+          },
+          "symbol_share_7d_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "symbol_share_wow_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          }
+        }
+      },
+      "LiquiditySnapshot": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "snapshot_ts",
+          "rows"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "snapshot_ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformRow"
+            }
+          },
+          "competitor_median_by_tier": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
+          "strict_competitor_median_by_tier": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
+          "kpis": {
+            "$ref": "#/components/schemas/LiquidityKPIs"
+          }
+        }
+      },
+      "QualitySnapshot": {
+        "type": "object",
+        "required": [
+          "symbol",
+          "snapshot_ts",
+          "slippage_buckets_usd",
+          "rows"
+        ],
+        "properties": {
+          "symbol": {
+            "type": "string"
+          },
+          "snapshot_ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "slippage_buckets_usd": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlatformRow"
+            }
+          }
+        }
+      },
+      "ShareRow": {
+        "type": "object",
+        "required": [
+          "platform"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "raw_volume_usd": {
+            "type": "number"
+          },
+          "adjusted_volume_usd": {
+            "type": "number"
+          },
+          "adjusted_volume_24h_usd": {
+            "type": "number"
+          },
+          "adjusted_volume_total_usd": {
+            "type": "number"
+          },
+          "share_pct": {
+            "type": "number"
+          },
+          "denominator_pct": {
+            "type": "number"
+          },
+          "discount": {
+            "type": "number"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "data_source": {
+            "type": "string"
+          },
+          "days_seen": {
+            "type": "integer"
+          },
+          "days_window": {
+            "type": "integer"
+          }
+        }
+      },
+      "ShareTrend": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": {
+                "oneOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      "ShareHistory": {
+        "type": "object",
+        "additionalProperties": {
+          "$ref": "#/components/schemas/ApiStatus"
+        }
+      },
+      "ShareKPIs": {
+        "type": "object",
+        "properties": {
+          "edgex_share_pct": {
+            "type": "number"
+          },
+          "edgex_total_volume_usd": {
+            "type": "number"
+          },
+          "denominator_usd": {
+            "type": "number"
+          }
+        }
+      },
+      "ShareSnapshot": {
+        "type": "object",
+        "required": [
+          "window",
+          "snapshot_ts",
+          "rows"
+        ],
+        "properties": {
+          "window": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "snapshot_ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "denominator_usd": {
+            "type": "number"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ShareRow"
+            }
+          },
+          "kpis": {
+            "$ref": "#/components/schemas/ShareKPIs"
+          },
+          "history": {
+            "$ref": "#/components/schemas/ShareHistory"
+          },
+          "trend": {
+            "$ref": "#/components/schemas/ShareTrend"
+          }
+        }
+      },
+      "Top30Row": {
+        "type": "object",
+        "required": [
+          "rank",
+          "platform",
+          "symbol"
+        ],
+        "properties": {
+          "rank": {
+            "type": "integer"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "symbol": {
+            "type": "string"
+          },
+          "volume_24h_usd": {
+            "type": "number"
+          },
+          "volume_7d_usd": {
+            "type": "number"
+          },
+          "delta_7d_pct": {
+            "type": "number"
+          },
+          "volume_7d_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "delta_7d_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "edgex_listed": {
+            "type": "boolean"
+          },
+          "edgex_listed_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "competitor_top30_coverage": {
+            "type": "integer"
+          },
+          "competitor_top30_coverage_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "suggested_action": {
+            "type": "string"
+          },
+          "suggested_action_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "data_source": {
+            "type": "string"
+          },
+          "source_endpoint": {
+            "type": "string"
+          },
+          "snapshot_ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "Top30Snapshot": {
+        "type": "object",
+        "required": [
+          "surface",
+          "platform",
+          "snapshot_ts",
+          "rows"
+        ],
+        "properties": {
+          "surface": {
+            "type": "string"
+          },
+          "platform": {
+            "type": "string"
+          },
+          "snapshot_ts": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Top30Row"
+            }
+          }
+        }
+      },
+      "RunSummary": {
+        "type": "object",
+        "properties": {
+          "run_id": {
+            "type": "string"
+          },
+          "started_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "completed_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "success": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          }
+        }
+      },
+      "CollectionStatusRow": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "display_symbol": {
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
+          "error": {
+            "type": "string"
+          },
+          "snapshot_ts": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "CollectionStatusResponse": {
+        "type": "object",
+        "required": [
+          "last_run",
+          "rows"
+        ],
+        "properties": {
+          "last_run": {
+            "$ref": "#/components/schemas/RunSummary"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollectionStatusRow"
+            }
+          }
+        }
+      },
+      "RuntimeConfig": {
+        "type": "object",
+        "additionalProperties": true
+      }
+    }
   }
 }
