@@ -84,6 +84,60 @@ func TestFetchTickerEmptyAPISymbolReturnsUnsupported(t *testing.T) {
 	}
 }
 
+func TestRESTAdapterLimiterSpacesEveryHTTPRequestAttempt(t *testing.T) {
+	requestCount := 0
+	adapter := RESTAdapter{
+		Platform: "binance",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requestCount++
+			return jsonResponse(`{}`), nil
+		})},
+		MaxAttempts: 1,
+		limiter:     newRequestLimiter(20),
+	}
+
+	start := time.Now()
+	for i := 0; i < 3; i++ {
+		var out map[string]any
+		if err := adapter.fetchJSON(context.Background(), http.MethodGet, "https://example.invalid/test", nil, &out); err != nil {
+			t.Fatalf("fetchJSON(%d): %v", i, err)
+		}
+	}
+	elapsed := time.Since(start)
+	if requestCount != 3 {
+		t.Fatalf("requestCount=%d want 3", requestCount)
+	}
+	if elapsed < 90*time.Millisecond {
+		t.Fatalf("limiter allowed 3 attempts in %s, want at least 90ms", elapsed)
+	}
+}
+
+func TestRESTAdapterLimiterHonorsContextCancellationBeforeHTTPRequest(t *testing.T) {
+	requestCount := 0
+	adapter := RESTAdapter{
+		Platform: "binance",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requestCount++
+			return jsonResponse(`{}`), nil
+		})},
+		MaxAttempts: 1,
+		limiter:     newRequestLimiter(1),
+	}
+
+	var out map[string]any
+	if err := adapter.fetchJSON(context.Background(), http.MethodGet, "https://example.invalid/test", nil, &out); err != nil {
+		t.Fatalf("first fetchJSON: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	if err := adapter.fetchJSON(ctx, http.MethodGet, "https://example.invalid/test", nil, &out); err == nil {
+		t.Fatalf("second fetchJSON should fail while waiting on cancelled context")
+	}
+	if requestCount != 1 {
+		t.Fatalf("cancelled wait must not issue HTTP request, got %d requests", requestCount)
+	}
+}
+
 func TestClassifyDepthMarksSparseBookPartialWhenTwoPercentNotCovered(t *testing.T) {
 	book := domain.OrderBookSnapshot{
 		Bids:        make([]domain.Level, 20),

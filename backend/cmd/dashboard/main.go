@@ -77,7 +77,7 @@ func main() {
 		c := collector.NewCollectorWithLighter(cfg, store, lighterProvider)
 		backfiller := collector.NewSymbolBackfiller(cfg, store, lighterProvider)
 		var top30bf *collector.Top30Backfiller
-		if err := c.CollectOnce(ctx); err != nil {
+		if err := runCollectionCycle(ctx, c, cfg.Runtime.CollectionInterval); err != nil {
 			log.Printf("initial collection completed with errors: %v", err)
 		}
 		if !*runOnce {
@@ -85,7 +85,7 @@ func main() {
 				ticker := time.NewTicker(cfg.Runtime.CollectionInterval)
 				defer ticker.Stop()
 				for range ticker.C {
-					if err := c.CollectOnce(ctx); err != nil {
+					if err := runCollectionCycle(ctx, c, cfg.Runtime.CollectionInterval); err != nil {
 						log.Printf("collection completed with errors: %v", err)
 					}
 				}
@@ -155,6 +155,15 @@ func main() {
 
 func roleStartsLiveProviders(role string) bool {
 	return role == "collector" || role == "all"
+}
+
+func runCollectionCycle(ctx context.Context, c *collector.Collector, timeout time.Duration) error {
+	if timeout <= 0 {
+		timeout = time.Minute
+	}
+	cycleCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return c.CollectOnce(cycleCtx)
 }
 
 // buildCoinGeckoCollector wires the CoinGecko client + mapping using the

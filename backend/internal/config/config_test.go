@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -38,6 +39,12 @@ ws_providers:
     url: wss://example.invalid/bybit
     proxy: http://127.0.0.1:7897
     stale_after: 22s
+collection:
+  per_platform_concurrency: 7
+  per_platform_rate_per_sec: 11
+backfill:
+  per_platform_concurrency: 2
+  per_platform_rate_per_sec: 3
 `)
 	mustWrite(t, filepath.Join(dir, "instrument_catalog.yaml"), `
 schema_version: 1
@@ -94,9 +101,50 @@ platforms:
 	if cfg.Runtime.VolumeDiscounts["binance"] != 0.9 {
 		t.Fatalf("volume discount not loaded: %+v", cfg.Runtime.VolumeDiscounts)
 	}
+	if cfg.Runtime.Collection.PerPlatformConcurrency != 7 {
+		t.Fatalf("collection concurrency = %d, want 7", cfg.Runtime.Collection.PerPlatformConcurrency)
+	}
+	if cfg.Runtime.Collection.PerPlatformRatePerSec != 11 {
+		t.Fatalf("collection rate = %d, want 11", cfg.Runtime.Collection.PerPlatformRatePerSec)
+	}
+	if cfg.Runtime.Backfill.PerPlatformConcurrency != 2 || cfg.Runtime.Backfill.PerPlatformRatePerSec != 3 {
+		t.Fatalf("backfill limits not loaded independently: %+v", cfg.Runtime.Backfill)
+	}
 	bybitWS := cfg.Runtime.WSProviders["bybit"]
 	if !bybitWS.Enabled || bybitWS.URL != "wss://example.invalid/bybit" || bybitWS.Proxy != "http://127.0.0.1:7897" || bybitWS.StaleAfter != 22*time.Second {
 		t.Fatalf("ws provider override not loaded: %+v", bybitWS)
+	}
+}
+
+func TestLoadCollectionDefaultsIndependentFromBackfill(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
+symbols:
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+platforms: [binance]
+`)
+	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), `
+endpoints:
+  binance: https://example.invalid/binance
+`)
+	mustWrite(t, filepath.Join(dir, "runtime.yaml"), `
+backfill:
+  per_platform_concurrency: 9
+  per_platform_rate_per_sec: 10
+`)
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Runtime.Collection.PerPlatformConcurrency != 3 {
+		t.Fatalf("collection concurrency = %d, want default 3", cfg.Runtime.Collection.PerPlatformConcurrency)
+	}
+	if cfg.Runtime.Collection.PerPlatformRatePerSec != 4 {
+		t.Fatalf("collection rate = %d, want default 4", cfg.Runtime.Collection.PerPlatformRatePerSec)
+	}
+	if cfg.Runtime.Backfill.PerPlatformConcurrency != 9 || cfg.Runtime.Backfill.PerPlatformRatePerSec != 10 {
+		t.Fatalf("backfill overrides not applied: %+v", cfg.Runtime.Backfill)
 	}
 }
 
@@ -215,6 +263,22 @@ func TestCommittedRuntimeAlignsCoinGeckoCadence(t *testing.T) {
 	}
 	if cfg.Runtime.CoinGecko.CacheTTL != 0 {
 		t.Fatalf("CoinGecko cache_ttl = %s, want disabled cache", cfg.Runtime.CoinGecko.CacheTTL)
+	}
+	if cfg.Runtime.Collection.PerPlatformConcurrency <= 0 {
+		t.Fatalf("collection per_platform_concurrency must be configured, got %d", cfg.Runtime.Collection.PerPlatformConcurrency)
+	}
+	if cfg.Runtime.Collection.PerPlatformRatePerSec <= 0 {
+		t.Fatalf("collection per_platform_rate_per_sec must be configured, got %d", cfg.Runtime.Collection.PerPlatformRatePerSec)
+	}
+	raw, err := os.ReadFile("../../../config/runtime.yaml")
+	if err != nil {
+		t.Fatalf("read committed runtime.yaml: %v", err)
+	}
+	text := string(raw)
+	for _, needle := range []string{"collection:", "per_platform_concurrency:", "per_platform_rate_per_sec:"} {
+		if !strings.Contains(text, needle) {
+			t.Fatalf("runtime.yaml should explicitly declare %q", needle)
+		}
 	}
 }
 

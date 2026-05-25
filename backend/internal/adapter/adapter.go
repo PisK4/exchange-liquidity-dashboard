@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"edgex-dashboard/backend/internal/domain"
@@ -30,6 +31,7 @@ type RESTAdapter struct {
 	Client      *http.Client
 	MaxAttempts int
 	Lighter     LighterBookProvider
+	limiter     *requestLimiter
 }
 
 func New(platform string, timeout time.Duration) ExchangeAdapter {
@@ -47,6 +49,12 @@ func NewWithLighter(platform string, timeout time.Duration, lighter LighterBookP
 // container runtime cannot reach the upstream exchanges directly.
 func NewWithLighterAndProxy(platform string, timeout time.Duration, lighter LighterBookProvider, proxy string) ExchangeAdapter {
 	return RESTAdapter{Platform: platform, Client: newHTTPClient(timeout, proxy), MaxAttempts: 2, Lighter: lighter}
+}
+
+// NewWithLighterProxyAndRateLimit adds a per-adapter request limiter for the
+// live collection path while preserving the legacy proxy and Lighter wiring.
+func NewWithLighterProxyAndRateLimit(platform string, timeout time.Duration, lighter LighterBookProvider, proxy string, perSec int) ExchangeAdapter {
+	return RESTAdapter{Platform: platform, Client: newHTTPClient(timeout, proxy), MaxAttempts: 2, Lighter: lighter, limiter: newRequestLimiter(perSec)}
 }
 
 func newHTTPClient(timeout time.Duration, proxy string) *http.Client {
@@ -222,6 +230,11 @@ func (a RESTAdapter) fetchJSON(ctx context.Context, method, url string, body []b
 }
 
 func (a RESTAdapter) doJSONRequest(ctx context.Context, method, url string, body []byte) ([]byte, int, error) {
+	if a.limiter != nil {
+		if err := a.limiter.Wait(ctx); err != nil {
+			return nil, 0, err
+		}
+	}
 	var reader io.Reader
 	if body != nil {
 		reader = bytes.NewReader(body)
@@ -260,6 +273,40 @@ func retryBackoff(attempt int) time.Duration {
 	base := time.Duration(attempt*attempt) * 300 * time.Millisecond
 	jitter := time.Duration(retryJitterFracBP(attempt)) * base / 10000
 	return base + jitter
+}
+
+type requestLimiter struct {
+	mu       sync.Mutex
+	interval time.Duration
+	last     time.Time
+}
+
+func newRequestLimiter(perSec int) *requestLimiter {
+	if perSec <= 0 {
+		return nil
+	}
+	return &requestLimiter{interval: time.Second / time.Duration(perSec)}
+}
+
+func (r *requestLimiter) Wait(ctx context.Context) error {
+	r.mu.Lock()
+	wait := r.interval - time.Since(r.last)
+	if wait < 0 {
+		wait = 0
+	}
+	r.last = time.Now().Add(wait)
+	r.mu.Unlock()
+	if wait == 0 {
+		return nil
+	}
+	timer := time.NewTimer(wait)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
 }
 
 // retryJitterFracBP returns the per-attempt jitter slice in basis points

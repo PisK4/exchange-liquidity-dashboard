@@ -10,6 +10,7 @@ import (
 	"edgex-dashboard/backend/internal/config"
 	"edgex-dashboard/backend/internal/domain"
 	"edgex-dashboard/backend/internal/indicators"
+	"golang.org/x/sync/errgroup"
 )
 
 type Collector struct {
@@ -32,7 +33,7 @@ func NewCollector(cfg config.Config, store *Store) *Collector {
 func NewCollectorWithLighter(cfg config.Config, store *Store, lighter adapter.LighterBookProvider) *Collector {
 	adapters := map[string]adapter.ExchangeAdapter{}
 	for _, p := range cfg.Platforms {
-		adapters[p] = adapter.NewWithLighterAndProxy(p, cfg.Runtime.HTTPTimeout, lighter, cfg.Runtime.ExchangeProxy)
+		adapters[p] = adapter.NewWithLighterProxyAndRateLimit(p, cfg.Runtime.HTTPTimeout, lighter, cfg.Runtime.ExchangeProxy, cfg.Runtime.Collection.PerPlatformRatePerSec)
 	}
 	return &Collector{
 		cfg:         cfg,
@@ -100,17 +101,21 @@ func (c *Collector) recordCollectionResult(sub domain.SymbolSub, ok bool) {
 
 func (c *Collector) CollectOnce(ctx context.Context) error {
 	started := time.Now().UTC()
-	ctx, cancel := context.WithTimeout(ctx, c.cfg.Runtime.HTTPTimeout*6+10*time.Second)
-	defer cancel()
 	statuses := []domain.CollectionStatus{}
 	success, failed := 0, 0
 	var mu sync.Mutex
-	var wg sync.WaitGroup
+	semaphores := c.collectionSemaphores()
+	g, groupCtx := errgroup.WithContext(ctx)
 	for _, sub := range c.cfg.Symbols {
 		sub := sub
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		g.Go(func() error {
+			sem := semaphores[sub.Platform]
+			if err := acquirePlatformSlot(groupCtx, sem); err != nil {
+				return err
+			}
+			defer releasePlatformSlot(sem)
+			taskCtx, cancel := context.WithTimeout(groupCtx, collectionTaskTimeout(c.cfg.Runtime.HTTPTimeout))
+			defer cancel()
 			defer func() {
 				if r := recover(); r != nil {
 					mu.Lock()
@@ -149,11 +154,11 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 					SnapshotTS:     now,
 				})
 				mu.Unlock()
-				return
+				return nil
 			}
 			adapter := c.adapters[sub.Platform]
 			begin := time.Now()
-			book, err := adapter.FetchOrderBook(ctx, sub)
+			book, err := adapter.FetchOrderBook(taskCtx, sub)
 			orderbookOK := false
 			status := domain.StatusComplete
 			if err != nil {
@@ -175,7 +180,7 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 			c.store.SavePlatformSnapshot(platformFromBook(book, c.cfg.Runtime))
 
 			begin = time.Now()
-			vol, verr := adapter.FetchTicker(ctx, sub)
+			vol, verr := adapter.FetchTicker(taskCtx, sub)
 			vstatus := vol.Status
 			tickerOK := false
 			if verr != nil {
@@ -196,14 +201,57 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 			c.store.SaveVolume(vol)
 
 			c.recordCollectionResult(sub, orderbookOK || tickerOK)
-		}()
+			return nil
+		})
 	}
-	wg.Wait()
+	waitErr := g.Wait()
 	c.store.SaveStatus(statuses, RunSummary{RunID: fmt.Sprintf("run-%d", started.Unix()), StartedAt: started, CompletedAt: time.Now().UTC(), Success: success, Failed: failed})
+	if waitErr != nil {
+		return waitErr
+	}
 	if failed > 0 {
 		return fmt.Errorf("%d collection attempts failed or unsupported", failed)
 	}
 	return nil
+}
+
+func (c *Collector) collectionSemaphores() map[string]chan struct{} {
+	limit := c.cfg.Runtime.Collection.PerPlatformConcurrency
+	if limit <= 0 {
+		limit = 1
+	}
+	out := map[string]chan struct{}{}
+	for _, sub := range c.cfg.Symbols {
+		if _, ok := out[sub.Platform]; !ok {
+			out[sub.Platform] = make(chan struct{}, limit)
+		}
+	}
+	return out
+}
+
+func acquirePlatformSlot(ctx context.Context, sem chan struct{}) error {
+	if sem == nil {
+		return nil
+	}
+	select {
+	case sem <- struct{}{}:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func releasePlatformSlot(sem chan struct{}) {
+	if sem != nil {
+		<-sem
+	}
+}
+
+func collectionTaskTimeout(httpTimeout time.Duration) time.Duration {
+	if httpTimeout <= 0 {
+		httpTimeout = 5 * time.Second
+	}
+	return httpTimeout*6 + 10*time.Second
 }
 
 func platformFromBook(book domain.OrderBookSnapshot, runtime config.Runtime) domain.PlatformSnapshot {

@@ -22,6 +22,7 @@ type Runtime struct {
 	VolumeDiscounts       map[string]float64          `json:"volume_discounts"`
 	CoinGecko             CoinGeckoConfig             `json:"coingecko"`
 	WSProviders           map[string]WSProviderConfig `json:"ws_providers,omitempty"`
+	Collection            CollectionConfig            `json:"collection"`
 	Backfill              BackfillConfig              `json:"backfill"`
 	// StalenessByCategory configures per-asset_category snapshot freshness
 	// thresholds. Crypto markets trade 24/7 so a 30s threshold is
@@ -61,6 +62,14 @@ func (r Runtime) StaleThresholdFor(category string) time.Duration {
 		return 600 * time.Second
 	}
 	return 300 * time.Second
+}
+
+// CollectionConfig controls the 5-minute native REST collection cycle. It is
+// intentionally independent from BackfillConfig so operators can tune live
+// orderbook/ticker pressure without changing Top30 history repair traffic.
+type CollectionConfig struct {
+	PerPlatformConcurrency int `json:"per_platform_concurrency"`
+	PerPlatformRatePerSec  int `json:"per_platform_rate_per_sec"`
 }
 
 // BackfillConfig drives the Top30 daily kline backfill. Defaults are tuned
@@ -249,6 +258,7 @@ func Default() Config {
 			VolumeDiscounts:       map[string]float64{"mexc": 0.4, "gate": 0.5},
 			CoinGecko:             defaultCoinGeckoConfig(),
 			WSProviders:           defaultWSProviderConfig(),
+			Collection:            defaultCollectionConfig(),
 			Backfill:              defaultBackfillConfig(),
 			StalenessByCategory: map[string]time.Duration{
 				"crypto":    30 * time.Second,
@@ -259,6 +269,13 @@ func Default() Config {
 			CooldownFailureThreshold: 3,
 			CooldownDuration:         5 * time.Minute,
 		},
+	}
+}
+
+func defaultCollectionConfig() CollectionConfig {
+	return CollectionConfig{
+		PerPlatformConcurrency: 3,
+		PerPlatformRatePerSec:  4,
 	}
 }
 
@@ -375,10 +392,16 @@ type runtimeFile struct {
 	VolumeDiscounts          map[string]float64        `yaml:"volume_discounts"`
 	CoinGecko                *coinGeckoFile            `yaml:"coingecko"`
 	WSProviders              map[string]wsProviderFile `yaml:"ws_providers"`
+	Collection               *collectionFile           `yaml:"collection"`
 	Backfill                 *backfillFile             `yaml:"backfill"`
 	StalenessByCategory      map[string]string         `yaml:"staleness_by_category"`
 	CooldownFailureThreshold *int                      `yaml:"cooldown_failure_threshold"`
 	CooldownDuration         string                    `yaml:"cooldown_duration"`
+}
+
+type collectionFile struct {
+	PerPlatformConcurrency *int `yaml:"per_platform_concurrency"`
+	PerPlatformRatePerSec  *int `yaml:"per_platform_rate_per_sec"`
 }
 
 type coinGeckoFile struct {
@@ -544,6 +567,9 @@ func loadRuntime(path string, base Runtime) (Runtime, error) {
 		}
 		base.WSProviders = providers
 	}
+	if file.Collection != nil {
+		base.Collection = applyCollectionFile(base.Collection, *file.Collection)
+	}
 	if file.Backfill != nil {
 		base.Backfill = applyBackfillFile(base.Backfill, *file.Backfill)
 	}
@@ -575,6 +601,16 @@ func loadRuntime(path string, base Runtime) (Runtime, error) {
 		base.CooldownDuration = duration
 	}
 	return base, nil
+}
+
+func applyCollectionFile(base CollectionConfig, file collectionFile) CollectionConfig {
+	if file.PerPlatformConcurrency != nil {
+		base.PerPlatformConcurrency = *file.PerPlatformConcurrency
+	}
+	if file.PerPlatformRatePerSec != nil {
+		base.PerPlatformRatePerSec = *file.PerPlatformRatePerSec
+	}
+	return base
 }
 
 // applyBackfillFile overrides any non-nil field from the yaml on top of

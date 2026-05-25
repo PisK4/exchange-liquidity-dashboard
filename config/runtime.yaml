@@ -15,6 +15,13 @@ slippage_buckets_usd: [50000, 100000, 500000, 1000000]
 volume_discounts:
   mexc: 0.4
   gate: 0.5
+
+# Native 5min REST collection limits. Keep this independent from Top30
+# backfill so live orderbook/ticker pressure can be tuned separately.
+collection:
+  per_platform_concurrency: 3
+  per_platform_rate_per_sec: 4
+
 ws_providers:
   bitget:
     enabled: true
