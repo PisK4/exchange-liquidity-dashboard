@@ -48,19 +48,17 @@ test('adding a symbol via the dropdown commits to URL and localStorage', async (
   expect(JSON.parse(stored as string)).toEqual(['BTC', 'ETH']);
 });
 
-test('removing the last chip restores BTC fallback and clears localStorage URL param', async ({ page }) => {
+test('removing the last chip restores BTC fallback and persists it to localStorage', async ({ page }) => {
   await page.goto('/?watchlist=ETH');
   await page.getByTestId('watchlist-chip-remove-ETH').click();
-  // The DashboardClient mounts BTC as the single fallback symbol; the
-  // toolbar then re-renders the BTC chip. We don't strictly assert the
-  // URL is empty (replaceState removes the watchlist param when the
-  // list collapses to a single default), but the BTC chip MUST exist.
+  // The DashboardClient effect re-seeds BTC when the list empties out;
+  // the side-effect bus then writes the resolved single-chip list back
+  // to localStorage so a refresh keeps the BTC fallback intact.
   await expect(page.getByTestId('watchlist-chip-BTC')).toBeVisible();
-  // localStorage should not preserve ETH; either null (cleared) or [].
+  await expect(page.getByTestId('watchlist-chip-ETH')).toHaveCount(0);
   const stored = await page.evaluate(() => window.localStorage.getItem('edgex-dashboard:watchlist:v1'));
-  if (stored !== null) {
-    expect(JSON.parse(stored)).toEqual([]);
-  }
+  expect(stored).not.toBeNull();
+  expect(JSON.parse(stored as string)).toEqual(['BTC']);
 });
 
 test('localStorage seeded before mount populates the watchlist when URL is bare', async ({ page }) => {
@@ -89,12 +87,13 @@ test('URL parameter wins over localStorage on direct navigation', async ({ page 
 test('funding KPI panel shows edgeX 8h rate with sign and tooltip', async ({ page }) => {
   await page.goto('/');
   // The KPI card sits next to spread / share and renders the 4dp percent
-  // figure. Fixtures: edgex_funding_rate_8h = 0.00025 → 0.0250%.
+  // figure. Fixtures (CoinGecko percent units): edgex_funding_rate_8h
+  // = 0.0050 → "+0.0050%".
   const fundingCard = page.locator('section.panel').filter({ hasText: 'edgeX 资金费率 (8h 当量)' });
   await expect(fundingCard).toBeVisible();
-  await expect(fundingCard).toContainText('+0.0250%');
-  // vs-median delta: 0.00025 - 0.00045 = -0.00020 → -0.0200%.
-  await expect(fundingCard).toContainText('-0.0200%');
+  await expect(fundingCard).toContainText('+0.0050%');
+  // vs-median delta: 0.0050 - 0.0090 = -0.0040 → "-0.0040%".
+  await expect(fundingCard).toContainText('-0.0040%');
 });
 
 test('Liquidity detail table includes a 资金费率 (8h) column with per-row values', async ({ page }) => {
@@ -102,8 +101,8 @@ test('Liquidity detail table includes a 资金费率 (8h) column with per-row va
   const detail = page.locator('section.panel').filter({ hasText: '深度明细 · 平台 × 档位 (USD)' });
   await expect(detail).toBeVisible();
   await expect(detail).toContainText('资金费率 (8h)');
-  // edgeX row: rate_8h 0.00025 → +0.0250%
-  await expect(detail.locator('tbody')).toContainText('+0.0250%');
+  // edgeX row: rate_8h 0.0050 → +0.0050%
+  await expect(detail.locator('tbody')).toContainText('+0.0050%');
   // bingx row: status=unsupported → muted '—'
   await expect(detail.locator('tbody')).toContainText('—');
 });
@@ -123,7 +122,7 @@ test('Quality detail table includes the same 资金费率 column', async ({ page
   const detail = page.locator('section.panel').filter({ hasText: '盘口质量明细' });
   await expect(detail).toBeVisible();
   await expect(detail).toContainText('资金费率 (8h)');
-  await expect(detail.locator('tbody')).toContainText('+0.0250%');
+  await expect(detail.locator('tbody')).toContainText('+0.0050%');
 });
 
 test('watchlist cards render one section per symbol with distinct depth values', async ({ page }) => {
@@ -135,11 +134,29 @@ test('watchlist cards render one section per symbol with distinct depth values',
   // BTC scale=1.0 → 2.30M, ETH scale=0.7 → 1.61M (rendered as 1.61M).
   const btc = page.getByTestId('watchlist-card-BTC');
   const eth = page.getByTestId('watchlist-card-ETH');
-  // Both cards expose the funding row (edgeX 0.0250% identical across
+  // Both cards expose the funding row (edgeX 0.0050% identical across
   // symbols in fixtures); the depth row MUST differ.
   await expect(btc).toContainText('2.30M');
   await expect(eth).not.toContainText('2.30M');
   await expect(eth).toContainText('1.61M');
+});
+
+test('clicking 查看明细 on a card collapses the watchlist to that single symbol and reveals the V1 detail view', async ({ page }) => {
+  await page.goto('/?watchlist=BTC,ETH,SOL');
+  // Multi-symbol → card grid; depth detail table must be hidden.
+  await expect(page.locator('text=深度明细 · 平台 × 档位 (USD)')).toHaveCount(0);
+  // Click ETH's 查看明细 button.
+  await page.getByTestId('watchlist-card-expand-ETH').click();
+  // Watchlist now contains only ETH; the chip toolbar still shows ETH
+  // and the V1 single-symbol detail view (depth detail table) is back.
+  await expect(page.getByTestId('watchlist-chip-ETH')).toBeVisible();
+  await expect(page.getByTestId('watchlist-chip-BTC')).toHaveCount(0);
+  await expect(page.locator('text=深度明细 · 平台 × 档位 (USD)')).toBeVisible();
+  // URL and localStorage reflect the collapsed state via the
+  // side-effect bus in DashboardClient.
+  await expect(page).toHaveURL(/watchlist=ETH/);
+  const stored = await page.evaluate(() => window.localStorage.getItem('edgex-dashboard:watchlist:v1'));
+  expect(JSON.parse(stored as string)).toEqual(['ETH']);
 });
 
 test('add button disables at MAX_WATCHLIST cap (10)', async ({ page }) => {

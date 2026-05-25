@@ -19,12 +19,17 @@ export const FUNDING_SIGN_CONVENTION_TOOLTIP =
   '跨平台已折算为 8 小时当量；原始周期：edgeX 4h、Hyperliquid 1h、Lighter 1h、其余 8h。\n' +
   '数据源：CoinGecko /derivatives，5min 刷新。';
 
-// formatFundingRate8h renders a percent value with sign. CoinGecko sends
-// rates in percent units (1.0 = 1%); the dashboard inherits the same
-// convention internally, so this formatter scales by ×100 to surface
-// the percent character that operators expect. 4dp matches the spec
-// mocks and is the smallest precision at which inter-venue spreads
-// (typically 0.0001-0.001% per 8h) remain legible.
+// formatFundingRate8h renders a percent value with sign. CoinGecko's
+// /derivatives endpoint returns funding_rate already expressed in
+// percent units (per their public docs: "Funding rate (in percent)…
+// Example: 0.0095 means 0.0095%"), and the backend stores the value
+// verbatim without re-scaling. Therefore this formatter only needs to
+// fix precision + sign — multiplying by 100 a second time would shift
+// every reading by two orders of magnitude (a real 0.0095% per 8h on
+// Binance would otherwise render as "+0.95%").
+//
+// 4dp matches the spec mocks and is the smallest precision at which
+// inter-venue spreads (typically 0.0001–0.005% per 8h) remain legible.
 //
 // Returns '—' for null / undefined / non-finite values so callers can
 // route every funding value through one formatter without conditional
@@ -33,18 +38,18 @@ export const FUNDING_SIGN_CONVENTION_TOOLTIP =
 // and we explicitly NOT render a zero.
 export function formatFundingRate8h(rate?: number | null): string {
   if (typeof rate !== 'number' || !Number.isFinite(rate)) return '—';
-  const formatted = (rate * 100).toFixed(4);
+  const formatted = rate.toFixed(4);
   return rate >= 0 ? `+${formatted}%` : `${formatted}%`;
 }
 
 // formatFundingDelta renders a vs-median delta with the same precision
-// as formatFundingRate8h. The only difference is that 0 is shown
-// explicitly as '+0.0000%' instead of '—', because a row whose rate is
-// exactly the median is a meaningful observation (the operator wants
-// to see 'yes, we are right at the centre').
+// and unit handling as formatFundingRate8h. The only difference is that
+// 0 is shown explicitly as '+0.0000%' instead of '—', because a row
+// whose rate is exactly the median is a meaningful observation (the
+// operator wants to see 'yes, we are right at the centre').
 export function formatFundingDelta(delta?: number | null): string {
   if (typeof delta !== 'number' || !Number.isFinite(delta)) return '—';
-  const formatted = (delta * 100).toFixed(4);
+  const formatted = delta.toFixed(4);
   return delta >= 0 ? `+${formatted}%` : `${formatted}%`;
 }
 

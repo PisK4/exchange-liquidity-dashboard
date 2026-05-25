@@ -103,6 +103,22 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
     }
   }, [watchlist]);
 
+  // Side-effect bus: every watchlist mutation MUST sync to localStorage
+  // (for next-session resume) and to the URL (for share-links). The
+  // toolbar does this itself for chip add/remove, but the WatchlistCard
+  // 'expand' button and any future programmatic setter would otherwise
+  // bypass the sync. Doing it here in one place guarantees the three
+  // sources of truth — URL, localStorage, React state — never diverge.
+  const hasMountedRef = useRef(false);
+  useEffect(() => {
+    if (!hasMountedRef.current) {
+      hasMountedRef.current = true;
+      return;
+    }
+    saveToLocalStorage(watchlist);
+    applyURLState(watchlist);
+  }, [watchlist]);
+
   // Single-chip mode preserves the V1 deep-link contract: clicking a
   // category pill or picking from the symbol dropdown sets ?symbol=X
   // without touching ?watchlist=. When the operator hasn't pinned a

@@ -19,14 +19,21 @@ import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingRate8
 // so the card never collapses to an empty box; if the entire snapshot
 // failed to load (e.g. the symbol resolver couldn't find a canonical
 // match) we surface a StatusEmptyState instead of the KPI grid.
+// onExpand collapses the watchlist back to this single symbol so the
+// operator can drop into the full V1 detail view (depth curves, depth
+// detail table, funding column, etc.). Implemented as a click rather
+// than a pure Link so we can also clear the localStorage entries for
+// the other chips via the same code path that drives chip-remove.
 export function WatchlistCard({
   canonical,
   displayName,
   snapshot,
+  onExpand,
 }: {
   canonical: string;
   displayName: string;
   snapshot: LiquiditySnapshot | null;
+  onExpand?: () => void;
 }) {
   if (!snapshot) {
     return (
@@ -55,7 +62,17 @@ export function WatchlistCard({
     <section className="panel watchlist-card span-8 row-h-md" data-testid={`watchlist-card-${canonical}`}>
       <div className="panel-head">
         <span className="panel-title">{displayName}</span>
-        <span className="panel-tag muted">自选</span>
+        {onExpand && (
+          <button
+            type="button"
+            className="watchlist-card-expand"
+            onClick={onExpand}
+            data-testid={`watchlist-card-expand-${canonical}`}
+            title={`展开 ${displayName} 的深度曲线与明细表`}
+          >
+            查看明细 →
+          </button>
+        )}
       </div>
       <dl className="watchlist-kpis">
         <div>

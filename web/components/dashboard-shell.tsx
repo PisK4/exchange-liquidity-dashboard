@@ -347,12 +347,20 @@ function LiquidityTab({
             const canonical = normalizeSymbol(symbol);
             const meta = allSymbols.find(s => s.canonical.toUpperCase() === canonical);
             const snap = data.liquidityByCanonical[canonical] ?? null;
+            // Clicking 查看明细 collapses the watchlist down to just this
+            // symbol — the LiquidityTab then re-renders in single-symbol
+            // mode (full V1 view with depth curves + detail table). The
+            // other chips are reachable again through the toolbar's URL /
+            // localStorage round-trip, so this is a non-destructive
+            // 'focus' rather than a permanent removal.
+            const onExpand = () => onWatchlistChange([canonical]);
             return (
               <WatchlistCard
                 key={canonical}
                 canonical={canonical}
                 displayName={meta?.display_name ?? symbol}
                 snapshot={snap}
+                onExpand={onExpand}
               />
             );
           })}

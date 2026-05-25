@@ -44,17 +44,23 @@ function depthByTier(scale: number) {
 //      median above edgeX so the delta is negative and visible)
 //   4. unsupported platform that must surface as '—' and grey.
 function fundingFor(platform: string, symbol: string) {
+  // Values follow CoinGecko's /derivatives convention: funding_rate is
+  // already in percent units (e.g. 0.0095 means 0.0095%). The backend
+  // stores it verbatim; the frontend formatter prints `.toFixed(4) + '%'`
+  // without further scaling. Magnitudes here mirror real BTC funding
+  // levels (~0.005-0.015% per 8h) so the fixture exercises realistic
+  // precision instead of vanishingly small numbers that all round to 0.
   if (platform === 'edgeX') {
-    return { platform, period_hours: 4, rate_native: 0.000125, rate_8h: 0.00025, status: 'complete', snapshot_ts: now };
+    return { platform, period_hours: 4, rate_native: 0.0025, rate_8h: 0.0050, status: 'complete', snapshot_ts: now };
   }
   if (platform === 'binance') {
-    return { platform, period_hours: 8, rate_native: 0.00045, rate_8h: 0.00045, status: 'complete', snapshot_ts: now };
+    return { platform, period_hours: 8, rate_native: 0.0090, rate_8h: 0.0090, status: 'complete', snapshot_ts: now };
   }
   if (platform === 'okx') {
-    return { platform, period_hours: 8, rate_native: 0.00060, rate_8h: 0.00060, status: 'complete', snapshot_ts: now };
+    return { platform, period_hours: 8, rate_native: 0.0120, rate_8h: 0.0120, status: 'complete', snapshot_ts: now };
   }
   if (platform === 'bybit') {
-    return { platform, period_hours: 8, rate_native: 0.00030, rate_8h: 0.00030, status: 'complete', snapshot_ts: now };
+    return { platform, period_hours: 8, rate_native: 0.0060, rate_8h: 0.0060, status: 'complete', snapshot_ts: now };
   }
   // bingx in the v2.1 catalog is marked unsupported for funding; that
   // status must propagate through to the UI as muted '—'.
@@ -137,7 +143,7 @@ function liquidityFor(symbolDisplay: string) {
     funding: fundingFor(platform, canonical),
   }));
   // Median is computed across the three complete competitor rows
-  // (binance 0.00045, okx 0.00060, bybit 0.00030) = 0.00045.
+  // (binance 0.0090, okx 0.0120, bybit 0.0060) = 0.0090.
   return {
     symbol: meta?.display_symbol ?? symbolDisplay,
     snapshot_ts: now,
@@ -149,8 +155,8 @@ function liquidityFor(symbolDisplay: string) {
       symbol_share_7d_pct: sevenDayShare[canonical] ?? 5,
       edgex_spread_bp: 1.1,
       edgex_spread_10m_bp: 1.23,
-      edgex_funding_rate_8h: 0.00025,
-      competitor_funding_rate_median_8h: 0.00045,
+      edgex_funding_rate_8h: 0.0050,
+      competitor_funding_rate_median_8h: 0.0090,
       competitor_funding_rate_median_8h_status: 'complete',
       competitor_funding_rate_median_8h_samples: 3,
     },
