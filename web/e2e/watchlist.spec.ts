@@ -181,6 +181,53 @@ test('clicking 查看明细 on a card collapses the watchlist to that single sym
   expect(JSON.parse(stored as string)).toEqual(['ETH']);
 });
 
+test('Quality tab switches to QualityCard grid when watchlist has >1 symbol and shares the watchlist with Liquidity tab', async ({ page }) => {
+  await page.goto('/?watchlist=BTC,ETH,SOL&tab=quality');
+  // The V1 quality detail (3 BarCharts + 盘口质量明细 table) is hidden
+  // in card mode.
+  await expect(page.locator('text=盘口质量明细')).toHaveCount(0);
+  // Three QualityCards rendered, with the same testid namespace used
+  // by the Liquidity-side cards' chip toolbar (so toggling tabs
+  // preserves the toolbar identity for the operator).
+  for (const sym of ['BTC', 'ETH', 'SOL']) {
+    await expect(page.getByTestId(`quality-card-${sym}`)).toBeVisible();
+    await expect(page.getByTestId(`quality-card-expand-${sym}`)).toBeVisible();
+    await expect(page.getByTestId(`quality-card-chart-${sym}`)).toBeVisible();
+    await expect(page.getByTestId(`quality-card-verdict-${sym}`)).toBeVisible();
+  }
+  // Same WatchlistToolbar present in quality mode.
+  await expect(page.getByTestId('watchlist-toolbar')).toBeVisible();
+  // The KPI rows reflect quality fields — spread (10min), 滑点 @ bucket, 资金费率.
+  const btc = page.getByTestId('quality-card-BTC');
+  await expect(btc).toContainText('edgeX spread (10min 均值)');
+  await expect(btc).toContainText('滑点 @ 100K USD');
+  await expect(btc).toContainText('vs 竞品中位数滑点');
+  await expect(btc).toContainText('资金费率');
+});
+
+test('Quality bucket pill bar at the top of the card grid changes the @ bucket label across all cards', async ({ page }) => {
+  await page.goto('/?watchlist=BTC,ETH&tab=quality&bucket=100000');
+  const btc = page.getByTestId('quality-card-BTC');
+  const eth = page.getByTestId('quality-card-ETH');
+  await expect(btc).toContainText('滑点 @ 100K USD');
+  await expect(eth).toContainText('滑点 @ 100K USD');
+  // Click the 1M USD pill in the global bucket bar.
+  const oneMPill = page.locator('a.pill').filter({ hasText: '1M USD' }).first();
+  await oneMPill.click();
+  await expect(btc).toContainText('滑点 @ 1M USD');
+  await expect(eth).toContainText('滑点 @ 1M USD');
+});
+
+test('clicking 查看明细 on a QualityCard collapses to single-symbol V1 quality view', async ({ page }) => {
+  await page.goto('/?watchlist=BTC,ETH&tab=quality');
+  await page.getByTestId('quality-card-expand-ETH').click();
+  // Single chip, V1 quality detail table re-appears.
+  await expect(page.getByTestId('watchlist-chip-ETH')).toBeVisible();
+  await expect(page.getByTestId('watchlist-chip-BTC')).toHaveCount(0);
+  await expect(page.locator('section.panel').filter({ hasText: '盘口质量明细' })).toBeVisible();
+  await expect(page).toHaveURL(/watchlist=ETH/);
+});
+
 test('add button disables at MAX_WATCHLIST cap (10)', async ({ page }) => {
   // We only have 4 fixture symbols; build a URL with the 4 available
   // symbols duplicated up to 10 entries — dedupeAndCap collapses dupes

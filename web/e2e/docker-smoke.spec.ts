@@ -97,6 +97,22 @@ test('clicking 查看明细 collapses to single-symbol view and persists', async
   await expect(page).toHaveURL(/watchlist=ETH/);
 });
 
+test('Quality tab honours the watchlist and renders a QualityCard grid (live data)', async ({ page }) => {
+  await page.goto('/?watchlist=BTC,ETH&tab=quality');
+  for (const sym of ['BTC', 'ETH']) {
+    await expect(page.getByTestId(`quality-card-${sym}`)).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByTestId(`quality-card-chart-${sym}`)).toBeVisible();
+    await expect(page.getByTestId(`quality-card-verdict-${sym}`)).toBeVisible();
+  }
+  // Global bucket bar present; the V1 quality detail table must be
+  // hidden in card mode.
+  await expect(page.locator('text=盘口质量明细')).toHaveCount(0);
+  // KPI rows reflect the spread/imbalance/滑点 family.
+  const btc = page.getByTestId('quality-card-BTC');
+  await expect(btc).toContainText('edgeX spread');
+  await expect(btc).toContainText('滑点 @');
+});
+
 test('Top30 / Share tabs still render against live backend', async ({ page }) => {
   await page.goto('/?tab=share');
   // The Share tab includes a panel whose title contains '市占率明细表'.

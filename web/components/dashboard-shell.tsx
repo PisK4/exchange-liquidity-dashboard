@@ -6,6 +6,7 @@ import { PlatformCell, platformDisplayName } from '@/components/platform-cell';
 import { ShareTrendChart, type ShareTrendPoint } from '@/components/share-trend-chart';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
+import { QualityCard } from '@/components/quality-card';
 import { QualityFundingRow } from '@/components/quality-funding-row';
 import { WatchlistCard } from '@/components/watchlist-card';
 import { WatchlistToolbar } from '@/components/watchlist-toolbar';
@@ -270,7 +271,7 @@ export function DashboardShell({
       </nav>
       <main className="dashboard-main">
         {needsControls ? <DashboardControls query={{ ...query, tab }} categories={categories} activeCategory={activeCategory} activeCanonical={symbolCtx.canonical} /> : null}
-        {tab === 'quality' ? <QualityTab data={data} query={query} bucket={bucket} symbolCtx={symbolCtx} /> : null}
+        {tab === 'quality' ? <QualityTab data={data} query={query} bucket={bucket} symbolCtx={symbolCtx} watchlist={watchlist} allSymbols={(data.meta.categories ?? []).flatMap(c => c.symbols)} onWatchlistChange={onWatchlistChange} /> : null}
         {tab === 'share' ? <ShareTab data={data.share} query={query} /> : null}
         {tab === 'top30' ? <Top30Tab data={data.top30} query={query} platform={platform} /> : null}
         {tab === 'monitor' ? (
@@ -424,14 +425,59 @@ function LiquidityTab({
   );
 }
 
-function QualityTab({ data, query, bucket, symbolCtx }: { data: DashboardData; query: Query; bucket: string; symbolCtx: SymbolContext }) {
+type SymbolMeta = NonNullable<DashboardMeta['categories']>[number]['symbols'][number];
+
+function QualityTab({ data, query, bucket, symbolCtx, watchlist, allSymbols, onWatchlistChange }: { data: DashboardData; query: Query; bucket: string; symbolCtx: SymbolContext; watchlist: string[]; allSymbols: SymbolMeta[]; onWatchlistChange: (next: string[]) => void }) {
   const rows = data.quality.rows ?? [];
   const rowByPlatform = new Map(rows.map(row => [row.platform, row]));
   const buckets = (data.quality.slippage_buckets_usd ?? [50_000, 100_000, 500_000, 1_000_000]).map(String);
   const symbol = symbolCtx.displaySymbol;
+
+  // Quality watchlist mode mirrors LiquidityTab: when the watchlist
+  // holds 2+ symbols, the V1 detail (three BarCharts + 盘口质量明细
+  // table + funding span-24 row) collapses to a QualityCard grid.
+  // The global SlippagePills above the grid owns query.bucket so all
+  // cards render the same volume tier — the entire point of cards is
+  // 'compare the same metric across symbols side-by-side'.
+  if (watchlist.length > 1) {
+    return (
+      <div className="page-content active">
+        <div className="section-bar">
+          <span>3.5 · <b>盘口质量</b></span>
+          <div className="line" />
+          <span>{watchlist.length} 个标的 · 摘要视图 · 桶 {bucket === '1000000' ? '1M' : bucket === '500000' ? '500K' : bucket === '100000' ? '100K' : '50K'} USD</span>
+        </div>
+        <WatchlistToolbar items={watchlist} symbols={allSymbols} onChange={onWatchlistChange} />
+        <div className="quality-bucket-bar">
+          <span className="muted" style={{ fontSize: 12 }}>滑点桶 (USD):</span>
+          <SlippagePills buckets={buckets} active={bucket} query={query} />
+        </div>
+        <div className="grid">
+          {watchlist.map(sym => {
+            const canonical = normalizeSymbol(sym);
+            const meta = allSymbols.find(s => s.canonical.toUpperCase() === canonical);
+            const snap = data.liquidityByCanonical[canonical] ?? null;
+            return (
+              <QualityCard
+                key={canonical}
+                canonical={canonical}
+                displayName={meta?.display_name ?? sym}
+                snapshot={snap}
+                bucket={bucket}
+                buckets={buckets}
+                onExpand={() => onWatchlistChange([canonical])}
+              />
+            );
+          })}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="page-content active">
       <div className="section-bar"><span>3.5 · <b>盘口质量</b></span><div className="line" /><span>{symbolCtx.displayName} · Spread · Imbalance · 模拟下单滑点</span></div>
+      <WatchlistToolbar items={watchlist} symbols={allSymbols} onChange={onWatchlistChange} />
       <div className="grid">
         <section className="panel span-8 row-h-md">
           <div className="panel-head"><span className="panel-title">Spread (bp)</span><span className="panel-sub">· 买一/卖一相对价差</span></div>
