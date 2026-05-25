@@ -1,0 +1,240 @@
+package collector
+
+import (
+	"testing"
+	"time"
+
+	"edgex-dashboard/backend/internal/config"
+	"edgex-dashboard/backend/internal/domain"
+)
+
+func newDivergenceStore(t *testing.T) *Store {
+	t.Helper()
+	cfg := config.Default()
+	cfg.Runtime.Top30Divergence = config.Top30DivergenceConfig{
+		CEXPlatforms:         []string{"binance", "okx", "mexc"},
+		DEXPlatforms:         []string{"hyperliquid", "edgeX"},
+		SignificantRankDelta: 5,
+	}
+	return NewStore(cfg)
+}
+
+func mkTop30Row(rank int, symbol string, vol float64) domain.Top30Row {
+	return domain.Top30Row{
+		Rank:         rank,
+		Symbol:       symbol,
+		Volume24HUSD: vol,
+		Status:       domain.StatusComplete,
+		SnapshotTS:   time.Now().UTC(),
+	}
+}
+
+func TestTop30Divergence_EmptyStoreUnsupported(t *testing.T) {
+	store := newDivergenceStore(t)
+	snap := store.Top30Divergence()
+	if snap.Status != domain.StatusUnsupported {
+		t.Fatalf("expected status=unsupported on empty store, got %q", snap.Status)
+	}
+	if len(snap.CEXTop30) != 0 || len(snap.DEXTop30) != 0 {
+		t.Fatalf("expected empty aggregates on empty store, got cex=%d dex=%d", len(snap.CEXTop30), len(snap.DEXTop30))
+	}
+	if len(snap.Divergence) != 0 {
+		t.Fatalf("expected empty divergence on empty store, got %d rows", len(snap.Divergence))
+	}
+	if snap.SignificantRankDelta != 5 {
+		t.Fatalf("threshold must round-trip from config, got %d", snap.SignificantRankDelta)
+	}
+}
+
+func TestTop30Divergence_AggregatesAcrossClass(t *testing.T) {
+	store := newDivergenceStore(t)
+	// binance Top30: BTC #1 ($100), ETH #2 ($50)
+	store.SaveTop30("binance", []domain.Top30Row{
+		mkTop30Row(1, "BTC", 100),
+		mkTop30Row(2, "ETH", 50),
+	})
+	// okx Top30: ETH #1 ($80), BTC #2 ($60)
+	store.SaveTop30("okx", []domain.Top30Row{
+		mkTop30Row(1, "ETH", 80),
+		mkTop30Row(2, "BTC", 60),
+	})
+	// mexc Top30: BTC #1 ($200) — MEXC×0.4 discount must apply
+	store.SaveTop30("mexc", []domain.Top30Row{
+		mkTop30Row(1, "BTC", 200),
+	})
+
+	snap := store.Top30Divergence()
+	if len(snap.CEXTop30) != 2 {
+		t.Fatalf("expected 2 aggregate rows in CEX, got %d", len(snap.CEXTop30))
+	}
+	// BTC adjusted = 100 + 60 + 200*0.4 = 240
+	// ETH adjusted = 50 + 80           = 130
+	// BTC > ETH so BTC is rank #1
+	if snap.CEXTop30[0].Symbol != "BTC" {
+		t.Fatalf("expected CEX #1 = BTC, got %q", snap.CEXTop30[0].Symbol)
+	}
+	if got := snap.CEXTop30[0].AdjustedVolume24HUSD; got != 240 {
+		t.Fatalf("expected BTC adjusted=240 (incl. mexc×0.4), got %v", got)
+	}
+	if got := snap.CEXTop30[0].RawVolume24HUSD; got != 360 {
+		t.Fatalf("expected BTC raw=360, got %v", got)
+	}
+	if snap.CEXTop30[0].PlatformCount != 3 {
+		t.Fatalf("expected BTC platform_count=3, got %d", snap.CEXTop30[0].PlatformCount)
+	}
+	if snap.CEXTop30[1].Symbol != "ETH" || snap.CEXTop30[1].Rank != 2 {
+		t.Fatalf("expected CEX #2 = ETH, got %+v", snap.CEXTop30[1])
+	}
+}
+
+func TestTop30Divergence_CategoriesAndKPI(t *testing.T) {
+	store := newDivergenceStore(t)
+	// CEX universe: only BTC and FOO
+	store.SaveTop30("binance", []domain.Top30Row{
+		mkTop30Row(1, "BTC", 1000),
+		mkTop30Row(2, "FOO", 500),
+	})
+	// DEX universe: only BTC and BAR (FOO is CEX-only, BAR is DEX-only)
+	store.SaveTop30("hyperliquid", []domain.Top30Row{
+		mkTop30Row(1, "BTC", 800),
+		mkTop30Row(2, "BAR", 300),
+	})
+
+	snap := store.Top30Divergence()
+	if snap.Status != domain.StatusComplete {
+		t.Fatalf("expected status=complete, got %q", snap.Status)
+	}
+	byCategory := map[string]int{}
+	for _, row := range snap.Divergence {
+		byCategory[row.Category]++
+	}
+	if byCategory[domain.Top30DivergenceCEXOnly] != 1 {
+		t.Fatalf("expected exactly 1 cex_only row, got %d", byCategory[domain.Top30DivergenceCEXOnly])
+	}
+	if byCategory[domain.Top30DivergenceDEXOnly] != 1 {
+		t.Fatalf("expected exactly 1 dex_only row, got %d", byCategory[domain.Top30DivergenceDEXOnly])
+	}
+	if byCategory[domain.Top30DivergenceAligned] != 1 {
+		t.Fatalf("expected exactly 1 aligned row (BTC #1/#1), got %d", byCategory[domain.Top30DivergenceAligned])
+	}
+	if snap.KPI.CEXOnlyCount != 1 || snap.KPI.DEXOnlyCount != 1 || snap.KPI.AlignedCount != 1 {
+		t.Fatalf("KPI counts wrong: %+v", snap.KPI)
+	}
+}
+
+func TestTop30Divergence_HeavyClassification(t *testing.T) {
+	store := newDivergenceStore(t)
+	// CEX places XYZ at rank 1; DEX places XYZ at rank 10. Threshold=5
+	// (configured in newDivergenceStore) so |Δ|=9 triggers cex_heavy.
+	cexRows := []domain.Top30Row{mkTop30Row(1, "XYZ", 1000)}
+	for i := 2; i <= 9; i++ {
+		cexRows = append(cexRows, mkTop30Row(i, padSymbol("CX", i), 900-float64(i)))
+	}
+	cexRows = append(cexRows, mkTop30Row(10, "FILLER", 50))
+	store.SaveTop30("binance", cexRows)
+
+	dexRows := []domain.Top30Row{}
+	for i := 1; i <= 9; i++ {
+		dexRows = append(dexRows, mkTop30Row(i, padSymbol("DX", i), 900-float64(i)))
+	}
+	dexRows = append(dexRows, mkTop30Row(10, "XYZ", 100))
+	store.SaveTop30("hyperliquid", dexRows)
+
+	snap := store.Top30Divergence()
+	var xyz *domain.Top30DivergenceRow
+	for i := range snap.Divergence {
+		if snap.Divergence[i].Symbol == "XYZ" {
+			xyz = &snap.Divergence[i]
+			break
+		}
+	}
+	if xyz == nil {
+		t.Fatalf("XYZ row missing from divergence output")
+	}
+	if xyz.Category != domain.Top30DivergenceCEXHeavy {
+		t.Fatalf("expected XYZ = cex_heavy, got %q", xyz.Category)
+	}
+	if xyz.RankDelta == nil || *xyz.RankDelta != 9 {
+		t.Fatalf("expected |Δ|=9 for XYZ, got %+v", xyz.RankDelta)
+	}
+}
+
+func TestTop30Divergence_EdgexGapCount(t *testing.T) {
+	store := newDivergenceStore(t)
+	// BTC is hot on both classes and listed on edgeX → not a gap.
+	// FOO is hot on both classes but NOT listed → counts as gap.
+	store.SaveTop30("binance", []domain.Top30Row{
+		mkTop30Row(1, "BTC", 1000),
+		mkTop30Row(2, "FOO", 500),
+	})
+	store.SaveTop30("hyperliquid", []domain.Top30Row{
+		mkTop30Row(1, "BTC", 1000),
+		mkTop30Row(2, "FOO", 500),
+	})
+	store.SaveTop30("edgeX", []domain.Top30Row{
+		{Rank: 1, Symbol: "BTC", Volume24HUSD: 200, Status: domain.StatusComplete, EdgexListed: true, SnapshotTS: time.Now().UTC()},
+	})
+
+	snap := store.Top30Divergence()
+	if snap.KPI.EdgexGapCount != 1 {
+		t.Fatalf("expected edgex_gap_count=1 (FOO hot on both, not listed), got %d (kpi=%+v)", snap.KPI.EdgexGapCount, snap.KPI)
+	}
+}
+
+func TestTop30Divergence_PartialStatusOnSingleClass(t *testing.T) {
+	store := newDivergenceStore(t)
+	store.SaveTop30("binance", []domain.Top30Row{mkTop30Row(1, "BTC", 100)})
+	snap := store.Top30Divergence()
+	if snap.Status != domain.StatusPartial {
+		t.Fatalf("expected status=partial when only one class has data, got %q", snap.Status)
+	}
+	if len(snap.DEXTop30) != 0 {
+		t.Fatalf("expected empty DEX aggregate, got %d rows", len(snap.DEXTop30))
+	}
+	if len(snap.CEXTop30) != 1 {
+		t.Fatalf("expected 1 CEX aggregate row, got %d", len(snap.CEXTop30))
+	}
+}
+
+func TestClassifyDivergence(t *testing.T) {
+	one, two, eleven := 1, 2, 11
+	cases := []struct {
+		name     string
+		cex, dex *int
+		thresh   int
+		want     string
+	}{
+		{"both nil → aligned (degenerate)", nil, nil, 10, domain.Top30DivergenceAligned},
+		{"cex only", &one, nil, 10, domain.Top30DivergenceCEXOnly},
+		{"dex only", nil, &one, 10, domain.Top30DivergenceDEXOnly},
+		{"aligned within threshold", &one, &two, 10, domain.Top30DivergenceAligned},
+		{"cex_heavy when CEX ranks lower number", &one, &eleven, 5, domain.Top30DivergenceCEXHeavy},
+		{"dex_heavy when DEX ranks lower number", &eleven, &one, 5, domain.Top30DivergenceDEXHeavy},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := classifyDivergence(tc.cex, tc.dex, tc.thresh); got != tc.want {
+				t.Fatalf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+func padSymbol(prefix string, n int) string {
+	if n < 10 {
+		return prefix + "0" + itoa(n)
+	}
+	return prefix + itoa(n)
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	digits := []byte{}
+	for n > 0 {
+		digits = append([]byte{byte('0' + n%10)}, digits...)
+		n /= 10
+	}
+	return string(digits)
+}

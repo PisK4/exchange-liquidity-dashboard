@@ -91,6 +91,15 @@ coingecko:
     hyperliquid: "Hyperliquid (Futures)"
     lighter: "Lighter"
 
+# Top30 CEX vs DEX divergence view classification. Any platform not
+# listed here is ignored by the divergence aggregator. significant_rank_delta
+# is the |Δrank| threshold above which a symbol is tagged cex_heavy /
+# dex_heavy instead of aligned.
+top30_divergence:
+  cex_platforms: [binance, okx, bybit, bitget, mexc, gate, bingx]
+  dex_platforms: [hyperliquid, lighter, edgeX]
+  significant_rank_delta: 10
+
 # Top30 7d Vol / 7d Δ backfill. The backfiller iterates over the union of
 # base assets currently ranked in every platform's Top30 and pulls daily
 # kline rows from the platform's native endpoint, persisted as

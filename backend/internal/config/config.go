@@ -37,6 +37,23 @@ type Runtime struct {
 	// values (3 / 5m) and can be overridden in runtime.yaml.
 	CooldownFailureThreshold int           `json:"cooldown_failure_threshold,omitempty"`
 	CooldownDuration         time.Duration `json:"cooldown_duration,omitempty"`
+	// Top30Divergence configures the CEX-vs-DEX comparison view inside
+	// the Top30 tab. CEXPlatforms / DEXPlatforms partition the universe
+	// of Top30-producing platforms into two venue classes; any platform
+	// not listed in either set is ignored by the divergence aggregator.
+	// SignificantRankDelta is the |Δrank| threshold above which a symbol
+	// is tagged cex_heavy / dex_heavy instead of aligned.
+	Top30Divergence Top30DivergenceConfig `json:"top30_divergence"`
+}
+
+// Top30DivergenceConfig is the runtime knob for the CEX-vs-DEX Top30
+// view. Splitting the assignment out of the code lets ops re-tag a venue
+// (e.g. when a new DEX joins the dashboard) without a redeploy. The
+// defaults match the V1 roster: 7 CEX + 3 DEX, threshold=10.
+type Top30DivergenceConfig struct {
+	CEXPlatforms         []string `json:"cex_platforms"`
+	DEXPlatforms         []string `json:"dex_platforms"`
+	SignificantRankDelta int      `json:"significant_rank_delta"`
 }
 
 // StaleThresholdFor returns the configured freshness threshold for the
@@ -268,7 +285,20 @@ func Default() Config {
 			},
 			CooldownFailureThreshold: 3,
 			CooldownDuration:         5 * time.Minute,
+			Top30Divergence:          defaultTop30DivergenceConfig(),
 		},
+	}
+}
+
+// defaultTop30DivergenceConfig seeds the V1 venue classification. The 7
+// CEX platforms mirror the existing 24h-share denominator; the 3 DEX
+// platforms include edgeX itself so the "DEX side" of the comparison
+// reflects the entire onchain perp surface the dashboard tracks.
+func defaultTop30DivergenceConfig() Top30DivergenceConfig {
+	return Top30DivergenceConfig{
+		CEXPlatforms:         []string{"binance", "okx", "bybit", "bitget", "mexc", "gate", "bingx"},
+		DEXPlatforms:         []string{"hyperliquid", "lighter", "edgeX"},
+		SignificantRankDelta: 10,
 	}
 }
 
@@ -397,6 +427,13 @@ type runtimeFile struct {
 	StalenessByCategory      map[string]string         `yaml:"staleness_by_category"`
 	CooldownFailureThreshold *int                      `yaml:"cooldown_failure_threshold"`
 	CooldownDuration         string                    `yaml:"cooldown_duration"`
+	Top30Divergence          *top30DivergenceFile      `yaml:"top30_divergence"`
+}
+
+type top30DivergenceFile struct {
+	CEXPlatforms         []string `yaml:"cex_platforms"`
+	DEXPlatforms         []string `yaml:"dex_platforms"`
+	SignificantRankDelta *int     `yaml:"significant_rank_delta"`
 }
 
 type collectionFile struct {
@@ -600,7 +637,23 @@ func loadRuntime(path string, base Runtime) (Runtime, error) {
 		}
 		base.CooldownDuration = duration
 	}
+	if file.Top30Divergence != nil {
+		base.Top30Divergence = applyTop30DivergenceFile(base.Top30Divergence, *file.Top30Divergence)
+	}
 	return base, nil
+}
+
+func applyTop30DivergenceFile(base Top30DivergenceConfig, file top30DivergenceFile) Top30DivergenceConfig {
+	if len(file.CEXPlatforms) > 0 {
+		base.CEXPlatforms = append([]string(nil), file.CEXPlatforms...)
+	}
+	if len(file.DEXPlatforms) > 0 {
+		base.DEXPlatforms = append([]string(nil), file.DEXPlatforms...)
+	}
+	if file.SignificantRankDelta != nil && *file.SignificantRankDelta > 0 {
+		base.SignificantRankDelta = *file.SignificantRankDelta
+	}
+	return base
 }
 
 func applyCollectionFile(base CollectionConfig, file collectionFile) CollectionConfig {

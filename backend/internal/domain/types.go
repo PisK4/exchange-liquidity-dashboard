@@ -251,6 +251,88 @@ type Top30Row struct {
 	Error          string    `json:"error,omitempty"`
 }
 
+// Top30 divergence venue categories. The dashboard groups every Top30
+// platform into exactly one of {CEX, DEX}; the assignment lives in
+// Runtime.Top30Divergence so operators can re-tag a venue (e.g. when a
+// new DEX competitor is added) without a code change. The category is
+// emitted on every aggregate row so the frontend can colour the dot in
+// the scatter plot.
+const (
+	Top30DivergenceCEXOnly  = "cex_only"
+	Top30DivergenceDEXOnly  = "dex_only"
+	Top30DivergenceCEXHeavy = "cex_heavy"
+	Top30DivergenceDEXHeavy = "dex_heavy"
+	Top30DivergenceAligned  = "aligned"
+)
+
+// Top30AggregateRow is one row of an aggregated venue-class Top30. The
+// aggregation rule is: for every symbol that appears in at least one
+// platform's per-platform Top30, sum AdjustedVolume(platform, vol_24h)
+// over all platforms in the class, sort descending, take top N (default
+// 30). PlatformCount tells the operator how many member platforms
+// contributed to the aggregate so single-platform spikes don't masquerade
+// as broad consensus.
+type Top30AggregateRow struct {
+	Rank                  int      `json:"rank"`
+	Symbol                string   `json:"symbol"`
+	AdjustedVolume24HUSD  float64  `json:"adjusted_volume_24h_usd"`
+	RawVolume24HUSD       float64  `json:"raw_volume_24h_usd"`
+	PlatformCount         int      `json:"platform_count"`
+	ContributingPlatforms []string `json:"contributing_platforms,omitempty"`
+}
+
+// Top30DivergenceRow is the join of the CEX aggregate Top30 and the DEX
+// aggregate Top30 keyed by symbol. CEXRank / DEXRank are *int so the JSON
+// wire format keeps null for "未上榜" symbols (rank=0 would collide with a
+// legitimate #1). RankDelta is the absolute difference, only set when both
+// ranks exist; the renderer uses nil to know whether to show a Δ column.
+type Top30DivergenceRow struct {
+	Symbol                string   `json:"symbol"`
+	CEXRank               *int     `json:"cex_rank,omitempty"`
+	DEXRank               *int     `json:"dex_rank,omitempty"`
+	CEXAdjustedVolUSD     *float64 `json:"cex_adjusted_volume_24h_usd,omitempty"`
+	DEXAdjustedVolUSD     *float64 `json:"dex_adjusted_volume_24h_usd,omitempty"`
+	CEXRawVolUSD          *float64 `json:"cex_raw_volume_24h_usd,omitempty"`
+	DEXRawVolUSD          *float64 `json:"dex_raw_volume_24h_usd,omitempty"`
+	CEXPlatformCount      int      `json:"cex_platform_count"`
+	DEXPlatformCount      int      `json:"dex_platform_count"`
+	RankDelta             *int     `json:"rank_delta,omitempty"`
+	Category              string   `json:"category"`
+	EdgexListed           bool     `json:"edgex_listed"`
+	EdgexListedStatus     string   `json:"edgex_listed_status,omitempty"`
+}
+
+// Top30DivergenceKPI is the headline strip the Top30 divergence view
+// renders above the table. EdgexGapCount is the count of symbols that
+// are hot in BOTH the CEX aggregate Top30 AND the DEX aggregate Top30
+// but are not yet listed on edgeX — a high-confidence signal to consider
+// for the next listing batch.
+type Top30DivergenceKPI struct {
+	CEXOnlyCount  int `json:"cex_only_count"`
+	DEXOnlyCount  int `json:"dex_only_count"`
+	HeavyCount    int `json:"heavy_count"`
+	AlignedCount  int `json:"aligned_count"`
+	EdgexGapCount int `json:"edgex_gap_count"`
+}
+
+// Top30DivergenceSnapshot is the response payload of
+// /api/snapshot/top30/divergence. Status mirrors the convention used by
+// the existing Top30 endpoint: "complete" when both classes produced at
+// least one row, "unsupported" when neither class has data (collector
+// has not run yet or every platform's Top30 is empty), "partial" when
+// exactly one class is empty.
+type Top30DivergenceSnapshot struct {
+	SnapshotTS           time.Time            `json:"snapshot_ts"`
+	Status               string               `json:"status"`
+	CEXPlatforms         []string             `json:"cex_platforms"`
+	DEXPlatforms         []string             `json:"dex_platforms"`
+	SignificantRankDelta int                  `json:"significant_rank_delta"`
+	CEXTop30             []Top30AggregateRow  `json:"cex_top30"`
+	DEXTop30             []Top30AggregateRow  `json:"dex_top30"`
+	Divergence           []Top30DivergenceRow `json:"divergence_rows"`
+	KPI                  Top30DivergenceKPI   `json:"kpi"`
+}
+
 // PlatformVolumeAggregate captures one platform-level 24h volume / OI reading
 // for use in the Share(24h) view. SnapshotTS is the time at which the upstream
 // source produced this aggregate.
