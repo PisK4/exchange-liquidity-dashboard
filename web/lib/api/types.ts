@@ -23,3 +23,7 @@ export type ShareRow = Schema<'ShareRow'>;
 export type ShareSnapshot = Schema<'ShareSnapshot'>;
 export type Top30Row = Schema<'Top30Row'>;
 export type Top30Snapshot = Schema<'Top30Snapshot'>;
+export type Top30AggregateRow = Schema<'Top30AggregateRow'>;
+export type Top30DivergenceRow = Schema<'Top30DivergenceRow'>;
+export type Top30DivergenceKPI = Schema<'Top30DivergenceKPI'>;
+export type Top30DivergenceSnapshot = Schema<'Top30DivergenceSnapshot'>;

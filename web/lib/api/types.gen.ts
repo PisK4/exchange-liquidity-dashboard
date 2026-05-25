@@ -337,6 +337,41 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/snapshot/top30/divergence": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description top30 CEX vs DEX divergence */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Top30DivergenceSnapshot"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/collection-status": {
         parameters: {
             query?: never;
@@ -696,6 +731,49 @@ export interface components {
             snapshot_ts: string;
             status?: components["schemas"]["ApiStatus"];
             rows: components["schemas"]["Top30Row"][];
+        };
+        Top30AggregateRow: {
+            rank: number;
+            symbol: string;
+            adjusted_volume_24h_usd: number;
+            raw_volume_24h_usd: number;
+            platform_count: number;
+            contributing_platforms?: string[];
+        };
+        Top30DivergenceRow: {
+            symbol: string;
+            cex_rank?: number | null;
+            dex_rank?: number | null;
+            cex_adjusted_volume_24h_usd?: number | null;
+            dex_adjusted_volume_24h_usd?: number | null;
+            cex_raw_volume_24h_usd?: number | null;
+            dex_raw_volume_24h_usd?: number | null;
+            cex_platform_count: number;
+            dex_platform_count: number;
+            rank_delta?: number | null;
+            /** @enum {string} */
+            category: "cex_only" | "dex_only" | "cex_heavy" | "dex_heavy" | "aligned";
+            edgex_listed: boolean;
+            edgex_listed_status?: components["schemas"]["ApiStatus"];
+        };
+        Top30DivergenceKPI: {
+            cex_only_count: number;
+            dex_only_count: number;
+            heavy_count: number;
+            aligned_count: number;
+            edgex_gap_count: number;
+        };
+        Top30DivergenceSnapshot: {
+            /** Format: date-time */
+            snapshot_ts: string;
+            status: components["schemas"]["ApiStatus"];
+            cex_platforms: string[];
+            dex_platforms: string[];
+            significant_rank_delta: number;
+            cex_top30: components["schemas"]["Top30AggregateRow"][];
+            dex_top30: components["schemas"]["Top30AggregateRow"][];
+            divergence_rows: components["schemas"]["Top30DivergenceRow"][];
+            kpi: components["schemas"]["Top30DivergenceKPI"];
         };
         RunSummary: {
             run_id?: string;
