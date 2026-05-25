@@ -10,6 +10,7 @@ import {
   type LiquiditySnapshot,
   type QualitySnapshot,
   type ShareSnapshot,
+  type Top30DivergenceSnapshot,
   type Top30Snapshot,
 } from '@/lib/api/client';
 import {
@@ -33,6 +34,7 @@ type DashboardData = {
   quality: QualitySnapshot;
   share: ShareSnapshot;
   top30: Top30Snapshot;
+  top30Divergence: Top30DivergenceSnapshot;
   lookup: FrontendURLLookup;
   // liquidityByCanonical carries one snapshot per watchlist symbol when
   // the watchlist contains more than one entry; for single-entry lists
@@ -50,6 +52,7 @@ function buildPaths(query: Query) {
     quality: `/api/snapshot/quality?symbol=${symbolParam}`,
     share: `/api/snapshot/share?window=${query.window}`,
     top30: `/api/snapshot/top30?surface=perp&platform=${query.platform}`,
+    top30Divergence: '/api/snapshot/top30/divergence',
   };
 }
 
@@ -145,7 +148,7 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
   // symbol independently without dragging the headline view along.
   const paths = buildPaths(query);
   const watchlistKey = useMemo(() => watchlist.join(','), [watchlist]);
-  const { meta: metaPath, liquidity: liquidityPath, quality: qualityPath, share: sharePath, top30: top30Path } = paths;
+  const { meta: metaPath, liquidity: liquidityPath, quality: qualityPath, share: sharePath, top30: top30Path, top30Divergence: top30DivergencePath } = paths;
 
   useEffect(() => {
     let cancelled = false;
@@ -173,12 +176,13 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
 
     const fetchAll = async () => {
       try {
-        const [meta, liquidity, quality, share, top30, lookup, liquidityByCanonical] = await Promise.all([
+        const [meta, liquidity, quality, share, top30, top30Divergence, lookup, liquidityByCanonical] = await Promise.all([
           getJSONWithFallback<DashboardMeta>(metaPath, { signal: controller.signal }),
           getJSONWithFallback<LiquiditySnapshot>(liquidityPath, { signal: controller.signal }),
           getJSONWithFallback<QualitySnapshot>(qualityPath, { signal: controller.signal }),
           getJSONWithFallback<ShareSnapshot>(sharePath, { signal: controller.signal }),
           getJSONWithFallback<Top30Snapshot>(top30Path, { signal: controller.signal }),
+          getJSONWithFallback<Top30DivergenceSnapshot>(top30DivergencePath, { signal: controller.signal }),
           getFrontendURLLookup(),
           fanOutLiquidity(),
         ]);
@@ -190,7 +194,7 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
         if (!liquidityByCanonical[headlineCanonical]) {
           liquidityByCanonical[headlineCanonical] = liquidity;
         }
-        setData({ meta, liquidity, quality, share, top30, lookup, liquidityByCanonical, watchlist });
+        setData({ meta, liquidity, quality, share, top30, top30Divergence, lookup, liquidityByCanonical, watchlist });
       } catch (err) {
         if (cancelled || controller.signal.aborted) return;
         if (err instanceof DOMException && err.name === 'AbortError') return;
@@ -210,7 +214,7 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
       window.clearInterval(timer);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [metaPath, liquidityPath, qualityPath, sharePath, top30Path, watchlistKey, data?.meta.refresh_interval_sec]);
+  }, [metaPath, liquidityPath, qualityPath, sharePath, top30Path, top30DivergencePath, watchlistKey, data?.meta.refresh_interval_sec]);
 
   if (fatalError && !data) {
     throw fatalError;

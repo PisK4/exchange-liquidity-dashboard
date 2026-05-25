@@ -23,6 +23,7 @@ export default function Page({ searchParams }: { searchParams: SearchParams }) {
     platform: scalar(searchParams.platform) ?? 'binance',
     category: scalar(searchParams.category),
     coreOnly: scalar(searchParams.coreOnly),
+    view: scalar(searchParams.view),
   };
   // SSR-only resolution: localStorage is intentionally NOT touched here;
   // DashboardClient re-resolves once the browser mounts and uses

@@ -8,10 +8,11 @@ import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { QualityCard } from '@/components/quality-card';
 import { QualityFundingRow } from '@/components/quality-funding-row';
+import { Top30DivergenceView } from '@/components/top30-divergence-view';
 import { WatchlistCard } from '@/components/watchlist-card';
 import { WatchlistToolbar } from '@/components/watchlist-toolbar';
 import { resolveSymbolContext, type SymbolContext } from '@/components/lib/symbol-context';
-import { bp, money, moneyAuto, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformFundingRate, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
+import { bp, money, moneyAuto, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformFundingRate, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30DivergenceSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
 import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingRate8h, fundingPeriodTooltip } from '@/lib/funding-format';
 import { WATCHLIST_DEFAULT_FALLBACK, normalizeSymbol } from '@/lib/watchlist';
 
@@ -23,6 +24,7 @@ type DashboardData = {
   quality: QualitySnapshot;
   share: ShareSnapshot;
   top30: Top30Snapshot;
+  top30Divergence: Top30DivergenceSnapshot;
   lookup: FrontendURLLookup;
   liquidityByCanonical: Record<string, LiquiditySnapshot>;
   watchlist: string[];
@@ -273,7 +275,7 @@ export function DashboardShell({
         {needsControls ? <DashboardControls query={{ ...query, tab }} categories={categories} activeCategory={activeCategory} activeCanonical={symbolCtx.canonical} /> : null}
         {tab === 'quality' ? <QualityTab data={data} query={query} bucket={bucket} symbolCtx={symbolCtx} watchlist={watchlist} allSymbols={(data.meta.categories ?? []).flatMap(c => c.symbols)} onWatchlistChange={onWatchlistChange} /> : null}
         {tab === 'share' ? <ShareTab data={data.share} query={query} /> : null}
-        {tab === 'top30' ? <Top30Tab data={data.top30} query={query} platform={platform} /> : null}
+        {tab === 'top30' ? <Top30Tab data={data.top30} divergence={data.top30Divergence} lookup={data.lookup} query={query} platform={platform} /> : null}
         {tab === 'monitor' ? (
           <LiquidityTab
             data={data}
@@ -612,15 +614,47 @@ function renderActionCell(row: Top30Row) {
   return <span className={variant ? `action-cell ${variant}` : 'action-cell'}>{action}</span>;
 }
 
-function Top30Tab({ data, query, platform }: { data: Top30Snapshot; query: Query; platform: string }) {
+// top30ViewItems exposes the two sub-views of the Top30 tab. "per-platform"
+// is the legacy per-exchange Top30 table; "divergence" is the new CEX vs
+// DEX aggregate comparison. The active key is read from query.view; empty
+// / unknown values fall back to per-platform so existing bookmarks keep
+// rendering the table they were captured at.
+const top30ViewItems = [
+  { key: 'per-platform', label: '各平台 Top30' },
+  { key: 'divergence', label: 'CEX vs DEX 对比' },
+] as const;
+
+function Top30ViewPills({ active, query }: { active: string; query: Query }) {
+  return (
+    <span className="pill-group" aria-label="Top30 子视图">
+      {top30ViewItems.map(item => (
+        <Link className={`pill ${item.key === active ? 'active' : ''}`} href={withQuery(query, { tab: 'top30', view: item.key })} key={item.key}>
+          {item.label}
+        </Link>
+      ))}
+    </span>
+  );
+}
+
+function Top30Tab({ data, divergence, lookup, query, platform }: { data: Top30Snapshot; divergence: Top30DivergenceSnapshot; lookup: FrontendURLLookup; query: Query; platform: string }) {
+  const view = query.view === 'divergence' ? 'divergence' : 'per-platform';
   const platforms = ['binance', 'okx', 'bybit', 'bitget', 'mexc', 'gate', 'bingx', 'hyperliquid', 'lighter', 'edgeX'];
   return (
     <div className="page-content active">
-      <section className="panel">
-        <div className="panel-head"><span className="panel-title">各平台 Top30 成交量</span><PillGroup items={platforms} active={platform} query={{ ...query, tab: 'top30' }} param="platform" /></div>
-        {data.status === 'unsupported' ? <StatusEmptyState status="unsupported" message={data.platform === 'edgeX' ? 'not implemented' : '尚未返回该平台 Top30 排行，等待下一次拉取'} /> : null}
-        <div className="table-wrap"><table className="tbl"><thead><tr><th className="num">#</th><th>Symbol</th><th className="num">24h Vol</th><th className="num">7d Vol</th><th className="num">7d Δ</th><th className="num">edgeX 已上线?</th><th className="num">竞品 Top30 覆盖</th><th>建议动作</th></tr></thead><tbody>{data.rows.map(row => <tr key={`${row.rank}-${row.symbol}`}><td className="num">{row.rank}</td><td>{row.symbol}</td><td className="num">{row.status === 'unsupported' ? '—' : money(row.volume_24h_usd)}</td><td className="num">{typeof row.volume_7d_usd === 'number' ? money(row.volume_7d_usd) : <StatusBadge status={row.volume_7d_status ?? 'unsupported'} />}</td><td className="num">{typeof row.delta_7d_pct === 'number' ? pct(row.delta_7d_pct) : <StatusBadge status={row.delta_7d_status ?? 'unsupported'} />}</td><td className="num">{renderListedCell(row)}</td><td className="num">{renderCoverageCell(row)}</td><td>{renderActionCell(row)}</td></tr>)}</tbody></table></div>
-      </section>
+      <div className="section-bar">
+        <span>4 · <b>Top30 成交量</b></span>
+        <div className="line" />
+        <Top30ViewPills active={view} query={query} />
+      </div>
+      {view === 'divergence' ? (
+        <Top30DivergenceView snapshot={divergence} lookup={lookup} />
+      ) : (
+        <section className="panel">
+          <div className="panel-head"><span className="panel-title">各平台 Top30 成交量</span><PillGroup items={platforms} active={platform} query={{ ...query, tab: 'top30', view: 'per-platform' }} param="platform" /></div>
+          {data.status === 'unsupported' ? <StatusEmptyState status="unsupported" message={data.platform === 'edgeX' ? 'not implemented' : '尚未返回该平台 Top30 排行，等待下一次拉取'} /> : null}
+          <div className="table-wrap"><table className="tbl"><thead><tr><th className="num">#</th><th>Symbol</th><th className="num">24h Vol</th><th className="num">7d Vol</th><th className="num">7d Δ</th><th className="num">edgeX 已上线?</th><th className="num">竞品 Top30 覆盖</th><th>建议动作</th></tr></thead><tbody>{data.rows.map(row => <tr key={`${row.rank}-${row.symbol}`}><td className="num">{row.rank}</td><td>{row.symbol}</td><td className="num">{row.status === 'unsupported' ? '—' : money(row.volume_24h_usd)}</td><td className="num">{typeof row.volume_7d_usd === 'number' ? money(row.volume_7d_usd) : <StatusBadge status={row.volume_7d_status ?? 'unsupported'} />}</td><td className="num">{typeof row.delta_7d_pct === 'number' ? pct(row.delta_7d_pct) : <StatusBadge status={row.delta_7d_status ?? 'unsupported'} />}</td><td className="num">{renderListedCell(row)}</td><td className="num">{renderCoverageCell(row)}</td><td>{renderActionCell(row)}</td></tr>)}</tbody></table></div>
+        </section>
+      )}
     </div>
   );
 }
