@@ -6,8 +6,10 @@ import { PlatformCell, platformDisplayName } from '@/components/platform-cell';
 import { ShareTrendChart, type ShareTrendPoint } from '@/components/share-trend-chart';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
+import { QualityFundingRow } from '@/components/quality-funding-row';
 import { resolveSymbolContext, type SymbolContext } from '@/components/lib/symbol-context';
-import { bp, money, moneyAuto, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
+import { bp, money, moneyAuto, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformFundingRate, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
+import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingRate8h, fundingPeriodTooltip } from '@/lib/funding-format';
 
 type Query = Record<string, string | undefined>;
 
@@ -258,6 +260,37 @@ export function DashboardShell({ query, data }: { query: Query; data: DashboardD
   );
 }
 
+function FundingKpiPanel({ kpis }: { kpis?: LiquiditySnapshot['kpis'] }) {
+  const status = kpis?.competitor_funding_rate_median_8h_status ?? 'stale';
+  const median = kpis?.competitor_funding_rate_median_8h;
+  const edgexRate = kpis?.edgex_funding_rate_8h;
+  const delta = typeof edgexRate === 'number' && typeof median === 'number' ? edgexRate - median : null;
+  return (
+    <section className="panel span-6 row-h-sm">
+      <div className="panel-head">
+        <span className="panel-title">
+          edgeX 资金费率 (8h 当量)
+          <span className="info-icon" aria-label="资金费率 sign convention" title={FUNDING_SIGN_CONVENTION_TOOLTIP}> ⓘ</span>
+        </span>
+        <span className="panel-tag">latest</span>
+      </div>
+      <div className={`big-number${typeof edgexRate === 'number' ? '' : ' muted'}`}>{formatFundingRate8h(edgexRate)}</div>
+      <div className="subline">
+        vs 竞品 median {status === 'complete' ? formatFundingDelta(delta) : '—'}
+      </div>
+    </section>
+  );
+}
+
+function FundingCell({ funding }: { funding?: PlatformFundingRate | null }) {
+  const usable = funding && typeof funding.rate_8h === 'number' && Number.isFinite(funding.rate_8h);
+  const display = usable ? formatFundingRate8h(funding?.rate_8h) : '—';
+  const tooltip = fundingPeriodTooltip(funding ?? undefined);
+  return (
+    <td className="num" title={tooltip}>{usable ? <span>{display}</span> : <span className="muted">{display}</span>}</td>
+  );
+}
+
 function LiquidityTab({ data, query, tier, symbolCtx }: { data: DashboardData; query: Query; tier: string; symbolCtx: SymbolContext }) {
   const rows = data.liquidity.rows ?? [];
   const edge = rows.find(row => row.platform === 'edgeX');
@@ -294,12 +327,13 @@ function LiquidityTab({ data, query, tier, symbolCtx }: { data: DashboardData; q
           <div className="big-number">{bp(data.liquidity.kpis?.edgex_spread_bp)}</div>
           <div className="subline">24h share {pct(data.liquidity.kpis?.edgex_24h_share_pct)}</div>
         </section>
+        <FundingKpiPanel kpis={data.liquidity.kpis} />
         <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">买盘深度曲线 BID</span></div><LineChart ariaLabel="买盘深度曲线 BID" labels={tierLabels.map(displayTierLabel)} series={tierSeries(rows, 'bid_usd')} /></section>
         <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">卖盘深度曲线 ASK</span></div><LineChart ariaLabel="卖盘深度曲线 ASK" labels={tierLabels.map(displayTierLabel)} series={tierSeries(rows, 'ask_usd')} /></section>
         <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">合计深度曲线 BID + ASK</span></div><LineChart ariaLabel="合计深度曲线 BID + ASK" labels={tierLabels.map(displayTierLabel)} series={tierSeries(rows, 'total_usd')} /></section>
         <section className="panel span-24">
           <div className="panel-head"><span className="panel-title">深度明细 · 平台 × 档位 (USD)</span><span className="panel-sub">· 合计深度 vs 竞品中位数 / 排名</span></div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num col-bid">0.05% BID</th><th className="num col-ask">0.05% ASK</th><th className="num col-bid">0.1% BID</th><th className="num col-ask">0.1% ASK</th><th className="num col-bid">1% BID</th><th className="num col-ask">1% ASK</th><th className="num col-bid">2% BID</th><th className="num col-ask">2% ASK</th><th className="num">±0.1% 合计</th><th className="num">vs 中位数</th><th className="num">排名</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><DepthCell row={row} tier="0.05%" side="bid_usd" /><DepthCell row={row} tier="0.05%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="bid_usd" /><DepthCell row={row} tier="0.10%" side="ask_usd" /><DepthCell row={row} tier="1.00%" side="bid_usd" /><DepthCell row={row} tier="1.00%" side="ask_usd" /><DepthCell row={row} tier="2.00%" side="bid_usd" /><DepthCell row={row} tier="2.00%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="total_usd" /><td className="num">{ratio(row.vs_median_by_tier?.['0.10%'])}{row.depth_status_label && <span className={`badge ${depthLabelBadgeClass(row.depth_status_label)} depth-label-badge`} title={row.partial_reason}>{normalizeDepthLabel(row.depth_status_label)}</span>}</td><td className="num">{row.rank_0_1 ? `#${row.rank_0_1}` : '—'}</td></tr>)}</tbody></table></div>
+          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num col-bid">0.05% BID</th><th className="num col-ask">0.05% ASK</th><th className="num col-bid">0.1% BID</th><th className="num col-ask">0.1% ASK</th><th className="num col-bid">1% BID</th><th className="num col-ask">1% ASK</th><th className="num col-bid">2% BID</th><th className="num col-ask">2% ASK</th><th className="num">±0.1% 合计</th><th className="num">vs 中位数</th><th className="num">排名</th><th className="num" title={FUNDING_SIGN_CONVENTION_TOOLTIP}>资金费率 (8h) ⓘ</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><DepthCell row={row} tier="0.05%" side="bid_usd" /><DepthCell row={row} tier="0.05%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="bid_usd" /><DepthCell row={row} tier="0.10%" side="ask_usd" /><DepthCell row={row} tier="1.00%" side="bid_usd" /><DepthCell row={row} tier="1.00%" side="ask_usd" /><DepthCell row={row} tier="2.00%" side="bid_usd" /><DepthCell row={row} tier="2.00%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="total_usd" /><td className="num">{ratio(row.vs_median_by_tier?.['0.10%'])}{row.depth_status_label && <span className={`badge ${depthLabelBadgeClass(row.depth_status_label)} depth-label-badge`} title={row.partial_reason}>{normalizeDepthLabel(row.depth_status_label)}</span>}</td><td className="num">{row.rank_0_1 ? `#${row.rank_0_1}` : '—'}</td><FundingCell funding={row.funding} /></tr>)}</tbody></table></div>
           <div className="panel-foot-note"><span className="approx-mark">*</span> 表示该档位深度仅部分覆盖，数值为已观测部分的合计</div>
         </section>
       </div>
@@ -344,8 +378,9 @@ function QualityTab({ data, query, bucket, symbolCtx }: { data: DashboardData; q
         </section>
         <section className="panel span-24">
           <div className="panel-head"><span className="panel-title">盘口质量明细</span><span className="panel-sub">· 每行=一个平台</span><span className="panel-tag muted">CSV 可导</span></div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num">Spread (bp)</th><th className="num">Mid 价格</th><th className="num">Imbalance (%)</th><th className="num">滑点 50K (bp)</th><th className="num">滑点 100K (bp)</th><th className="num">滑点 500K (bp)</th><th className="num">滑点 1M (bp)</th><th>盘口结论</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><td className="num">{bp(row.spread_bp)}</td><td className="num">{money(row.mid_price)}</td><td className="num">{signedPct(row.imbalance_pct)}</td><td className="num">{bp(row.worst_slippage_bp?.['50000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['100000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['500000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['1000000'])}</td><td><VerdictBadge verdict={row.verdict} /></td></tr>)}</tbody></table></div>
+          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num">Spread (bp)</th><th className="num">Mid 价格</th><th className="num">Imbalance (%)</th><th className="num">滑点 50K (bp)</th><th className="num">滑点 100K (bp)</th><th className="num">滑点 500K (bp)</th><th className="num">滑点 1M (bp)</th><th className="num" title={FUNDING_SIGN_CONVENTION_TOOLTIP}>资金费率 (8h) ⓘ</th><th>盘口结论</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><td className="num">{bp(row.spread_bp)}</td><td className="num">{money(row.mid_price)}</td><td className="num">{signedPct(row.imbalance_pct)}</td><td className="num">{bp(row.worst_slippage_bp?.['50000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['100000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['500000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['1000000'])}</td><FundingCell funding={row.funding} /><td><VerdictBadge verdict={row.verdict} /></td></tr>)}</tbody></table></div>
         </section>
+        <QualityFundingRow rows={rows} kpis={data.quality.kpis} />
       </div>
     </div>
   );
