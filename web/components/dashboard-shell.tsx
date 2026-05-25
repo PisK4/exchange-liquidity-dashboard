@@ -27,8 +27,38 @@ type DashboardData = {
   top30Divergence: Top30DivergenceSnapshot;
   lookup: FrontendURLLookup;
   liquidityByCanonical: Record<string, LiquiditySnapshot>;
+  qualityByCanonical: Record<string, QualitySnapshot>;
   watchlist: string[];
 };
+
+// mergeQualityIntoLiquidity overlays per-row worst_slippage_bp +
+// verdict from the quality endpoint onto the liquidity snapshot.
+// The merge is keyed by `platform`; rows missing from either side
+// degrade gracefully (slippage stays null → card shows the empty
+// state). Returns null if `liq` is null since the liquidity side
+// owns the KPI block QualityCard needs (spread / share live there,
+// not on QualitySnapshot.kpis which only carries funding fields).
+function mergeQualityIntoLiquidity(
+  liq: LiquiditySnapshot | null,
+  qual: QualitySnapshot | null,
+): LiquiditySnapshot | null {
+  if (!liq) return null;
+  if (!qual) return liq;
+  const qualByPlatform = new Map<string, QualitySnapshot['rows'][number]>();
+  for (const row of qual.rows) qualByPlatform.set(row.platform, row);
+  return {
+    ...liq,
+    rows: liq.rows.map(lrow => {
+      const qrow = qualByPlatform.get(lrow.platform);
+      if (!qrow) return lrow;
+      return {
+        ...lrow,
+        worst_slippage_bp: qrow.worst_slippage_bp ?? lrow.worst_slippage_bp,
+        verdict: qrow.verdict ?? lrow.verdict,
+      };
+    }),
+  };
+}
 
 const tabs = [
   ['monitor', '流动性监控'],
@@ -458,7 +488,17 @@ function QualityTab({ data, query, bucket, symbolCtx, watchlist, allSymbols, onW
           {watchlist.map(sym => {
             const canonical = normalizeSymbol(sym);
             const meta = allSymbols.find(s => s.canonical.toUpperCase() === canonical);
-            const snap = data.liquidityByCanonical[canonical] ?? null;
+            // Merge worst_slippage_bp + verdict from the quality
+            // fan-out into the liquidity snapshot's rows so QualityCard
+            // can read spread/share KPIs from the liquidity side AND
+            // slippage/verdict from the quality side via a single
+            // PlatformRow-shaped object. Without this merge the mini
+            // bar chart degrades to "该标的暂无可绘制的滑点数据"
+            // because /api/snapshot/liquidity always reports null on
+            // those two fields in production.
+            const liq = data.liquidityByCanonical[canonical] ?? null;
+            const qual = data.qualityByCanonical[canonical] ?? null;
+            const snap = mergeQualityIntoLiquidity(liq, qual);
             return (
               <QualityCard
                 key={canonical}

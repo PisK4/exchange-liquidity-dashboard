@@ -36,11 +36,25 @@ type DashboardData = {
   top30: Top30Snapshot;
   top30Divergence: Top30DivergenceSnapshot;
   lookup: FrontendURLLookup;
-  // liquidityByCanonical carries one snapshot per watchlist symbol when
-  // the watchlist contains more than one entry; for single-entry lists
-  // it mirrors the primary `liquidity` field so the shell can read from
-  // either path without branching at every consumer.
+  // liquidityByCanonical / qualityByCanonical carry one snapshot per
+  // watchlist symbol when the watchlist contains more than one entry;
+  // for single-entry lists they mirror the primary `liquidity` /
+  // `quality` fields so the shell can read from either path without
+  // branching at every consumer.
+  //
+  // Two parallel fan-outs are needed (not just one) because the
+  // backend reducers populate different fields on each endpoint:
+  // /snapshot/liquidity carries depth_by_tier + spread_bp, while
+  // /snapshot/quality is the only place that fills worst_slippage_bp
+  // (per USD bucket) and verdict. PlatformRow is a shared TS type
+  // across both snapshots, which hides the difference from the type
+  // system; a quick `curl /api/snapshot/liquidity?symbol=BTC` confirms
+  // worst_slippage_bp comes back null on the liquidity side in
+  // production. Without the quality fan-out the QualityCard mini
+  // chart degrades to "该标的暂无可绘制的滑点数据" even though the
+  // quality endpoint has the data.
   liquidityByCanonical: Record<string, LiquiditySnapshot>;
+  qualityByCanonical: Record<string, QualitySnapshot>;
   watchlist: string[];
 };
 
@@ -202,20 +216,19 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
     let cancelled = false;
     const controller = new AbortController();
 
-    const fanOutLiquidity = async (): Promise<Record<string, LiquiditySnapshot>> => {
-      const out: Record<string, LiquiditySnapshot> = {};
+    // fanOut handles either snapshot type with one generic helper —
+    // identical concurrency model, single AbortController coverage,
+    // and per-symbol swallow so one bad fetch doesn't blank the rest
+    // of the cards.
+    const fanOut = async <T,>(pathFor: (sym: string) => string): Promise<Record<string, T>> => {
+      const out: Record<string, T> = {};
       await Promise.all(
         watchlist.map(async sym => {
           try {
-            const snap = await getJSONWithFallback<LiquiditySnapshot>(
-              `/api/snapshot/liquidity?symbol=${encodeURIComponent(sym)}`,
-              { signal: controller.signal },
-            );
+            const snap = await getJSONWithFallback<T>(pathFor(sym), { signal: controller.signal });
             out[normalizeSymbol(sym)] = snap;
           } catch (err) {
             if (err instanceof DOMException && err.name === 'AbortError') throw err;
-            // Per-symbol fetch failure should not blank out the others;
-            // the card renders 'unavailable' on its own.
           }
         }),
       );
@@ -224,7 +237,7 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
 
     const fetchAll = async () => {
       try {
-        const [meta, liquidity, quality, share, top30, top30Divergence, lookup, liquidityByCanonical] = await Promise.all([
+        const [meta, liquidity, quality, share, top30, top30Divergence, lookup, liquidityByCanonical, qualityByCanonical] = await Promise.all([
           getJSONWithFallback<DashboardMeta>(metaPath, { signal: controller.signal }),
           getJSONWithFallback<LiquiditySnapshot>(liquidityPath, { signal: controller.signal }),
           getJSONWithFallback<QualitySnapshot>(qualityPath, { signal: controller.signal }),
@@ -232,11 +245,12 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
           getJSONWithFallback<Top30Snapshot>(top30Path, { signal: controller.signal }),
           getJSONWithFallback<Top30DivergenceSnapshot>(top30DivergencePath, { signal: controller.signal }),
           getFrontendURLLookup(),
-          fanOutLiquidity(),
+          fanOut<LiquiditySnapshot>(sym => `/api/snapshot/liquidity?symbol=${encodeURIComponent(sym)}`),
+          fanOut<QualitySnapshot>(sym => `/api/snapshot/quality?symbol=${encodeURIComponent(sym)}`),
         ]);
         if (cancelled || controller.signal.aborted) return;
-        // Ensure the headline snapshot is always reachable via the
-        // per-symbol map so card-mode consumers don't need to special-
+        // Ensure the headline snapshots are always reachable via the
+        // per-symbol maps so card-mode consumers don't need to special-
         // case the first entry. Use effectiveSymbol so the mapping key
         // tracks the actual symbol whose data was just fetched (vs the
         // possibly-stale query.symbol from SSR props).
@@ -244,7 +258,10 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
         if (!liquidityByCanonical[headlineCanonical]) {
           liquidityByCanonical[headlineCanonical] = liquidity;
         }
-        setData({ meta, liquidity, quality, share, top30, top30Divergence, lookup, liquidityByCanonical, watchlist });
+        if (!qualityByCanonical[headlineCanonical]) {
+          qualityByCanonical[headlineCanonical] = quality;
+        }
+        setData({ meta, liquidity, quality, share, top30, top30Divergence, lookup, liquidityByCanonical, qualityByCanonical, watchlist });
       } catch (err) {
         if (cancelled || controller.signal.aborted) return;
         if (err instanceof DOMException && err.name === 'AbortError') return;
