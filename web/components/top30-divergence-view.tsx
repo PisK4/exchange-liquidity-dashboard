@@ -1,17 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import {
-  CartesianGrid,
-  ReferenceLine,
-  ResponsiveContainer,
-  Scatter,
-  ScatterChart,
-  Tooltip,
-  XAxis,
-  YAxis,
-  ZAxis,
-} from 'recharts';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import {
@@ -63,65 +52,6 @@ function filterRows(rows: Top30DivergenceRow[], filter: FilterKey): Top30Diverge
   if (filter === 'all') return rows;
   if (filter === 'heavy') return rows.filter(row => isHeavy(row.category));
   return rows.filter(row => row.category === filter);
-}
-
-// scatterChartData turns the join into recharts-ready points. Symbols
-// missing from one side are pinned to "off-chart" (rank=33 = aggregate
-// limit + 3) so they don't overlap with the legitimate rank=30 row;
-// without this nudge cex_only and dex_only points would visually look
-// like an aligned #30 on the missing axis.
-const OFF_CHART_RANK = 33;
-const AXIS_MAX = 34;
-
-type ScatterPoint = {
-  symbol: string;
-  cex: number;
-  dex: number;
-  category: string;
-  cexRank: number | null;
-  dexRank: number | null;
-};
-
-function buildScatterPoints(rows: Top30DivergenceRow[]): ScatterPoint[] {
-  return rows.map(row => ({
-    symbol: row.symbol,
-    cex: typeof row.cex_rank === 'number' ? row.cex_rank : OFF_CHART_RANK,
-    dex: typeof row.dex_rank === 'number' ? row.dex_rank : OFF_CHART_RANK,
-    category: row.category,
-    cexRank: typeof row.cex_rank === 'number' ? row.cex_rank : null,
-    dexRank: typeof row.dex_rank === 'number' ? row.dex_rank : null,
-  }));
-}
-
-// scatterFillFor: aligned (overlap on diagonal) gets the accent green;
-// heavy + only categories all get the warn-yellow used in the badge
-// system so the operator can read both visualisations the same way.
-function scatterFillFor(category: string): string {
-  if (category === 'aligned') return '#6ccf8e';
-  return '#f2cc0c';
-}
-
-function ScatterTooltip({ active, payload }: { active?: boolean; payload?: Array<{ payload: ScatterPoint }> }) {
-  if (!active || !payload || payload.length === 0) return null;
-  const p = payload[0].payload;
-  const { label } = categoryBadge(p.category);
-  return (
-    <div style={{
-      background: 'rgba(14,16,19,.96)',
-      border: '1px solid #2a2e36',
-      borderRadius: 4,
-      padding: '6px 9px',
-      fontSize: 11,
-      color: '#e8eaed',
-      lineHeight: 1.45,
-      boxShadow: '0 10px 28px rgba(0,0,0,.36)',
-    }}>
-      <div style={{ fontWeight: 600, marginBottom: 4 }}>{p.symbol}</div>
-      <div>CEX rank: {p.cexRank ?? '未上榜'}</div>
-      <div>DEX rank: {p.dexRank ?? '未上榜'}</div>
-      <div style={{ color: '#9aa0a6', marginTop: 2 }}>{label}</div>
-    </div>
-  );
 }
 
 function KpiStrip({ kpi, signifThreshold }: { kpi: Top30DivergenceKPI; signifThreshold: number }) {
@@ -192,14 +122,6 @@ function AggregateTable({ title, sub, rows, platforms }: { title: string; sub: s
 export function Top30DivergenceView({ snapshot, lookup: _lookup }: { snapshot: Top30DivergenceSnapshot; lookup: FrontendURLLookup }) {
   const [filter, setFilter] = useState<FilterKey>('all');
   const rowsFiltered = useMemo(() => filterRows(snapshot.divergence_rows, filter), [snapshot.divergence_rows, filter]);
-  const scatterPoints = useMemo(() => buildScatterPoints(snapshot.divergence_rows), [snapshot.divergence_rows]);
-  const scatterByCategory = useMemo(() => {
-    const out: Record<string, ScatterPoint[]> = {};
-    for (const p of scatterPoints) {
-      (out[p.category] ??= []).push(p);
-    }
-    return out;
-  }, [scatterPoints]);
 
   if (snapshot.status === 'unsupported') {
     return (
@@ -232,57 +154,6 @@ export function Top30DivergenceView({ snapshot, lookup: _lookup }: { snapshot: T
         rows={snapshot.dex_top30}
         platforms={snapshot.dex_platforms}
       />
-
-      <section className="panel span-24 row-h-md">
-        <div className="panel-head">
-          <span className="panel-title">CEX rank × DEX rank 散点图</span>
-          <span className="panel-sub">· 越靠近对角线 = 两阵营越对齐 · 角落圆点 = 仅一边热门 (未上榜=33)</span>
-        </div>
-        {scatterPoints.length === 0 ? (
-          <StatusEmptyState status="partial" message="无可比较的 symbol" />
-        ) : (
-          <div style={{ height: 280, padding: '8px 10px 10px' }}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ top: 10, right: 24, bottom: 36, left: 36 }}>
-                <CartesianGrid stroke="rgba(255,255,255,.08)" />
-                <XAxis
-                  type="number"
-                  dataKey="cex"
-                  name="CEX rank"
-                  domain={[0, AXIS_MAX]}
-                  ticks={[1, 5, 10, 15, 20, 25, 30, 33]}
-                  reversed
-                  stroke="#9aa0a6"
-                  tick={{ fill: '#9aa0a6', fontSize: 11 }}
-                  label={{ value: 'CEX 阵营 rank', position: 'insideBottom', offset: -20, fill: '#9aa0a6', fontSize: 11 }}
-                />
-                <YAxis
-                  type="number"
-                  dataKey="dex"
-                  name="DEX rank"
-                  domain={[0, AXIS_MAX]}
-                  ticks={[1, 5, 10, 15, 20, 25, 30, 33]}
-                  reversed
-                  stroke="#9aa0a6"
-                  tick={{ fill: '#9aa0a6', fontSize: 11 }}
-                  label={{ value: 'DEX 阵营 rank', angle: -90, position: 'insideLeft', offset: 4, fill: '#9aa0a6', fontSize: 11 }}
-                />
-                <ZAxis type="number" range={[60, 60]} />
-                <ReferenceLine
-                  segment={[{ x: 1, y: 1 }, { x: 30, y: 30 }]}
-                  stroke="#6ccf8e"
-                  strokeDasharray="4 4"
-                  ifOverflow="hidden"
-                />
-                <Tooltip cursor={{ stroke: '#4b5563', strokeDasharray: '3 3' }} content={<ScatterTooltip />} />
-                {Object.entries(scatterByCategory).map(([category, points]) => (
-                  <Scatter key={category} name={categoryBadge(category).label} data={points} fill={scatterFillFor(category)} />
-                ))}
-              </ScatterChart>
-            </ResponsiveContainer>
-          </div>
-        )}
-      </section>
 
       <section className="panel span-24">
         <div className="panel-head">
