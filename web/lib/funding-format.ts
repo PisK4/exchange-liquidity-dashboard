@@ -53,6 +53,25 @@ export function formatFundingDelta(delta?: number | null): string {
   return delta >= 0 ? `+${formatted}%` : `${formatted}%`;
 }
 
+// formatFundingPeriodTag renders the native settlement period as a short
+// inline tag (e.g. '4h 计费') so the operator can tell at a glance that
+// a normalised 8h-equivalent value was derived from a non-8h native
+// period. Returns null when the period is missing, non-positive, or
+// exactly 8h — in the V1 platform set this is true for every venue
+// except edgeX (4h), Hyperliquid (1h) and Lighter (1h); rendering the
+// tag for the 8h cohort would just add chartjunk.
+//
+// CoinGecko reports edgeX's funding_rate as a constant 0.005 per 4h
+// across BTC/ETH/SOL on 2026-05-26 (confirmed by sampling /api/snapshot/
+// quality directly), which normalises to a uniform +0.0100% per 8h on
+// the dashboard. The tag also doubles as a hint that the value was
+// transformed — the displayed number is not the raw upstream reading.
+export function formatFundingPeriodTag(periodHours?: number | null): string | null {
+  if (typeof periodHours !== 'number' || !Number.isFinite(periodHours) || periodHours <= 0) return null;
+  if (periodHours === 8) return null;
+  return ` edgex ${periodHours}h 计费, 此处对齐其他交易所8h周期已x2处理`;
+}
+
 // directionGlyph returns the neutral arrow character used next to a
 // vs-median delta. Decision 'v2 箭头中性化' explicitly rejected green-up
 // / red-down so the operator does not subconsciously read 'higher

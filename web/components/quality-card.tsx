@@ -3,7 +3,7 @@
 import { BarChart } from '@/components/chart-primitives';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { bp, pct, type LiquiditySnapshot } from '@/lib/api/client';
-import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingRate8h } from '@/lib/funding-format';
+import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingPeriodTag, formatFundingRate8h } from '@/lib/funding-format';
 
 // QualityCard reads a LiquiditySnapshot-shaped object: that snapshot
 // type owns the spread / share KPIs the card surfaces, while
@@ -198,6 +198,9 @@ export function QualityCard({
           </dt>
           <dd>
             {formatFundingRate8h(kpis?.edgex_funding_rate_8h)}
+            {formatFundingPeriodTag(kpis?.edgex_funding_rate_period_hours) && (
+              <span className="watchlist-funding-period muted">  · {formatFundingPeriodTag(kpis?.edgex_funding_rate_period_hours)}</span>
+            )}
             {fundingMedianAvailable && (
               <span className="watchlist-funding-delta muted">  vs 中位数 {formatFundingDelta(fundingDelta)}</span>
             )}
