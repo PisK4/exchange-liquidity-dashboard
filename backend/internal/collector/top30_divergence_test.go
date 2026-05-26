@@ -196,6 +196,89 @@ func TestTop30Divergence_PartialStatusOnSingleClass(t *testing.T) {
 	}
 }
 
+// TestTop30Divergence_MergesAcrossQuoteVariants pins the bug-fix where
+// BTC-USDT (CEX-side perp), BTC-USDC (Hyperliquid perp) and BTC-USD
+// (edgeX perp) used to surface as three separate rows. They denote
+// the same BTC perpetual product and MUST collapse onto a single
+// canonical "BTC" row so the CEX-vs-DEX comparison aligns the two
+// camps. Without this normalisation BTC trends as cex_only (USDT
+// branch) while BTC-USDC / BTC-USD show up as dex_only — the exact
+// symptom the operator reported.
+func TestTop30Divergence_MergesAcrossQuoteVariants(t *testing.T) {
+	store := newDivergenceStore(t)
+	// CEX camp prices BTC in USDT (the post-NormaliseSymbol form for
+	// every centralised venue we collect).
+	store.SaveTop30("binance", []domain.Top30Row{
+		mkTop30Row(1, "BTC-USDT (perp)", 1000),
+	})
+	store.SaveTop30("okx", []domain.Top30Row{
+		mkTop30Row(1, "BTC-USDT (perp)", 500),
+	})
+	// DEX camp: Hyperliquid uses USDC settlement, edgeX uses USD.
+	// Both must merge with the CEX BTC bucket.
+	store.SaveTop30("hyperliquid", []domain.Top30Row{
+		mkTop30Row(1, "BTC-USDC (perp)", 800),
+	})
+	store.SaveTop30("edgeX", []domain.Top30Row{
+		{Rank: 1, Symbol: "BTC-USD (perp)", Volume24HUSD: 200, Status: domain.StatusComplete, EdgexListed: true, SnapshotTS: time.Now().UTC()},
+	})
+
+	snap := store.Top30Divergence()
+	if len(snap.CEXTop30) != 1 || snap.CEXTop30[0].Symbol != "BTC" {
+		t.Fatalf("expected CEX aggregate to collapse to a single BTC row, got %+v", snap.CEXTop30)
+	}
+	if snap.CEXTop30[0].PlatformCount != 2 {
+		t.Fatalf("expected BTC CEX platform_count=2 (binance+okx), got %d", snap.CEXTop30[0].PlatformCount)
+	}
+	if got := snap.CEXTop30[0].RawVolume24HUSD; got != 1500 {
+		t.Fatalf("expected BTC CEX raw vol=1500 (1000+500), got %v", got)
+	}
+	if len(snap.DEXTop30) != 1 || snap.DEXTop30[0].Symbol != "BTC" {
+		t.Fatalf("expected DEX aggregate to collapse BTC-USDC + BTC-USD into one BTC row, got %+v", snap.DEXTop30)
+	}
+	if snap.DEXTop30[0].PlatformCount != 2 {
+		t.Fatalf("expected BTC DEX platform_count=2 (hyperliquid+edgeX), got %d", snap.DEXTop30[0].PlatformCount)
+	}
+	if got := snap.DEXTop30[0].RawVolume24HUSD; got != 1000 {
+		t.Fatalf("expected BTC DEX raw vol=1000 (800+200), got %v", got)
+	}
+	if len(snap.Divergence) != 1 || snap.Divergence[0].Symbol != "BTC" {
+		t.Fatalf("expected exactly one divergence row labelled BTC, got %+v", snap.Divergence)
+	}
+	if snap.Divergence[0].Category != domain.Top30DivergenceAligned {
+		t.Fatalf("expected BTC category=aligned (both camps rank it #1), got %q", snap.Divergence[0].Category)
+	}
+	if !snap.Divergence[0].EdgexListed {
+		t.Fatalf("expected BTC to be marked edgex_listed=true (edgeX BTC-USD row carried the flag)")
+	}
+	if snap.KPI.EdgexGapCount != 0 {
+		t.Fatalf("expected edgex_gap_count=0 (BTC listed on edgeX, no gap), got %d", snap.KPI.EdgexGapCount)
+	}
+}
+
+func TestCanonicaliseDivergenceSymbol(t *testing.T) {
+	cases := []struct {
+		in, want string
+	}{
+		{"BTC", "BTC"},
+		{"BTC-USDT (perp)", "BTC"},
+		{"BTC-USDC (perp)", "BTC"},
+		{"BTC-USD (perp)", "BTC"},
+		{"ETH-BUSD (perp)", "ETH"},
+		{"ETH-FDUSD (perp)", "ETH"},
+		{"kPEPE-USDT (perp)", "KPEPE"},
+		{"1000PEPE-USDT (perp)", "1000PEPE"},
+		{"  HYPE-USDC (perp)  ", "HYPE"},
+		{"", ""},
+		{"   ", ""},
+	}
+	for _, tc := range cases {
+		if got := canonicaliseDivergenceSymbol(tc.in); got != tc.want {
+			t.Errorf("canonicaliseDivergenceSymbol(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
 func TestClassifyDivergence(t *testing.T) {
 	one, two, eleven := 1, 2, 11
 	cases := []struct {

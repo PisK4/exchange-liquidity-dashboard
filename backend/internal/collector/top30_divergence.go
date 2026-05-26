@@ -133,7 +133,6 @@ func (s *Store) aggregateClassLocked(platforms []string) ([]domain.Top30Aggregat
 		contribute map[string]struct{}
 	}
 	byCanonical := map[string]*bucket{}
-	canonicalToDisplay := map[string]string{}
 	var latest time.Time
 	for _, platform := range platforms {
 		rows, ok := s.top30ByPlatform[platform]
@@ -159,9 +158,6 @@ func (s *Store) aggregateClassLocked(platforms []string) ([]domain.Top30Aggregat
 			b.adjusted += indicators.AdjustedVolume(platform, row.Volume24HUSD)
 			b.raw += row.Volume24HUSD
 			b.contribute[platform] = struct{}{}
-			if _, has := canonicalToDisplay[canonical]; !has {
-				canonicalToDisplay[canonical] = row.Symbol
-			}
 			if row.SnapshotTS.After(latest) {
 				latest = row.SnapshotTS
 			}
@@ -170,19 +166,21 @@ func (s *Store) aggregateClassLocked(platforms []string) ([]domain.Top30Aggregat
 	if len(byCanonical) == 0 {
 		return nil, latest
 	}
+	// Emit the canonical (base asset) as Symbol so the aggregate row's
+	// label honestly represents the post-merge identity. Using the
+	// first-seen raw display here would mislead the reader: a "BTC"
+	// row that summed BTC-USDT + BTC-USDC + BTC-USD volumes would
+	// otherwise be labelled "BTC-USDT (perp)" and look like a single-
+	// quote aggregate.
 	out := make([]domain.Top30AggregateRow, 0, len(byCanonical))
 	for canonical, b := range byCanonical {
-		display := canonicalToDisplay[canonical]
-		if display == "" {
-			display = canonical
-		}
 		contributors := make([]string, 0, len(b.contribute))
 		for p := range b.contribute {
 			contributors = append(contributors, p)
 		}
 		sort.Strings(contributors)
 		out = append(out, domain.Top30AggregateRow{
-			Symbol:                display,
+			Symbol:                canonical,
 			AdjustedVolume24HUSD:  b.adjusted,
 			RawVolume24HUSD:       b.raw,
 			PlatformCount:         len(b.contribute),
@@ -378,10 +376,51 @@ func indexAggregateBySymbol(rows []domain.Top30AggregateRow) map[string]domain.T
 	return out
 }
 
-// canonicaliseDivergenceSymbol normalises a Top30 Symbol (which the
-// CoinGecko collector emits via NormaliseSymbol, e.g. "BTC", "ETH", a
-// rare "kPEPE") to the upper-cased base asset used as the join key.
+// divergenceQuoteSuffixes lists the perp settlement quotes we collapse
+// onto the base asset. Order is significant only insofar as longer
+// suffixes must come first when two share a prefix (e.g. "-USDT" vs the
+// generic "-USD"); we do that explicitly here so the first match wins.
+//
+// The list intentionally mirrors the quotes NormaliseSymbol emits (USDT,
+// USDC, USD) plus the legacy CEX-issued stablecoins (BUSD, FDUSD, TUSD)
+// in case CoinGecko ever serves a back-cataloged pair on those quotes.
+// Adding a new quote here is a one-line change with a regression test
+// added to Top30Divergence_MergesAcrossQuoteVariants.
+var divergenceQuoteSuffixes = []string{
+	"-USDT", "-USDC", "-USD", "-BUSD", "-FDUSD", "-TUSD",
+}
+
+// canonicaliseDivergenceSymbol normalises a Top30 Symbol to the base
+// asset used as the cross-camp join key. CoinGecko collector emits
+// venue-specific forms via NormaliseSymbol — e.g. "BTC-USDT (perp)" on
+// every CEX, "BTC-USDC (perp)" on Hyperliquid, "BTC-USD (perp)" on
+// edgeX — that all denote the same BTC perpetual product. For the
+// divergence view the quote is noise: CEX BTC-USDT, DEX BTC-USDC and
+// edgeX BTC-USD must collapse into a single "BTC" row so the
+// CEX-vs-DEX comparison shows BTC as aligned (which it is, both camps
+// list it heavily) instead of three different cex_only/dex_only rows.
+//
+// Aligns with the symbol-resolution semantics elsewhere in the
+// dashboard (Store.ResolveSymbol / SymbolSub.Canonical), but we don't
+// need to consult the symbol catalog because:
+//   - the catalog only covers the ~74 curated canonicals; Top30 long
+//     tails (PUMP, MEW, MOODENG, …) wouldn't be in it
+//   - NormaliseSymbol already collapses all venue tickers to the same
+//     "BASE-QUOTE (perp)" shape, so a stable quote-suffix strip is
+//     equivalent to a full catalog lookup for symbols that ARE in the
+//     catalog, and deterministic for those that aren't.
+//
 // Empty / whitespace-only input returns empty.
 func canonicaliseDivergenceSymbol(symbol string) string {
-	return strings.ToUpper(strings.TrimSpace(symbol))
+	s := strings.ToUpper(strings.TrimSpace(symbol))
+	if s == "" {
+		return ""
+	}
+	s = strings.TrimSuffix(s, " (PERP)")
+	for _, suffix := range divergenceQuoteSuffixes {
+		if strings.HasSuffix(s, suffix) {
+			return strings.TrimSuffix(s, suffix)
+		}
+	}
+	return s
 }
