@@ -123,5 +123,5 @@ test('Top30 / Share tabs still render against live backend', async ({ page }) =>
   await page.goto('/?tab=top30');
   // The Top30 tab uses a different layout; assert one of its known
   // strings rather than depending on Chinese label exact wording.
-  await expect(page.locator('text=各平台 Top30')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole('link', { name: '各平台 Top30' })).toBeVisible({ timeout: 15_000 });
 });

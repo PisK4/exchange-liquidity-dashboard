@@ -1,0 +1,148 @@
+Database:
+  # Fill these in Nacos for dev/prod. Leave empty for local in-memory mode
+  # unless DASHBOARD_MYSQL_DSN is provided via .env or environment.
+  Name: ""
+  Addr: ""
+  UserName: ""
+  Password: ""
+  ParseTime: true
+  MaxIdleConn: 4
+  MaxOpenConn: 8
+  ConnMaxLifeTime: 30m
+
+Alert:
+  AppName: edgex-liquidity-dashboard
+  Enabled: false
+  FeishuUid: ""
+  DestPhoneNumber: ""
+  Business: ""
+  ServerUrl: ""
+  WebHookP12: ""
+  WebHookP3: ""
+  WebHookP45: ""
+
+Catalog:
+  ExchangeEndpointsFile: exchange_endpoints.yaml
+  SymbolMappingFile: symbol_mapping.yaml
+  InstrumentCatalogFile: instrument_catalog.yaml
+  ListedUniverseFile: listed_universe.yaml
+
+Runtime:
+  collection_interval: 5m
+  http_timeout: 12s
+  # Optional HTTP/HTTPS proxy for the 9 native exchange REST adapters. Set
+  # this to e.g. http://host.docker.internal:7897 when the dashboard runs in
+  # a container whose runtime network cannot reach binance/okx/bybit/...
+  # directly. Leave blank in production environments that can reach the
+  # upstream exchanges over the open internet — latency measurements are
+  # clearest without an intermediary.
+  exchange_proxy: "http://host.docker.internal:7897"
+  lighter_ws_url: wss://mainnet.zklighter.elliot.ai/stream?readonly=true
+  lighter_stale_after: 15s
+  display_fallback_window: 30m
+  depth_tiers: [0.0005, 0.001, 0.01, 0.02]
+  slippage_buckets_usd: [50000, 100000, 500000, 1000000]
+  volume_discounts:
+    mexc: 0.4
+    gate: 0.5
+
+  # Native 5min REST collection limits. Keep this independent from Top30
+  # backfill so live orderbook/ticker pressure can be tuned separately.
+  collection:
+    per_platform_concurrency: 3
+    per_platform_rate_per_sec: 4
+
+  ws_providers:
+    bitget:
+      enabled: true
+      url: wss://stream.bitget.com/public/v1/stream
+      proxy: "http://host.docker.internal:7897"
+      stale_after: 15s
+    mexc:
+      enabled: true
+      url: wss://futures.mexc.com/edge?Trans-Protocol=JSON
+      proxy: "http://host.docker.internal:7897"
+      stale_after: 15s
+    okx:
+      enabled: true
+      url: wss://wspri.okx.com:8443/ws/v5/ipublic
+      stale_after: 15s
+    bybit:
+      enabled: false
+      url: wss://ws2.bybit.com/realtime_w
+      proxy: "http://host.docker.internal:7897"
+      stale_after: 15s
+    bingx:
+      enabled: false
+      url: wss://open-api-swap.bingx.com/swap-market
+      proxy: "http://host.docker.internal:7897"
+      stale_after: 15s
+  history:
+    enabled_windows: [24h]
+    disabled_windows:
+      7d: insufficient_history
+      30d: insufficient_history
+
+  # CoinGecko derivatives ingestion (R1: no process-env proxy).
+  # When enabled=true the dashboard will pull /derivatives?include_tickers=unexpired
+  # every pull_interval and UPSERT the resulting per-platform 24h volumes plus a
+  # per-day rollup into MySQL. proxy is read as a literal URL; if blank the
+  # CoinGecko client goes direct. Do NOT set HTTPS_PROXY / HTTP_PROXY at the
+  # process level — that would also route the 9 native exchange adapters through
+  # the proxy and pollute their latency measurements.
+  coingecko:
+    enabled: true
+    base_url: https://api.coingecko.com/api/v3
+    api_key_env: COINGECKO_DEMO_API_KEY
+    proxy: "http://host.docker.internal:7897"
+    pull_interval: 5m
+    cache_ttl: 0s
+    request_timeout: 30s
+    exchange_id:
+      edgeX: edgex
+      binance: binance_futures
+      okx: okex_swap
+      bybit: bybit
+      bitget: bitget_futures
+      bingx: bingx_futures
+      mexc: mxc_futures
+      gate: gate_futures
+      hyperliquid: hyperliquid
+      lighter: lighter
+    market_name:
+      edgeX: "edgeX"
+      binance: "Binance (Futures)"
+      okx: "OKX (Futures)"
+      bybit: "Bybit (Futures)"
+      bitget: "Bitget Futures"
+      bingx: "BingX (Futures)"
+      mexc: "MEXC (Futures)"
+      gate: "Gate (Futures)"
+      hyperliquid: "Hyperliquid (Futures)"
+      lighter: "Lighter"
+
+  # Top30 CEX vs DEX divergence view classification. Any platform not
+  # listed here is ignored by the divergence aggregator. significant_rank_delta
+  # is the |Δrank| threshold above which a symbol is tagged cex_heavy /
+  # dex_heavy instead of aligned.
+  top30_divergence:
+    cex_platforms: [binance, okx, bybit, bitget, mexc, gate, bingx]
+    dex_platforms: [hyperliquid, lighter, edgeX]
+    significant_rank_delta: 10
+
+  # Top30 7d Vol / 7d Δ backfill. The backfiller iterates over the union of
+  # base assets currently ranked in every platform's Top30 and pulls daily
+  # kline rows from the platform's native endpoint, persisted as
+  # data_source=native_backfill. The schedule fires once at boot (after a
+  # 90s warmup so the first /derivatives round populates the roster) and
+  # again every UTC day at schedule_utc_hour:schedule_utc_minute. Defaults
+  # below are sized for free-tier exchange budgets — operators with paid
+  # tiers can raise per_platform_concurrency / per_platform_rate_per_sec.
+  backfill:
+    enabled: true
+    cold_start_days: 14
+    daily_repair_days: 3
+    per_platform_concurrency: 3
+    per_platform_rate_per_sec: 4
+    schedule_utc_hour: 2
+    schedule_utc_minute: 30

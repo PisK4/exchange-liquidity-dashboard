@@ -2,8 +2,10 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"edgex-dashboard/backend/internal/domain"
@@ -34,7 +36,7 @@ type Runtime struct {
 	// CooldownFailureThreshold is the number of consecutive failures for a
 	// (platform, canonical) pair before the collector pauses collecting
 	// it. CooldownDuration is the pause length. Both default to safe
-	// values (3 / 5m) and can be overridden in runtime.yaml.
+	// values (3 / 5m) and can be overridden in edgex-liquidity-dashboard.yaml.
 	CooldownFailureThreshold int           `json:"cooldown_failure_threshold,omitempty"`
 	CooldownDuration         time.Duration `json:"cooldown_duration,omitempty"`
 	// Top30Divergence configures the CEX-vs-DEX comparison view inside
@@ -109,7 +111,7 @@ type BackfillConfig struct {
 
 // CoinGeckoConfig controls the CoinGecko derivatives ingestion path.
 //
-// Proxy is read as a literal URL string from runtime.yaml; the CoinGecko
+// Proxy is read as a literal URL string from edgex-liquidity-dashboard.yaml; the CoinGecko
 // client builds its own *http.Transport from this URL. Process-level
 // HTTPS_PROXY / HTTP_PROXY env vars are intentionally NOT consulted, so that
 // turning the CoinGecko proxy on never silently routes the other 9 native
@@ -133,19 +135,97 @@ type WSProviderConfig struct {
 	StaleAfter time.Duration `json:"stale_after"`
 }
 
+type DatabaseConfig struct {
+	Name            string        `json:"name"`
+	Addr            string        `json:"addr"`
+	UserName        string        `json:"user_name"`
+	Password        string        `json:"-"`
+	ParseTime       bool          `json:"parse_time"`
+	MaxIdleConn     int           `json:"max_idle_conn"`
+	MaxOpenConn     int           `json:"max_open_conn"`
+	ConnMaxLifeTime time.Duration `json:"conn_max_life_time"`
+	DSN             string        `json:"-"`
+}
+
+type AlertConfig struct {
+	AppName         string `json:"app_name"`
+	Enabled         bool   `json:"enabled"`
+	FeishuUid       string `json:"feishu_uid,omitempty"`
+	DestPhoneNumber string `json:"dest_phone_number,omitempty"`
+	Business        string `json:"business,omitempty"`
+	ServerURL       string `json:"server_url,omitempty"`
+	WebHookP12      string `json:"webhook_p12,omitempty"`
+	WebHookP3       string `json:"webhook_p3,omitempty"`
+	WebHookP45      string `json:"webhook_p45,omitempty"`
+}
+
+type CatalogConfig struct {
+	ExchangeEndpointsFile string `json:"exchange_endpoints_file"`
+	SymbolMappingFile     string `json:"symbol_mapping_file"`
+	InstrumentCatalogFile string `json:"instrument_catalog_file"`
+	ListedUniverseFile    string `json:"listed_universe_file"`
+}
+
 type Config struct {
 	Symbols   []domain.SymbolSub `json:"symbols"`
 	Platforms []string           `json:"platforms"`
 	Runtime   Runtime            `json:"runtime"`
+	Database  DatabaseConfig     `json:"database"`
+	Alert     AlertConfig        `json:"alert"`
+	Catalog   CatalogConfig      `json:"catalog"`
+}
+
+func (c Config) MySQLDSN() string {
+	if c.Database.DSN != "" {
+		return c.Database.DSN
+	}
+	return c.Database.DSNString()
+}
+
+func (d DatabaseConfig) DSNString() string {
+	if d.Name == "" || d.Addr == "" || d.UserName == "" {
+		return ""
+	}
+	q := url.Values{}
+	if d.ParseTime {
+		q.Set("parseTime", "true")
+	}
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s", d.UserName, d.Password, d.Addr, d.Name)
+	if encoded := q.Encode(); encoded != "" {
+		dsn += "?" + encoded
+	}
+	return dsn
 }
 
 func Load(configDir string) (Config, error) {
 	if configDir == "" {
 		configDir = filepath.Join("..", "config")
 	}
+	loadDotEnv(filepath.Join(configDir, ".env"))
 	cfg := Default()
 
-	endpoints, err := loadEndpoints(filepath.Join(configDir, "exchange_endpoints.yaml"))
+	mainCfg, hasMain, err := loadDashboardConfig(filepath.Join(configDir, "edgex-liquidity-dashboard.yaml"))
+	if err != nil {
+		return Config{}, err
+	}
+	if hasMain {
+		cfg.Database = mainCfg.Database.toConfig()
+		cfg.Alert = mainCfg.Alert.toConfig()
+		cfg.Catalog = mainCfg.Catalog.withDefaults()
+		runtimeBlock := mainCfg.Runtime
+		if !runtimeBlock.hasValues() {
+			runtimeBlock = mainCfg.LegacyRuntime()
+		}
+		cfg.Runtime, err = applyRuntimeFile(cfg.Runtime, runtimeBlock)
+		if err != nil {
+			return Config{}, err
+		}
+	} else {
+		cfg.Catalog = defaultCatalogConfig()
+		cfg.Database.DSN = os.Getenv("DASHBOARD_MYSQL_DSN")
+	}
+
+	endpoints, err := loadEndpoints(filepath.Join(configDir, cfg.Catalog.ExchangeEndpointsFile))
 	if err != nil {
 		return Config{}, err
 	}
@@ -153,20 +233,22 @@ func Load(configDir string) (Config, error) {
 		endpoints = defaultEndpoints()
 	}
 
-	if symbols, platforms, err := loadSymbols(filepath.Join(configDir, "symbol_mapping.yaml")); err != nil {
+	if symbols, platforms, err := loadSymbols(filepath.Join(configDir, cfg.Catalog.SymbolMappingFile)); err != nil {
 		return Config{}, err
 	} else if len(symbols) > 0 && len(platforms) > 0 {
 		cfg.Platforms = platforms
 		cfg.Symbols = expandSymbols(symbols, platforms, endpoints)
 	}
 
-	runtimeCfg, err := loadRuntime(filepath.Join(configDir, "runtime.yaml"), cfg.Runtime)
-	if err != nil {
-		return Config{}, err
+	if !hasMain {
+		runtimeCfg, err := loadRuntime(filepath.Join(configDir, "runtime.yaml"), cfg.Runtime)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.Runtime = runtimeCfg
 	}
-	cfg.Runtime = runtimeCfg
 
-	cat, err := LoadCatalog(filepath.Join(configDir, "instrument_catalog.yaml"))
+	cat, err := LoadCatalog(filepath.Join(configDir, cfg.Catalog.InstrumentCatalogFile))
 	if err != nil {
 		return Config{}, err
 	}
@@ -264,6 +346,7 @@ func Default() Config {
 	return Config{
 		Symbols:   subs,
 		Platforms: platforms,
+		Catalog:   defaultCatalogConfig(),
 		Runtime: Runtime{
 			CollectionInterval:    5 * time.Minute,
 			HTTPTimeout:           5 * time.Second,
@@ -311,7 +394,7 @@ func defaultCollectionConfig() CollectionConfig {
 
 // defaultBackfillConfig keeps Top30 backfill enabled by default; an
 // operator who explicitly wants to disable it can set
-// `backfill.enabled: false` in runtime.yaml.
+// `backfill.enabled: false` in edgex-liquidity-dashboard.yaml.
 func defaultBackfillConfig() BackfillConfig {
 	return BackfillConfig{
 		Enabled:                true,
@@ -430,6 +513,45 @@ type runtimeFile struct {
 	Top30Divergence          *top30DivergenceFile      `yaml:"top30_divergence"`
 }
 
+type dashboardFile struct {
+	runtimeFile `yaml:",inline"`
+	Database    databaseFile `yaml:"Database"`
+	Alert       alertFile    `yaml:"Alert"`
+	Runtime     runtimeFile  `yaml:"Runtime"`
+	Catalog     catalogFile  `yaml:"Catalog"`
+}
+
+type databaseFile struct {
+	Name            string `yaml:"Name"`
+	Addr            string `yaml:"Addr"`
+	UserName        string `yaml:"UserName"`
+	Password        string `yaml:"Password"`
+	ParseTime       *bool  `yaml:"ParseTime"`
+	MaxIdleConn     int    `yaml:"MaxIdleConn"`
+	MaxOpenConn     int    `yaml:"MaxOpenConn"`
+	ConnMaxLifeTime string `yaml:"ConnMaxLifeTime"`
+	DSN             string `yaml:"DSN"`
+}
+
+type alertFile struct {
+	AppName         string `yaml:"AppName"`
+	Enabled         *bool  `yaml:"Enabled"`
+	FeishuUid       string `yaml:"FeishuUid"`
+	DestPhoneNumber string `yaml:"DestPhoneNumber"`
+	Business        string `yaml:"Business"`
+	ServerURL       string `yaml:"ServerUrl"`
+	WebHookP12      string `yaml:"WebHookP12"`
+	WebHookP3       string `yaml:"WebHookP3"`
+	WebHookP45      string `yaml:"WebHookP45"`
+}
+
+type catalogFile struct {
+	ExchangeEndpointsFile string `yaml:"ExchangeEndpointsFile"`
+	SymbolMappingFile     string `yaml:"SymbolMappingFile"`
+	InstrumentCatalogFile string `yaml:"InstrumentCatalogFile"`
+	ListedUniverseFile    string `yaml:"ListedUniverseFile"`
+}
+
 type top30DivergenceFile struct {
 	CEXPlatforms         []string `yaml:"cex_platforms"`
 	DEXPlatforms         []string `yaml:"dex_platforms"`
@@ -542,11 +664,146 @@ func loadEndpoints(path string) (map[string]string, error) {
 	return file.Endpoints, nil
 }
 
+func defaultCatalogConfig() CatalogConfig {
+	return CatalogConfig{
+		ExchangeEndpointsFile: "exchange_endpoints.yaml",
+		SymbolMappingFile:     "symbol_mapping.yaml",
+		InstrumentCatalogFile: "instrument_catalog.yaml",
+		ListedUniverseFile:    "listed_universe.yaml",
+	}
+}
+
+func loadDashboardConfig(path string) (dashboardFile, bool, error) {
+	var file dashboardFile
+	data, err := os.ReadFile(path)
+	if os.IsNotExist(err) {
+		return file, false, nil
+	}
+	if err != nil {
+		return file, false, err
+	}
+	if err := yaml.Unmarshal(data, &file); err != nil {
+		return file, false, err
+	}
+	return file, true, nil
+}
+
+func loadDotEnv(path string) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || !strings.Contains(line, "=") {
+			continue
+		}
+		parts := strings.SplitN(line, "=", 2)
+		key := strings.TrimSpace(parts[0])
+		value := strings.Trim(strings.TrimSpace(parts[1]), `"'`)
+		if key != "" && os.Getenv(key) == "" {
+			_ = os.Setenv(key, value)
+		}
+	}
+}
+
+func (f dashboardFile) LegacyRuntime() runtimeFile {
+	return runtimeFile{
+		CollectionInterval:       f.CollectionInterval,
+		HTTPTimeout:              f.HTTPTimeout,
+		ExchangeProxy:            f.ExchangeProxy,
+		LighterWSURL:             f.LighterWSURL,
+		LighterStaleAfter:        f.LighterStaleAfter,
+		DisplayFallbackWindow:    f.DisplayFallbackWindow,
+		DepthTiers:               f.DepthTiers,
+		SlippageBucketsUSD:       f.SlippageBucketsUSD,
+		VolumeDiscounts:          f.VolumeDiscounts,
+		CoinGecko:                f.CoinGecko,
+		WSProviders:              f.WSProviders,
+		Collection:               f.Collection,
+		Backfill:                 f.Backfill,
+		StalenessByCategory:      f.StalenessByCategory,
+		CooldownFailureThreshold: f.CooldownFailureThreshold,
+		CooldownDuration:         f.CooldownDuration,
+		Top30Divergence:          f.Top30Divergence,
+	}
+}
+
+func (f runtimeFile) hasValues() bool {
+	return f.CollectionInterval != "" || f.HTTPTimeout != "" || f.ExchangeProxy != "" || f.LighterWSURL != "" ||
+		f.LighterStaleAfter != "" || f.DisplayFallbackWindow != "" || len(f.DepthTiers) > 0 ||
+		len(f.SlippageBucketsUSD) > 0 || len(f.VolumeDiscounts) > 0 || f.CoinGecko != nil ||
+		len(f.WSProviders) > 0 || f.Collection != nil || f.Backfill != nil || len(f.StalenessByCategory) > 0 ||
+		f.CooldownFailureThreshold != nil || f.CooldownDuration != "" || f.Top30Divergence != nil
+}
+
+func (f catalogFile) withDefaults() CatalogConfig {
+	cfg := defaultCatalogConfig()
+	if f.ExchangeEndpointsFile != "" {
+		cfg.ExchangeEndpointsFile = f.ExchangeEndpointsFile
+	}
+	if f.SymbolMappingFile != "" {
+		cfg.SymbolMappingFile = f.SymbolMappingFile
+	}
+	if f.InstrumentCatalogFile != "" {
+		cfg.InstrumentCatalogFile = f.InstrumentCatalogFile
+	}
+	if f.ListedUniverseFile != "" {
+		cfg.ListedUniverseFile = f.ListedUniverseFile
+	}
+	return cfg
+}
+
+func (f databaseFile) toConfig() DatabaseConfig {
+	parseTime := true
+	if f.ParseTime != nil {
+		parseTime = *f.ParseTime
+	}
+	cfg := DatabaseConfig{
+		Name:        f.Name,
+		Addr:        f.Addr,
+		UserName:    f.UserName,
+		Password:    f.Password,
+		ParseTime:   parseTime,
+		MaxIdleConn: f.MaxIdleConn,
+		MaxOpenConn: f.MaxOpenConn,
+		DSN:         f.DSN,
+	}
+	if f.ConnMaxLifeTime != "" {
+		if d, err := time.ParseDuration(f.ConnMaxLifeTime); err == nil {
+			cfg.ConnMaxLifeTime = d
+		}
+	}
+	return cfg
+}
+
+func (f alertFile) toConfig() AlertConfig {
+	enabled := false
+	if f.Enabled != nil {
+		enabled = *f.Enabled
+	}
+	return AlertConfig{
+		AppName:         f.AppName,
+		Enabled:         enabled,
+		FeishuUid:       f.FeishuUid,
+		DestPhoneNumber: f.DestPhoneNumber,
+		Business:        f.Business,
+		ServerURL:       f.ServerURL,
+		WebHookP12:      f.WebHookP12,
+		WebHookP3:       f.WebHookP3,
+		WebHookP45:      f.WebHookP45,
+	}
+}
+
 func loadRuntime(path string, base Runtime) (Runtime, error) {
 	var file runtimeFile
 	if err := readYAML(path, &file); err != nil {
 		return Runtime{}, err
 	}
+	return applyRuntimeFile(base, file)
+}
+
+func applyRuntimeFile(base Runtime, file runtimeFile) (Runtime, error) {
 	if file.CollectionInterval != "" {
 		duration, err := time.ParseDuration(file.CollectionInterval)
 		if err != nil {

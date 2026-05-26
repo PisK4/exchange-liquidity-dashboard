@@ -45,8 +45,8 @@ func main() {
 	}
 
 	store := collector.NewStore(cfg)
-	if *mysqlDSN != "" {
-		db, err := collector.OpenMySQL(*mysqlDSN)
+	if resolvedDSN := resolveMySQLDSN(*mysqlDSN, cfg); resolvedDSN != "" {
+		db, err := collector.OpenMySQL(resolvedDSN)
 		if err != nil {
 			log.Fatalf("connect mysql: %v", err)
 		}
@@ -209,4 +209,11 @@ func waitForLighter(ctx context.Context, provider *adapter.LighterWSProvider) {
 		case <-ticker.C:
 		}
 	}
+}
+
+func resolveMySQLDSN(flagValue string, cfg config.Config) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	return cfg.MySQLDSN()
 }

@@ -44,10 +44,14 @@ func main() {
 	}
 
 	store := collector.NewStore(cfg)
-	if *mysqlDSN == "" {
-		log.Fatalf("--mysql-dsn (or DASHBOARD_MYSQL_DSN) is required: backfill must persist to MySQL")
+	resolvedDSN := *mysqlDSN
+	if resolvedDSN == "" {
+		resolvedDSN = cfg.MySQLDSN()
 	}
-	db, err := collector.OpenMySQL(*mysqlDSN)
+	if resolvedDSN == "" {
+		log.Fatalf("--mysql-dsn, DASHBOARD_MYSQL_DSN, or Database config is required: backfill must persist to MySQL")
+	}
+	db, err := collector.OpenMySQL(resolvedDSN)
 	if err != nil {
 		log.Fatalf("connect mysql: %v", err)
 	}

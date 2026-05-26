@@ -10,6 +10,109 @@ import (
 	"edgex-dashboard/backend/internal/domain"
 )
 
+func TestLoadReadsDashboardMainConfigAndDatabase(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbols-dev.yaml"), `
+symbols:
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+    market_surface: perp
+    instrument_kind: canonical
+platforms: [binance]
+`)
+	mustWrite(t, filepath.Join(dir, "endpoints-dev.yaml"), `
+endpoints:
+  binance: https://example.invalid/binance-depth
+`)
+	mustWrite(t, filepath.Join(dir, "catalog-dev.yaml"), `
+schema_version: 1
+generated_at: "2026-05-26T00:00:00Z"
+generated_by: test
+platforms:
+  binance:
+    BTC:
+      api_symbol: BTCUSDT
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      source_endpoint: https://example.invalid/binance-depth
+`)
+	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
+Database:
+  Name: edgex_dashboard
+  Addr: mysql.dev:3306
+  UserName: dashboard
+  Password: secret
+  ParseTime: true
+  MaxIdleConn: 5
+  MaxOpenConn: 12
+  ConnMaxLifeTime: 45m
+Alert:
+  AppName: edgex-liquidity-dashboard
+  Enabled: true
+  WebHookP12: p12-hook
+  WebHookP3: p3-hook
+Runtime:
+  collection_interval: 2m
+  http_timeout: 9s
+  exchange_proxy: http://proxy.dev:8080
+Catalog:
+  ExchangeEndpointsFile: endpoints-dev.yaml
+  SymbolMappingFile: symbols-dev.yaml
+  InstrumentCatalogFile: catalog-dev.yaml
+  ListedUniverseFile: listed-dev.yaml
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Database.Name != "edgex_dashboard" || cfg.Database.Addr != "mysql.dev:3306" || cfg.Database.UserName != "dashboard" {
+		t.Fatalf("database block not loaded: %+v", cfg.Database)
+	}
+	if cfg.MySQLDSN() != "dashboard:secret@tcp(mysql.dev:3306)/edgex_dashboard?parseTime=true" {
+		t.Fatalf("MySQLDSN() = %q", cfg.MySQLDSN())
+	}
+	if !cfg.Alert.Enabled || cfg.Alert.AppName != "edgex-liquidity-dashboard" || cfg.Alert.WebHookP12 != "p12-hook" {
+		t.Fatalf("alert block not loaded: %+v", cfg.Alert)
+	}
+	if cfg.Runtime.CollectionInterval != 2*time.Minute || cfg.Runtime.HTTPTimeout != 9*time.Second {
+		t.Fatalf("runtime block not loaded: %+v", cfg.Runtime)
+	}
+	if len(cfg.Symbols) != 1 || cfg.Symbols[0].APISymbol != "BTCUSDT" {
+		t.Fatalf("catalog file override not applied: %+v", cfg.Symbols)
+	}
+}
+
+func TestLoadFallsBackToDotEnvWhenDashboardConfigMissing(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, ".env"), `
+DASHBOARD_MYSQL_DSN=env_user:env_pass@tcp(mysql.env:3306)/env_dashboard?parseTime=true
+COINGECKO_DEMO_API_KEY=demo-key-from-env-file
+`)
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
+symbols:
+  - display_symbol: ETH-USDT (perp)
+    canonical: ETH
+platforms: [binance]
+`)
+	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), `
+endpoints:
+  binance: https://example.invalid/binance
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.MySQLDSN() != "env_user:env_pass@tcp(mysql.env:3306)/env_dashboard?parseTime=true" {
+		t.Fatalf("MySQLDSN() = %q", cfg.MySQLDSN())
+	}
+	if got := os.Getenv("COINGECKO_DEMO_API_KEY"); got != "demo-key-from-env-file" {
+		t.Fatalf("COINGECKO_DEMO_API_KEY = %q", got)
+	}
+}
+
 func TestLoadReadsYAMLSourceOfTruth(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
@@ -25,7 +128,7 @@ endpoints:
   binance: https://example.invalid/binance-depth
   hyperliquid: https://example.invalid/hyperliquid-info
 `)
-	mustWrite(t, filepath.Join(dir, "runtime.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
 collection_interval: 90s
 display_fallback_window: 45m
 depth_tiers: [0.001, 0.02]
@@ -128,7 +231,7 @@ platforms: [binance]
 endpoints:
   binance: https://example.invalid/binance
 `)
-	mustWrite(t, filepath.Join(dir, "runtime.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
 backfill:
   per_platform_concurrency: 9
   per_platform_rate_per_sec: 10
@@ -162,7 +265,7 @@ platforms: [edgeX]
 endpoints:
   edgeX: https://example.invalid/edgex
 `)
-	mustWrite(t, filepath.Join(dir, "runtime.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
 coingecko:
   enabled: true
   base_url: https://example.invalid/cg/v3
@@ -226,7 +329,7 @@ platforms: [edgeX]
 endpoints:
   edgeX: https://example.invalid/edgex
 `)
-	mustWrite(t, filepath.Join(dir, "runtime.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
 collection_interval: 90s
 `)
 	cfg, err := Load(dir)
@@ -270,14 +373,14 @@ func TestCommittedRuntimeAlignsCoinGeckoCadence(t *testing.T) {
 	if cfg.Runtime.Collection.PerPlatformRatePerSec <= 0 {
 		t.Fatalf("collection per_platform_rate_per_sec must be configured, got %d", cfg.Runtime.Collection.PerPlatformRatePerSec)
 	}
-	raw, err := os.ReadFile("../../../config/runtime.yaml")
+	raw, err := os.ReadFile("../../../config/edgex-liquidity-dashboard.yaml")
 	if err != nil {
-		t.Fatalf("read committed runtime.yaml: %v", err)
+		t.Fatalf("read committed edgex-liquidity-dashboard.yaml: %v", err)
 	}
 	text := string(raw)
 	for _, needle := range []string{"collection:", "per_platform_concurrency:", "per_platform_rate_per_sec:"} {
 		if !strings.Contains(text, needle) {
-			t.Fatalf("runtime.yaml should explicitly declare %q", needle)
+			t.Fatalf("edgex-liquidity-dashboard.yaml should explicitly declare %q", needle)
 		}
 	}
 }
@@ -626,7 +729,7 @@ symbols:
     instrument_kind: canonical
 platforms: [edgeX]
 `)
-	mustWrite(t, filepath.Join(dir, "runtime.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
 collection_interval: 5m
 http_timeout: 5s
 staleness_by_category:
