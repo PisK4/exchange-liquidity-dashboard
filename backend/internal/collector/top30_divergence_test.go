@@ -58,7 +58,8 @@ func TestTop30Divergence_AggregatesAcrossClass(t *testing.T) {
 		mkTop30Row(1, "ETH", 80),
 		mkTop30Row(2, "BTC", 60),
 	})
-	// mexc Top30: BTC #1 ($200) — MEXC×0.4 discount must apply
+	// mexc Top30: BTC #1 ($200). With the platform discount removed,
+	// MEXC contributes its full raw 200 to the BTC bucket.
 	store.SaveTop30("mexc", []domain.Top30Row{
 		mkTop30Row(1, "BTC", 200),
 	})
@@ -67,17 +68,21 @@ func TestTop30Divergence_AggregatesAcrossClass(t *testing.T) {
 	if len(snap.CEXTop30) != 2 {
 		t.Fatalf("expected 2 aggregate rows in CEX, got %d", len(snap.CEXTop30))
 	}
-	// BTC adjusted = 100 + 60 + 200*0.4 = 240
-	// ETH adjusted = 50 + 80           = 130
+	// BTC volume = 100 + 60 + 200 = 360
+	// ETH volume = 50 + 80        = 130
 	// BTC > ETH so BTC is rank #1
 	if snap.CEXTop30[0].Symbol != "BTC" {
 		t.Fatalf("expected CEX #1 = BTC, got %q", snap.CEXTop30[0].Symbol)
 	}
-	if got := snap.CEXTop30[0].AdjustedVolume24HUSD; got != 240 {
-		t.Fatalf("expected BTC adjusted=240 (incl. mexc×0.4), got %v", got)
+	if got := snap.CEXTop30[0].AdjustedVolume24HUSD; got != 360 {
+		t.Fatalf("expected BTC volume=360 (raw, no discount), got %v", got)
 	}
 	if got := snap.CEXTop30[0].RawVolume24HUSD; got != 360 {
 		t.Fatalf("expected BTC raw=360, got %v", got)
+	}
+	if snap.CEXTop30[0].AdjustedVolume24HUSD != snap.CEXTop30[0].RawVolume24HUSD {
+		t.Fatalf("expected adjusted == raw after discount removal, got adj=%v raw=%v",
+			snap.CEXTop30[0].AdjustedVolume24HUSD, snap.CEXTop30[0].RawVolume24HUSD)
 	}
 	if snap.CEXTop30[0].PlatformCount != 3 {
 		t.Fatalf("expected BTC platform_count=3, got %d", snap.CEXTop30[0].PlatformCount)

@@ -5,7 +5,6 @@ import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import {
   money,
-  moneyAuto,
   type FrontendURLLookup,
   type Top30AggregateRow,
   type Top30DivergenceKPI,
@@ -95,20 +94,18 @@ function AggregateTable({ title, sub, rows, platforms }: { title: string; sub: s
             <tr>
               <th className="num">#</th>
               <th>Symbol</th>
-              <th className="num">折算后 24h Vol</th>
-              <th className="num">原始 24h Vol</th>
+              <th className="num">24h Vol</th>
               <th className="num">命中家数</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
-              <tr><td colSpan={5}><div className="empty-state">该阵营暂无 Top30 数据</div></td></tr>
+              <tr><td colSpan={4}><div className="empty-state">该阵营暂无 Top30 数据</div></td></tr>
             ) : rows.map(row => (
               <tr key={row.symbol}>
                 <td className="num">{row.rank}</td>
                 <td>{row.symbol}</td>
-                <td className="num">{money(row.adjusted_volume_24h_usd)}</td>
-                <td className="num muted">{moneyAuto(row.raw_volume_24h_usd)}</td>
+                <td className="num">{money(row.raw_volume_24h_usd)}</td>
                 <td className="num">{row.platform_count} / {platforms.length}</td>
               </tr>
             ))}
@@ -137,7 +134,7 @@ export function Top30DivergenceView({ snapshot, lookup: _lookup }: { snapshot: T
       <section className="panel span-24">
         <div className="panel-head">
           <span className="panel-title">CEX vs DEX 阵营分歧</span>
-          <span className="panel-sub">· 阵营内合计 24h 成交量重新排 Top30 · 折算系数 mexc×0.4, gate×0.5</span>
+          <span className="panel-sub">· 阵营内合计 24h 成交量重新排 Top30</span>
         </div>
         <KpiStrip kpi={snapshot.kpi} signifThreshold={snapshot.significant_rank_delta} />
       </section>
@@ -180,9 +177,9 @@ export function Top30DivergenceView({ snapshot, lookup: _lookup }: { snapshot: T
               <tr>
                 <th>Symbol</th>
                 <th className="num">CEX rank</th>
-                <th className="num">CEX 24h vol (折算)</th>
+                <th className="num">CEX 24h vol</th>
                 <th className="num">DEX rank</th>
-                <th className="num">DEX 24h vol (折算)</th>
+                <th className="num">DEX 24h vol</th>
                 <th className="num">|Δrank|</th>
                 <th>分歧类型</th>
                 <th>edgeX 已上线?</th>

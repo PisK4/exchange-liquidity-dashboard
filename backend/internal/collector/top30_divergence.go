@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"edgex-dashboard/backend/internal/domain"
-	"edgex-dashboard/backend/internal/indicators"
 )
 
 // top30AggregateLimit caps the per-class aggregate ranking at the same N
@@ -23,10 +22,12 @@ const top30AggregateLimit = 30
 //
 //  1. For each venue class (CEX / DEX), iterate every member platform's
 //     latest Top30 rows. For each (symbol) appearing in any member's
-//     Top30, sum AdjustedVolume(platform, vol_24h) (which folds MEXC×0.4
-//     and Gate×0.5 in) to get the class's adjusted volume for that
-//     symbol; the raw volume is summed in parallel for display.
-//  2. Sort each class by adjusted volume descending and take top 30.
+//     Top30, sum the raw 24h USD volume across contributing platforms
+//     to get the class total for that symbol. We deliberately do NOT
+//     fold the MEXC×0.4 / Gate×0.5 discount in here: this view is a
+//     directional CEX-vs-DEX comparison, not a share calculation, so a
+//     real per-venue 24h volume is the honest signal.
+//  2. Sort each class by the raw volume descending and take top 30.
 //  3. Outer-join the two aggregate Top30s on `symbol` to produce a
 //     divergence row per union member. Categorise each row as
 //     cex_only / dex_only / cex_heavy / dex_heavy / aligned using the
@@ -128,8 +129,7 @@ func (s *Store) aggregateClassLocked(platforms []string) ([]domain.Top30Aggregat
 		return nil, time.Time{}
 	}
 	type bucket struct {
-		adjusted   float64
-		raw        float64
+		volume     float64
 		contribute map[string]struct{}
 	}
 	byCanonical := map[string]*bucket{}
@@ -155,8 +155,7 @@ func (s *Store) aggregateClassLocked(platforms []string) ([]domain.Top30Aggregat
 				b = &bucket{contribute: map[string]struct{}{}}
 				byCanonical[canonical] = b
 			}
-			b.adjusted += indicators.AdjustedVolume(platform, row.Volume24HUSD)
-			b.raw += row.Volume24HUSD
+			b.volume += row.Volume24HUSD
 			b.contribute[platform] = struct{}{}
 			if row.SnapshotTS.After(latest) {
 				latest = row.SnapshotTS
@@ -172,6 +171,13 @@ func (s *Store) aggregateClassLocked(platforms []string) ([]domain.Top30Aggregat
 	// row that summed BTC-USDT + BTC-USDC + BTC-USD volumes would
 	// otherwise be labelled "BTC-USDT (perp)" and look like a single-
 	// quote aggregate.
+	//
+	// AdjustedVolume24HUSD and RawVolume24HUSD carry the same value
+	// after we dropped the MEXC×0.4 / Gate×0.5 platform discount: the
+	// divergence view is a directional comparison, not a share
+	// calculation, so a discounted "adjusted" view would distort the
+	// CEX vs DEX signal. Both API fields are retained for schema
+	// compatibility; consumers should pick either.
 	out := make([]domain.Top30AggregateRow, 0, len(byCanonical))
 	for canonical, b := range byCanonical {
 		contributors := make([]string, 0, len(b.contribute))
@@ -181,8 +187,8 @@ func (s *Store) aggregateClassLocked(platforms []string) ([]domain.Top30Aggregat
 		sort.Strings(contributors)
 		out = append(out, domain.Top30AggregateRow{
 			Symbol:                canonical,
-			AdjustedVolume24HUSD:  b.adjusted,
-			RawVolume24HUSD:       b.raw,
+			AdjustedVolume24HUSD:  b.volume,
+			RawVolume24HUSD:       b.volume,
 			PlatformCount:         len(b.contribute),
 			ContributingPlatforms: contributors,
 		})
