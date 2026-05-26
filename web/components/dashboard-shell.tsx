@@ -559,8 +559,13 @@ function QualityTab({ data, query, bucket, symbolCtx, watchlist, allSymbols, onW
 
 function ShareTab({ data, query }: { data: ShareSnapshot; query: Query }) {
   const activeWindow = query.window ?? data.window ?? '24h';
-  const rawDenominator = data.rows.reduce((sum, row) => sum + (row.raw_volume_usd ?? 0), 0);
-  const edgexRaw = data.rows.find(row => row.platform === 'edgeX')?.raw_volume_usd;
+  const rawRows = [...data.rows].sort((a, b) => {
+    const av = typeof a.raw_volume_usd === 'number' ? a.raw_volume_usd : Number.NEGATIVE_INFINITY;
+    const bv = typeof b.raw_volume_usd === 'number' ? b.raw_volume_usd : Number.NEGATIVE_INFINITY;
+    return bv - av;
+  });
+  const rawDenominator = rawRows.reduce((sum, row) => sum + (row.raw_volume_usd ?? 0), 0);
+  const edgexRaw = rawRows.find(row => row.platform === 'edgeX')?.raw_volume_usd;
   const edgexRawShare = rawDenominator > 0 && typeof edgexRaw === 'number' ? edgexRaw / rawDenominator * 100 : undefined;
   return (
     <div className="page-content active">
@@ -581,13 +586,13 @@ function ShareTab({ data, query }: { data: ShareSnapshot; query: Query }) {
               edgeX 自身也计入分母。
             </p>
           </div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>#</th><th>平台</th><th className="num">成交量 (USD)</th><th className="num">在分母中占比</th><th>占比可视化</th></tr></thead><tbody>{data.rows.map(row => {
+          <div className="table-wrap"><table className="tbl"><thead><tr><th>#</th><th>平台</th><th className="num">成交量 (USD)</th><th className="num">在分母中占比</th><th>占比可视化</th></tr></thead><tbody>{rawRows.map((row, index) => {
             const share = typeof row.raw_volume_usd === 'number' && rawDenominator > 0
               ? row.raw_volume_usd / rawDenominator * 100
               : undefined;
             return (
               <tr key={row.platform}>
-                <td>{row.rank ?? '—'}</td>
+                <td>{index + 1}</td>
                 <td><span className={row.platform === 'edgeX' ? 'platform-self' : undefined}>{platformDisplayName(row.platform)}</span></td>
                 <td className="num"><b>{moneyAuto(row.raw_volume_usd)}</b></td>
                 <td className="num">{pct(share)}</td>
