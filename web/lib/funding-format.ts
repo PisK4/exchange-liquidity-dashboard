@@ -53,6 +53,30 @@ export function formatFundingDelta(delta?: number | null): string {
   return delta >= 0 ? `+${formatted}%` : `${formatted}%`;
 }
 
+// formatNativeRateWithPeriod renders the platform's native funding
+// rate plus its native settlement period in a single inline label such
+// as "+0.0050% / 4h". This is the canonical "contract-truthful" form
+// chosen for the dedicated 资金费率 Tab: operators want to read each
+// venue's actual per-period fee, not the cross-platform 8h-normalised
+// derivative number. The 8h-equivalent is still computed in the
+// backend and displayed as a secondary value (and as the BarChart
+// sort key + bar length) so the comparison axis stays intact.
+//
+// Returns '—' when either input is missing / non-finite / non-positive
+// so the caller can pipe every cell through a single formatter without
+// branching. The period segment is omitted if periodHours is unknown
+// rather than guessing 8h, mirroring funding.go's "unknown → unsupported"
+// posture: silently defaulting to 8h would mask a config drift.
+export function formatNativeRateWithPeriod(rate?: number | null, periodHours?: number | null): string {
+  if (typeof rate !== 'number' || !Number.isFinite(rate)) return '—';
+  const sign = rate >= 0 ? '+' : '';
+  const formatted = `${sign}${rate.toFixed(4)}%`;
+  if (typeof periodHours === 'number' && Number.isFinite(periodHours) && periodHours > 0) {
+    return `${formatted} / ${periodHours}h`;
+  }
+  return formatted;
+}
+
 // formatFundingPeriodTag renders the native settlement period as a short
 // inline tag (e.g. '4h 计费') so the operator can tell at a glance that
 // a normalised 8h-equivalent value was derived from a non-8h native
