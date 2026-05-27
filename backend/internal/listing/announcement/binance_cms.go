@@ -1,0 +1,63 @@
+package announcement
+
+import (
+	"encoding/json"
+	"strings"
+)
+
+type binanceCMSAnnouncementRaw struct {
+	ID           string      `json:"id"`
+	Code         string      `json:"code"`
+	Title        string      `json:"title"`
+	Body         string      `json:"body"`
+	URL          string      `json:"url"`
+	CategoryName string      `json:"catalogName"`
+	ReleaseDate  json.Number `json:"releaseDate"`
+	UpdateTime   json.Number `json:"updateTime"`
+	Language     string      `json:"language"`
+}
+
+func ParseBinanceCMSAnnouncement(raw json.RawMessage) (ParsedAnnouncement, error) {
+	var p binanceCMSAnnouncementRaw
+	if err := json.Unmarshal(raw, &p); err != nil {
+		return ParsedAnnouncement{}, &SchemaDriftError{Platform: "binance", Message: "decode cms announcement: " + err.Error()}
+	}
+	id := strings.TrimSpace(p.ID)
+	if id == "" {
+		id = strings.TrimSpace(p.Code)
+	}
+	if id == "" || strings.TrimSpace(p.Title) == "" {
+		return ParsedAnnouncement{}, &SchemaDriftError{Platform: "binance", Message: "missing id/code or title"}
+	}
+	subtype, confidence, emit := classifyTitle(p.Title)
+	out := ParsedAnnouncement{
+		Platform:        "binance",
+		AnnouncementID:  id,
+		Title:           p.Title,
+		URL:             p.URL,
+		Category:        p.CategoryName,
+		Description:     p.Body,
+		Language:        p.Language,
+		ParseConfidence: confidence,
+		RawPayloadJSON:  append(json.RawMessage(nil), raw...),
+		RawPayloadHash:  computeHash(raw),
+	}
+	if t := parseEpochMillis(p.ReleaseDate); t != nil {
+		out.PublishedAt = t
+	}
+	if t := parseEpochMillis(p.UpdateTime); t != nil {
+		out.UpdatedAt = t
+	}
+	if emit {
+		for _, s := range extractCanonicalSymbols(p.Title) {
+			out.Symbols = append(out.Symbols, ParsedAnnouncementSymbol{
+				CanonicalSymbol: s,
+				MarketSurface:   "perp",
+				InstrumentKind:  "canonical",
+				SignalSubtype:   subtype,
+				ListingTimeTS:   out.PublishedAt,
+			})
+		}
+	}
+	return out, nil
+}

@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"edgex-dashboard/backend/internal/listing/announcement"
+
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
@@ -212,5 +214,65 @@ func TestRepositoryListCandidatesAppliesFilters(t *testing.T) {
 	}
 	if !errors.Is(mock.ExpectationsWereMet(), nil) {
 		t.Fatalf("expectations: %v", mock.ExpectationsWereMet())
+	}
+}
+
+func TestRepositoryUpsertAnnouncementInsertsParent(t *testing.T) {
+	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	parsed := announcement.ParsedAnnouncement{
+		Platform:        "bybit",
+		AnnouncementID:  "a1",
+		Title:           "ABC USDT Perpetual",
+		URL:             "https://example.test/a1",
+		ParseConfidence: announcement.ConfidenceHigh,
+		RawPayloadJSON:  json.RawMessage(`{"id":"a1"}`),
+		RawPayloadHash:  "h",
+		PublishedAt:     &now,
+	}
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_announcement")).
+		WillReturnResult(sqlmock.NewResult(7, 1))
+
+	id, err := repo.UpsertAnnouncement(context.Background(), parsed)
+	if err != nil {
+		t.Fatalf("UpsertAnnouncement err = %v", err)
+	}
+	if id != 7 {
+		t.Fatalf("id = %d, want 7", id)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestRepositoryInsertAnnouncementSymbolAndSignalChains(t *testing.T) {
+	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	sym := announcement.ParsedAnnouncementSymbol{
+		CanonicalSymbol: "ABC",
+		MarketSurface:   "perp",
+		InstrumentKind:  "canonical",
+		SignalSubtype:   announcement.SubtypePerpListing,
+		ListingTimeTS:   &now,
+	}
+	rawPayload := json.RawMessage(`{"id":"a1"}`)
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_announcement_symbol")).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_signal_observation")).
+		WillReturnResult(sqlmock.NewResult(101, 1))
+
+	signalID, inserted, err := repo.InsertAnnouncementSymbolAndSignal(context.Background(), 7, "bybit", "a1", sym, rawPayload, now)
+	if err != nil {
+		t.Fatalf("InsertAnnouncementSymbolAndSignal err = %v", err)
+	}
+	if !inserted || signalID != 101 {
+		t.Fatalf("inserted=%v id=%d, want inserted=true id=101", inserted, signalID)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
 	}
 }

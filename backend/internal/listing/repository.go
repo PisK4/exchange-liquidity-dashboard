@@ -8,7 +8,58 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"edgex-dashboard/backend/internal/listing/announcement"
 )
+
+// Thin aliases so call sites in this file stay short while the
+// announcement package remains the canonical home for the parsed
+// shapes.
+type (
+	annParsed = announcementParsedAdapter
+	annSymbol = announcement.ParsedAnnouncementSymbol
+)
+
+// announcementParsedAdapter projects announcement.ParsedAnnouncement
+// onto the fields the repository writes. The adapter keeps optional
+// future fields (e.g. effective listing time once added to the parser
+// output) explicit rather than relying on the parser struct shape.
+type announcementParsedAdapter struct {
+	Platform             string
+	AnnouncementID       string
+	URL                  string
+	Title                string
+	Description          string
+	Category             string
+	Language             string
+	PublishedAt          *time.Time
+	UpdatedAt            *time.Time
+	EffectiveListingTime *time.Time
+	ParseConfidence      string
+	RawPayloadJSON       json.RawMessage
+	RawPayloadHash       string
+	ParserVersion        string
+}
+
+func newAnnouncementParsed(a announcement.ParsedAnnouncement) annParsed {
+	pv := a.RawPayloadHash // unused; kept to keep parser-side hash visible
+	_ = pv
+	return annParsed{
+		Platform:        a.Platform,
+		AnnouncementID:  a.AnnouncementID,
+		URL:             a.URL,
+		Title:           a.Title,
+		Description:     a.Description,
+		Category:        a.Category,
+		Language:        a.Language,
+		PublishedAt:     a.PublishedAt,
+		UpdatedAt:       a.UpdatedAt,
+		ParseConfidence: a.ParseConfidence,
+		RawPayloadJSON:  a.RawPayloadJSON,
+		RawPayloadHash:  a.RawPayloadHash,
+		ParserVersion:   announcement.ParserVersion,
+	}
+}
 
 // Repository is the MySQL-backed read/write gateway for every Listing
 // Agent table. It is intentionally tiny: there is one method per
@@ -177,6 +228,117 @@ func (r *Repository) LinkCandidateSignal(ctx context.Context, candidateID, signa
 		candidateID, signalID,
 	)
 	return err
+}
+
+// UpsertAnnouncement inserts (or updates) one t_listing_announcement
+// row keyed by (platform, announcement_id). Returns the row id.
+func (r *Repository) UpsertAnnouncement(ctx context.Context, parsed announcement.ParsedAnnouncement) (int64, error) {
+	a := newAnnouncementParsed(parsed)
+	if r.db == nil {
+		return 0, errors.New("listing repository: no db attached")
+	}
+	res, err := r.db.ExecContext(ctx,
+		`INSERT INTO t_listing_announcement
+		   (platform, announcement_id, announcement_url, title, description, category, tags_json,
+		    language, published_at, source_updated_at, parsed_market_type, effective_listing_time,
+		    parse_confidence, raw_payload_json, raw_payload_hash, parser_version)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   announcement_url = VALUES(announcement_url),
+		   title = VALUES(title),
+		   description = VALUES(description),
+		   category = VALUES(category),
+		   tags_json = VALUES(tags_json),
+		   language = VALUES(language),
+		   published_at = VALUES(published_at),
+		   source_updated_at = VALUES(source_updated_at),
+		   parse_confidence = VALUES(parse_confidence),
+		   raw_payload_json = VALUES(raw_payload_json),
+		   raw_payload_hash = VALUES(raw_payload_hash),
+		   parser_version = VALUES(parser_version)`,
+		a.Platform, a.AnnouncementID, nullString(a.URL), a.Title, nullString(a.Description),
+		nullString(a.Category), nil, nullString(a.Language),
+		nullTimePtr(a.PublishedAt), nullTimePtr(a.UpdatedAt),
+		nil, nullTimePtr(a.EffectiveListingTime),
+		a.ParseConfidence, []byte(a.RawPayloadJSON), a.RawPayloadHash, a.ParserVersion,
+	)
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if id == 0 {
+		row := r.db.QueryRowContext(ctx,
+			`SELECT id FROM t_listing_announcement WHERE platform = ? AND announcement_id = ?`,
+			a.Platform, a.AnnouncementID)
+		if err := row.Scan(&id); err != nil {
+			return 0, fmt.Errorf("resolve announcement id: %w", err)
+		}
+	}
+	return id, nil
+}
+
+// InsertAnnouncementSymbolAndSignal materialises one child symbol row
+// in t_listing_announcement_symbol and emits the matching
+// announcement_listing signal observation. The two writes are linked
+// by the deterministic signal fingerprint so subsequent runs are
+// idempotent without needing a transaction.
+func (r *Repository) InsertAnnouncementSymbolAndSignal(
+	ctx context.Context,
+	announcementID int64,
+	platform string,
+	announcementExternalID string,
+	sym annSymbol,
+	rawPayload []byte,
+	observedAt time.Time,
+) (int64, bool, error) {
+	if r.db == nil {
+		return 0, false, errors.New("listing repository: no db attached")
+	}
+	if _, err := r.db.ExecContext(ctx,
+		`INSERT IGNORE INTO t_listing_announcement_symbol
+		   (announcement_id, canonical_symbol, display_symbol, market_surface, instrument_kind,
+		    signal_subtype, listing_time_ts)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		announcementID, sym.CanonicalSymbol, nullString(sym.DisplaySymbol),
+		sym.MarketSurface, sym.InstrumentKind, sym.SignalSubtype, nullTimePtr(sym.ListingTimeTS)); err != nil {
+		return 0, false, err
+	}
+	fingerprint := fmt.Sprintf("announcement_listing|%s|%s|%s|%s|%s",
+		platform, announcementExternalID, sym.CanonicalSymbol, sym.MarketSurface, sym.InstrumentKind)
+	signal := SignalObservation{
+		SignalType:      SignalAnnouncementListing,
+		SignalSubtype:   sym.SignalSubtype,
+		SourcePlatform:  platform,
+		CanonicalSymbol: sym.CanonicalSymbol,
+		DisplaySymbol:   sym.DisplaySymbol,
+		MarketSurface:   sym.MarketSurface,
+		InstrumentKind:  sym.InstrumentKind,
+		ObservedAt:      observedAt,
+		ListingTimeTS:   sym.ListingTimeTS,
+		Fingerprint:     fingerprint,
+		PayloadJSON:     buildAnnouncementPayload(announcementID, announcementExternalID, sym),
+		RawPayloadJSON:  rawPayload,
+	}
+	return r.InsertSignal(ctx, signal)
+}
+
+func buildAnnouncementPayload(announcementID int64, externalID string, sym annSymbol) json.RawMessage {
+	payload := map[string]any{
+		"announcement_id":          announcementID,
+		"announcement_external_id": externalID,
+		"canonical_symbol":         sym.CanonicalSymbol,
+		"market_surface":           sym.MarketSurface,
+		"instrument_kind":          sym.InstrumentKind,
+		"signal_subtype":           sym.SignalSubtype,
+	}
+	if sym.ListingTimeTS != nil {
+		payload["listing_time_ts"] = sym.ListingTimeTS.UTC().Format(time.RFC3339)
+	}
+	b, _ := json.Marshal(payload)
+	return b
 }
 
 // MarkSignalFused stamps fused_at on the given signal id. Used by the
