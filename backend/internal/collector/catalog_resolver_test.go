@@ -2,6 +2,7 @@ package collector
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -133,6 +134,85 @@ func TestResolveHyperliquidUnknownBase(t *testing.T) {
 	}
 	if !errors.Is(err, ErrSymbolUnsupported) {
 		t.Fatalf("expected ErrSymbolUnsupported, got %v", err)
+	}
+}
+
+// TestResolveHyperliquidPerpDexSymbol verifies that an HIP-3 builder-deployed
+// PerpDex universe ("xyz:CL", "xyz:SP500", ...) is merged into the
+// hyperliquid lookup map so Top30 backfill can call candleSnapshot with the
+// exact prefixed coin name the API expects (lower-cased dex prefix). The
+// resolver lookup happens via the uppercased base produced by
+// baseAssetFromSymbol ("XYZ:CL-USD (perp)" -> "XYZ:CL").
+func TestResolveHyperliquidPerpDexSymbol(t *testing.T) {
+	dumpsDir := t.TempDir()
+	mainDir := filepath.Join(dumpsDir, "hyperliquid-perp")
+	if err := os.MkdirAll(mainDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(mainDir, "2026-05-27.json"),
+		[]byte(`[{"universe":[{"name":"BTC"},{"name":"kPEPE"}]},{}]`),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+	dexDir := filepath.Join(dumpsDir, "hyperliquid-perpdex-xyz")
+	if err := os.MkdirAll(dexDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(
+		filepath.Join(dexDir, "2026-05-27.json"),
+		[]byte(`{"universe":[{"name":"xyz:CL"},{"name":"xyz:SP500"}]}`),
+		0o644,
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	r := NewCatalogResolver(dumpsDir)
+
+	sub, err := r.Resolve("hyperliquid", "XYZ:CL", "XYZ:CL-USD (perp)")
+	if err != nil {
+		t.Fatalf("resolve xyz:CL: %v", err)
+	}
+	if sub.APISymbol != "xyz:CL" {
+		t.Errorf("api_symbol=%q want xyz:CL (case preserved for candleSnapshot)", sub.APISymbol)
+	}
+	if sub.DisplaySymbol != "XYZ:CL-USD (perp)" {
+		t.Errorf("display_symbol=%q want XYZ:CL-USD (perp)", sub.DisplaySymbol)
+	}
+
+	subSP, err := r.Resolve("hyperliquid", "XYZ:SP500", "XYZ:SP500-USD (perp)")
+	if err != nil {
+		t.Fatalf("resolve xyz:SP500: %v", err)
+	}
+	if subSP.APISymbol != "xyz:SP500" {
+		t.Errorf("api_symbol=%q want xyz:SP500", subSP.APISymbol)
+	}
+
+	subPEPE, err := r.Resolve("hyperliquid", "KPEPE", "kPEPE-USDT (perp)")
+	if err != nil {
+		t.Fatalf("resolve kPEPE: %v", err)
+	}
+	if subPEPE.APISymbol != "kPEPE" {
+		t.Errorf("api_symbol=%q want kPEPE (case preserved for main universe)", subPEPE.APISymbol)
+	}
+
+	if _, err := r.Resolve("hyperliquid", "XYZ:NOT_A_THING", ""); !errors.Is(err, ErrSymbolUnsupported) {
+		t.Errorf("expected ErrSymbolUnsupported for unknown xyz symbol, got %v", err)
+	}
+}
+
+// TestResolveHyperliquidShippedXyzDump exercises the real shipped xyz dex
+// dump (if present) to guarantee Top30 backfill can resolve a representative
+// builder-dex coin without test fixtures.
+func TestResolveHyperliquidShippedXyzDump(t *testing.T) {
+	r := NewCatalogResolver(realDumpsDir(t))
+	sub, err := r.Resolve("hyperliquid", "XYZ:CL", "XYZ:CL-USD (perp)")
+	if err != nil {
+		t.Skipf("xyz dex dump unavailable: %v", err)
+	}
+	if sub.APISymbol != "xyz:CL" {
+		t.Errorf("api_symbol=%q want xyz:CL", sub.APISymbol)
 	}
 }
 

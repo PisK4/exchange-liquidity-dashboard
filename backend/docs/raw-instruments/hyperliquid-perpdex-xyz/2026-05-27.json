@@ -1,0 +1,817 @@
+{
+  "collateralToken": 0,
+  "marginTables": [
+    [
+      50,
+      {
+        "description": "",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 50
+          }
+        ]
+      }
+    ]
+  ],
+  "universe": [
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginTableId": 30,
+      "maxLeverage": 30,
+      "name": "xyz:XYZ100",
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:TSLA",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:NVDA",
+      "szDecimals": 3
+    },
+    {
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "xyz:GOLD",
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:HOOD",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:INTC",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:PLTR",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:COIN",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:META",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:AAPL",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:MSFT",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:ORCL",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:GOOGL",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:AMZN",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:AMD",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:MU",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-23T17:37:10.033211662",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:SNDK",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "lastGrowthModeChangeTime": "2026-01-14T16:05:30.519245305",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:MSTR",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-12-05T17:07:43.712558241",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:CRCL",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-12-05T17:07:43.712558241",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:NFLX",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-12-05T17:07:43.712558241",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:COST",
+      "onlyIsolated": true,
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-12-05T17:07:43.712558241",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:LLY",
+      "onlyIsolated": true,
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-12-19T16:55:24.230127845",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:SKHX",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-12-19T16:55:24.230127845",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:TSM",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-12-19T16:55:24.230127845",
+      "marginMode": "noCross",
+      "marginTableId": 50,
+      "maxLeverage": 50,
+      "name": "xyz:JPY",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-12-19T16:55:24.230127845",
+      "marginMode": "noCross",
+      "marginTableId": 50,
+      "maxLeverage": 50,
+      "name": "xyz:EUR",
+      "onlyIsolated": true,
+      "szDecimals": 1
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-12-27T14:46:13.933247634",
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "xyz:SILVER",
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-06T14:22:02.431616165",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:RIVN",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-06T14:22:02.431616165",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:BABA",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-06T14:22:02.431616165",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:CL",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-09T00:07:27.711071079",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:COPPER",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-17T00:52:17.773623405",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:NATGAS",
+      "onlyIsolated": true,
+      "szDecimals": 1
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-01-26T16:47:08.614356922",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:URANIUM",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-01-21T21:02:05.395415841",
+      "marginMode": "strictIsolated",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:ALUMINIUM",
+      "onlyIsolated": true,
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-26T16:47:08.614356922",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:SMSN",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-26T16:47:08.614356922",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:PLATINUM",
+      "onlyIsolated": true,
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-26T16:47:08.614356922",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:USAR",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-26T23:31:34.059495489",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:CRWV",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-29T14:25:47.800206028",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:URNM",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-31T00:37:41.755544137",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:PALLADIUM",
+      "onlyIsolated": true,
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-02-01T17:33:54.214113650",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:DXY",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-03T19:32:57.961597289",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:GME",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-05T03:32:50.957071742",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:KR200",
+      "onlyIsolated": true,
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-02-10T19:10:39.792893920",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:SOFTBANK",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-12T00:07:23.069735778",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:JP225",
+      "onlyIsolated": true,
+      "szDecimals": 5
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-18T01:46:52.673000860",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:HYUNDAI",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-02-25T01:02:01.358848807",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:KIOXIA",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-28T21:59:11.850632195",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:EWY",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-02T00:41:25.683109868",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:EWJ",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-04T14:33:56.611209792",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:BRENTOIL",
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-03-09T19:53:24.389395191",
+      "marginMode": "strictIsolated",
+      "marginTableId": 3,
+      "maxLeverage": 3,
+      "name": "xyz:VIX",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-15T17:57:18.478880296",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:HIMS",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-18T11:38:49.335772800",
+      "marginTableId": 50,
+      "maxLeverage": 50,
+      "name": "xyz:SP500",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-23T12:47:36.299219957",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:DKNG",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-27T21:12:35.323224713",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:LITE",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-03-29T19:28:21.135127220",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:CORN",
+      "onlyIsolated": true,
+      "szDecimals": 0
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-31T19:51:50.241985327",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:XLE",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-04-02T02:42:07.320427073",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:WHEAT",
+      "onlyIsolated": true,
+      "szDecimals": 0
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-04-03T19:07:01.933950208",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:TTF",
+      "onlyIsolated": true,
+      "szDecimals": 1
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-06T15:39:22.032937119",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:BX",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "lastGrowthModeChangeTime": "2026-05-09T05:06:30.219278272",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:PURRDAT",
+      "onlyIsolated": true,
+      "szDecimals": 0
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-11T05:57:11.042604593",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:MRVL",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-13T15:14:54.385823035",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:RKLB",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-15T21:47:45.104299047",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:BIRD",
+      "onlyIsolated": true,
+      "szDecimals": 1
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-04-17T15:51:21.894541784",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:VOL",
+      "onlyIsolated": true,
+      "szDecimals": 1
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-22T14:35:27.161106929",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:DRAM",
+      "onlyIsolated": true,
+      "szDecimals": 1
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-24T01:16:48.392583764",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:CBRS",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-27T15:13:21.741505858",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:EWZ",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-04-30T23:33:46.845378252",
+      "marginMode": "noCross",
+      "marginTableId": 50,
+      "maxLeverage": 50,
+      "name": "xyz:KRW",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-05-03T17:13:06.829773905",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:ZM",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-05-05T14:22:12.576535126",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:EBAY",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-05-07T00:49:40.291714731",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:H100",
+      "onlyIsolated": true,
+      "szDecimals": 0
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-05-09T05:04:37.536668407",
+      "marginMode": "strictIsolated",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:NIFTY",
+      "onlyIsolated": true,
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-05-11T15:05:18.433457126",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:ARM",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-05-13T15:30:23.954993706",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:EWT",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-05-16T01:31:07.460142934",
+      "marginMode": "noCross",
+      "marginTableId": 50,
+      "maxLeverage": 50,
+      "name": "xyz:GBP",
+      "onlyIsolated": true,
+      "szDecimals": 0
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-05-17T14:46:21.424795458",
+      "marginMode": "strictIsolated",
+      "marginTableId": 5,
+      "maxLeverage": 5,
+      "name": "xyz:SPCX",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-05-20T00:21:19.388863967",
+      "marginMode": "strictIsolated",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "xyz:IBOV",
+      "onlyIsolated": true,
+      "szDecimals": 5
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-05-21T17:10:42.165373019",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:ASML",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-05-25T03:02:14.645754442",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:MINIMAX",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-05-26T11:58:14.597789923",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "xyz:BB",
+      "onlyIsolated": true,
+      "szDecimals": 1
+    }
+  ]
+}

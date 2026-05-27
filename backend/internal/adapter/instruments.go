@@ -900,6 +900,65 @@ func (a RESTAdapter) fetchHyperliquidInstruments(ctx context.Context, fetchedAt 
 		Instruments: perpInsts,
 	})
 
+	// Builder-deployed PerpDexes (HIP-3) live in separate namespaces such
+	// as `xyz` (equities / commodities / indices). Symbols are returned
+	// from {"type":"meta","dex":"<name>"} prefixed like `xyz:CL`, and the
+	// same `candleSnapshot` endpoint accepts that prefixed coin directly
+	// without any extra `dex` request field. We emit one MarketDump per
+	// non-null dex so the resolver and downstream Top30 backfill can pick
+	// them up. Failures here MUST be non-fatal: the catalog refresh for
+	// the main perp universe must keep working even when Hyperliquid is
+	// adding / removing builder dexes.
+	perpDexsBody, _ := json.Marshal(map[string]any{"type": "perpDexs"})
+	if perpDexsRaw, dexErr := a.fetchRaw(ctx, http.MethodPost, perpURL, perpDexsBody); dexErr == nil {
+		var dexes []struct {
+			Name string `json:"name"`
+		}
+		if err := json.Unmarshal(perpDexsRaw, &dexes); err == nil {
+			for _, d := range dexes {
+				name := strings.TrimSpace(d.Name)
+				if name == "" {
+					continue
+				}
+				dexBody, _ := json.Marshal(map[string]any{"type": "meta", "dex": name})
+				dexRaw, err := a.fetchRaw(ctx, http.MethodPost, perpURL, dexBody)
+				if err != nil {
+					continue
+				}
+				var dexMeta struct {
+					Universe []struct {
+						Name       string `json:"name"`
+						SzDecimals int    `json:"szDecimals"`
+						IsDelisted bool   `json:"isDelisted"`
+					} `json:"universe"`
+				}
+				if err := json.Unmarshal(dexRaw, &dexMeta); err != nil {
+					continue
+				}
+				dexInsts := make([]Instrument, 0, len(dexMeta.Universe))
+				for _, u := range dexMeta.Universe {
+					status := "live"
+					if u.IsDelisted {
+						status = "delisted"
+					}
+					dexInsts = append(dexInsts, Instrument{
+						APISymbol:   u.Name,
+						BaseAsset:   u.Name,
+						QuoteAsset:  "USDC",
+						SettleAsset: "USDC",
+						Status:      status,
+					})
+				}
+				res.Markets = append(res.Markets, MarketDump{
+					MarketType:  "perpdex-" + name,
+					SourceURL:   perpURL,
+					RawJSON:     prettyJSON(dexRaw),
+					Instruments: dexInsts,
+				})
+			}
+		}
+	}
+
 	spotBody, _ := json.Marshal(map[string]any{"type": "spotMeta"})
 	spotRaw, err := a.fetchRaw(ctx, http.MethodPost, perpURL, spotBody)
 	if err != nil {

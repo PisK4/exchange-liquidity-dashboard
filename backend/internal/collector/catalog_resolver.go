@@ -246,6 +246,15 @@ func (r *CatalogResolver) loadLighter() (platformLookup, error) {
 // loadHyperliquid reads hyperliquid-perp/<latest>.json universe list. The
 // dump is a 2-element JSON array; index 0 carries the metadata block we
 // need (`universe`), index 1 is the live mids snapshot we ignore.
+//
+// In addition to the main perp universe, this loader also scans for any
+// `hyperliquid-perpdex-<name>` dump directories produced by
+// build-catalog and merges their HIP-3 builder-deployed dex universes
+// (e.g. `xyz:CL`, `xyz:SP500`) into the same lookup map. The dex-prefixed
+// coin symbols are stored as-is (lowercase prefix) in api_symbol because
+// Hyperliquid's `candleSnapshot` endpoint accepts the prefixed coin
+// directly. The map key is uppercase to match baseAssetFromSymbol's
+// output for Top30 rows like "XYZ:CL-USD (perp)".
 func (r *CatalogResolver) loadHyperliquid() (platformLookup, error) {
 	path, err := latestDump(r.dumpsDir, "hyperliquid-perp")
 	if err != nil {
@@ -275,10 +284,55 @@ func (r *CatalogResolver) loadHyperliquid() (platformLookup, error) {
 		out[base] = domain.SymbolSub{
 			Platform:  "hyperliquid",
 			Canonical: base,
-			APISymbol: base,
+			APISymbol: row.Name,
 		}
 	}
+	r.mergeHyperliquidPerpDexes(out)
 	return platformLookup{entries: out}, nil
+}
+
+// mergeHyperliquidPerpDexes scans dumpsDir for any directory matching
+// `hyperliquid-perpdex-<name>` and folds each dex's universe into out.
+// Missing or malformed dumps are tolerated silently — the main perp
+// universe is the only required source; dex coverage is best-effort.
+func (r *CatalogResolver) mergeHyperliquidPerpDexes(out map[string]domain.SymbolSub) {
+	entries, err := os.ReadDir(r.dumpsDir)
+	if err != nil {
+		return
+	}
+	const prefix = "hyperliquid-perpdex-"
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		if !strings.HasPrefix(e.Name(), prefix) {
+			continue
+		}
+		path, err := latestDump(r.dumpsDir, e.Name())
+		if err != nil {
+			continue
+		}
+		var dexMeta struct {
+			Universe []struct {
+				Name string `json:"name"`
+			} `json:"universe"`
+		}
+		if err := readJSON(path, &dexMeta); err != nil {
+			continue
+		}
+		for _, row := range dexMeta.Universe {
+			apiSymbol := strings.TrimSpace(row.Name)
+			if apiSymbol == "" {
+				continue
+			}
+			base := strings.ToUpper(apiSymbol)
+			out[base] = domain.SymbolSub{
+				Platform:  "hyperliquid",
+				Canonical: base,
+				APISymbol: apiSymbol,
+			}
+		}
+	}
 }
 
 // loadEdgeX reads edgeX-perp-v1/<latest>.json and joins coinList →
