@@ -442,6 +442,240 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/listing/candidates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                    status?: string;
+                    evidence_kind?: string;
+                    platform?: string;
+                    symbol?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description listing candidates */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ListingCandidateListResponse"];
+                    };
+                };
+                /** @description listing disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ListingUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/listing/candidates/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description candidate detail with signals */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ListingCandidateDetailResponse"];
+                    };
+                };
+                /** @description listing disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ListingUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/listing/candidates/{id}/signals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description candidate signals */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ListingSignalListResponse"];
+                    };
+                };
+                /** @description listing disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ListingUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/listing/source-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description listing source health */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ListingSourceHealthResponse"];
+                    };
+                };
+                /** @description listing disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ListingUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/listing/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                    event_type?: string;
+                    status?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description listing delivery outbox */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ListingDeliveryListResponse"];
+                    };
+                };
+                /** @description listing disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ListingUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -804,6 +1038,122 @@ export interface components {
         };
         RuntimeConfig: {
             [key: string]: unknown;
+        };
+        ListingCandidate: {
+            id?: number;
+            canonical_symbol?: string;
+            display_symbol?: string;
+            market_surface?: string;
+            instrument_kind?: string;
+            lifecycle_status?: string;
+            lifecycle_status_label?: string;
+            evidence_kind?: string;
+            confidence_level?: string;
+            business_score?: number | null;
+            business_score_version?: string;
+            recommendation?: string;
+            recommendation_label?: string;
+            source_platforms?: string[];
+            /** Format: date-time */
+            first_observed_at?: string;
+            /** Format: date-time */
+            last_observed_at?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        ListingCandidateListResponse: {
+            candidates: components["schemas"]["ListingCandidate"][];
+            count: number;
+        };
+        ListingCandidateDetailResponse: {
+            candidate: components["schemas"]["ListingCandidate"];
+            signals: components["schemas"]["ListingSignal"][];
+        };
+        ListingSignal: {
+            id?: number;
+            signal_type?: string;
+            signal_subtype?: string;
+            source_platform?: string;
+            market_type?: string;
+            api_symbol?: string;
+            canonical_symbol?: string;
+            display_symbol?: string;
+            market_surface?: string;
+            instrument_kind?: string;
+            status_normalized?: string;
+            confidence?: string;
+            /** Format: date-time */
+            observed_at?: string;
+            /** Format: date-time */
+            published_at?: string | null;
+            /** Format: date-time */
+            listing_time_ts?: string | null;
+            fingerprint?: string;
+            payload?: {
+                [key: string]: unknown;
+            };
+            raw_payload?: {
+                [key: string]: unknown;
+            };
+        } & {
+            [key: string]: unknown;
+        };
+        ListingSignalListResponse: {
+            signals: components["schemas"]["ListingSignal"][];
+            count: number;
+        };
+        ListingSourceHealth: {
+            source_key?: string;
+            source_type?: string;
+            platform?: string;
+            status?: string;
+            /** Format: date-time */
+            last_success_at?: string | null;
+            /** Format: date-time */
+            last_error_at?: string | null;
+            consecutive_error_count?: number;
+            schema_drift_count?: number;
+            /** Format: date-time */
+            disabled_until?: string | null;
+            last_error?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        ListingSourceHealthResponse: {
+            sources: components["schemas"]["ListingSourceHealth"][];
+            count: number;
+        };
+        ListingDelivery: {
+            id?: number;
+            event_type?: string;
+            dedupe_key?: string;
+            target_channel?: string;
+            status?: string;
+            attempt_count?: number;
+            max_attempts?: number;
+            /** Format: date-time */
+            next_attempt_at?: string | null;
+            payload?: {
+                [key: string]: unknown;
+            };
+            last_error?: string;
+            /** Format: date-time */
+            sent_at?: string | null;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        ListingDeliveryListResponse: {
+            deliveries: components["schemas"]["ListingDelivery"][];
+            count: number;
+        };
+        ListingUnavailableResponse: {
+            status: string;
+            reason?: string;
+            feature: string;
         };
     };
     responses: never;

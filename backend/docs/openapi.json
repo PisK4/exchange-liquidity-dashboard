@@ -254,6 +254,90 @@
           }
         }
       }
+    },
+    "/api/listing/candidates": {
+      "get": {
+        "parameters": [
+          {"in": "query", "name": "limit", "schema": {"type": "integer"}},
+          {"in": "query", "name": "status", "schema": {"type": "string"}},
+          {"in": "query", "name": "evidence_kind", "schema": {"type": "string"}},
+          {"in": "query", "name": "platform", "schema": {"type": "string"}},
+          {"in": "query", "name": "symbol", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "listing candidates",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingCandidateListResponse"}}}
+          },
+          "503": {
+            "description": "listing disabled",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingUnavailableResponse"}}}
+          }
+        }
+      }
+    },
+    "/api/listing/candidates/{id}": {
+      "get": {
+        "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "integer"}}],
+        "responses": {
+          "200": {
+            "description": "candidate detail with signals",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingCandidateDetailResponse"}}}
+          },
+          "503": {
+            "description": "listing disabled",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingUnavailableResponse"}}}
+          }
+        }
+      }
+    },
+    "/api/listing/candidates/{id}/signals": {
+      "get": {
+        "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "integer"}}],
+        "responses": {
+          "200": {
+            "description": "candidate signals",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingSignalListResponse"}}}
+          },
+          "503": {
+            "description": "listing disabled",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingUnavailableResponse"}}}
+          }
+        }
+      }
+    },
+    "/api/listing/source-health": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "listing source health",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingSourceHealthResponse"}}}
+          },
+          "503": {
+            "description": "listing disabled",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingUnavailableResponse"}}}
+          }
+        }
+      }
+    },
+    "/api/listing/deliveries": {
+      "get": {
+        "parameters": [
+          {"in": "query", "name": "limit", "schema": {"type": "integer"}},
+          {"in": "query", "name": "event_type", "schema": {"type": "string"}},
+          {"in": "query", "name": "status", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "listing delivery outbox",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingDeliveryListResponse"}}}
+          },
+          "503": {
+            "description": "listing disabled",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingUnavailableResponse"}}}
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1502,6 +1586,136 @@
       "RuntimeConfig": {
         "type": "object",
         "additionalProperties": true
+      },
+      "ListingCandidate": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {"type": "integer"},
+          "canonical_symbol": {"type": "string"},
+          "display_symbol": {"type": "string"},
+          "market_surface": {"type": "string"},
+          "instrument_kind": {"type": "string"},
+          "lifecycle_status": {"type": "string"},
+          "lifecycle_status_label": {"type": "string"},
+          "evidence_kind": {"type": "string"},
+          "confidence_level": {"type": "string"},
+          "business_score": {"type": "number", "nullable": true},
+          "business_score_version": {"type": "string"},
+          "recommendation": {"type": "string"},
+          "recommendation_label": {"type": "string"},
+          "source_platforms": {"type": "array", "items": {"type": "string"}},
+          "first_observed_at": {"type": "string", "format": "date-time"},
+          "last_observed_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ListingCandidateListResponse": {
+        "type": "object",
+        "required": ["candidates", "count"],
+        "properties": {
+          "candidates": {"type": "array", "items": {"$ref": "#/components/schemas/ListingCandidate"}},
+          "count": {"type": "integer"}
+        }
+      },
+      "ListingCandidateDetailResponse": {
+        "type": "object",
+        "required": ["candidate", "signals"],
+        "properties": {
+          "candidate": {"$ref": "#/components/schemas/ListingCandidate"},
+          "signals": {"type": "array", "items": {"$ref": "#/components/schemas/ListingSignal"}}
+        }
+      },
+      "ListingSignal": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {"type": "integer"},
+          "signal_type": {"type": "string"},
+          "signal_subtype": {"type": "string"},
+          "source_platform": {"type": "string"},
+          "market_type": {"type": "string"},
+          "api_symbol": {"type": "string"},
+          "canonical_symbol": {"type": "string"},
+          "display_symbol": {"type": "string"},
+          "market_surface": {"type": "string"},
+          "instrument_kind": {"type": "string"},
+          "status_normalized": {"type": "string"},
+          "confidence": {"type": "string"},
+          "observed_at": {"type": "string", "format": "date-time"},
+          "published_at": {"type": "string", "format": "date-time", "nullable": true},
+          "listing_time_ts": {"type": "string", "format": "date-time", "nullable": true},
+          "fingerprint": {"type": "string"},
+          "payload": {"type": "object", "additionalProperties": true},
+          "raw_payload": {"type": "object", "additionalProperties": true}
+        }
+      },
+      "ListingSignalListResponse": {
+        "type": "object",
+        "required": ["signals", "count"],
+        "properties": {
+          "signals": {"type": "array", "items": {"$ref": "#/components/schemas/ListingSignal"}},
+          "count": {"type": "integer"}
+        }
+      },
+      "ListingSourceHealth": {
+        "type": "object",
+        "properties": {
+          "source_key": {"type": "string"},
+          "source_type": {"type": "string"},
+          "platform": {"type": "string"},
+          "status": {"type": "string"},
+          "last_success_at": {"type": "string", "format": "date-time", "nullable": true},
+          "last_error_at": {"type": "string", "format": "date-time", "nullable": true},
+          "consecutive_error_count": {"type": "integer"},
+          "schema_drift_count": {"type": "integer"},
+          "disabled_until": {"type": "string", "format": "date-time", "nullable": true},
+          "last_error": {"type": "string"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ListingSourceHealthResponse": {
+        "type": "object",
+        "required": ["sources", "count"],
+        "properties": {
+          "sources": {"type": "array", "items": {"$ref": "#/components/schemas/ListingSourceHealth"}},
+          "count": {"type": "integer"}
+        }
+      },
+      "ListingDelivery": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {"type": "integer"},
+          "event_type": {"type": "string"},
+          "dedupe_key": {"type": "string"},
+          "target_channel": {"type": "string"},
+          "status": {"type": "string"},
+          "attempt_count": {"type": "integer"},
+          "max_attempts": {"type": "integer"},
+          "next_attempt_at": {"type": "string", "format": "date-time", "nullable": true},
+          "payload": {"type": "object", "additionalProperties": true},
+          "last_error": {"type": "string"},
+          "sent_at": {"type": "string", "format": "date-time", "nullable": true},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ListingDeliveryListResponse": {
+        "type": "object",
+        "required": ["deliveries", "count"],
+        "properties": {
+          "deliveries": {"type": "array", "items": {"$ref": "#/components/schemas/ListingDelivery"}},
+          "count": {"type": "integer"}
+        }
+      },
+      "ListingUnavailableResponse": {
+        "type": "object",
+        "required": ["status", "feature"],
+        "properties": {
+          "status": {"type": "string"},
+          "reason": {"type": "string"},
+          "feature": {"type": "string"}
+        }
       }
     }
   }
