@@ -367,7 +367,7 @@ function FundingTab({
       <div className="section-bar">
         <span>3.3 · <b>资金费率</b></span>
         <div className="line" />
-        <span>{blocks.length} 个标的 · 8h 归一对比</span>
+        <span>{blocks.length} 个标的 · 折算 8h 维度排名</span>
       </div>
       <WatchlistToolbar items={watchlist} symbols={allSymbols} onChange={onWatchlistChange} />
       <div className="grid">

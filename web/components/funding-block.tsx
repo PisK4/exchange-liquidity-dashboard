@@ -116,7 +116,7 @@ export function FundingBlock({
       <div className="panel-head">
         <span className="panel-title">{displayName}</span>
         <span className="panel-sub">
-          · 跨交易所资金费率对比 · 8h 归一
+          · 跨交易所资金费率对比 · 折算 8h 维度排名
           <span
             className="info-icon"
             aria-label="资金费率 sign convention"
@@ -125,7 +125,7 @@ export function FundingBlock({
             {' '}ⓘ
           </span>
         </span>
-        <span className="panel-tag muted">CoinGecko /derivatives</span>
+        {/* <span className="panel-tag muted">CoinGecko /derivatives</span> */}
       </div>
       <div className="grid">
         <section className="panel span-8 row-h-sm">
@@ -176,9 +176,9 @@ export function FundingBlock({
           <div className="panel-head">
             <span className="panel-title">资金费率明细</span>
             <span className="panel-sub">
-              · 红字=正费率（多头付出）· 青字=负费率（空头付出）· 排名按同号 1224 规则
+              · 红字=正费率（多头付出）· 青字=负费率（空头付出）
             </span>
-            <span className="panel-tag muted">CSV 可导</span>
+            {/* <span className="panel-tag muted">CSV 可导</span> */}
           </div>
           <div className="table-wrap">
             <table className="tbl">
