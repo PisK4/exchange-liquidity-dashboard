@@ -27,8 +27,11 @@ export function SymbolSearchSelect({
   const [open, setOpen] = useState(false);
   const [filter, setFilter] = useState('');
   const [highlight, setHighlight] = useState(0);
+  const [placement, setPlacement] = useState<'down' | 'up'>('down');
   const ref = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const optionRefs = useRef<(HTMLLIElement | null)[]>([]);
 
   const active = symbols.find(s => s.canonical === activeCanonical);
   const filtered = useMemo(() => {
@@ -63,6 +66,21 @@ export function SymbolSearchSelect({
     setHighlight(0);
   }, [filter]);
 
+  useEffect(() => {
+    if (!open) return;
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const estimated = Math.min(window.innerHeight * 0.6, 480);
+    const spaceBelow = window.innerHeight - rect.bottom;
+    setPlacement(spaceBelow < estimated && rect.top > spaceBelow ? 'up' : 'down');
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    optionRefs.current[highlight]?.scrollIntoView({ block: 'nearest' });
+  }, [highlight, open]);
+
   const label = active?.display_name ?? activeCanonical ?? '—';
 
   function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -87,6 +105,7 @@ export function SymbolSearchSelect({
   return (
     <span className="symbol-select" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         className={`pill symbol-select-trigger ${open ? 'active' : ''}`}
         onClick={() => setOpen(o => !o)}
@@ -98,7 +117,7 @@ export function SymbolSearchSelect({
         <span className="symbol-select-caret" aria-hidden>▾</span>
       </button>
       {open && (
-        <div className="symbol-select-dropdown" role="listbox" data-testid="symbol-select-dropdown">
+        <div className={`symbol-select-dropdown ${placement === 'up' ? 'up' : ''}`} role="listbox" data-testid="symbol-select-dropdown">
           <input
             ref={inputRef}
             type="text"
@@ -116,7 +135,7 @@ export function SymbolSearchSelect({
               const isActive = s.canonical === activeCanonical;
               const isHighlight = idx === highlight;
               return (
-                <li key={s.canonical}>
+                <li key={s.canonical} ref={el => { optionRefs.current[idx] = el; }}>
                   <Link
                     className={`symbol-select-option ${isActive ? 'active' : ''} ${isHighlight ? 'hl' : ''}`}
                     href={href(query, { symbol: s.canonical })}

@@ -45,7 +45,7 @@ export function DashboardControls({
 
   return (
     <div className="global-controls">
-      <label>
+      <span className="control-label">
         <span>资产类别</span>
         <span className="pill-group" aria-label="资产类别">
           {categories.map(c => {
@@ -69,11 +69,11 @@ export function DashboardControls({
             全部
           </Link>
         </span>
-      </label>
-      <label>
+      </span>
+      <span className="control-label">
         <span>交易对</span>
         <SymbolSearchSelect symbols={visibleSymbols} activeCanonical={activeCanonical} query={query} />
-      </label>
+      </span>
       <Link className={`pill ${query.coreOnly === '1' ? 'active' : ''}`} href={href(query, { coreOnly: query.coreOnly === '1' ? undefined : '1' })}>
         仅看核心
       </Link>
