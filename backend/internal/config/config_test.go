@@ -719,6 +719,141 @@ func TestRuntimeStaleThresholdForRespectsConfiguredOverride(t *testing.T) {
 	}
 }
 
+func TestLoadListingAgentConfig(t *testing.T) {
+	dir := t.TempDir()
+	body := `
+Database:
+  ParseTime: true
+Catalog:
+  ExchangeEndpointsFile: exchange_endpoints.yaml
+  SymbolMappingFile: symbol_mapping.yaml
+  InstrumentCatalogFile: instrument_catalog.yaml
+  ListedUniverseFile: listed_universe.yaml
+Runtime:
+  listing_agent:
+    enabled: true
+    worker:
+      lease_ttl: 2m
+      max_attempts: 5
+      retry_backoff: [1m, 5m, 15m, 1h]
+    sources:
+      instrument_diff:
+        enabled: true
+        polls:
+          - platform: binance
+            market_type: usdm_futures
+            poll_interval: 3m
+      announcement:
+        enabled: true
+        polls:
+          - platform: bybit
+            poll_interval: 3m
+    delivery:
+      enabled: true
+      top30_webhook_url: https://example.test/hook
+      top30_webhook_url_env: LARK_LISTING_TOP30_WEBHOOK_URL
+      top30_webhook_secret: secret
+      dashboard_base_url: https://dashboard.example.test
+    top30_push:
+      enabled: true
+      poll_interval: 5m
+      stale_after: 15m
+    candidate:
+      merge_window: 14d
+`
+	if err := os.WriteFile(filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "exchange_endpoints.yaml"), []byte("endpoints: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "symbol_mapping.yaml"), []byte("platforms: [edgeX]\nsymbols: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "instrument_catalog.yaml"), []byte("schema_version: 1\nplatforms: {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if !cfg.Runtime.ListingAgent.Enabled {
+		t.Fatalf("listing_agent.enabled = false, want true")
+	}
+	if cfg.Runtime.ListingAgent.Worker.LeaseTTL != 2*time.Minute {
+		t.Fatalf("lease ttl = %s", cfg.Runtime.ListingAgent.Worker.LeaseTTL)
+	}
+	if len(cfg.Runtime.ListingAgent.Worker.RetryBackoff) != 4 {
+		t.Fatalf("retry backoff entries = %d", len(cfg.Runtime.ListingAgent.Worker.RetryBackoff))
+	}
+	if cfg.Runtime.ListingAgent.Worker.RetryBackoff[3] != time.Hour {
+		t.Fatalf("retry backoff[3] = %s", cfg.Runtime.ListingAgent.Worker.RetryBackoff[3])
+	}
+	if got := cfg.Runtime.ListingAgent.Delivery.Top30WebhookURL; got != "https://example.test/hook" {
+		t.Fatalf("top30 webhook url = %q", got)
+	}
+	if got := cfg.Runtime.ListingAgent.Delivery.Top30WebhookSecret; got != "secret" {
+		t.Fatalf("top30 webhook secret = %q", got)
+	}
+	if got := cfg.Runtime.ListingAgent.Delivery.DashboardBaseURL; got != "https://dashboard.example.test" {
+		t.Fatalf("dashboard base url = %q", got)
+	}
+	if got := cfg.Runtime.ListingAgent.Top30Push.StaleAfter; got != 15*time.Minute {
+		t.Fatalf("top30 stale_after = %s", got)
+	}
+	if got := cfg.Runtime.ListingAgent.Top30Push.PollInterval; got != 5*time.Minute {
+		t.Fatalf("top30 poll_interval = %s", got)
+	}
+	if got := cfg.Runtime.ListingAgent.Candidate.MergeWindow; got != 14*24*time.Hour {
+		t.Fatalf("merge_window = %s", got)
+	}
+	// instrument source roster overrides defaults: only binance is configured here.
+	if len(cfg.Runtime.ListingAgent.Sources.InstrumentDiff.Polls) != 1 {
+		t.Fatalf("instrument polls len = %d", len(cfg.Runtime.ListingAgent.Sources.InstrumentDiff.Polls))
+	}
+	if got := cfg.Runtime.ListingAgent.Sources.InstrumentDiff.Polls[0]; got.Platform != "binance" || got.MarketType != "usdm_futures" || got.PollInterval != 3*time.Minute || !got.Enabled {
+		t.Fatalf("instrument poll[0] = %+v", got)
+	}
+	if len(cfg.Runtime.ListingAgent.Sources.Announcement.Polls) != 1 {
+		t.Fatalf("announcement polls len = %d", len(cfg.Runtime.ListingAgent.Sources.Announcement.Polls))
+	}
+}
+
+func TestDefaultListingAgentSeedsP1Sources(t *testing.T) {
+	cfg := Default()
+	la := cfg.Runtime.ListingAgent
+	if !la.Enabled {
+		t.Fatalf("default listing agent must be enabled")
+	}
+	if la.Worker.LeaseTTL != 2*time.Minute {
+		t.Fatalf("default lease ttl = %s", la.Worker.LeaseTTL)
+	}
+	if la.Worker.MaxAttempts != 5 {
+		t.Fatalf("default max_attempts = %d", la.Worker.MaxAttempts)
+	}
+	wantPlatforms := map[string]bool{"binance": false, "bybit": false, "okx": false, "bitget": false, "mexc": false, "hyperliquid": false}
+	for _, p := range la.Sources.InstrumentDiff.Polls {
+		if _, ok := wantPlatforms[p.Platform]; ok {
+			wantPlatforms[p.Platform] = true
+		}
+	}
+	for p, seen := range wantPlatforms {
+		if !seen {
+			t.Fatalf("default instrument source roster missing %s", p)
+		}
+	}
+	if la.Delivery.Top30WebhookURLEnv != "LARK_LISTING_TOP30_WEBHOOK_URL" {
+		t.Fatalf("default delivery env name = %q", la.Delivery.Top30WebhookURLEnv)
+	}
+	if la.Top30Push.StaleAfter != 15*time.Minute {
+		t.Fatalf("default stale_after = %s", la.Top30Push.StaleAfter)
+	}
+	if la.Candidate.MergeWindow != 14*24*time.Hour {
+		t.Fatalf("default merge_window = %s", la.Candidate.MergeWindow)
+	}
+}
+
 func TestLoadAppliesStalenessAndCooldownOverrides(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `

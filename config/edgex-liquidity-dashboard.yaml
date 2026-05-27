@@ -146,3 +146,59 @@ Runtime:
     per_platform_rate_per_sec: 4
     schedule_utc_hour: 2
     schedule_utc_minute: 30
+
+  # Listing Agent P1 backend detection + Top30 hot-gap push. See
+  # architecture/方案设计/EdgeX运营/Listing/2026-05-27-Listing-Agent-P1-主链路方案设计.md
+  # §23 for the authoritative knobs.
+  listing_agent:
+    enabled: true
+    worker:
+      lease_ttl: 2m
+      max_attempts: 5
+      retry_backoff: [1m, 5m, 15m, 1h]
+    sources:
+      instrument_diff:
+        enabled: true
+        polls:
+          - platform: binance
+            market_type: usdm_futures
+            poll_interval: 3m
+          - platform: bybit
+            market_type: linear
+            poll_interval: 3m
+          - platform: okx
+            market_type: swap
+            poll_interval: 5m
+          - platform: bitget
+            market_type: usdt_futures
+            poll_interval: 5m
+          - platform: mexc
+            market_type: contract
+            poll_interval: 5m
+          - platform: hyperliquid
+            market_type: perp
+            poll_interval: 3m
+      announcement:
+        enabled: true
+        polls:
+          - platform: bybit
+            poll_interval: 3m
+          - platform: bitget
+            poll_interval: 3m
+          - platform: binance
+            poll_interval: 5m
+    delivery:
+      enabled: true
+      # Webhook URL is never persisted to MySQL or printed in logs. Leave
+      # blank in committed yaml; resolve at runtime from
+      # top30_webhook_url_env (default LARK_LISTING_TOP30_WEBHOOK_URL).
+      top30_webhook_url: ""
+      top30_webhook_url_env: LARK_LISTING_TOP30_WEBHOOK_URL
+      top30_webhook_secret: ""
+      dashboard_base_url: ""
+    top30_push:
+      enabled: true
+      poll_interval: 5m
+      stale_after: 15m
+    candidate:
+      merge_window: 14d

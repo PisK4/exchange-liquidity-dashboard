@@ -46,6 +46,104 @@ type Runtime struct {
 	// SignificantRankDelta is the |Δrank| threshold above which a symbol
 	// is tagged cex_heavy / dex_heavy instead of aligned.
 	Top30Divergence Top30DivergenceConfig `json:"top30_divergence"`
+	// ListingAgent is the Listing Agent P1 configuration block. It owns
+	// per-source poll intervals, candidate fusion knobs, business score
+	// thresholds, the Top30 hot-gap push producer cadence, and the
+	// shared delivery outbox webhook target. Listing-only fields live
+	// here so the legacy collector can continue to ignore them.
+	ListingAgent ListingAgentConfig `json:"listing_agent"`
+}
+
+// ListingAgentConfig is the runtime root for the Listing Agent P1
+// backend detection main link. Enabled defaults to true; individual
+// sources / delivery / Top30 push subsystems can still be toggled
+// independently. See architecture/方案设计/EdgeX运营/Listing/
+// 2026-05-27-Listing-Agent-P1-主链路方案设计.md §16 and §23 for the
+// authoritative knobs.
+type ListingAgentConfig struct {
+	Enabled   bool                    `json:"enabled"`
+	Worker    ListingWorkerConfig     `json:"worker"`
+	Sources   ListingSourcesConfig    `json:"sources"`
+	Delivery  ListingDeliveryConfig   `json:"delivery"`
+	Top30Push ListingTop30PushConfig  `json:"top30_push"`
+	Candidate ListingCandidateConfig  `json:"candidate"`
+}
+
+// ListingWorkerConfig controls the per-source worker lease and the
+// delivery retry budget. LeaseTTL bounds how long a single instance can
+// hold a source lease; RetryBackoff is the sequence of delays between
+// outbox attempts (one entry per follow-up attempt).
+type ListingWorkerConfig struct {
+	LeaseTTL     time.Duration   `json:"lease_ttl"`
+	MaxAttempts  int             `json:"max_attempts"`
+	RetryBackoff []time.Duration `json:"retry_backoff"`
+}
+
+// ListingSourcesConfig groups the two real source subsystems active in
+// P1a. Top30 is intentionally consumed as enrichment, not as a source,
+// so it has no entry here.
+type ListingSourcesConfig struct {
+	InstrumentDiff ListingInstrumentDiffConfig `json:"instrument_diff"`
+	Announcement   ListingAnnouncementConfig   `json:"announcement"`
+}
+
+// ListingInstrumentDiffConfig controls the per-platform instrument
+// pollers (Binance USD-M, Bybit linear, OKX SWAP, Bitget USDT-FUTURES,
+// MEXC contract, Hyperliquid perp).
+type ListingInstrumentDiffConfig struct {
+	Enabled bool                      `json:"enabled"`
+	Polls   []ListingSourcePollConfig `json:"polls"`
+}
+
+// ListingAnnouncementConfig controls the announcement pollers
+// (Bybit, Bitget, Binance CMS).
+type ListingAnnouncementConfig struct {
+	Enabled bool                      `json:"enabled"`
+	Polls   []ListingSourcePollConfig `json:"polls"`
+}
+
+// ListingSourcePollConfig is the per-source poll declaration. Enabled
+// defaults to true at parse time so partial overrides do not silently
+// disable a source.
+type ListingSourcePollConfig struct {
+	Platform     string        `json:"platform"`
+	MarketType   string        `json:"market_type,omitempty"`
+	PollInterval time.Duration `json:"poll_interval"`
+	Enabled      bool          `json:"enabled"`
+}
+
+// ListingDeliveryConfig configures the shared delivery outbox worker.
+// Top30WebhookURL / Top30WebhookURLEnv resolve at startup:
+// - if Top30WebhookURL is set, it wins;
+// - otherwise the environment variable named by Top30WebhookURLEnv is
+//   resolved at engine start time.
+// The webhook URL is never persisted to MySQL or printed in logs (see
+// repo CLAUDE.md §coding_guidelines). Top30WebhookSecret is forwarded
+// to the Lark sign helper when non-empty.
+type ListingDeliveryConfig struct {
+	Enabled            bool   `json:"enabled"`
+	Top30WebhookURL    string `json:"top30_webhook_url,omitempty"`
+	Top30WebhookURLEnv string `json:"top30_webhook_url_env,omitempty"`
+	Top30WebhookSecret string `json:"-"`
+	DashboardBaseURL   string `json:"dashboard_base_url,omitempty"`
+}
+
+// ListingTop30PushConfig controls the Top30 hot-gap producer worker.
+// StaleAfter is the maximum age of the newest t_top30_snapshot row
+// before the producer marks the source as stale and stops generating
+// new outbox entries.
+type ListingTop30PushConfig struct {
+	Enabled      bool          `json:"enabled"`
+	PollInterval time.Duration `json:"poll_interval"`
+	StaleAfter   time.Duration `json:"stale_after"`
+}
+
+// ListingCandidateConfig holds candidate fusion knobs that are not
+// part of the worker / delivery / sources blocks. MergeWindow is the
+// reach-back window used when fusing signals into an existing
+// candidate; P1 default is 14 days.
+type ListingCandidateConfig struct {
+	MergeWindow time.Duration `json:"merge_window"`
 }
 
 // Top30DivergenceConfig is the runtime knob for the CEX-vs-DEX Top30
@@ -369,6 +467,59 @@ func Default() Config {
 			CooldownFailureThreshold: 3,
 			CooldownDuration:         5 * time.Minute,
 			Top30Divergence:          defaultTop30DivergenceConfig(),
+			ListingAgent:             defaultListingAgentConfig(),
+		},
+	}
+}
+
+// defaultListingAgentConfig seeds the P1 source roster, worker lease,
+// delivery, Top30 push, and candidate fusion defaults. Source polls
+// mirror the cadences confirmed in §23.4 of the main design.
+func defaultListingAgentConfig() ListingAgentConfig {
+	return ListingAgentConfig{
+		Enabled: true,
+		Worker: ListingWorkerConfig{
+			LeaseTTL:    2 * time.Minute,
+			MaxAttempts: 5,
+			RetryBackoff: []time.Duration{
+				time.Minute,
+				5 * time.Minute,
+				15 * time.Minute,
+				time.Hour,
+			},
+		},
+		Sources: ListingSourcesConfig{
+			InstrumentDiff: ListingInstrumentDiffConfig{
+				Enabled: true,
+				Polls: []ListingSourcePollConfig{
+					{Platform: "binance", MarketType: "usdm_futures", PollInterval: 3 * time.Minute, Enabled: true},
+					{Platform: "bybit", MarketType: "linear", PollInterval: 3 * time.Minute, Enabled: true},
+					{Platform: "okx", MarketType: "swap", PollInterval: 5 * time.Minute, Enabled: true},
+					{Platform: "bitget", MarketType: "usdt_futures", PollInterval: 5 * time.Minute, Enabled: true},
+					{Platform: "mexc", MarketType: "contract", PollInterval: 5 * time.Minute, Enabled: true},
+					{Platform: "hyperliquid", MarketType: "perp", PollInterval: 3 * time.Minute, Enabled: true},
+				},
+			},
+			Announcement: ListingAnnouncementConfig{
+				Enabled: true,
+				Polls: []ListingSourcePollConfig{
+					{Platform: "bybit", PollInterval: 3 * time.Minute, Enabled: true},
+					{Platform: "bitget", PollInterval: 3 * time.Minute, Enabled: true},
+					{Platform: "binance", PollInterval: 5 * time.Minute, Enabled: true},
+				},
+			},
+		},
+		Delivery: ListingDeliveryConfig{
+			Enabled:            true,
+			Top30WebhookURLEnv: "LARK_LISTING_TOP30_WEBHOOK_URL",
+		},
+		Top30Push: ListingTop30PushConfig{
+			Enabled:      true,
+			PollInterval: 5 * time.Minute,
+			StaleAfter:   15 * time.Minute,
+		},
+		Candidate: ListingCandidateConfig{
+			MergeWindow: 14 * 24 * time.Hour,
 		},
 	}
 }
@@ -511,6 +662,62 @@ type runtimeFile struct {
 	CooldownFailureThreshold *int                      `yaml:"cooldown_failure_threshold"`
 	CooldownDuration         string                    `yaml:"cooldown_duration"`
 	Top30Divergence          *top30DivergenceFile      `yaml:"top30_divergence"`
+	ListingAgent             *listingAgentFile         `yaml:"listing_agent"`
+}
+
+type listingAgentFile struct {
+	Enabled   *bool                 `yaml:"enabled"`
+	Worker    *listingWorkerFile    `yaml:"worker"`
+	Sources   *listingSourcesFile   `yaml:"sources"`
+	Delivery  *listingDeliveryFile  `yaml:"delivery"`
+	Top30Push *listingTop30PushFile `yaml:"top30_push"`
+	Candidate *listingCandidateFile `yaml:"candidate"`
+}
+
+type listingWorkerFile struct {
+	LeaseTTL     string   `yaml:"lease_ttl"`
+	MaxAttempts  *int     `yaml:"max_attempts"`
+	RetryBackoff []string `yaml:"retry_backoff"`
+}
+
+type listingSourcesFile struct {
+	InstrumentDiff *listingInstrumentDiffFile `yaml:"instrument_diff"`
+	Announcement   *listingAnnouncementFile   `yaml:"announcement"`
+}
+
+type listingInstrumentDiffFile struct {
+	Enabled *bool                   `yaml:"enabled"`
+	Polls   []listingSourcePollFile `yaml:"polls"`
+}
+
+type listingAnnouncementFile struct {
+	Enabled *bool                   `yaml:"enabled"`
+	Polls   []listingSourcePollFile `yaml:"polls"`
+}
+
+type listingSourcePollFile struct {
+	Platform     string `yaml:"platform"`
+	MarketType   string `yaml:"market_type"`
+	PollInterval string `yaml:"poll_interval"`
+	Enabled      *bool  `yaml:"enabled"`
+}
+
+type listingDeliveryFile struct {
+	Enabled            *bool  `yaml:"enabled"`
+	Top30WebhookURL    string `yaml:"top30_webhook_url"`
+	Top30WebhookURLEnv string `yaml:"top30_webhook_url_env"`
+	Top30WebhookSecret string `yaml:"top30_webhook_secret"`
+	DashboardBaseURL   string `yaml:"dashboard_base_url"`
+}
+
+type listingTop30PushFile struct {
+	Enabled      *bool  `yaml:"enabled"`
+	PollInterval string `yaml:"poll_interval"`
+	StaleAfter   string `yaml:"stale_after"`
+}
+
+type listingCandidateFile struct {
+	MergeWindow string `yaml:"merge_window"`
 }
 
 type dashboardFile struct {
@@ -726,6 +933,7 @@ func (f dashboardFile) LegacyRuntime() runtimeFile {
 		CooldownFailureThreshold: f.CooldownFailureThreshold,
 		CooldownDuration:         f.CooldownDuration,
 		Top30Divergence:          f.Top30Divergence,
+		ListingAgent:             f.ListingAgent,
 	}
 }
 
@@ -734,7 +942,8 @@ func (f runtimeFile) hasValues() bool {
 		f.LighterStaleAfter != "" || f.DisplayFallbackWindow != "" || len(f.DepthTiers) > 0 ||
 		len(f.SlippageBucketsUSD) > 0 || len(f.VolumeDiscounts) > 0 || f.CoinGecko != nil ||
 		len(f.WSProviders) > 0 || f.Collection != nil || f.Backfill != nil || len(f.StalenessByCategory) > 0 ||
-		f.CooldownFailureThreshold != nil || f.CooldownDuration != "" || f.Top30Divergence != nil
+		f.CooldownFailureThreshold != nil || f.CooldownDuration != "" || f.Top30Divergence != nil ||
+		f.ListingAgent != nil
 }
 
 func (f catalogFile) withDefaults() CatalogConfig {
@@ -897,7 +1106,220 @@ func applyRuntimeFile(base Runtime, file runtimeFile) (Runtime, error) {
 	if file.Top30Divergence != nil {
 		base.Top30Divergence = applyTop30DivergenceFile(base.Top30Divergence, *file.Top30Divergence)
 	}
+	if file.ListingAgent != nil {
+		la, err := applyListingAgentFile(base.ListingAgent, *file.ListingAgent)
+		if err != nil {
+			return Runtime{}, err
+		}
+		base.ListingAgent = la
+	}
 	return base, nil
+}
+
+// applyListingAgentFile overlays the YAML listing_agent block onto the
+// default ListingAgentConfig. Unset YAML fields keep their default
+// values; durations are parsed with time.ParseDuration; the polls
+// arrays fully replace the defaults when non-empty so operators can
+// reduce the source roster.
+func applyListingAgentFile(base ListingAgentConfig, file listingAgentFile) (ListingAgentConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.Worker != nil {
+		w, err := applyListingWorkerFile(base.Worker, *file.Worker)
+		if err != nil {
+			return ListingAgentConfig{}, err
+		}
+		base.Worker = w
+	}
+	if file.Sources != nil {
+		s, err := applyListingSourcesFile(base.Sources, *file.Sources)
+		if err != nil {
+			return ListingAgentConfig{}, err
+		}
+		base.Sources = s
+	}
+	if file.Delivery != nil {
+		base.Delivery = applyListingDeliveryFile(base.Delivery, *file.Delivery)
+	}
+	if file.Top30Push != nil {
+		t, err := applyListingTop30PushFile(base.Top30Push, *file.Top30Push)
+		if err != nil {
+			return ListingAgentConfig{}, err
+		}
+		base.Top30Push = t
+	}
+	if file.Candidate != nil {
+		c, err := applyListingCandidateFile(base.Candidate, *file.Candidate)
+		if err != nil {
+			return ListingAgentConfig{}, err
+		}
+		base.Candidate = c
+	}
+	return base, nil
+}
+
+func applyListingWorkerFile(base ListingWorkerConfig, file listingWorkerFile) (ListingWorkerConfig, error) {
+	if file.LeaseTTL != "" {
+		d, err := time.ParseDuration(file.LeaseTTL)
+		if err != nil {
+			return ListingWorkerConfig{}, fmt.Errorf("listing_agent.worker.lease_ttl: %w", err)
+		}
+		base.LeaseTTL = d
+	}
+	if file.MaxAttempts != nil && *file.MaxAttempts > 0 {
+		base.MaxAttempts = *file.MaxAttempts
+	}
+	if len(file.RetryBackoff) > 0 {
+		out := make([]time.Duration, 0, len(file.RetryBackoff))
+		for i, raw := range file.RetryBackoff {
+			if raw == "" {
+				continue
+			}
+			d, err := time.ParseDuration(raw)
+			if err != nil {
+				return ListingWorkerConfig{}, fmt.Errorf("listing_agent.worker.retry_backoff[%d]: %w", i, err)
+			}
+			out = append(out, d)
+		}
+		if len(out) > 0 {
+			base.RetryBackoff = out
+		}
+	}
+	return base, nil
+}
+
+func applyListingSourcesFile(base ListingSourcesConfig, file listingSourcesFile) (ListingSourcesConfig, error) {
+	if file.InstrumentDiff != nil {
+		if file.InstrumentDiff.Enabled != nil {
+			base.InstrumentDiff.Enabled = *file.InstrumentDiff.Enabled
+		}
+		if len(file.InstrumentDiff.Polls) > 0 {
+			polls, err := convertListingPollFiles(file.InstrumentDiff.Polls, "listing_agent.sources.instrument_diff.polls")
+			if err != nil {
+				return ListingSourcesConfig{}, err
+			}
+			base.InstrumentDiff.Polls = polls
+		}
+	}
+	if file.Announcement != nil {
+		if file.Announcement.Enabled != nil {
+			base.Announcement.Enabled = *file.Announcement.Enabled
+		}
+		if len(file.Announcement.Polls) > 0 {
+			polls, err := convertListingPollFiles(file.Announcement.Polls, "listing_agent.sources.announcement.polls")
+			if err != nil {
+				return ListingSourcesConfig{}, err
+			}
+			base.Announcement.Polls = polls
+		}
+	}
+	return base, nil
+}
+
+func convertListingPollFiles(in []listingSourcePollFile, scope string) ([]ListingSourcePollConfig, error) {
+	out := make([]ListingSourcePollConfig, 0, len(in))
+	for i, p := range in {
+		enabled := true
+		if p.Enabled != nil {
+			enabled = *p.Enabled
+		}
+		var pollInterval time.Duration
+		if p.PollInterval != "" {
+			d, err := time.ParseDuration(p.PollInterval)
+			if err != nil {
+				return nil, fmt.Errorf("%s[%d].poll_interval: %w", scope, i, err)
+			}
+			pollInterval = d
+		}
+		out = append(out, ListingSourcePollConfig{
+			Platform:     p.Platform,
+			MarketType:   p.MarketType,
+			PollInterval: pollInterval,
+			Enabled:      enabled,
+		})
+	}
+	return out, nil
+}
+
+func applyListingDeliveryFile(base ListingDeliveryConfig, file listingDeliveryFile) ListingDeliveryConfig {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.Top30WebhookURL != "" {
+		base.Top30WebhookURL = file.Top30WebhookURL
+	}
+	if file.Top30WebhookURLEnv != "" {
+		base.Top30WebhookURLEnv = file.Top30WebhookURLEnv
+	}
+	if file.Top30WebhookSecret != "" {
+		base.Top30WebhookSecret = file.Top30WebhookSecret
+	}
+	if file.DashboardBaseURL != "" {
+		base.DashboardBaseURL = file.DashboardBaseURL
+	}
+	return base
+}
+
+func applyListingTop30PushFile(base ListingTop30PushConfig, file listingTop30PushFile) (ListingTop30PushConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.PollInterval != "" {
+		d, err := time.ParseDuration(file.PollInterval)
+		if err != nil {
+			return ListingTop30PushConfig{}, fmt.Errorf("listing_agent.top30_push.poll_interval: %w", err)
+		}
+		base.PollInterval = d
+	}
+	if file.StaleAfter != "" {
+		d, err := time.ParseDuration(file.StaleAfter)
+		if err != nil {
+			return ListingTop30PushConfig{}, fmt.Errorf("listing_agent.top30_push.stale_after: %w", err)
+		}
+		base.StaleAfter = d
+	}
+	return base, nil
+}
+
+func applyListingCandidateFile(base ListingCandidateConfig, file listingCandidateFile) (ListingCandidateConfig, error) {
+	if file.MergeWindow != "" {
+		d, err := parseListingDayDuration(file.MergeWindow)
+		if err != nil {
+			return ListingCandidateConfig{}, fmt.Errorf("listing_agent.candidate.merge_window: %w", err)
+		}
+		base.MergeWindow = d
+	}
+	return base, nil
+}
+
+// parseListingDayDuration parses durations that may use the `d` suffix
+// (e.g. `14d`), which time.ParseDuration does not support natively.
+func parseListingDayDuration(raw string) (time.Duration, error) {
+	trim := strings.TrimSpace(raw)
+	if strings.HasSuffix(trim, "d") {
+		nStr := strings.TrimSpace(strings.TrimSuffix(trim, "d"))
+		if nStr == "" {
+			return 0, fmt.Errorf("invalid duration %q", raw)
+		}
+		n, err := strconvParsePositive(nStr)
+		if err != nil {
+			return 0, err
+		}
+		return time.Duration(n) * 24 * time.Hour, nil
+	}
+	return time.ParseDuration(trim)
+}
+
+func strconvParsePositive(s string) (int, error) {
+	n := 0
+	for _, r := range s {
+		if r < '0' || r > '9' {
+			return 0, fmt.Errorf("invalid integer %q", s)
+		}
+		n = n*10 + int(r-'0')
+	}
+	return n, nil
 }
 
 func applyTop30DivergenceFile(base Top30DivergenceConfig, file top30DivergenceFile) Top30DivergenceConfig {
