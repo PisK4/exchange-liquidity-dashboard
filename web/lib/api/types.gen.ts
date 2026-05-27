@@ -612,7 +612,8 @@ export interface components {
             /** Format: date-time */
             snapshot_ts?: string;
             vs_median_8h?: number | null;
-            rank?: number;
+            rank_positive?: number | null;
+            rank_negative?: number | null;
         };
         LiquidityKPIs: {
             edgex_depth_by_tier?: {

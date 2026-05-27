@@ -216,7 +216,29 @@ type PlatformFundingRate struct {
 	SourceEndpoint string     `json:"source_endpoint,omitempty"`
 	SnapshotTS     *time.Time `json:"snapshot_ts,omitempty"`
 	VsMedian8h     *float64   `json:"vs_median_8h,omitempty"`
-	Rank           int        `json:"rank,omitempty"`
+	// RankPositive / RankNegative carry the platform's position
+	// within the same-sign cohort. Positive funding (longs pay) and
+	// negative funding (shorts pay) are economically opposite states,
+	// so a single signed-ascending rank that lumps them together is
+	// misleading — when the ladder straddles zero the meaning of
+	// "rank 1" depends on which side of zero you're sitting on. We
+	// publish two independent ranks and the UI shows whichever side
+	// the row belongs to.
+	//
+	// Within RankPositive, larger positive rates rank closer to 1
+	// (most expensive funding to long / most rewarding to short).
+	// Within RankNegative, more negative rates rank closer to 1
+	// (most expensive funding to short / most rewarding to long).
+	// Rows whose rate_8h is exactly zero belong to neither cohort
+	// and carry nil for both fields; the UI renders '—' there.
+	//
+	// Pointers so the wire format omits the field on rows that have
+	// no rank in that dimension (status != complete, rate missing,
+	// or zero rate). A nil pointer encodes "not ranked", which is
+	// distinct from "ranked 0" and lets the renderer choose '—'
+	// without a magic-number check.
+	RankPositive *int `json:"rank_positive,omitempty"`
+	RankNegative *int `json:"rank_negative,omitempty"`
 }
 
 type VolumeSnapshot struct {

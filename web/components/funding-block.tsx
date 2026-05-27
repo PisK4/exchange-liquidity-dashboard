@@ -45,6 +45,19 @@ function formatSampleCount(samples?: number) {
   return String(samples);
 }
 
+// rateSignColorClass picks the CSS class that paints a numeric cell
+// based on the sign of the funding-rate value it carries. Positive
+// rates (longs pay) render red; negative rates (shorts pay) render
+// teal; zero and missing values stay neutral. The classes themselves
+// live in globals.css alongside .platform-self and .r-edgex so the
+// palette stays in one place.
+function rateSignColorClass(value?: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+  if (value > 0) return 'funding-positive';
+  if (value < 0) return 'funding-negative';
+  return '';
+}
+
 export function FundingBlock({
   canonical,
   displayName,
@@ -162,7 +175,9 @@ export function FundingBlock({
         <section className="panel span-24">
           <div className="panel-head">
             <span className="panel-title">资金费率明细</span>
-            <span className="panel-sub">· 每行=一个平台 · 原生费率含周期 tag</span>
+            <span className="panel-sub">
+              · 红字=正费率（多头付出）· 青字=负费率（空头付出）· 排名按同号 1224 规则
+            </span>
             <span className="panel-tag muted">CSV 可导</span>
           </div>
           <div className="table-wrap">
@@ -173,15 +188,19 @@ export function FundingBlock({
                   <th className="num">原生费率</th>
                   <th className="num">8h 当量</th>
                   <th className="num">vs 中位数 (8h)</th>
-                  <th className="num">排名</th>
+                  <th className="num">正费率排名</th>
+                  <th className="num">负费率排名</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedRows.map(row => {
                   const f = row.funding;
                   const isUsable = f && typeof f.rate_8h === 'number' && Number.isFinite(f.rate_8h);
+                  const rateSignClass = rateSignColorClass(f?.rate_8h);
+                  const vsMedianSignClass = rateSignColorClass(f?.vs_median_8h);
+                  const rowClass = row.platform === 'edgeX' ? 'r-edgex' : undefined;
                   return (
-                    <tr key={row.platform}>
+                    <tr key={row.platform} className={rowClass}>
                       <td>
                         <PlatformCell
                           platform={row.platform}
@@ -189,21 +208,24 @@ export function FundingBlock({
                           lookup={lookup}
                         />
                       </td>
-                      <td className="num">
+                      <td className={`num ${rateSignClass}`}>
                         {isUsable
                           ? formatNativeRateWithPeriod(f?.rate_native, f?.period_hours)
                           : '—'}
                       </td>
-                      <td className="num">
+                      <td className={`num ${rateSignClass}`}>
                         {isUsable ? formatFundingRate8h(f?.rate_8h) : '—'}
                       </td>
-                      <td className="num">
+                      <td className={`num ${vsMedianSignClass}`}>
                         {typeof f?.vs_median_8h === 'number'
                           ? formatFundingDelta(f.vs_median_8h)
                           : '—'}
                       </td>
-                      <td className="num">
-                        {typeof f?.rank === 'number' && f.rank > 0 ? f.rank : '—'}
+                      <td className="num funding-positive">
+                        {typeof f?.rank_positive === 'number' && f.rank_positive > 0 ? f.rank_positive : '—'}
+                      </td>
+                      <td className="num funding-negative">
+                        {typeof f?.rank_negative === 'number' && f.rank_negative > 0 ? f.rank_negative : '—'}
                       </td>
                     </tr>
                   );

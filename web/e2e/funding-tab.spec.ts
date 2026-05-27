@@ -112,39 +112,65 @@ test('no cross-platform BarChart panel resurfaces between KPI cards and detail t
   await expect(block.locator('.bar-row')).toHaveCount(0);
 });
 
-test('detail table exposes slim 5-column shape (平台 / 原生费率 / 8h / vs 中位数 / 排名)', async ({ page }) => {
+test('detail table exposes 6-column shape with sign-bucketed rank columns', async ({ page }) => {
   await page.goto('/?tab=funding');
   const block = page.getByTestId('funding-block-BTC');
   const detail = block.locator('section.panel').filter({ hasText: '资金费率明细' }).first();
   await expect(detail).toBeVisible();
-  // Expected headers (the slim set chosen after iteration round-1).
-  for (const header of ['平台', '原生费率', '8h 当量', 'vs 中位数 (8h)', '排名']) {
+  // Expected headers (after iteration round-3 split rank into two
+  // sign-aware columns).
+  for (const header of ['平台', '原生费率', '8h 当量', 'vs 中位数 (8h)', '正费率排名', '负费率排名']) {
     await expect(detail).toContainText(header);
   }
-  // The dropped headers must NOT appear.
+  // The dropped headers from earlier iterations must NOT appear.
   for (const dropped of ['原生周期', '数据源时间戳', '状态']) {
     await expect(detail.locator('thead')).not.toContainText(dropped);
   }
-  // edgeX row: native rate cell now has period folded inline as
-  // "+0.0025% / 4h" instead of split across two columns.
+  // edgeX row: native rate cell carries period inline, 8h equivalent
+  // alongside, and the positive-rank column shows '4' (4th in the
+  // 5-platform positive cohort).
   const edgeRow = detail.locator('tbody tr').filter({ hasText: 'edgeX' });
   await expect(edgeRow).toContainText('+0.0025% / 4h');
   await expect(edgeRow).toContainText('+0.0050%');
-  // Rank populated by the backend enrichFundingRankRows helper —
-  // edgeX is the cheapest of the 4 complete rows → rank 1.
-  await expect(edgeRow.locator('td.num').last()).toHaveText('1');
 });
 
-test('detail table renders the full ascending rank ladder for complete rows', async ({ page }) => {
+test('detail table renders the sign-bucketed rank ladder', async ({ page }) => {
   await page.goto('/?tab=funding');
   const block = page.getByTestId('funding-block-BTC');
   const detail = block.locator('section.panel').filter({ hasText: '资金费率明细' }).first();
-  // Ranks: edgeX=1, bybit=2, binance=3, okx=4.
-  const ranks: Record<string, string> = { edgeX: '1', bybit: '2', binance: '3', okx: '4' };
-  for (const [platform, rank] of Object.entries(ranks)) {
+  // Positive cohort (desc by rate): okx(0.012)=1, binance(0.009)=2,
+  // bybit(0.006)=3, edgeX(0.005)=4, hyperliquid(0.0002)=5.
+  // All fixture rows are positive, so 负费率排名 shows '—' everywhere.
+  const wantPos: Record<string, string> = { okx: '1', binance: '2', bybit: '3', edgeX: '4', hyperliquid: '5' };
+  for (const [platform, rank] of Object.entries(wantPos)) {
     const row = detail.locator('tbody tr').filter({ hasText: platform });
-    await expect(row.locator('td.num').last()).toHaveText(rank);
+    // td.num cells (the first <td> is the platform link without .num):
+    //   nth(0)=原生费率, nth(1)=8h 当量, nth(2)=vs 中位数,
+    //   nth(3)=正费率排名, nth(4)=负费率排名.
+    await expect(row.locator('td.num').nth(3)).toHaveText(rank); // 正费率排名
+    await expect(row.locator('td.num').nth(4)).toHaveText('—');   // 负费率排名
   }
+});
+
+test('edgeX detail row gets the .r-edgex highlight class', async ({ page }) => {
+  await page.goto('/?tab=funding');
+  const block = page.getByTestId('funding-block-BTC');
+  const detail = block.locator('section.panel').filter({ hasText: '资金费率明细' }).first();
+  const edgeRow = detail.locator('tbody tr').filter({ hasText: 'edgeX' });
+  await expect(edgeRow).toHaveClass(/r-edgex/);
+});
+
+test('positive rate cells carry funding-positive class for sign coloring', async ({ page }) => {
+  await page.goto('/?tab=funding');
+  const block = page.getByTestId('funding-block-BTC');
+  const detail = block.locator('section.panel').filter({ hasText: '资金费率明细' }).first();
+  // okx fixture is the largest positive rate → its 原生费率 and 8h
+  // 当量 cells must carry .funding-positive so the CSS rule paints
+  // them red. We don't check the literal color — just the class — so
+  // tests don't break if the palette evolves.
+  const okxRow = detail.locator('tbody tr').filter({ hasText: 'okx' });
+  await expect(okxRow.locator('td.num').nth(0)).toHaveClass(/funding-positive/);
+  await expect(okxRow.locator('td.num').nth(1)).toHaveClass(/funding-positive/);
 });
 
 test('1h-period venue (hyperliquid) bumps native rate precision to 6dp instead of collapsing to +0.0000%', async ({ page }) => {
@@ -158,21 +184,23 @@ test('1h-period venue (hyperliquid) bumps native rate precision to 6dp instead o
   // magnitude is visible to the operator.
   const hlRow = detail.locator('tbody tr').filter({ hasText: 'hyperliquid' });
   await expect(hlRow).toBeVisible();
-  await expect(hlRow).toContainText('+0.000025% / 1h');
-  // Sanity: the misleading 4dp collapsed form must NOT appear in the row.
-  await expect(hlRow).not.toContainText('+0.0000% / 1h');
+  await expect(hlRow.locator('td.num').nth(0)).toContainText('+0.000025% / 1h');
+  // Sanity: the misleading 4dp collapsed form must NOT appear in the
+  // native-rate cell (looser .toContainText would match the 8h cell).
+  await expect(hlRow.locator('td.num').nth(0)).not.toContainText('+0.0000% / 1h');
 });
 
-test('unsupported platform (bingx) renders em-dash in every numeric cell including 排名', async ({ page }) => {
+test('unsupported platform (bingx) renders em-dash in every numeric cell including both rank columns', async ({ page }) => {
   await page.goto('/?tab=funding');
   const block = page.getByTestId('funding-block-BTC');
   const detail = block.locator('section.panel').filter({ hasText: '资金费率明细' }).first();
-  // bingx fixture is unsupported → backend cannot assign a rank, the
-  // table cell must surface '—' rather than a fabricated zero.
+  // bingx fixture is unsupported → backend assigns no rank in either
+  // cohort, both cells must surface '—' rather than fabricated zero.
   const bingxRow = detail.locator('tbody tr').filter({ hasText: 'bingx' });
   await expect(bingxRow).toBeVisible();
   await expect(bingxRow).toContainText('—');
-  await expect(bingxRow.locator('td.num').last()).toHaveText('—');
+  await expect(bingxRow.locator('td.num').nth(3)).toHaveText('—'); // 正费率排名
+  await expect(bingxRow.locator('td.num').nth(4)).toHaveText('—'); // 负费率排名
 });
 
 test('multi-symbol watchlist stacks one FundingBlock per chip', async ({ page }) => {

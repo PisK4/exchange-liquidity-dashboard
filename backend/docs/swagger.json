@@ -848,8 +848,13 @@
             "type": "number",
             "nullable": true
           },
-          "rank": {
-            "type": "integer"
+          "rank_positive": {
+            "type": "integer",
+            "nullable": true
+          },
+          "rank_negative": {
+            "type": "integer",
+            "nullable": true
           }
         }
       },

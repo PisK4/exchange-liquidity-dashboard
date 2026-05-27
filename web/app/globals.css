@@ -239,6 +239,19 @@ table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
 .muted { color: var(--text-mute); }
 .error { color: var(--bad); }
 .platform-self { color: var(--accent); font-weight: 600; }
+/* Funding-rate sign coloring (used by the 资金费率 Tab's detail table).
+   Positive funding = longs pay shorts → red (Chinese stock-market
+   convention for "cost"). Negative funding = shorts pay longs → teal,
+   intentionally not green so it can't be confused with the existing
+   --accent that highlights edgeX. Numbers themselves carry the sign
+   via "+" / "-" prefix; the color reinforces direction at a glance
+   without forcing the eye to scan for the sign character. */
+.funding-positive { color: var(--bad); }
+.funding-negative { color: #4fc3a1; }
+/* edgeX row in the funding detail table picks up a soft green tint so
+   the eye lands on it first, matching the highlight convention used
+   in other tabs' edgeX-vs-competitor surfaces. */
+.tbl tr.r-edgex td { background: var(--accent-soft); }
 .action-cell { font-weight: 500; }
 .action-cell.action-hot { color: var(--bad); }
 .action-cell.action-listing-prio { color: var(--ok); }

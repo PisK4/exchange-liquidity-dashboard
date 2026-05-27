@@ -185,79 +185,122 @@ func TestStoreAttachFundingLockedFillsFromMap(t *testing.T) {
 	}
 }
 
-func TestEnrichFundingRankRowsAssignsAscending(t *testing.T) {
+func intPtr(v int) *int { return &v }
+
+func TestEnrichFundingRankBySignSplitsCohorts(t *testing.T) {
 	rows := []domain.PlatformSnapshot{
 		makeRow("binance", ptr(0.0090), domain.StatusComplete),
 		makeRow("okx", ptr(0.0120), domain.StatusComplete),
-		makeRow("bybit", ptr(0.0060), domain.StatusComplete),
+		makeRow("bybit", ptr(-0.0060), domain.StatusComplete),
+		makeRow("hyperliquid", ptr(-0.0030), domain.StatusComplete),
 		makeRow("edgeX", ptr(0.0050), domain.StatusComplete),
 	}
-	rows = enrichFundingRankRows(rows)
-	want := map[string]int{
-		"edgeX":   1,
-		"bybit":   2,
-		"binance": 3,
-		"okx":     4,
+	rows = enrichFundingRankBySignRows(rows)
+
+	// Positive cohort sorted desc by rate: okx 0.012 → 1, binance 0.009 → 2, edgeX 0.005 → 3.
+	// Negative cohort sorted asc by rate: bybit -0.006 → 1, hyperliquid -0.003 → 2.
+	wantPos := map[string]*int{
+		"okx":     intPtr(1),
+		"binance": intPtr(2),
+		"edgeX":   intPtr(3),
+	}
+	wantNeg := map[string]*int{
+		"bybit":       intPtr(1),
+		"hyperliquid": intPtr(2),
 	}
 	for _, row := range rows {
-		if row.Funding == nil {
-			t.Fatalf("%s funding should not be nil", row.Platform)
+		f := row.Funding
+		if f == nil {
+			t.Fatalf("%s funding nil", row.Platform)
 		}
-		if got := row.Funding.Rank; got != want[row.Platform] {
-			t.Fatalf("%s rank = %d, want %d", row.Platform, got, want[row.Platform])
+		if want, ok := wantPos[row.Platform]; ok {
+			if f.RankPositive == nil || *f.RankPositive != *want {
+				t.Fatalf("%s RankPositive = %v, want %d", row.Platform, f.RankPositive, *want)
+			}
+			if f.RankNegative != nil {
+				t.Fatalf("%s in positive cohort but RankNegative = %v (want nil)", row.Platform, *f.RankNegative)
+			}
+		}
+		if want, ok := wantNeg[row.Platform]; ok {
+			if f.RankNegative == nil || *f.RankNegative != *want {
+				t.Fatalf("%s RankNegative = %v, want %d", row.Platform, f.RankNegative, *want)
+			}
+			if f.RankPositive != nil {
+				t.Fatalf("%s in negative cohort but RankPositive = %v (want nil)", row.Platform, *f.RankPositive)
+			}
 		}
 	}
 }
 
-func TestEnrichFundingRankRowsSkipsIncompleteAndMissing(t *testing.T) {
+func TestEnrichFundingRankBySignSkipsIncompleteMissingAndZero(t *testing.T) {
 	rows := []domain.PlatformSnapshot{
 		makeRow("binance", ptr(0.0090), domain.StatusComplete),
 		makeRow("bingx", nil, domain.StatusUnsupported),
 		makeRow("mexc", ptr(0.0010), domain.StatusStale),
+		makeRow("lighter", ptr(0.0), domain.StatusComplete), // exactly zero → neither cohort
 		{Platform: "kraken", DisplaySymbol: "BTC-USDT (perp)"}, // funding nil
 		makeRow("edgeX", ptr(0.0050), domain.StatusComplete),
 	}
-	rows = enrichFundingRankRows(rows)
-	// edgeX 0.0050 → rank 1; binance 0.0090 → rank 2.
-	// bingx (unsupported), mexc (stale), kraken (no funding) stay at rank 0.
+	rows = enrichFundingRankBySignRows(rows)
 	for _, row := range rows {
+		f := row.Funding
 		switch row.Platform {
 		case "edgeX":
-			if row.Funding.Rank != 1 {
-				t.Fatalf("edgeX rank = %d, want 1", row.Funding.Rank)
+			// edgeX 0.0050 is the smaller positive → rank 2 (binance 0.009 ranks 1)
+			if f.RankPositive == nil || *f.RankPositive != 2 {
+				t.Fatalf("edgeX RankPositive = %v, want 2", f.RankPositive)
+			}
+			if f.RankNegative != nil {
+				t.Fatalf("edgeX RankNegative should be nil, got %v", *f.RankNegative)
 			}
 		case "binance":
-			if row.Funding.Rank != 2 {
-				t.Fatalf("binance rank = %d, want 2", row.Funding.Rank)
+			if f.RankPositive == nil || *f.RankPositive != 1 {
+				t.Fatalf("binance RankPositive = %v, want 1", f.RankPositive)
 			}
 		case "bingx", "mexc":
-			if row.Funding.Rank != 0 {
-				t.Fatalf("%s rank = %d, want 0 (incomplete should not be ranked)", row.Platform, row.Funding.Rank)
+			if f.RankPositive != nil || f.RankNegative != nil {
+				t.Fatalf("%s should have no rank (status != complete), got pos=%v neg=%v", row.Platform, f.RankPositive, f.RankNegative)
+			}
+		case "lighter":
+			if f.RankPositive != nil || f.RankNegative != nil {
+				t.Fatalf("lighter rate exactly 0 should have no rank, got pos=%v neg=%v", f.RankPositive, f.RankNegative)
 			}
 		case "kraken":
-			if row.Funding != nil {
-				t.Fatalf("kraken funding should remain nil, got %+v", row.Funding)
+			if f != nil {
+				t.Fatalf("kraken funding should remain nil, got %+v", f)
 			}
 		}
 	}
 }
 
-func TestEnrichFundingRankRowsStableOnTies(t *testing.T) {
+func TestEnrichFundingRankBySignUses1224Ties(t *testing.T) {
+	// Four venues tied at 0.01, two cleanly separated values below.
+	// 1224 standard: tied venues share rank 1, next non-tied jumps to 5.
 	rows := []domain.PlatformSnapshot{
-		makeRow("binance", ptr(0.0050), domain.StatusComplete),
-		makeRow("okx", ptr(0.0050), domain.StatusComplete),
-		makeRow("bybit", ptr(0.0050), domain.StatusComplete),
+		makeRow("edgeX", ptr(0.0100), domain.StatusComplete),
+		makeRow("okx", ptr(0.0100), domain.StatusComplete),
+		makeRow("bingx", ptr(0.0100), domain.StatusComplete),
+		makeRow("gate", ptr(0.0100), domain.StatusComplete),
+		makeRow("mexc", ptr(0.0071), domain.StatusComplete),
+		makeRow("binance", ptr(0.0070), domain.StatusComplete),
 	}
-	rows = enrichFundingRankRows(rows)
-	// SliceStable preserves input order on equal keys.
+	rows = enrichFundingRankBySignRows(rows)
 	want := map[string]int{
-		"binance": 1,
-		"okx":     2,
-		"bybit":   3,
+		"edgeX":   1,
+		"okx":     1,
+		"bingx":   1,
+		"gate":    1,
+		"mexc":    5, // skipped 2/3/4 occupied by tie cohort
+		"binance": 6,
 	}
 	for _, row := range rows {
-		if got := row.Funding.Rank; got != want[row.Platform] {
-			t.Fatalf("%s rank = %d, want %d (stable order on ties)", row.Platform, got, want[row.Platform])
+		f := row.Funding
+		got := 0
+		if f != nil && f.RankPositive != nil {
+			got = *f.RankPositive
+		}
+		if got != want[row.Platform] {
+			t.Fatalf("%s RankPositive = %d, want %d (1224 tie rule)", row.Platform, got, want[row.Platform])
 		}
 	}
 }

@@ -50,35 +50,33 @@ function fundingFor(platform: string, symbol: string) {
   // without further scaling. Magnitudes here mirror real BTC funding
   // levels (~0.005-0.015% per 8h) so the fixture exercises realistic
   // precision instead of vanishingly small numbers that all round to 0.
-  // rank reflects the ascending 8h ordering across the four complete
-  // fixture rows: edgeX 0.0050 → 1, bybit 0.0060 → 2, binance 0.0090
-  // → 3, okx 0.0120 → 4. vs_median_8h is rate_8h - median (median =
-  // 0.0090). Both fields are normally populated by the Go store's
-  // enrichFundingVsMedianRows + enrichFundingRankRows; the fixture
-  // mirrors that contract so e2e tests exercise the same wire shape
-  // the production backend emits.
+  // Ranks reflect sign-bucketed cohorts populated by the Go store's
+  // enrichFundingRankBySignRows helper. Positive cohort (rate_8h > 0)
+  // sorts descending by rate, negative cohort (rate_8h < 0) sorts
+  // ascending. 1224 tie rule (ties share a rank, next jumps).
+  //
+  // Positive cohort across this fixture: okx(0.012)=1, binance(0.009)=2,
+  // bybit(0.006)=3, edgeX(0.005)=4, hyperliquid(0.0002)=5.
+  // Negative cohort: empty in the happy-path fixture but tests below
+  // exercise it through explicit rate overrides.
   if (platform === 'edgeX') {
-    return { platform, period_hours: 4, rate_native: 0.0025, rate_8h: 0.0050, status: 'complete', snapshot_ts: now, vs_median_8h: -0.0040, rank: 1 };
+    return { platform, period_hours: 4, rate_native: 0.0025, rate_8h: 0.0050, status: 'complete', snapshot_ts: now, vs_median_8h: -0.0040, rank_positive: 4 };
   }
   if (platform === 'binance') {
-    return { platform, period_hours: 8, rate_native: 0.0090, rate_8h: 0.0090, status: 'complete', snapshot_ts: now, vs_median_8h: 0, rank: 3 };
+    return { platform, period_hours: 8, rate_native: 0.0090, rate_8h: 0.0090, status: 'complete', snapshot_ts: now, vs_median_8h: 0, rank_positive: 2 };
   }
   if (platform === 'okx') {
-    return { platform, period_hours: 8, rate_native: 0.0120, rate_8h: 0.0120, status: 'complete', snapshot_ts: now, vs_median_8h: 0.0030, rank: 4 };
+    return { platform, period_hours: 8, rate_native: 0.0120, rate_8h: 0.0120, status: 'complete', snapshot_ts: now, vs_median_8h: 0.0030, rank_positive: 1 };
   }
   if (platform === 'bybit') {
-    return { platform, period_hours: 8, rate_native: 0.0060, rate_8h: 0.0060, status: 'complete', snapshot_ts: now, vs_median_8h: -0.0030, rank: 2 };
+    return { platform, period_hours: 8, rate_native: 0.0060, rate_8h: 0.0060, status: 'complete', snapshot_ts: now, vs_median_8h: -0.0030, rank_positive: 3 };
   }
-  // hyperliquid settles funding every 1h. The 8h equivalent is tiny
-  // (≈+0.0002%) and the native 1h rate is ~1/8 of that (≈+0.000025%).
-  // At 4dp the native value collapses to "+0.0000%" — the formatter
-  // must bump to 6dp on this case so the actual magnitude survives.
-  // Rank 0 here means "do not enter the rank ladder" — the fixture
-  // keeps hyperliquid out of the deterministic 1..4 sequence the
-  // detail-table rank ladder test asserts on, since the 0.0002% rate
-  // would slot in below edgeX and shift every other rank.
+  // hyperliquid settles funding every 1h with a tiny positive 8h
+  // equivalent. Verifies the formatter's 4dp→6dp precision bump on
+  // sub-microscopic native values and that hyperliquid lands at the
+  // bottom of the positive cohort.
   if (platform === 'hyperliquid') {
-    return { platform, period_hours: 1, rate_native: 0.000025, rate_8h: 0.0002, status: 'complete', snapshot_ts: now, vs_median_8h: -0.0088, rank: 0 };
+    return { platform, period_hours: 1, rate_native: 0.000025, rate_8h: 0.0002, status: 'complete', snapshot_ts: now, vs_median_8h: -0.0088, rank_positive: 5 };
   }
   // bingx in the v2.1 catalog is marked unsupported for funding; that
   // status must propagate through to the UI as muted '—'.

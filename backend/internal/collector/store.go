@@ -667,7 +667,7 @@ func (s *Store) Liquidity(symbol string) map[string]any {
 	rows = enrichLiquidityRows(rows, medians)
 	fundingMedian, fundingSamples, fundingMedianStatus := competitorFundingMedian8h(rows)
 	rows = enrichFundingVsMedianRows(rows, fundingMedian, fundingMedianStatus)
-	rows = enrichFundingRankRows(rows)
+	rows = enrichFundingRankBySignRows(rows)
 	return map[string]any{
 		"symbol":                           symbol,
 		"snapshot_ts":                      latestTS(rows),
@@ -697,7 +697,7 @@ func (s *Store) Quality(symbol string) map[string]any {
 	rows = enrichQualityRows(rows)
 	fundingMedian, fundingSamples, fundingMedianStatus := competitorFundingMedian8h(rows)
 	rows = enrichFundingVsMedianRows(rows, fundingMedian, fundingMedianStatus)
-	rows = enrichFundingRankRows(rows)
+	rows = enrichFundingRankBySignRows(rows)
 	kpis := map[string]any{
 		"competitor_funding_rate_median_8h_status":  fundingMedianStatus,
 		"competitor_funding_rate_median_8h_samples": fundingSamples,
@@ -1595,40 +1595,100 @@ func enrichFundingVsMedianRows(rows []domain.PlatformSnapshot, median float64, m
 	return rows
 }
 
-// enrichFundingRankRows assigns an absolute 1-based ascending rank to
-// each row's Funding.Rank based on Rate8h. edgeX is included in the
-// population because the 资金费率 Tab detail table renders the rank
-// alongside the platform name, and operators expect a stable answer
-// to "where does edgeX sit in the N-venue ladder right now".
+// enrichFundingRankBySignRows assigns sign-bucketed 1-based ranks to
+// each row's funding observation. Positive funding (longs pay) and
+// negative funding (shorts pay) are economically opposite states, so
+// a single signed-ascending rank that lumps them together is
+// misleading — when the ladder straddles zero the meaning of "rank 1"
+// flips on you. We publish two independent ranks (RankPositive,
+// RankNegative) and the UI shows whichever side the row sits on.
 //
-// Rows whose funding observation is missing or whose status is not
-// complete are intentionally skipped — assigning them an arbitrary
-// integer would invent ordering information from absent data, and
-// the wire-format "rank=0" sentinel already maps to the UI's '—'.
-// Among complete rows ties are broken by stable platform order so
-// the rank is deterministic across polls.
-func enrichFundingRankRows(rows []domain.PlatformSnapshot) []domain.PlatformSnapshot {
+// Ranking convention within each cohort:
+//   - RankPositive: sorted descending by Rate8h. Rank 1 = largest
+//     positive rate (most expensive funding to long, most rewarding
+//     to short). This puts the "extreme positive" venues at the
+//     visual top of the column, matching how operators read "rank 1".
+//   - RankNegative: sorted ascending by Rate8h. Rank 1 = most
+//     negative rate (most expensive funding to short, most rewarding
+//     to long). Same "extreme first" convention as positive.
+//
+// Tie handling uses the standard "1224" rule (also called "ordinal
+// with skips"): tied rates share a rank, and the next non-tied row
+// jumps by the size of the tie cohort. Example: rates [0.01, 0.01,
+// 0.01, 0.005] → ranks [1, 1, 1, 4]. Operators reading "rank 7" can
+// always be sure rank 7 has 6 strictly higher-magnitude venues
+// above it; the prior stable-order assignment broke this invariant
+// when four venues all reported the same 0.01% rate and got ranks
+// 7, 8, 9, 10 despite being mathematically identical.
+//
+// Rows whose funding is missing, status != complete, or rate exactly
+// 0 belong to neither cohort and keep nil pointers in both fields —
+// the wire format then omits the JSON keys entirely and the UI
+// renders '—'. Status filtering preserves AGENTS.md's "no fabricated
+// data" rule: a stale row must not appear inside an ordered ladder
+// it hasn't actually qualified for.
+func enrichFundingRankBySignRows(rows []domain.PlatformSnapshot) []domain.PlatformSnapshot {
 	type candidate struct {
 		index int
 		rate  float64
 	}
-	candidates := make([]candidate, 0, len(rows))
+	positives := make([]candidate, 0, len(rows))
+	negatives := make([]candidate, 0, len(rows))
 	for i, row := range rows {
 		f := row.Funding
 		if f == nil || f.Rate8h == nil || f.Status != domain.StatusComplete {
 			continue
 		}
-		candidates = append(candidates, candidate{index: i, rate: *f.Rate8h})
+		rate := *f.Rate8h
+		switch {
+		case rate > 0:
+			positives = append(positives, candidate{index: i, rate: rate})
+		case rate < 0:
+			negatives = append(negatives, candidate{index: i, rate: rate})
+			// rate == 0 belongs to neither cohort.
+		}
 	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		return candidates[i].rate < candidates[j].rate
+	// Positive cohort: largest rate first (rank 1 = most extreme positive).
+	sort.SliceStable(positives, func(i, j int) bool {
+		return positives[i].rate > positives[j].rate
 	})
-	for rank, c := range candidates {
+	// Negative cohort: most negative first (rank 1 = most extreme negative).
+	sort.SliceStable(negatives, func(i, j int) bool {
+		return negatives[i].rate < negatives[j].rate
+	})
+	// Apply 1224 ranks (ties share rank, next jumps).
+	for assignIdx, c := range positives {
+		rank := assignIdx + 1
+		// Walk backwards: if the previous candidate had the same rate,
+		// inherit its rank rather than start a new one.
+		if assignIdx > 0 && positives[assignIdx-1].rate == c.rate {
+			prevFunding := rows[positives[assignIdx-1].index].Funding
+			if prevFunding != nil && prevFunding.RankPositive != nil {
+				rank = *prevFunding.RankPositive
+			}
+		}
 		f := rows[c.index].Funding
 		if f == nil {
 			continue
 		}
-		f.Rank = rank + 1
+		r := rank
+		f.RankPositive = &r
+		rows[c.index].Funding = f
+	}
+	for assignIdx, c := range negatives {
+		rank := assignIdx + 1
+		if assignIdx > 0 && negatives[assignIdx-1].rate == c.rate {
+			prevFunding := rows[negatives[assignIdx-1].index].Funding
+			if prevFunding != nil && prevFunding.RankNegative != nil {
+				rank = *prevFunding.RankNegative
+			}
+		}
+		f := rows[c.index].Funding
+		if f == nil {
+			continue
+		}
+		r := rank
+		f.RankNegative = &r
 		rows[c.index].Funding = f
 	}
 	return rows
