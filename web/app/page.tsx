@@ -22,7 +22,6 @@ export default function Page({ searchParams }: { searchParams: SearchParams }) {
     bucket: scalar(searchParams.bucket) ?? '100000',
     platform: scalar(searchParams.platform) ?? 'binance',
     category: scalar(searchParams.category),
-    coreOnly: scalar(searchParams.coreOnly),
     view: scalar(searchParams.view),
   };
   // SSR-only resolution: localStorage is intentionally NOT touched here;

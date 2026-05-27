@@ -101,9 +101,6 @@ export function DashboardControls({
           maxFavorites={MAX_WATCHLIST}
         />
       </span>
-      <Link className={`pill ${query.coreOnly === '1' ? 'active' : ''}`} href={href(query, { coreOnly: query.coreOnly === '1' ? undefined : '1' })}>
-        仅看核心
-      </Link>
     </div>
   );
 }
