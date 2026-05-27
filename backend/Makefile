@@ -1,4 +1,4 @@
-.PHONY: build test run smoke-api smoke-adapters smoke-coingecko backfill-share swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci prune-snapshots-dry prune-snapshots-confirm verify-urls
+.PHONY: build test run smoke-api smoke-adapters smoke-coingecko smoke-listing backfill-share swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci prune-snapshots-dry prune-snapshots-confirm verify-urls
 
 PORT ?= 18080
 SYMBOL ?= BTC-USDT
@@ -90,6 +90,15 @@ smoke-coingecko:
 backfill-share:
 	DASHBOARD_MYSQL_DSN="$(MYSQL_DSN)" \
 	go run ./cmd/coingecko-backfill --days=$(BACKFILL_DAYS)
+
+# Run one full Listing Agent tick (fusion + Top30 push + delivery
+# drain) against the supplied MYSQL_DSN and exit. Listing role
+# requires a MySQL DSN; webhook URL is optional and unset webhook
+# URLs cause Top30 outbox rows to be marked disabled instead of
+# attempting network delivery.
+smoke-listing:
+	DASHBOARD_MYSQL_DSN="$(MYSQL_DSN)" \
+	go run ./cmd/dashboard --role=listing --run-once --mysql-dsn="$(MYSQL_DSN)"
 
 swagger:
 	mkdir -p docs
