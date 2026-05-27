@@ -19,38 +19,61 @@ export const FUNDING_SIGN_CONVENTION_TOOLTIP =
   '跨平台已折算为 8 小时当量；原始周期：edgeX 4h、Hyperliquid 1h、Lighter 1h、其余 8h。\n' +
   '数据源：CoinGecko /derivatives，5min 刷新。';
 
-// formatFundingRate8h renders a percent value with sign. CoinGecko's
-// /derivatives endpoint returns funding_rate already expressed in
-// percent units (per their public docs: "Funding rate (in percent)…
-// Example: 0.0095 means 0.0095%"), and the backend stores the value
-// verbatim without re-scaling. Therefore this formatter only needs to
-// fix precision + sign — multiplying by 100 a second time would shift
-// every reading by two orders of magnitude (a real 0.0095% per 8h on
-// Binance would otherwise render as "+0.95%").
+// formatPercentAdaptive is the shared precision/sign formatter every
+// funding-rate value flows through. CoinGecko's /derivatives endpoint
+// returns funding_rate already in percent units (per their docs:
+// "Funding rate (in percent)… Example: 0.0095 means 0.0095%") and the
+// backend stores the value verbatim — this formatter therefore only
+// fixes precision + sign and never multiplies by 100 a second time.
 //
-// 4dp matches the spec mocks and is the smallest precision at which
-// inter-venue spreads (typically 0.0001–0.005% per 8h) remain legible.
+// Precision rule (uniform across native / 8h / delta cells so the
+// table is internally consistent):
+//   - Default 4dp matches the spec mocks and is the smallest
+//     precision at which inter-venue spreads (typical 0.0001–0.005%
+//     per 8h) remain legible.
+//   - When 4dp would collapse a non-zero value to "0.0000" (e.g.
+//     Hyperliquid's ~5e-5 native 1h rate, or any platform whose 8h
+//     equivalent lands inside ±0.00005% during low-volatility
+//     windows), bump to 6dp so the actual magnitude is visible. The
+//     6dp ceiling matches CoinGecko's published precision and
+//     prevents microscopic numerical noise from masquerading as
+//     signal.
+//   - Genuine zero stays at the default 4dp ("+0.0000%") so the
+//     operator can tell "this venue is actually at 0 right now"
+//     apart from "this venue's value is sub-microscopic". Lighter
+//     periodically reports rate_8h=0 verbatim from CoinGecko; that
+//     reading must NOT get upgraded to 6dp because there is no
+//     extra magnitude to expose.
 //
-// Returns '—' for null / undefined / non-finite values so callers can
-// route every funding value through one formatter without conditional
-// branches at every call site. AGENTS.md's 'no fabricated data' rule
-// is preserved at this boundary: status=stale rows carry rate8h=null
-// and we explicitly NOT render a zero.
-export function formatFundingRate8h(rate?: number | null): string {
+// Returns '—' for null / undefined / non-finite values so callers
+// can route every funding value through one formatter without
+// conditional branches at every call site. AGENTS.md's "no fabricated
+// data" rule is preserved at this boundary: status=stale rows carry
+// rate=null and we explicitly do NOT render a zero.
+function formatPercentAdaptive(rate?: number | null): string {
   if (typeof rate !== 'number' || !Number.isFinite(rate)) return '—';
-  const formatted = rate.toFixed(4);
-  return rate >= 0 ? `+${formatted}%` : `${formatted}%`;
+  let formatted = rate.toFixed(4);
+  if (rate !== 0 && parseFloat(formatted) === 0) {
+    formatted = rate.toFixed(6);
+  }
+  const sign = rate >= 0 ? '+' : '';
+  return `${sign}${formatted}%`;
 }
 
-// formatFundingDelta renders a vs-median delta with the same precision
-// and unit handling as formatFundingRate8h. The only difference is that
-// 0 is shown explicitly as '+0.0000%' instead of '—', because a row
-// whose rate is exactly the median is a meaningful observation (the
-// operator wants to see 'yes, we are right at the centre').
+// formatFundingRate8h renders an 8h-equivalent funding rate. Delegates
+// to the shared adaptive formatter so the same precision rule applies
+// across the KPI cards, detail-table 8h column, and the
+// edgeX-funding-rate subline.
+export function formatFundingRate8h(rate?: number | null): string {
+  return formatPercentAdaptive(rate);
+}
+
+// formatFundingDelta renders a vs-median delta. Shares precision rules
+// with formatFundingRate8h so the table is internally consistent —
+// previously the two formatters maintained independent precision
+// branches and could drift apart on edge cases.
 export function formatFundingDelta(delta?: number | null): string {
-  if (typeof delta !== 'number' || !Number.isFinite(delta)) return '—';
-  const formatted = delta.toFixed(4);
-  return delta >= 0 ? `+${formatted}%` : `${formatted}%`;
+  return formatPercentAdaptive(delta);
 }
 
 // formatNativeRateWithPeriod renders the platform's native funding
@@ -59,8 +82,8 @@ export function formatFundingDelta(delta?: number | null): string {
 // chosen for the dedicated 资金费率 Tab: operators want to read each
 // venue's actual per-period fee, not the cross-platform 8h-normalised
 // derivative number. The 8h-equivalent is still computed in the
-// backend and displayed as a secondary value (and as the BarChart
-// sort key + bar length) so the comparison axis stays intact.
+// backend and displayed as a secondary value so the comparison axis
+// stays intact.
 //
 // Returns '—' when either input is missing / non-finite / non-positive
 // so the caller can pipe every cell through a single formatter without
@@ -68,22 +91,8 @@ export function formatFundingDelta(delta?: number | null): string {
 // rather than guessing 8h, mirroring funding.go's "unknown → unsupported"
 // posture: silently defaulting to 8h would mask a config drift.
 export function formatNativeRateWithPeriod(rate?: number | null, periodHours?: number | null): string {
-  if (typeof rate !== 'number' || !Number.isFinite(rate)) return '—';
-  // The dashboard's default 4dp precision is calibrated to 8h-equivalent
-  // values (typically 0.0001–0.005%). When a venue settles every 1h
-  // (Hyperliquid, Lighter) the native per-period reading is roughly
-  // 1/8 of the 8h equivalent, so a perfectly real +0.0002% per 8h
-  // reading collapses to "+0.0000% / 1h" at 4dp — looking to operators
-  // like a missing-data bug rather than a tiny-but-real rate. Detect
-  // that collapse and re-render with 6dp so the actual magnitude
-  // survives. The 6dp cap matches CoinGecko's published precision and
-  // prevents microscopic numerical noise from masquerading as signal.
-  let formatted = rate.toFixed(4);
-  if (rate !== 0 && parseFloat(formatted) === 0) {
-    formatted = rate.toFixed(6);
-  }
-  const sign = rate >= 0 ? '+' : '';
-  const label = `${sign}${formatted}%`;
+  const label = formatPercentAdaptive(rate);
+  if (label === '—') return '—';
   if (typeof periodHours === 'number' && Number.isFinite(periodHours) && periodHours > 0) {
     return `${label} / ${periodHours}h`;
   }

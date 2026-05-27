@@ -151,9 +151,12 @@ export function FundingBlock({
             <span className="muted">{directionGlyph(delta)}</span>
           </div>
           <div className="subline muted">
-            {medianStatus === 'complete'
-              ? '正值 = 多头付出 > 竞品中位数'
+            {medianStatus === 'complete' && typeof edgeRate8h === 'number' && typeof median === 'number'
+              ? `= edgeX 8h (${formatFundingRate8h(edgeRate8h)}) − 中位数 (${formatFundingRate8h(median)})`
               : '中位数缺失，无法计算 delta'}
+          </div>
+          <div className="subline muted">
+            {medianStatus === 'complete' ? '正值 = edgeX 多头付出 > 竞品中位数' : ''}
           </div>
         </section>
         <section className="panel span-24">

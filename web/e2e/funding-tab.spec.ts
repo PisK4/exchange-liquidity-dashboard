@@ -86,13 +86,18 @@ test('竞品中位数 card shows 8h-only with sample count and explanatory subli
   await expect(medianCard).toContainText('跨周期混合，仅能以 8h 当量表达');
 });
 
-test('vs 竞品中位数 delta card shows signed 8h delta with directional glyph', async ({ page }) => {
+test('vs 竞品中位数 delta card shows signed 8h delta + explicit formula subline', async ({ page }) => {
   await page.goto('/?tab=funding');
   const block = page.getByTestId('funding-block-BTC');
   const deltaCard = block.locator('section.panel').filter({ hasText: 'edgeX vs 竞品中位数' }).first();
   await expect(deltaCard).toBeVisible();
-  // delta = 0.0050 - 0.0090 = -0.0040 → "-0.0040%".
+  // Fixture: edgeX 8h = +0.0050%, median = +0.0090% → delta = -0.0040%.
   await expect(deltaCard).toContainText('-0.0040%');
+  // Subline spells out the calculation so the operator does not have to
+  // mentally compute the value against the displayed native rate
+  // (which is +0.0025% / 4h on edgeX — easy to confuse with the 8h
+  // value used for the comparison).
+  await expect(deltaCard).toContainText('= edgeX 8h (+0.0050%) − 中位数 (+0.0090%)');
 });
 
 test('no cross-platform BarChart panel resurfaces between KPI cards and detail table', async ({ page }) => {
