@@ -8,8 +8,8 @@ import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { QualityCard } from '@/components/quality-card';
 import { QualityFundingRow } from '@/components/quality-funding-row';
+import { SymbolBlock } from '@/components/symbol-block';
 import { Top30DivergenceView } from '@/components/top30-divergence-view';
-import { WatchlistCard } from '@/components/watchlist-card';
 import { WatchlistToolbar } from '@/components/watchlist-toolbar';
 import { resolveSymbolContext, type SymbolContext } from '@/components/lib/symbol-context';
 import { bp, money, moneyAuto, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformFundingRate, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30DivergenceSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
@@ -369,89 +369,41 @@ function LiquidityTab({
   onWatchlistChange: (next: string[]) => void;
 }) {
   const allSymbols = (data.meta.categories ?? []).flatMap(c => c.symbols);
-  const watchlistMode = watchlist.length > 1;
 
-  if (watchlistMode) {
-    return (
-      <div className="page-content active">
-        <div className="section-bar">
-          <span>3.2 · <b>自选清单</b></span>
-          <div className="line" />
-          <span>{watchlist.length} 个标的 · 摘要视图</span>
-        </div>
-        <WatchlistToolbar items={watchlist} symbols={allSymbols} onChange={onWatchlistChange} />
-        <div className="grid">
-          {watchlist.map(symbol => {
-            const canonical = normalizeSymbol(symbol);
-            const meta = allSymbols.find(s => s.canonical.toUpperCase() === canonical);
-            const snap = data.liquidityByCanonical[canonical] ?? null;
-            // Clicking 查看明细 collapses the watchlist down to just this
-            // symbol — the LiquidityTab then re-renders in single-symbol
-            // mode (full V1 view with depth curves + detail table). The
-            // other chips are reachable again through the toolbar's URL /
-            // localStorage round-trip, so this is a non-destructive
-            // 'focus' rather than a permanent removal.
-            const onExpand = () => onWatchlistChange([canonical]);
-            return (
-              <WatchlistCard
-                key={canonical}
-                canonical={canonical}
-                displayName={meta?.display_name ?? symbol}
-                snapshot={snap}
-                onExpand={onExpand}
-              />
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  const rows = data.liquidity.rows ?? [];
-  const edge = rows.find(row => row.platform === 'edgeX');
-  const edgeDepth = edge && depthDisplayAvailable(edge, tier) ? edge.depth_by_tier?.[tier]?.total_usd : undefined;
-  const edgeRatio = edge?.vs_median_by_tier?.[tier];
-  const symbol = symbolCtx.displaySymbol;
+  // Both single-symbol and multi-symbol monitor views render through
+  // SymbolBlock now: the watchlist defines the set of blocks to stack
+  // vertically; when it is empty we fall back to the URL-resolved
+  // symbolCtx so the page is never blank. Each block owns its own
+  // tier state so adding BTC + ETH doesn't force them to share the
+  // ±0.10% pill toggle.
+  const blocks = watchlist.length > 0 ? watchlist : [symbolCtx.canonical];
 
   return (
     <div className="page-content active">
-      <div className="section-bar"><span>3.2 · <b>深度对比</b></span><div className="line" /><span>{symbolCtx.displayName} · 4 档深度</span></div>
+      <div className="section-bar">
+        <span>3.2 · <b>深度对比</b></span>
+        <div className="line" />
+        <span>{blocks.length} 个标的 · 完整视图</span>
+      </div>
       <WatchlistToolbar items={watchlist} symbols={allSymbols} onChange={onWatchlistChange} />
       <div className="grid">
-        <section className="panel span-6 row-h-sm">
-          <div className="panel-head">
-            <span className="panel-title">edgeX <span>±{tier}</span> 总深度</span>
-            <PillGroup items={tierLabels} active={tier} query={{ ...query, tab: 'monitor' }} param="tier" />
-          </div>
-          <div className="big-number">{moneyAuto(edgeDepth)}</div>
-          <div className="subline">vs 中位数 {ratio(edgeRatio)}</div>
-        </section>
-        <section className="panel span-6 row-h-sm">
-          <div className="panel-head"><span className="panel-title">当前交易对 7d 市占率</span><span className="panel-tag">单币种</span></div>
-          {typeof data.liquidity.kpis?.symbol_share_7d_pct === 'number'
-            ? <div className="big-number">{pct(data.liquidity.kpis.symbol_share_7d_pct)}</div>
-            : <div className="big-number muted">—</div>}
-        </section>
-        <section className="panel span-6 row-h-sm">
-          <div className="panel-head"><span className="panel-title">edgeX spread (10min 均值)</span><span className="panel-tag">盘口</span></div>
-          {typeof data.liquidity.kpis?.edgex_spread_10m_bp === 'number'
-            ? <div className="big-number">{bp(data.liquidity.kpis.edgex_spread_10m_bp)}</div>
-            : <div className="big-number muted">—</div>}
-        </section>
-        <section className="panel span-6 row-h-sm">
-          <div className="panel-head"><span className="panel-title">edgeX 当前 spread</span><span className="panel-tag">latest</span></div>
-          <div className="big-number">{bp(data.liquidity.kpis?.edgex_spread_bp)}</div>
-          <div className="subline">24h share {pct(data.liquidity.kpis?.edgex_24h_share_pct)}</div>
-        </section>
-        <FundingKpiPanel kpis={data.liquidity.kpis} />
-        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">买盘深度曲线 BID</span></div><LineChart ariaLabel="买盘深度曲线 BID" labels={tierLabels.map(displayTierLabel)} series={tierSeries(rows, 'bid_usd')} /></section>
-        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">卖盘深度曲线 ASK</span></div><LineChart ariaLabel="卖盘深度曲线 ASK" labels={tierLabels.map(displayTierLabel)} series={tierSeries(rows, 'ask_usd')} /></section>
-        <section className="panel span-8 row-h-md"><div className="panel-head"><span className="panel-title">合计深度曲线 BID + ASK</span></div><LineChart ariaLabel="合计深度曲线 BID + ASK" labels={tierLabels.map(displayTierLabel)} series={tierSeries(rows, 'total_usd')} /></section>
-        <section className="panel span-24">
-          <div className="panel-head"><span className="panel-title">深度明细 · 平台 × 档位 (USD)</span><span className="panel-sub">· 合计深度 vs 竞品中位数 / 排名</span></div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num col-bid">0.05% BID</th><th className="num col-ask">0.05% ASK</th><th className="num col-bid">0.1% BID</th><th className="num col-ask">0.1% ASK</th><th className="num col-bid">1% BID</th><th className="num col-ask">1% ASK</th><th className="num col-bid">2% BID</th><th className="num col-ask">2% ASK</th><th className="num">±0.1% 合计</th><th className="num">vs 中位数</th><th className="num">排名</th><th className="num" title={FUNDING_SIGN_CONVENTION_TOOLTIP}>资金费率 (8h) ⓘ</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><DepthCell row={row} tier="0.05%" side="bid_usd" /><DepthCell row={row} tier="0.05%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="bid_usd" /><DepthCell row={row} tier="0.10%" side="ask_usd" /><DepthCell row={row} tier="1.00%" side="bid_usd" /><DepthCell row={row} tier="1.00%" side="ask_usd" /><DepthCell row={row} tier="2.00%" side="bid_usd" /><DepthCell row={row} tier="2.00%" side="ask_usd" /><DepthCell row={row} tier="0.10%" side="total_usd" /><td className="num">{ratio(row.vs_median_by_tier?.['0.10%'])}{row.depth_status_label && <span className={`badge ${depthLabelBadgeClass(row.depth_status_label)} depth-label-badge`} title={row.partial_reason}>{normalizeDepthLabel(row.depth_status_label)}</span>}</td><td className="num">{row.rank_0_1 ? `#${row.rank_0_1}` : '—'}</td><FundingCell funding={row.funding} /></tr>)}</tbody></table></div>
-          <div className="panel-foot-note"><span className="approx-mark">*</span> 表示该档位深度仅部分覆盖，数值为已观测部分的合计</div>
-        </section>
+        {blocks.map(sym => {
+          const canonical = normalizeSymbol(sym);
+          const meta = allSymbols.find(s => s.canonical.toUpperCase() === canonical);
+          const snap =
+            data.liquidityByCanonical[canonical]
+            ?? (canonical === symbolCtx.canonical.toUpperCase() ? data.liquidity : null);
+          return (
+            <SymbolBlock
+              key={canonical}
+              canonical={canonical}
+              displayName={meta?.display_name ?? sym}
+              snapshot={snap}
+              lookup={data.lookup}
+              defaultTier={tier}
+            />
+          );
+        })}
       </div>
     </div>
   );

@@ -184,4 +184,8 @@ table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
 .quality-card-chart .bar-chart { font-size: 11px; }
 .quality-card-foot { padding: 4px 12px 10px; font-size: 11px; line-height: 1.5; border-top: 1px dashed var(--border); margin: 4px 8px 0; }
 .quality-bucket-bar { display: flex; align-items: center; gap: 10px; padding: 6px 4px 4px; }
+.symbol-block { padding: 0; margin-bottom: 6px; }
+.symbol-block > .panel-head { background: #181c22; }
+.symbol-block > .panel-head .panel-title { font-size: 14px; }
+.symbol-block > .grid { padding: 10px; }
 @media (max-width: 1100px) { .span-6, .span-8, .span-12 { grid-column: span 24; } .topbar { align-items: flex-start; height: auto; flex-wrap: wrap; padding: 8px 12px; } .tabs { top: 0; overflow-x: auto; } .share-kpi-strip { align-items: flex-start; flex-direction: column; gap: 12px; } .share-kpi-note { margin-left: 0; text-align: left; } .watchlist-kpis { grid-template-columns: 1fr; } }
