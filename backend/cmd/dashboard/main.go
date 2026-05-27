@@ -13,6 +13,7 @@ import (
 	"edgex-dashboard/backend/internal/api"
 	"edgex-dashboard/backend/internal/collector"
 	"edgex-dashboard/backend/internal/config"
+	"edgex-dashboard/backend/internal/listing"
 	"edgex-dashboard/backend/internal/marketdata/coingecko"
 )
 
@@ -45,7 +46,9 @@ func main() {
 	}
 
 	store := collector.NewStore(cfg)
-	if resolvedDSN := resolveMySQLDSN(*mysqlDSN, cfg); resolvedDSN != "" {
+	resolvedDSN := resolveMySQLDSN(*mysqlDSN, cfg)
+	var listingRepo *listing.Repository
+	if resolvedDSN != "" {
 		db, err := collector.OpenMySQL(resolvedDSN)
 		if err != nil {
 			log.Fatalf("connect mysql: %v", err)
@@ -57,6 +60,14 @@ func main() {
 		store.AttachDB(db)
 		if err := store.LoadLatestFromDB(context.Background()); err != nil {
 			log.Printf("load latest snapshots from mysql: %v", err)
+		}
+		listingRepo = listing.NewRepository(db)
+	} else {
+		if roleRequiresMySQL(*role) {
+			log.Fatalf("role %q requires MySQL DSN (--mysql-dsn or DASHBOARD_MYSQL_DSN)", *role)
+		}
+		if roleStartsListing(*role) {
+			log.Printf("listing engine disabled: no MySQL DSN configured")
 		}
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -138,19 +149,60 @@ func main() {
 		}
 	}
 
+	universePath := filepath.Join(*configDir, "listed_universe.yaml")
+	listingUniverseLoader := func() (*config.ListedUniverse, error) {
+		return config.LoadListedUniverse(universePath)
+	}
+	if roleStartsListing(*role) && cfg.Runtime.ListingAgent.Enabled && listingRepo != nil {
+		engine := listing.NewEngine(cfg, listingRepo, listing.EngineDeps{
+			LoadUniverse: listingUniverseLoader,
+			HTTPClient:   http.DefaultClient,
+		})
+		if *runOnce && *role == "listing" {
+			summary, err := engine.RunOnce(ctx)
+			log.Printf("listing run-once summary: %+v", summary)
+			if err != nil {
+				log.Printf("listing run-once completed with errors: %v", err)
+			}
+			return
+		}
+		go func() {
+			if err := engine.Run(ctx); err != nil {
+				log.Printf("listing engine stopped: %v", err)
+			}
+		}()
+	}
+
 	if *role == "collector" && *runOnce {
 		return
 	}
 
-	if *role == "collector" {
+	if *role == "collector" || *role == "listing" {
 		select {}
 	}
 
-	server := api.NewServer(cfg, store)
+	opts := []api.Option{}
+	if listingRepo != nil {
+		opts = append(opts, api.WithListingReader(listingRepo))
+	}
+	server := api.NewServer(cfg, store, opts...)
 	log.Printf("EdgeX liquidity dashboard API listening on %s", *addr)
 	if err := http.ListenAndServe(*addr, server.Routes()); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// roleStartsListing reports whether the listing engine should be
+// started for the given --role flag.
+func roleStartsListing(role string) bool {
+	return role == "listing" || role == "collector" || role == "all"
+}
+
+// roleRequiresMySQL reports whether the role cannot operate without a
+// MySQL DSN. The listing role is the only role that fail-stops on
+// missing DSN today; collector / all degrade gracefully.
+func roleRequiresMySQL(role string) bool {
+	return role == "listing"
 }
 
 func roleStartsLiveProviders(role string) bool {
