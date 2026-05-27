@@ -50,11 +50,14 @@ function formatSampleCount(samples?: number) {
 // rates (longs pay) render red; negative rates (shorts pay) render
 // teal; zero and missing values stay neutral. The classes themselves
 // live in globals.css alongside .platform-self and .r-edgex so the
-// palette stays in one place.
+// palette stays in one place — the same .sign-positive/.sign-negative
+// pair is reused by 盘口质量明细's Imbalance column for direction
+// (BID-heavy vs ASK-heavy), so this helper is intentionally a thin
+// sign → class mapping with no funding-specific logic.
 function rateSignColorClass(value?: number | null): string {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '';
-  if (value > 0) return 'funding-positive';
-  if (value < 0) return 'funding-negative';
+  if (value > 0) return 'sign-positive';
+  if (value < 0) return 'sign-negative';
   return '';
 }
 
@@ -221,10 +224,10 @@ export function FundingBlock({
                           ? formatFundingDelta(f.vs_median_8h)
                           : '—'}
                       </td>
-                      <td className="num funding-positive">
+                      <td className="num sign-positive">
                         {typeof f?.rank_positive === 'number' && f.rank_positive > 0 ? f.rank_positive : '—'}
                       </td>
-                      <td className="num funding-negative">
+                      <td className="num sign-negative">
                         {typeof f?.rank_negative === 'number' && f.rank_negative > 0 ? f.rank_negative : '—'}
                       </td>
                     </tr>

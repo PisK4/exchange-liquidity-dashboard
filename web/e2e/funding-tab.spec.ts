@@ -119,7 +119,7 @@ test('detail table exposes 6-column shape with sign-bucketed rank columns', asyn
   await expect(detail).toBeVisible();
   // Expected headers (after iteration round-3 split rank into two
   // sign-aware columns).
-  for (const header of ['平台', '原生费率', '8h 当量', 'vs 中位数 (8h)', '正费率排名', '负费率排名']) {
+  for (const header of ['平台', '原生费率', '8h 折算费率', 'vs 中位数 (8h)', '正费率排名', '负费率排名']) {
     await expect(detail).toContainText(header);
   }
   // The dropped headers from earlier iterations must NOT appear.
@@ -160,17 +160,19 @@ test('edgeX detail row gets the .r-edgex highlight class', async ({ page }) => {
   await expect(edgeRow).toHaveClass(/r-edgex/);
 });
 
-test('positive rate cells carry funding-positive class for sign coloring', async ({ page }) => {
+test('positive rate cells carry sign-positive class for sign coloring', async ({ page }) => {
   await page.goto('/?tab=funding');
   const block = page.getByTestId('funding-block-BTC');
   const detail = block.locator('section.panel').filter({ hasText: '资金费率明细' }).first();
   // okx fixture is the largest positive rate → its 原生费率 and 8h
-  // 当量 cells must carry .funding-positive so the CSS rule paints
-  // them red. We don't check the literal color — just the class — so
-  // tests don't break if the palette evolves.
+  // 当量 cells must carry .sign-positive so the CSS rule paints them
+  // red. We don't check the literal color — just the class — so
+  // tests don't break if the palette evolves. The class is the
+  // generic sign-* pair (was funding-positive prior to the cross-tab
+  // generalisation that lets 盘口质量明细 Imbalance reuse the rule).
   const okxRow = detail.locator('tbody tr').filter({ hasText: 'okx' });
-  await expect(okxRow.locator('td.num').nth(0)).toHaveClass(/funding-positive/);
-  await expect(okxRow.locator('td.num').nth(1)).toHaveClass(/funding-positive/);
+  await expect(okxRow.locator('td.num').nth(0)).toHaveClass(/sign-positive/);
+  await expect(okxRow.locator('td.num').nth(1)).toHaveClass(/sign-positive/);
 });
 
 test('1h-period venue (hyperliquid) bumps native rate precision to 6dp instead of collapsing to +0.0000%', async ({ page }) => {

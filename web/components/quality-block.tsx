@@ -32,6 +32,22 @@ function signedPct(value?: number) {
   return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
 }
 
+// imbalanceSignClass paints the Imbalance cell red (BID-heavy) or
+// teal (ASK-heavy) so the buy/sell direction is parseable without
+// scanning for the "+" / "-" character. Color encodes DIRECTION only,
+// not optimality — both directions can be healthy (|x| < 30%) or
+// unhealthy (|x| > 30%); the existing Imbalance BarChart already
+// flags magnitude via its own threshold-based palette. This is the
+// same .sign-positive/.sign-negative pair the 资金费率 Tab uses; the
+// classes were deliberately renamed in this commit to drop the
+// funding-specific prefix so reuse here doesn't look out of place.
+function imbalanceSignClass(value?: number | null): string {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '';
+  if (value > 0) return 'sign-positive';
+  if (value < 0) return 'sign-negative';
+  return '';
+}
+
 function bucketShortLabel(bucket: string) {
   const amount = Number(bucket);
   if (!Number.isFinite(amount)) return bucket;
@@ -222,7 +238,9 @@ export function QualityBlock({
         <section className="panel span-24">
           <div className="panel-head">
             <span className="panel-title">盘口质量明细</span>
-            <span className="panel-sub">· 每行=一个平台</span>
+            <span className="panel-sub">
+              · 每行=一个平台 · Imbalance 红=BID 偏多 / 青=ASK 偏多（颜色仅表方向，|x|&gt;30% 才偏离健康）
+            </span>
             <span className="panel-tag muted">CSV 可导</span>
           </div>
           <div className="table-wrap">
@@ -255,7 +273,7 @@ export function QualityBlock({
                     </td>
                     <td className="num">{bp(row.spread_bp)}</td>
                     <td className="num">{money(row.mid_price)}</td>
-                    <td className="num">{signedPct(row.imbalance_pct)}</td>
+                    <td className={`num ${imbalanceSignClass(row.imbalance_pct)}`}>{signedPct(row.imbalance_pct)}</td>
                     <td className="num">{bp(row.worst_slippage_bp?.['50000'])}</td>
                     <td className="num">{bp(row.worst_slippage_bp?.['100000'])}</td>
                     <td className="num">{bp(row.worst_slippage_bp?.['500000'])}</td>
