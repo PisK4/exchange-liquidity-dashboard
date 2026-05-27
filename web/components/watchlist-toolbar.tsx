@@ -3,19 +3,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { MAX_WATCHLIST, addSymbol, applyURLState, removeSymbol, saveToLocalStorage } from '@/lib/watchlist';
 import type { DashboardCategorySymbol } from '@/lib/api/client';
+import { SymbolPickerDropdown } from './symbol-picker-dropdown';
 
-// WatchlistToolbar renders the chip row + 'add' button that drives the
-// multi-symbol Liquidity view. It is intentionally state-less — the
-// canonical watchlist lives in the parent DashboardClient — and only
-// emits onChange with the new array. The component owns the dropdown
-// open/closed state and the search filter because those are pure UI
-// concerns nobody else needs to know about.
+// WatchlistToolbar renders the chip row + a "管理自选" button that
+// opens the same SymbolPickerDropdown used by the global symbol pill in
+// DashboardControls. Two equivalent entry points share one
+// implementation so the operator's mental model — "starring is starring,
+// no matter where I click" — never breaks.
 //
-// Adding / removing always goes through addSymbol / removeSymbol so the
-// dedupe + uppercase + max-length rules are enforced in one place; the
-// toolbar also writes back to localStorage and replaceState the moment
-// the change is committed so a tab-close / page-refresh round-trip
-// preserves the operator's last-known intent.
+// The component is intentionally state-less for the watchlist itself:
+// the canonical list lives in the parent DashboardClient and is mirrored
+// here only to render the chips. Add/remove always goes through
+// addSymbol / removeSymbol so the dedupe + uppercase + max-length rules
+// are enforced in one place; the toolbar also writes back to
+// localStorage and replaceState the moment a change is committed so a
+// tab-close / page-refresh round-trip preserves the operator's
+// last-known intent.
 export function WatchlistToolbar({
   items,
   symbols,
@@ -26,9 +29,8 @@ export function WatchlistToolbar({
   onChange: (next: string[]) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const [filter, setFilter] = useState('');
   const ref = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
 
   const lookup = useMemo(() => {
     const out = new Map<string, DashboardCategorySymbol>();
@@ -38,21 +40,6 @@ export function WatchlistToolbar({
     return out;
   }, [symbols]);
 
-  const filtered = useMemo(() => {
-    const f = filter.trim().toLowerCase();
-    const alreadyIn = new Set(items.map(s => s.toUpperCase()));
-    return symbols
-      .filter(s => !alreadyIn.has(s.canonical.toUpperCase()))
-      .filter(s => {
-        if (!f) return true;
-        return (
-          s.canonical.toLowerCase().includes(f) ||
-          s.display_name.toLowerCase().includes(f) ||
-          s.display_symbol.toLowerCase().includes(f)
-        );
-      });
-  }, [symbols, items, filter]);
-
   useEffect(() => {
     function onClick(e: MouseEvent) {
       if (!ref.current?.contains(e.target as Node)) setOpen(false);
@@ -61,31 +48,26 @@ export function WatchlistToolbar({
     return () => document.removeEventListener('mousedown', onClick);
   }, []);
 
-  useEffect(() => {
-    if (open) {
-      setFilter('');
-      const id = window.setTimeout(() => inputRef.current?.focus(), 0);
-      return () => window.clearTimeout(id);
-    }
-  }, [open]);
-
   function commit(next: string[]) {
     onChange(next);
     saveToLocalStorage(next);
     applyURLState(next);
   }
 
-  function add(symbol: string) {
-    if (items.length >= MAX_WATCHLIST) return;
-    commit(addSymbol(items, symbol));
-    setOpen(false);
+  function toggleFavorite(symbol: string) {
+    const upper = symbol.toUpperCase();
+    const isFav = items.some(s => s.toUpperCase() === upper);
+    if (isFav) {
+      commit(removeSymbol(items, upper));
+    } else {
+      if (items.length >= MAX_WATCHLIST) return;
+      commit(addSymbol(items, upper));
+    }
   }
 
   function remove(symbol: string) {
     commit(removeSymbol(items, symbol));
   }
-
-  const capped = items.length >= MAX_WATCHLIST;
 
   return (
     <div className="watchlist-toolbar" ref={ref} data-testid="watchlist-toolbar">
@@ -112,45 +94,27 @@ export function WatchlistToolbar({
       </span>
       <span className="watchlist-add">
         <button
+          ref={triggerRef}
           type="button"
           className={`pill watchlist-add-trigger ${open ? 'active' : ''}`}
           onClick={() => setOpen(o => !o)}
           aria-haspopup="listbox"
           aria-expanded={open}
-          disabled={capped}
-          title={capped ? `最多 ${MAX_WATCHLIST} 个标的` : '添加标的到自选'}
+          title="管理自选清单（最多 10 个标的）"
           data-testid="watchlist-add-trigger"
         >
-          + 添加标的
+          管理自选 ▾
         </button>
-        {open && !capped && (
-          <div className="symbol-select-dropdown" role="listbox" data-testid="watchlist-add-dropdown">
-            <input
-              ref={inputRef}
-              type="text"
-              className="symbol-select-input"
-              placeholder="搜索 BTC / GOLD / TSLA..."
-              value={filter}
-              onChange={e => setFilter(e.target.value)}
-              aria-label="搜索可添加的标的"
-            />
-            <ul className="symbol-select-list">
-              {filtered.length === 0 && <li className="symbol-select-empty">没有可添加的标的</li>}
-              {filtered.map(s => (
-                <li key={s.canonical}>
-                  <button
-                    type="button"
-                    className="symbol-select-option"
-                    onClick={() => add(s.canonical)}
-                    data-testid={`watchlist-add-option-${s.canonical}`}
-                  >
-                    <span className="symbol-select-name">{s.display_name}</span>
-                    <span className="symbol-select-meta">{s.supported_platform_count} 平台</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </div>
+        {open && (
+          <SymbolPickerDropdown
+            symbols={symbols}
+            favorites={items}
+            onToggleFavorite={toggleFavorite}
+            maxFavorites={MAX_WATCHLIST}
+            triggerRef={triggerRef}
+            onClose={() => setOpen(false)}
+            testIdPrefix="watchlist-add"
+          />
         )}
       </span>
     </div>

@@ -46,9 +46,18 @@ a { color: inherit; text-decoration: none; }
 .symbol-select-list::-webkit-scrollbar-track { background: transparent; }
 .symbol-select-list::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
 .symbol-select-list::-webkit-scrollbar-thumb:hover { background: #6b7280; }
-.symbol-select-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px; color: var(--text-mute); font-size: 12px; text-decoration: none; }
+.symbol-select-option { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 6px 10px; color: var(--text-mute); font-size: 12px; text-decoration: none; flex: 1 1 auto; min-width: 0; background: transparent; border: 0; cursor: pointer; text-align: left; font: inherit; }
 .symbol-select-option.hl, .symbol-select-option:hover { background: #1c2026; color: var(--text); }
 .symbol-select-option.active { color: var(--accent); }
+.symbol-select-row { display: flex; align-items: center; padding-right: 4px; }
+.symbol-select-row.hl, .symbol-select-row:hover { background: #1c2026; }
+.symbol-select-row.hl .symbol-select-option, .symbol-select-row:hover .symbol-select-option { color: var(--text); background: transparent; }
+.symbol-select-row.active .symbol-select-option { color: var(--accent); }
+.symbol-select-star { width: 24px; height: 24px; display: inline-flex; align-items: center; justify-content: center; background: transparent; border: 0; cursor: pointer; color: var(--text-mute); font-size: 14px; line-height: 1; border-radius: 4px; padding: 0; flex-shrink: 0; }
+.symbol-select-star:hover:not(:disabled) { color: var(--warn); background: rgba(242, 204, 12, 0.10); }
+.symbol-select-star.on { color: var(--warn); }
+.symbol-select-star:disabled { cursor: not-allowed; opacity: 0.35; }
+.symbol-select-group { padding: 6px 10px 2px; color: var(--text-mute); font-size: 10px; letter-spacing: 0.05em; text-transform: uppercase; }
 .symbol-select-name { font-weight: 600; }
 .symbol-select-meta { color: var(--text-mute); font-size: 11px; }
 .symbol-select-empty { padding: 8px 10px; color: var(--text-mute); font-size: 12px; }

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { SymbolSearchSelect } from './symbol-search-select';
 import type { DashboardCategory, DashboardCategorySymbol } from '@/lib/api/client';
+import { MAX_WATCHLIST, addSymbol, removeSymbol } from '@/lib/watchlist';
 
 type Query = Record<string, string | undefined>;
 
@@ -32,16 +33,35 @@ export function DashboardControls({
   categories,
   activeCategory,
   activeCanonical,
+  watchlist,
+  onWatchlistChange,
 }: {
   query: Query;
   categories: DashboardCategory[];
   activeCategory: string;
   activeCanonical: string;
+  watchlist: string[];
+  onWatchlistChange: (next: string[]) => void;
 }) {
   const visibleSymbols: DashboardCategorySymbol[] =
     activeCategory === ALL_CATEGORY_KEY
       ? categories.flatMap(c => c.symbols)
       : categories.find(c => c.key === activeCategory)?.symbols ?? [];
+
+  // toggleFavorite is centralised here so the in-dropdown ★ button and
+  // the toolbar's "管理自选" share the same add/remove rules. URL +
+  // localStorage syncing is handled by the DashboardClient effect-bus
+  // that watches `watchlist`, so we only need to emit the new array.
+  function toggleFavorite(canonical: string) {
+    const upper = canonical.toUpperCase();
+    const isFav = watchlist.some(s => s.toUpperCase() === upper);
+    if (isFav) {
+      onWatchlistChange(removeSymbol(watchlist, upper));
+    } else {
+      if (watchlist.length >= MAX_WATCHLIST) return;
+      onWatchlistChange(addSymbol(watchlist, upper));
+    }
+  }
 
   return (
     <div className="global-controls">
@@ -72,7 +92,14 @@ export function DashboardControls({
       </span>
       <span className="control-label">
         <span>交易对</span>
-        <SymbolSearchSelect symbols={visibleSymbols} activeCanonical={activeCanonical} query={query} />
+        <SymbolSearchSelect
+          symbols={visibleSymbols}
+          activeCanonical={activeCanonical}
+          query={query}
+          watchlist={watchlist}
+          onToggleFavorite={toggleFavorite}
+          maxFavorites={MAX_WATCHLIST}
+        />
       </span>
       <Link className={`pill ${query.coreOnly === '1' ? 'active' : ''}`} href={href(query, { coreOnly: query.coreOnly === '1' ? undefined : '1' })}>
         仅看核心
