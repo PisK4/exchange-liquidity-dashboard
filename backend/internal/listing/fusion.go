@@ -1,0 +1,217 @@
+package listing
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"edgex-dashboard/backend/internal/config"
+)
+
+// ErrFusionFailClosed is returned when fusion cannot run because the
+// listed universe is unavailable. The engine logs this as a normal
+// outcome and increments source health, but no candidates are
+// produced.
+var ErrFusionFailClosed = errors.New("listing fusion fail-closed")
+
+// FusionDeps wires the moving parts fusion needs. Tests inject fake
+// universe loaders; production wiring uses
+// config.LoadListedUniverse from the dashboard runtime path.
+type FusionDeps struct {
+	LoadUniverse func() (*config.ListedUniverse, error)
+	Now          func() time.Time
+	// SignalBatchSize bounds the number of unfused signals processed
+	// per run; defaults to 500.
+	SignalBatchSize int
+}
+
+// FusionResult is what one fusion run produces. The engine writes
+// these counts onto its RunSummary.
+type FusionResult struct {
+	Signals    int
+	Candidates int
+	FailClosed string
+}
+
+// FuseSignals reads the next batch of unfused signals and groups them
+// by (canonical_symbol, market_surface, instrument_kind). Per group
+// the function derives evidence kind, runs the scoring gate, upserts
+// the candidate, links every signal, and marks each signal fused.
+//
+// Fail-closed rules:
+//  1. Universe failed to load or no edgeX base assets => skip the
+//     entire run, return ErrFusionFailClosed.
+//
+// The function intentionally does not modify config.LoadListedUniverse;
+// callers thread their own loader so the Top30 collector keeps its
+// existing fail-open behaviour while listing fusion is fail-closed.
+func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (FusionResult, error) {
+	if repo == nil {
+		return FusionResult{}, errors.New("listing fusion: repo is nil")
+	}
+	if deps.Now == nil {
+		deps.Now = func() time.Time { return time.Now().UTC() }
+	}
+	if deps.SignalBatchSize <= 0 {
+		deps.SignalBatchSize = 500
+	}
+	universe, err := deps.LoadUniverse()
+	if err != nil {
+		return FusionResult{FailClosed: "universe_load_error"}, fmt.Errorf("%w: %v", ErrFusionFailClosed, err)
+	}
+	if universe == nil || !universe.Loaded() || len(universe.BaseAssets("edgeX")) == 0 {
+		return FusionResult{FailClosed: "universe_not_loaded"}, ErrFusionFailClosed
+	}
+
+	signals, err := repo.ListUnfusedSignals(ctx, deps.SignalBatchSize)
+	if err != nil {
+		return FusionResult{}, fmt.Errorf("list unfused signals: %w", err)
+	}
+	if len(signals) == 0 {
+		return FusionResult{}, nil
+	}
+
+	type groupKey struct{ canonical, surface, kind string }
+	type group struct {
+		key          groupKey
+		signals      []SignalObservation
+		display      string
+		firstSeen    time.Time
+		lastSeen     time.Time
+		platforms    map[string]struct{}
+		hasInstrument bool
+		hasAnnouncement bool
+	}
+	groups := make(map[groupKey]*group)
+	order := make([]groupKey, 0)
+	for _, s := range signals {
+		key := groupKey{strings.ToUpper(s.CanonicalSymbol), s.MarketSurface, s.InstrumentKind}
+		g, ok := groups[key]
+		if !ok {
+			g = &group{key: key, platforms: make(map[string]struct{})}
+			groups[key] = g
+			order = append(order, key)
+		}
+		g.signals = append(g.signals, s)
+		if g.display == "" {
+			g.display = s.DisplaySymbol
+		}
+		if g.firstSeen.IsZero() || s.ObservedAt.Before(g.firstSeen) {
+			g.firstSeen = s.ObservedAt
+		}
+		if s.ObservedAt.After(g.lastSeen) {
+			g.lastSeen = s.ObservedAt
+		}
+		if s.SourcePlatform != "" {
+			g.platforms[strings.ToLower(s.SourcePlatform)] = struct{}{}
+		}
+		switch s.SignalType {
+		case SignalInstrumentDiff:
+			g.hasInstrument = true
+		case SignalAnnouncementListing:
+			g.hasAnnouncement = true
+		}
+	}
+
+	now := deps.Now()
+	out := FusionResult{}
+	for _, key := range order {
+		g := groups[key]
+		evidence := EvidenceInstrumentDiffOnly
+		switch {
+		case g.hasAnnouncement && g.hasInstrument:
+			evidence = EvidenceAnnouncementAndAPI
+		case g.hasAnnouncement && !g.hasInstrument:
+			evidence = EvidenceAnnouncementPendingAPI
+		}
+		platforms := keysSorted(g.platforms)
+		isListed := false
+		for _, base := range universe.BaseAssets("edgeX") {
+			if strings.EqualFold(base, g.key.canonical) {
+				isListed = true
+				break
+			}
+		}
+		score := ScoreCandidate(ScoreInput{
+			Platforms:      platforms,
+			EvidenceKind:   evidence,
+			EdgexListed:    isListed,
+			MarketSurface:  g.key.surface,
+			InstrumentKind: g.key.kind,
+		})
+		lifecycleStatus, lifecycleLabel := deriveLifecycle(evidence, isListed, score.LifecycleStatus, score.LifecycleStatusLabel)
+		upsert := CandidateUpsert{
+			CanonicalSymbol:      g.key.canonical,
+			DisplaySymbol:        g.display,
+			MarketSurface:        g.key.surface,
+			InstrumentKind:       g.key.kind,
+			LifecycleStatus:      lifecycleStatus,
+			LifecycleStatusLabel: lifecycleLabel,
+			EvidenceKind:         evidence,
+			ConfidenceLevel:      score.ConfidenceLevel,
+			BusinessScore:        score.BusinessScore,
+			BusinessScoreVersion: score.BusinessScoreVersion,
+			Recommendation:       score.Recommendation,
+			RecommendationLabel:  score.RecommendationLabel,
+			SourcePlatforms:      platforms,
+			ObservedAt:           g.lastSeen,
+		}
+		candidateID, err := repo.UpsertCandidate(ctx, upsert)
+		if err != nil {
+			return out, fmt.Errorf("upsert candidate %s: %w", g.key.canonical, err)
+		}
+		for _, s := range g.signals {
+			if err := repo.LinkCandidateSignal(ctx, candidateID, s.ID); err != nil {
+				return out, fmt.Errorf("link candidate %d signal %d: %w", candidateID, s.ID, err)
+			}
+		}
+		for _, s := range g.signals {
+			if err := repo.MarkSignalFused(ctx, s.ID, now); err != nil {
+				return out, fmt.Errorf("mark signal fused %d: %w", s.ID, err)
+			}
+		}
+		out.Candidates++
+		out.Signals += len(g.signals)
+	}
+	return out, nil
+}
+
+// deriveLifecycle picks the lifecycle_status enum for the candidate
+// row, preferring the score-derived AlreadyListed override when
+// edgeX already lists the asset.
+func deriveLifecycle(evidence string, edgexListed bool, scoreLifecycle, scoreLabel string) (string, string) {
+	if scoreLifecycle != "" {
+		return scoreLifecycle, scoreLabel
+	}
+	if edgexListed {
+		return LifecycleAlreadyListed, LifecycleStatusLabels[LifecycleAlreadyListed]
+	}
+	switch evidence {
+	case EvidenceAnnouncementAndAPI:
+		return LifecycleConfirmedListingCandidate, LifecycleStatusLabels[LifecycleConfirmedListingCandidate]
+	case EvidenceAnnouncementPendingAPI:
+		return LifecycleAnnouncedPendingAPI, LifecycleStatusLabels[LifecycleAnnouncedPendingAPI]
+	case EvidenceInstrumentDiffOnly:
+		return LifecycleAPIDetectedNoAnnouncement, LifecycleStatusLabels[LifecycleAPIDetectedNoAnnouncement]
+	}
+	return LifecycleObserved, LifecycleStatusLabels[LifecycleObserved]
+}
+
+func keysSorted(m map[string]struct{}) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	// deterministic order across runs and across stable assertions
+	if len(out) > 1 {
+		// inline sort.Strings via manual swap to avoid extra imports
+		for i := 1; i < len(out); i++ {
+			for j := i; j > 0 && out[j-1] > out[j]; j-- {
+				out[j-1], out[j] = out[j], out[j-1]
+			}
+		}
+	}
+	return out
+}
