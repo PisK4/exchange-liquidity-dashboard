@@ -1,0 +1,23 @@
+# Independent E2E stack for the Listing Agent. Project name MUST be
+# unique so it never collides with the production deploy/ stack:
+#
+#   docker compose -p listing-e2e -f backend/e2e/docker-compose.e2e.yaml up -d
+#
+# Port 13306 is published only on 127.0.0.1 so this stack never
+# competes with the dev MySQL on 3306 or 3307.
+services:
+  mysql:
+    image: mysql:8.0
+    container_name: listing-e2e-mysql
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: edgex_dashboard_e2e
+    ports:
+      - "127.0.0.1:13306:3306"
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 3s
+      timeout: 2s
+      retries: 30
+    tmpfs:
+      - /var/lib/mysql
