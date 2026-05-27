@@ -15,11 +15,12 @@ import { routeWatchlistAPI } from './fixtures-watchlist';
 //      defeat the whole purpose of this surface.
 //   4. Median + delta cards correctly surface as 8h-only with sample
 //      counts, because a cross-period median has no native counterpart.
-//   5. Δ-to-median BarChart — earlier "absolute 8h equivalent" form
-//      compressed every bar into a near-zero square and duplicated the
-//      detail table; this spec locks the rebased form (zero =
-//      competitor median, edgeX displayed against the comparison
-//      anchor) plus ascending-by-Δ sort order.
+//   5. The 跨平台 BarChart was removed in iteration round-2. Earlier
+//      cuts plotted absolute 8h equivalents and then Δ-to-median;
+//      both struggled at the ~±0.005% magnitudes typical of funding
+//      rates. The three KPI cards plus the detail table now carry the
+//      full story — this spec includes a negative assertion that no
+//      cross-platform comparison chart panel resurfaces.
 //   6. Detail table exposes the slim column set operators asked for
 //      after iteration round-1: 平台, 原生费率 (with period folded
 //      inline as "+0.0025% / 4h"), 8h 当量, vs 中位数 (8h), 排名 —
@@ -94,27 +95,16 @@ test('vs 竞品中位数 delta card shows signed 8h delta with directional glyph
   await expect(deltaCard).toContainText('-0.0040%');
 });
 
-test('Δ-to-median BarChart sorts ascending on Δ and shows Δ + 8h-equivalent labels', async ({ page }) => {
+test('no cross-platform BarChart panel resurfaces between KPI cards and detail table', async ({ page }) => {
   await page.goto('/?tab=funding');
   const block = page.getByTestId('funding-block-BTC');
-  // The Δ-to-median chart panel has panel-title "对竞品中位数偏离 (Δ, 8h)".
-  const chartPanel = block.locator('section.panel').filter({ hasText: '对竞品中位数偏离' }).first();
-  await expect(chartPanel).toBeVisible();
-  // Fixture median = 0.0090. Δ values:
-  //   edgeX  (0.0050 - 0.0090) = -0.0040
-  //   bybit  (0.0060 - 0.0090) = -0.0030
-  //   binance(0.0090 - 0.0090) =  0
-  //   okx    (0.0120 - 0.0090) = +0.0030
-  //   bingx  (unsupported, value undefined → falls to end via Infinity).
-  const labels = await chartPanel.locator('.bar-row b').allInnerTexts();
-  expect(labels.length).toBeGreaterThanOrEqual(4);
-  expect(labels[0]).toContain('Δ -0.0040%');
-  expect(labels[0]).toContain('8h +0.0050%');
-  expect(labels[1]).toContain('Δ -0.0030%');
-  expect(labels[2]).toContain('Δ +0.0000%');
-  expect(labels[3]).toContain('Δ +0.0030%');
-  // Footnote restates the comparison anchor.
-  await expect(chartPanel).toContainText('Δ = 8h 当量 − 竞品中位数');
+  // Iteration round-2 removed both the absolute-8h and Δ-to-median
+  // chart panels. Guard against either form coming back by asserting
+  // the historical panel titles are absent.
+  await expect(block.locator('text=跨平台资金费率对比')).toHaveCount(0);
+  await expect(block.locator('text=对竞品中位数偏离')).toHaveCount(0);
+  // No BarChart instance should be embedded inside the funding block.
+  await expect(block.locator('.bar-row')).toHaveCount(0);
 });
 
 test('detail table exposes slim 5-column shape (平台 / 原生费率 / 8h / vs 中位数 / 排名)', async ({ page }) => {

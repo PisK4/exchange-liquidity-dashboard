@@ -1,6 +1,5 @@
 'use client';
 
-import { BarChart } from '@/components/chart-primitives';
 import { PlatformCell } from '@/components/platform-cell';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import {
@@ -9,9 +8,8 @@ import {
   formatFundingDelta,
   formatFundingRate8h,
   formatNativeRateWithPeriod,
-  fundingDisplayStatus,
 } from '@/lib/funding-format';
-import type { FrontendURLLookup, LiquiditySnapshot, PlatformRow } from '@/lib/api/client';
+import type { FrontendURLLookup, LiquiditySnapshot } from '@/lib/api/client';
 
 // FundingBlock is the dedicated 资金费率 Tab counterpart of SymbolBlock /
 // QualityBlock. Each watchlist symbol renders into its own
@@ -23,39 +21,24 @@ import type { FrontendURLLookup, LiquiditySnapshot, PlatformRow } from '@/lib/ap
 //      8h small), competitor median (8h only — cross-period mix has no
 //      single native representation), and edgeX vs median delta (8h only,
 //      same reason).
-//   3. A span-24 BarChart of "Δ to competitor median" (rate_8h − median).
-//      Earlier iterations plotted absolute 8h equivalents, but the
-//      magnitudes are ~±0.005-0.01% and the visual rendering compressed
-//      every bar into an indistinguishable square around the signed
-//      zero line; worse, the right-side dual-format labels duplicated
-//      the detail table verbatim. Rebasing the chart against the
-//      competitor median moves zero to the comparison anchor operators
-//      care about ("vs the market") and dramatically expands the
-//      effective dynamic range — the signal the table cannot give.
-//      edgeX is colored accent green; competitors blue; unsupported grey.
-//   4. A span-24 detail table holding the contract-truthful data:
+//   3. A span-24 detail table holding the contract-truthful data:
 //      platform, native rate (with period folded inline as
 //      "+0.0025% / 4h"), 8h equivalent, vs median (8h), and rank.
-//      Earlier columns (native period, snapshot timestamp, status)
-//      were dropped per operator feedback — period is now inside the
-//      native-rate cell, the snapshot timestamp is redundant with the
-//      tab-level refresh tag, and missing data already surfaces as '—'.
+//      Earlier iterations carried a cross-platform BarChart between
+//      the KPI cards and the table — first plotting absolute 8h
+//      equivalents, then Δ to median. Both forms struggled at the
+//      ~±0.005% magnitudes typical of funding rates: the BarChart
+//      either compressed every bar into an indistinguishable square,
+//      or restated values already visible in the table. After two
+//      operator iterations we removed it entirely; the three KPI
+//      cards already answer the "where does edgeX sit" question and
+//      the detail table answers everything else.
 //
 // 数据通路：reuse the LiquiditySnapshot fan-out (liquidityByCanonical)
 // already produced by DashboardClient — its rows[].funding and
 // kpis.edgex_funding_rate_* / competitor_funding_rate_* fields are
 // populated by the same backend collector that feeds the Liquidity Tab.
 // No new HTTP endpoint or extra round-trip is introduced.
-
-const edgexAccent = '#6ccf8e';
-const competitorColor = '#5794f2';
-const unsupportedColor = '#6b7280';
-
-function pickFundingRows(rows: PlatformRow[]) {
-  return rows.filter(row => {
-    return row.funding && typeof row.funding.rate_8h === 'number' && Number.isFinite(row.funding.rate_8h);
-  });
-}
 
 function formatSampleCount(samples?: number) {
   if (typeof samples !== 'number' || samples < 0) return '0';
@@ -103,25 +86,14 @@ export function FundingBlock({
       ? edgeRate8h - median
       : null;
 
-  const usableRows = pickFundingRows(rows);
-  // Detail table keeps the absolute 8h-ascending order operators
-  // recognised from the prior bar chart.
+  // Detail table sorts ascending by 8h equivalent so the cheapest
+  // venues sit at the top. Rows without a usable rate sink to the
+  // bottom via Infinity so the visible series stays contiguous.
   const sortedRows = [...rows].sort((a, b) => {
     const av = typeof a.funding?.rate_8h === 'number' ? a.funding.rate_8h : Number.POSITIVE_INFINITY;
     const bv = typeof b.funding?.rate_8h === 'number' ? b.funding.rate_8h : Number.POSITIVE_INFINITY;
     return av - bv;
   });
-  // For the Δ-to-median chart we sort by delta (rate_8h - median)
-  // ascending so the most-below-median venues sit at the top and the
-  // most-above sit at the bottom. Rows without a usable rate fall to
-  // the bottom via Infinity so the visible series is contiguous.
-  const deltaRows = medianStatus === 'complete' && typeof median === 'number'
-    ? [...rows].sort((a, b) => {
-        const av = typeof a.funding?.rate_8h === 'number' ? a.funding.rate_8h - median : Number.POSITIVE_INFINITY;
-        const bv = typeof b.funding?.rate_8h === 'number' ? b.funding.rate_8h - median : Number.POSITIVE_INFINITY;
-        return av - bv;
-      })
-    : [];
 
   return (
     <section
@@ -183,58 +155,6 @@ export function FundingBlock({
               ? '正值 = 多头付出 > 竞品中位数'
               : '中位数缺失，无法计算 delta'}
           </div>
-        </section>
-        <section className="panel span-24 row-h-md">
-          <div className="panel-head">
-            <span className="panel-title">对竞品中位数偏离 (Δ, 8h)</span>
-            <span className="panel-sub">
-              · 零点 = 竞品中位数 · 正值 = 比竞品贵, 负值 = 比竞品便宜
-            </span>
-            <span className="panel-tag muted">5min 刷新</span>
-          </div>
-          {medianStatus !== 'complete' || typeof median !== 'number' ? (
-            <StatusEmptyState
-              status="stale"
-              message={
-                usableRows.length === 0
-                  ? '尚未观测到该 symbol 的 funding 数据，等待下一次拉取'
-                  : `竞品样本不足 3 家（${medianSamples}/3），暂不展示偏离图`
-              }
-            />
-          ) : (
-            <BarChart
-              signed
-              rows={deltaRows.map(row => {
-                const f = row.funding;
-                const usable = f && typeof f.rate_8h === 'number' && Number.isFinite(f.rate_8h);
-                const delta = usable ? (f!.rate_8h as number) - median : undefined;
-                let color: string;
-                if (!usable) {
-                  color = unsupportedColor;
-                } else if (row.platform === 'edgeX') {
-                  color = edgexAccent;
-                } else {
-                  color = competitorColor;
-                }
-                return {
-                  label: row.platform,
-                  value: delta,
-                  status: fundingDisplayStatus(f),
-                  color,
-                };
-              })}
-              format={(value, row) => {
-                const original = rows.find(r => r.platform === row.label);
-                const f = original?.funding;
-                const rate8h = formatFundingRate8h(f?.rate_8h);
-                const deltaLabel = formatFundingDelta(value);
-                return `Δ ${deltaLabel} (8h ${rate8h})`;
-              }}
-            />
-          )}
-          <p className="panel-foot-note">
-            Δ = 8h 当量 − 竞品中位数 ({formatFundingRate8h(median)})。括号内为该平台原始 8h 当量。
-          </p>
         </section>
         <section className="panel span-24">
           <div className="panel-head">
