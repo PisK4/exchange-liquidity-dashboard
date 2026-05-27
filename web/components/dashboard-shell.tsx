@@ -1,20 +1,16 @@
 import Link from 'next/link';
-import { BarChart } from '@/components/chart-primitives';
 import { DashboardControls, PillGroup } from '@/components/dashboard-controls';
-import { LineChart } from '@/components/line-chart';
 import { PlatformCell, platformDisplayName } from '@/components/platform-cell';
 import { ShareTrendChart, type ShareTrendPoint } from '@/components/share-trend-chart';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
-import { QualityCard } from '@/components/quality-card';
-import { QualityFundingRow } from '@/components/quality-funding-row';
+import { QualityBlock } from '@/components/quality-block';
 import { SymbolBlock } from '@/components/symbol-block';
 import { Top30DivergenceView } from '@/components/top30-divergence-view';
 import { WatchlistToolbar } from '@/components/watchlist-toolbar';
 import { resolveSymbolContext, type SymbolContext } from '@/components/lib/symbol-context';
-import { bp, money, moneyAuto, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformFundingRate, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30DivergenceSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
-import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingRate8h, fundingPeriodTooltip } from '@/lib/funding-format';
-import { WATCHLIST_DEFAULT_FALLBACK, normalizeSymbol } from '@/lib/watchlist';
+import { money, moneyAuto, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30DivergenceSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
+import { normalizeSymbol } from '@/lib/watchlist';
 
 type Query = Record<string, string | undefined>;
 
@@ -67,11 +63,10 @@ const tabs = [
   ['top30', 'Top30 成交量'],
 ] as const;
 
-// tierLabels / tierSeries / displayTierLabel are exported so the
-// WatchlistCard mini chart can render the exact same x-axis and series
-// shape as the V1 single-symbol detail view. Keeping one definition
-// avoids the two surfaces drifting (e.g. someone adding ±5% here but
-// not there).
+// tierLabels / tierSeries / displayTierLabel are exported so
+// SymbolBlock can share the same x-axis and series shape as the
+// V1 detail view. Keeping one definition prevents the two surfaces
+// from drifting (e.g. someone adding ±5% here but not there).
 export const tierLabels = ['0.05%', '0.10%', '1.00%', '2.00%'];
 const edgexAccent = '#6ccf8e';
 const shareWindowItems = [
@@ -131,49 +126,7 @@ function WindowPills({ active, query }: { active: string; query: Query }) {
   );
 }
 
-function signedPct(value?: number) {
-  if (typeof value !== 'number') return '—';
-  return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`;
-}
-
-function spreadUSD(row: PlatformRow, spreadBp?: number) {
-  return typeof spreadBp === 'number' && typeof row.mid_price === 'number' ? row.mid_price * spreadBp / 10_000 : undefined;
-}
-
-function slippageUSD(bucket: string, slippageBp?: number) {
-  const amount = Number(bucket);
-  return typeof slippageBp === 'number' && Number.isFinite(amount) ? amount * slippageBp / 10_000 : undefined;
-}
-
-function spreadUSDLabel(rowByPlatform: Map<string, PlatformRow>, label: string, spreadBp?: number) {
-  const row = rowByPlatform.get(label);
-  return usdLabel(row ? spreadUSD(row, spreadBp) : undefined);
-}
-
-function usdLabel(value?: number, digits = 2) {
-  return typeof value === 'number' ? `$${value.toFixed(digits)}` : '$—';
-}
-
-function bucketLabel(bucket: string) {
-  const amount = Number(bucket);
-  if (!Number.isFinite(amount)) return bucket;
-  if (amount >= 1_000_000) return `${amount / 1_000_000}M USD`;
-  return `${amount / 1_000}K USD`;
-}
-
-function SlippagePills({ buckets, active, query }: { buckets: string[]; active: string; query: Query }) {
-  return (
-    <span className="pill-group" aria-label="滑点档位">
-      {buckets.map(item => (
-        <Link className={`pill ${item === active ? 'active' : ''}`} href={withQuery(query, { tab: 'quality', bucket: item })} key={item}>
-          {bucketLabel(item)}
-        </Link>
-      ))}
-    </span>
-  );
-}
-
-function VerdictBadge({ verdict }: { verdict?: string }) {
+export function VerdictBadge({ verdict }: { verdict?: string }) {
   if (verdict === 'unsupported') return <StatusBadge status="unsupported" />;
   const label = verdict === 'healthy' || verdict === '健康' ? '健康' : verdict === 'watch' || verdict === '关注' ? '关注' : verdict === 'poor' || verdict === '较差' ? '较差' : verdict || '—';
   const cls = label === '健康' ? 'b-ok' : label === '关注' ? 'b-warn' : label === '较差' ? 'b-bad' : 'b-mute';
@@ -201,12 +154,6 @@ function depthStrictComplete(row: PlatformRow, tier: string) {
   if (!depth) return false;
   if (typeof depth.strict_complete === 'boolean') return depth.strict_complete;
   return isStrictStatus(tierStatus(row, tier));
-}
-
-function rowDisplayAvailable(row: PlatformRow) {
-  const tiers = Object.keys(row.depth_by_tier ?? {});
-  if (tiers.length === 0) return isDisplayableStatus(row.depth_status);
-  return tiers.some(tier => depthDisplayAvailable(row, tier));
 }
 
 function depthUnavailableTooltip(row: PlatformRow, tier: string) {
@@ -322,36 +269,10 @@ export function DashboardShell({
   );
 }
 
-function FundingKpiPanel({ kpis }: { kpis?: LiquiditySnapshot['kpis'] }) {
-  const status = kpis?.competitor_funding_rate_median_8h_status ?? 'stale';
-  const median = kpis?.competitor_funding_rate_median_8h;
-  const edgexRate = kpis?.edgex_funding_rate_8h;
-  const delta = typeof edgexRate === 'number' && typeof median === 'number' ? edgexRate - median : null;
-  return (
-    <section className="panel span-6 row-h-sm">
-      <div className="panel-head">
-        <span className="panel-title">
-          edgeX 资金费率
-          <span className="info-icon" aria-label="资金费率 sign convention" title={FUNDING_SIGN_CONVENTION_TOOLTIP}> ⓘ</span>
-        </span>
-        <span className="panel-tag">latest</span>
-      </div>
-      <div className={`big-number${typeof edgexRate === 'number' ? '' : ' muted'}`}>{formatFundingRate8h(edgexRate)}</div>
-      <div className="subline">
-        vs 竞品 median {status === 'complete' ? formatFundingDelta(delta) : '—'}
-      </div>
-    </section>
-  );
-}
-
-function FundingCell({ funding }: { funding?: PlatformFundingRate | null }) {
-  const usable = funding && typeof funding.rate_8h === 'number' && Number.isFinite(funding.rate_8h);
-  const display = usable ? formatFundingRate8h(funding?.rate_8h) : '—';
-  const tooltip = fundingPeriodTooltip(funding ?? undefined);
-  return (
-    <td className="num" title={tooltip}>{usable ? <span>{display}</span> : <span className="muted">{display}</span>}</td>
-  );
-}
+// FundingKpiPanel and FundingCell were removed when 资金费率 was
+// moved out of Quality Tab. They will be reintroduced (or replaced)
+// in the dedicated 资金费率 surface follow-up. quality-funding-row.tsx
+// is kept on disk for that follow-up to reuse.
 
 function LiquidityTab({
   data,
@@ -411,99 +332,53 @@ function LiquidityTab({
 
 type SymbolMeta = NonNullable<DashboardMeta['categories']>[number]['symbols'][number];
 
-function QualityTab({ data, query, bucket, symbolCtx, watchlist, allSymbols, onWatchlistChange }: { data: DashboardData; query: Query; bucket: string; symbolCtx: SymbolContext; watchlist: string[]; allSymbols: SymbolMeta[]; onWatchlistChange: (next: string[]) => void }) {
-  const rows = data.quality.rows ?? [];
-  const rowByPlatform = new Map(rows.map(row => [row.platform, row]));
+function QualityTab({ data, query: _query, bucket, symbolCtx, watchlist, allSymbols, onWatchlistChange }: { data: DashboardData; query: Query; bucket: string; symbolCtx: SymbolContext; watchlist: string[]; allSymbols: SymbolMeta[]; onWatchlistChange: (next: string[]) => void }) {
   const buckets = (data.quality.slippage_buckets_usd ?? [50_000, 100_000, 500_000, 1_000_000]).map(String);
-  const symbol = symbolCtx.displaySymbol;
 
-  // Quality watchlist mode mirrors LiquidityTab: when the watchlist
-  // holds 2+ symbols, the V1 detail (three BarCharts + 盘口质量明细
-  // table + funding span-24 row) collapses to a QualityCard grid.
-  // The global SlippagePills above the grid owns query.bucket so all
-  // cards render the same volume tier — the entire point of cards is
-  // 'compare the same metric across symbols side-by-side'.
-  if (watchlist.length > 1) {
-    return (
-      <div className="page-content active">
-        <div className="section-bar">
-          <span>3.5 · <b>盘口质量</b></span>
-          <div className="line" />
-          <span>{watchlist.length} 个标的 · 摘要视图 · 桶 {bucket === '1000000' ? '1M' : bucket === '500000' ? '500K' : bucket === '100000' ? '100K' : '50K'} USD</span>
-        </div>
-        <WatchlistToolbar items={watchlist} symbols={allSymbols} onChange={onWatchlistChange} />
-        <div className="quality-bucket-bar">
-          <span className="muted" style={{ fontSize: 12 }}>滑点桶 (USD):</span>
-          <SlippagePills buckets={buckets} active={bucket} query={query} />
-        </div>
-        <div className="grid">
-          {watchlist.map(sym => {
-            const canonical = normalizeSymbol(sym);
-            const meta = allSymbols.find(s => s.canonical.toUpperCase() === canonical);
-            // Merge worst_slippage_bp + verdict from the quality
-            // fan-out into the liquidity snapshot's rows so QualityCard
-            // can read spread/share KPIs from the liquidity side AND
-            // slippage/verdict from the quality side via a single
-            // PlatformRow-shaped object. Without this merge the mini
-            // bar chart degrades to "该标的暂无可绘制的滑点数据"
-            // because /api/snapshot/liquidity always reports null on
-            // those two fields in production.
-            const liq = data.liquidityByCanonical[canonical] ?? null;
-            const qual = data.qualityByCanonical[canonical] ?? null;
-            const snap = mergeQualityIntoLiquidity(liq, qual);
-            return (
-              <QualityCard
-                key={canonical}
-                canonical={canonical}
-                displayName={meta?.display_name ?? sym}
-                snapshot={snap}
-                bucket={bucket}
-                buckets={buckets}
-                onExpand={() => onWatchlistChange([canonical])}
-              />
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
+  // QualityTab now mirrors LiquidityTab's v2 layout: any watchlist
+  // length renders as a stack of QualityBlock × N (each one a
+  // span-24 frame containing its KPIs + three BarCharts + 盘口质量
+  // 明细 sub-table). 资金费率 has been moved out of the Quality Tab
+  // entirely — neither the per-row column nor the bottom span-24
+  // funding panel is rendered here; a dedicated 资金费率 surface is
+  // a planned follow-up.
+  const blocks = watchlist.length > 0 ? watchlist : [symbolCtx.canonical];
 
   return (
     <div className="page-content active">
-      <div className="section-bar"><span>3.5 · <b>盘口质量</b></span><div className="line" /><span>{symbolCtx.displayName} · Spread · Imbalance · 模拟下单滑点</span></div>
+      <div className="section-bar">
+        <span>3.5 · <b>盘口质量</b></span>
+        <div className="line" />
+        <span>{blocks.length} 个标的 · 完整视图</span>
+      </div>
       <WatchlistToolbar items={watchlist} symbols={allSymbols} onChange={onWatchlistChange} />
       <div className="grid">
-        <section className="panel span-8 row-h-md">
-          <div className="panel-head"><span className="panel-title">Spread (bp)</span><span className="panel-sub">· 买一/卖一相对价差</span></div>
-          <BarChart
-            rows={rows.map(row => ({ label: row.platform, value: rowDisplayAvailable(row) ? row.spread_bp : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : '#5794f2' }))}
-            sort="asc"
-            format={(value, row) => `${(value ?? 0).toFixed(2)} bp · ${spreadUSDLabel(rowByPlatform, row.label, value)}`}
-          />
-        </section>
-        <section className="panel span-8 row-h-md">
-          <div className="panel-head"><span className="panel-title">模拟下单滑点 (bp)</span><span className="panel-sub">· 相对中间价</span><div className="panel-actions"><SlippagePills buckets={buckets} active={bucket} query={query} /></div></div>
-          <div className="note">档位 <b>可配置</b>: 在运营后台 <code>config.slippage_buckets</code> 维护, 默认 [50K / 100K / 500K / 1M] USD。</div>
-          <BarChart
-            rows={rows.map(row => ({ label: row.platform, value: rowDisplayAvailable(row) ? row.worst_slippage_bp?.[bucket] : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : '#73bf69' }))}
-            sort="asc"
-            format={value => `${(value ?? 0).toFixed(2)} bp · ${usdLabel(slippageUSD(bucket, value), 0)}`}
-          />
-        </section>
-        <section className="panel span-8 row-h-md">
-          <div className="panel-head"><span className="panel-title">Bid/Ask Imbalance (%)</span><span className="panel-sub">· (BID深度-ASK深度)/合计</span></div>
-          <div className="note">正值=买侧偏厚, 负值=卖侧偏厚, |值| &gt; 30% 视为单边报价偏离健康区间。</div>
-          <BarChart
-            signed
-            rows={rows.map(row => ({ label: row.platform, value: rowDisplayAvailable(row) ? row.imbalance_pct : undefined, status: row.depth_status, color: row.platform === 'edgeX' ? edgexAccent : Math.abs(row.imbalance_pct ?? 0) > 30 ? '#f2495c' : '#5794f2' }))}
-            format={value => signedPct(value)}
-          />
-        </section>
-        <section className="panel span-24">
-          <div className="panel-head"><span className="panel-title">盘口质量明细</span><span className="panel-sub">· 每行=一个平台</span><span className="panel-tag muted">CSV 可导</span></div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>平台</th><th className="num">Spread (bp)</th><th className="num">Mid 价格</th><th className="num">Imbalance (%)</th><th className="num">滑点 50K (bp)</th><th className="num">滑点 100K (bp)</th><th className="num">滑点 500K (bp)</th><th className="num">滑点 1M (bp)</th><th className="num" title={FUNDING_SIGN_CONVENTION_TOOLTIP}>资金费率 (8h) ⓘ</th><th>盘口结论</th></tr></thead><tbody>{rows.map(row => <tr key={row.platform}><td><PlatformCell platform={row.platform} displaySymbol={symbol} lookup={data.lookup} /></td><td className="num">{bp(row.spread_bp)}</td><td className="num">{money(row.mid_price)}</td><td className="num">{signedPct(row.imbalance_pct)}</td><td className="num">{bp(row.worst_slippage_bp?.['50000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['100000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['500000'])}</td><td className="num">{bp(row.worst_slippage_bp?.['1000000'])}</td><FundingCell funding={row.funding} /><td><VerdictBadge verdict={row.verdict} /></td></tr>)}</tbody></table></div>
-        </section>
-        <QualityFundingRow rows={rows} kpis={data.quality.kpis} />
+        {blocks.map(sym => {
+          const canonical = normalizeSymbol(sym);
+          const meta = allSymbols.find(s => s.canonical.toUpperCase() === canonical);
+          // Merge worst_slippage_bp + verdict from the quality fan-out
+          // into the liquidity snapshot's rows so QualityBlock can read
+          // spread/mid/imbalance from the liquidity side AND slippage/
+          // verdict from the quality side via a single PlatformRow-
+          // shaped object. The merge is required because /api/snapshot/
+          // liquidity always reports null on slippage/verdict in prod.
+          const liq = data.liquidityByCanonical[canonical]
+            ?? (canonical === symbolCtx.canonical.toUpperCase() ? data.liquidity : null);
+          const qual = data.qualityByCanonical[canonical]
+            ?? (canonical === symbolCtx.canonical.toUpperCase() ? data.quality : null);
+          const snap = mergeQualityIntoLiquidity(liq, qual);
+          return (
+            <QualityBlock
+              key={canonical}
+              canonical={canonical}
+              displayName={meta?.display_name ?? sym}
+              snapshot={snap}
+              buckets={buckets}
+              lookup={data.lookup}
+              defaultBucket={bucket}
+            />
+          );
+        })}
       </div>
     </div>
   );
