@@ -2,6 +2,10 @@
 
 import { useState } from 'react';
 import { displayTierLabel, tierLabels, tierSeries } from '@/components/dashboard-shell';
+// 已隐藏的 Y 轴方案对照预览（与下方 JSX 注释中的 <SqrtLineChart> /
+// <DualRangeLineChart> 配对，回滚时同步取消注释）：
+// import { DualRangeLineChart } from '@/components/dual-range-line-chart';
+// import { SqrtLineChart } from '@/components/sqrt-line-chart';
 import { LineChart } from '@/components/line-chart';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { bp, moneyAuto, pct, ratio, type FrontendURLLookup, type LiquiditySnapshot } from '@/lib/api/client';
@@ -159,6 +163,42 @@ export function SymbolBlock({
             series={tierSeries(rows, 'total_usd')}
           />
         </section>
+        {/*
+          已隐藏：方案 Sqrt Y 轴预览（保留 JSX 以便日后回滚 / 重新评估）
+          - Sqrt 通过数据预变换 + Y tick 平方反变换实现
+          - 大档位被压缩、低档位被抬起；edgeX 不再贴 X 轴
+          - Y 轴 tick / tooltip 仍显示真实 USD（sqrt 仅用于绘制）
+          - 完全决策后可与 sqrt-line-chart.tsx 一并清理
+        <section className="panel span-24 row-h-md">
+          <div className="panel-head">
+            <span className="panel-title">方案 Sqrt Y 轴预览 · 合计深度 BID + ASK</span>
+            <span className="panel-sub">· 与上方线性 Y 轴对照评估</span>
+          </div>
+          <SqrtLineChart
+            ariaLabel={`${displayName} Sqrt Y 轴预览 合计深度`}
+            labels={tierLabels.map(displayTierLabel)}
+            series={tierSeries(rows, 'total_usd')}
+          />
+        </section>
+        */}
+        {/*
+          已隐藏：方案 DualRange 双面板预览（保留 JSX 以便日后回滚 / 重新评估）
+          - 左：低价档位 ±0.05% / ±0.10%（贴近盘口），Y 轴自适应小量级
+          - 右：高价档位 ±1% / ±2%（远离盘口），Y 轴自适应大量级
+          - 两侧各自独立线性 Y 轴；保留绝对 USD 语义
+          - 完全决策后可与 dual-range-line-chart.tsx 一并清理
+        <section className="panel span-24">
+          <div className="panel-head">
+            <span className="panel-title">方案 DualRange 双面板预览 · 合计深度 BID + ASK</span>
+            <span className="panel-sub">· 低/高档位拆分，各自独立 Y 轴</span>
+          </div>
+          <DualRangeLineChart
+            ariaLabel={`${displayName} DualRange 预览 合计深度`}
+            labels={tierLabels.map(displayTierLabel)}
+            series={tierSeries(rows, 'total_usd')}
+          />
+        </section>
+        */}
         {/*
         已隐藏：深度明细 · 平台 × 档位 (USD) 表格
         <section className="panel span-24">

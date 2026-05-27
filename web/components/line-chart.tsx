@@ -80,6 +80,13 @@ export function LineChart({ ariaLabel, labels, series, unit = 'USD', compact = f
     if (!canvas) return;
 
     chartRef.current?.destroy();
+    // 视觉权重：
+    //   edgeX  → V1 默认权重（3px 实线），不 hero 加粗、不画静态点
+    //   竞品   → 1.5px @ 0.42 alpha 线，退到背景层、不画静态点
+    //   所有平台静态 pointRadius=0 让画面只剩"线"，避免点扎堆相互盖；
+    //   pointHoverRadius 保留 4–5px 以便 hover 触发 tooltip
+    // compact 模式（dead path）参数保持原样不破坏未来回滚。
+    const competitorLineAlpha = 0.42;
     const config: ChartConfiguration<'line', Array<number | null>, string> = {
       type: 'line',
       data: {
@@ -87,18 +94,36 @@ export function LineChart({ ariaLabel, labels, series, unit = 'USD', compact = f
         datasets: series.map(item => {
           const color = colorFor(item.label);
           const isSelf = item.label === 'edgeX';
+          if (isSelf) {
+            return {
+              label: item.label,
+              data: item.values.map(value => (typeof value === 'number' ? value : null)),
+              borderColor: color,
+              backgroundColor: rgba(color, 0.35),
+              borderWidth: compact ? 2 : 3,
+              pointRadius: compact ? 2.5 : 0,
+              pointHoverRadius: compact ? 3.5 : 5,
+              pointBackgroundColor: color,
+              pointBorderColor: color,
+              pointBorderWidth: 0,
+              tension: 0.35,
+              fill: false,
+              spanGaps: false,
+            };
+          }
           return {
             label: item.label,
             data: item.values.map(value => (typeof value === 'number' ? value : null)),
-            borderColor: color,
-            backgroundColor: rgba(color, isSelf ? 0.35 : 0.12),
-            borderWidth: isSelf ? (compact ? 2 : 3) : (compact ? 1 : 1.6),
-            pointRadius: isSelf ? (compact ? 2.5 : 4) : (compact ? 1.2 : 2),
-            pointHoverRadius: isSelf ? (compact ? 3.5 : 5) : (compact ? 2 : 3),
+            borderColor: compact ? color : rgba(color, competitorLineAlpha),
+            backgroundColor: compact ? rgba(color, 0.12) : rgba(color, competitorLineAlpha),
+            borderWidth: compact ? 1 : 1.5,
+            pointRadius: compact ? 1.2 : 0,
+            pointHoverRadius: compact ? 2 : 4,
             pointBackgroundColor: color,
             pointBorderColor: color,
+            pointBorderWidth: 0,
             tension: 0.35,
-            fill: !compact,
+            fill: false,
             spanGaps: false,
           };
         }),
@@ -106,6 +131,10 @@ export function LineChart({ ariaLabel, labels, series, unit = 'USD', compact = f
       options: {
         responsive: true,
         maintainAspectRatio: false,
+        // 关闭 entry / data-update 动画。父组件重渲染会反复触发 1000ms
+        // 缓动，导致重复 destroy + recreate Chart 视觉上像图自己在抖。
+        animation: false,
+        layout: compact ? undefined : { padding: { top: 8, right: 12, bottom: 4, left: 4 } },
         interaction: { mode: 'index', intersect: false },
         scales: {
           x: {

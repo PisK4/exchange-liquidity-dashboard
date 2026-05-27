@@ -4,10 +4,12 @@ const palette: Record<string, string> = {
   okx: '#4f8cff',
   bybit: '#ffd166',
   bitget: '#00d4ff',
-  bingx: '#35d07f',
+  // bingx 原 #35d07f 与 edgeX 中绿撞色，挪到天蓝避开 edgeX 绿主色域。
+  bingx: '#7dd3fc',
   mexc: '#21c1d6',
   gate: '#7c5cff',
-  hyperliquid: '#00e5a8',
+  // hyperliquid 原 #00e5a8 也跟 edgeX 撞色；改成珊瑚粉，跳出蓝/绿/青家族。
+  hyperliquid: '#fb7185',
   lighter: '#f2495c',
 };
 
