@@ -75,13 +75,13 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 
 	type groupKey struct{ canonical, surface, kind string }
 	type group struct {
-		key          groupKey
-		signals      []SignalObservation
-		display      string
-		firstSeen    time.Time
-		lastSeen     time.Time
-		platforms    map[string]struct{}
-		hasInstrument bool
+		key             groupKey
+		signals         []SignalObservation
+		display         string
+		firstSeen       time.Time
+		lastSeen        time.Time
+		platforms       map[string]struct{}
+		hasInstrument   bool
 		hasAnnouncement bool
 	}
 	groups := make(map[groupKey]*group)

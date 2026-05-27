@@ -56,12 +56,12 @@ const (
 // Signal-subtype constants. Mirror domain.go so the two layers stay
 // aligned.
 const (
-	SubtypePerpListing  = "perp_listing_announcement"
-	SubtypePreMarket    = "pre_market_announcement"
-	SubtypeStockPerp    = "stock_perp_announcement"
-	SubtypeSpotListing  = "spot_listing_announcement"
-	SubtypeIrrelevant   = "irrelevant_announcement"
-	SubtypeParseFailed  = "parse_failed"
+	SubtypePerpListing = "perp_listing_announcement"
+	SubtypePreMarket   = "pre_market_announcement"
+	SubtypeStockPerp   = "stock_perp_announcement"
+	SubtypeSpotListing = "spot_listing_announcement"
+	SubtypeIrrelevant  = "irrelevant_announcement"
+	SubtypeParseFailed = "parse_failed"
 )
 
 // SchemaDriftError is returned by parsers when the upstream schema no

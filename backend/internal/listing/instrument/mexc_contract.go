@@ -6,11 +6,11 @@ import (
 )
 
 type mexcContractRaw struct {
-	Symbol      string  `json:"symbol"`
-	BaseCoin    string  `json:"baseCoin"`
-	QuoteCoin   string  `json:"quoteCoin"`
-	State       *int    `json:"state"`
-	OpeningTime int64   `json:"openingTime"`
+	Symbol       string  `json:"symbol"`
+	BaseCoin     string  `json:"baseCoin"`
+	QuoteCoin    string  `json:"quoteCoin"`
+	State        *int    `json:"state"`
+	OpeningTime  int64   `json:"openingTime"`
 	ContractSize float64 `json:"contractSize"`
 }
 

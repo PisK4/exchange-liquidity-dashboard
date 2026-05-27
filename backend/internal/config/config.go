@@ -61,12 +61,12 @@ type Runtime struct {
 // 2026-05-27-Listing-Agent-P1-主链路方案设计.md §16 and §23 for the
 // authoritative knobs.
 type ListingAgentConfig struct {
-	Enabled   bool                    `json:"enabled"`
-	Worker    ListingWorkerConfig     `json:"worker"`
-	Sources   ListingSourcesConfig    `json:"sources"`
-	Delivery  ListingDeliveryConfig   `json:"delivery"`
-	Top30Push ListingTop30PushConfig  `json:"top30_push"`
-	Candidate ListingCandidateConfig  `json:"candidate"`
+	Enabled   bool                   `json:"enabled"`
+	Worker    ListingWorkerConfig    `json:"worker"`
+	Sources   ListingSourcesConfig   `json:"sources"`
+	Delivery  ListingDeliveryConfig  `json:"delivery"`
+	Top30Push ListingTop30PushConfig `json:"top30_push"`
+	Candidate ListingCandidateConfig `json:"candidate"`
 }
 
 // ListingWorkerConfig controls the per-source worker lease and the
@@ -114,9 +114,10 @@ type ListingSourcePollConfig struct {
 
 // ListingDeliveryConfig configures the shared delivery outbox worker.
 // Top30WebhookURL / Top30WebhookURLEnv resolve at startup:
-// - if Top30WebhookURL is set, it wins;
-// - otherwise the environment variable named by Top30WebhookURLEnv is
-//   resolved at engine start time.
+//   - if Top30WebhookURL is set, it wins;
+//   - otherwise the environment variable named by Top30WebhookURLEnv is
+//     resolved at engine start time.
+//
 // The webhook URL is never persisted to MySQL or printed in logs (see
 // repo CLAUDE.md §coding_guidelines). Top30WebhookSecret is forwarded
 // to the Lark sign helper when non-empty.

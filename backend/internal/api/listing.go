@@ -138,17 +138,17 @@ func (s *Server) listingSourceHealth(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, map[string]any{
-			"source_key":               row.SourceKey,
-			"source_type":              row.SourceType,
-			"platform":                 row.Platform,
-			"status":                   row.Status,
-			"last_success_at":          row.LastSuccessAt,
-			"last_error_at":            row.LastErrorAt,
-			"consecutive_error_count":  row.ConsecutiveErrorCount,
-			"schema_drift_count":       row.SchemaDriftCount,
-			"disabled_until":           row.DisabledUntil,
-			"last_error":               row.LastError,
-			"updated_at":               row.UpdatedAt,
+			"source_key":              row.SourceKey,
+			"source_type":             row.SourceType,
+			"platform":                row.Platform,
+			"status":                  row.Status,
+			"last_success_at":         row.LastSuccessAt,
+			"last_error_at":           row.LastErrorAt,
+			"consecutive_error_count": row.ConsecutiveErrorCount,
+			"schema_drift_count":      row.SchemaDriftCount,
+			"disabled_until":          row.DisabledUntil,
+			"last_error":              row.LastError,
+			"updated_at":              row.UpdatedAt,
 		})
 	}
 	writeJSON(w, map[string]any{"sources": out, "count": len(out)})
@@ -177,19 +177,19 @@ func (s *Server) listingDeliveries(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		out = append(out, map[string]any{
-			"id":               row.ID,
-			"event_type":       row.EventType,
-			"dedupe_key":       row.DedupeKey,
-			"target_channel":   row.TargetChannel,
-			"status":           row.Status,
-			"attempt_count":    row.AttemptCount,
-			"max_attempts":     row.MaxAttempts,
-			"next_attempt_at":  row.NextAttemptAt,
-			"payload":          json.RawMessage(row.PayloadJSON),
-			"last_error":       row.LastError,
-			"sent_at":          row.SentAt,
-			"created_at":       row.CreatedAt,
-			"updated_at":       row.UpdatedAt,
+			"id":              row.ID,
+			"event_type":      row.EventType,
+			"dedupe_key":      row.DedupeKey,
+			"target_channel":  row.TargetChannel,
+			"status":          row.Status,
+			"attempt_count":   row.AttemptCount,
+			"max_attempts":    row.MaxAttempts,
+			"next_attempt_at": row.NextAttemptAt,
+			"payload":         json.RawMessage(row.PayloadJSON),
+			"last_error":      row.LastError,
+			"sent_at":         row.SentAt,
+			"created_at":      row.CreatedAt,
+			"updated_at":      row.UpdatedAt,
 		})
 	}
 	writeJSON(w, map[string]any{"deliveries": out, "count": len(out)})
@@ -232,22 +232,22 @@ func signalsToWire(in []listing.SignalObservation, includeRaw bool) []map[string
 	out := make([]map[string]any, 0, len(in))
 	for _, s := range in {
 		row := map[string]any{
-			"id":                 s.ID,
-			"signal_type":        s.SignalType,
-			"signal_subtype":     s.SignalSubtype,
-			"source_platform":    s.SourcePlatform,
-			"market_type":        s.MarketType,
-			"api_symbol":         s.APISymbol,
-			"canonical_symbol":   s.CanonicalSymbol,
-			"display_symbol":     s.DisplaySymbol,
-			"market_surface":     s.MarketSurface,
-			"instrument_kind":    s.InstrumentKind,
-			"status_normalized":  s.StatusNormalized,
-			"confidence":         s.Confidence,
-			"observed_at":        s.ObservedAt,
-			"published_at":       s.PublishedAt,
-			"listing_time_ts":    s.ListingTimeTS,
-			"fingerprint":        s.Fingerprint,
+			"id":                s.ID,
+			"signal_type":       s.SignalType,
+			"signal_subtype":    s.SignalSubtype,
+			"source_platform":   s.SourcePlatform,
+			"market_type":       s.MarketType,
+			"api_symbol":        s.APISymbol,
+			"canonical_symbol":  s.CanonicalSymbol,
+			"display_symbol":    s.DisplaySymbol,
+			"market_surface":    s.MarketSurface,
+			"instrument_kind":   s.InstrumentKind,
+			"status_normalized": s.StatusNormalized,
+			"confidence":        s.Confidence,
+			"observed_at":       s.ObservedAt,
+			"published_at":      s.PublishedAt,
+			"listing_time_ts":   s.ListingTimeTS,
+			"fingerprint":       s.Fingerprint,
 		}
 		if len(s.PayloadJSON) > 0 {
 			row["payload"] = json.RawMessage(s.PayloadJSON)

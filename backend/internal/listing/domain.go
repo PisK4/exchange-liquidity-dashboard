@@ -41,12 +41,12 @@ const (
 // Announcement signal subtypes. Only canonical perp listings drive
 // candidate creation; everything else is parsed for the audit trail.
 const (
-	AnnouncementPerpListing    = "perp_listing_announcement"
-	AnnouncementPreMarket      = "pre_market_announcement"
-	AnnouncementStockPerp      = "stock_perp_announcement"
-	AnnouncementSpotListing    = "spot_listing_announcement"
-	AnnouncementIrrelevant     = "irrelevant_announcement"
-	AnnouncementParseFailed    = "parse_failed"
+	AnnouncementPerpListing = "perp_listing_announcement"
+	AnnouncementPreMarket   = "pre_market_announcement"
+	AnnouncementStockPerp   = "stock_perp_announcement"
+	AnnouncementSpotListing = "spot_listing_announcement"
+	AnnouncementIrrelevant  = "irrelevant_announcement"
+	AnnouncementParseFailed = "parse_failed"
 )
 
 // Status normalisation across all instrument sources. MEXC unknown
@@ -80,11 +80,11 @@ const (
 
 // Lifecycle status enum (see §6.5).
 const (
-	LifecycleObserved                       = "observed"
-	LifecycleAnnouncedPendingAPI            = "announced_pending_api_confirmation"
-	LifecycleAPIDetectedNoAnnouncement      = "api_detected_no_announcement"
-	LifecycleConfirmedListingCandidate      = "confirmed_listing_candidate"
-	LifecycleAlreadyListed                  = "already_listed"
+	LifecycleObserved                  = "observed"
+	LifecycleAnnouncedPendingAPI       = "announced_pending_api_confirmation"
+	LifecycleAPIDetectedNoAnnouncement = "api_detected_no_announcement"
+	LifecycleConfirmedListingCandidate = "confirmed_listing_candidate"
+	LifecycleAlreadyListed             = "already_listed"
 )
 
 // Recommendation enum + operator-facing labels (see §23.5).
@@ -128,13 +128,13 @@ const (
 
 // SourceState status enum (see §15 t_listing_source_state).
 const (
-	SourceStatusOK              = "ok"
-	SourceStatusStale           = "stale"
-	SourceStatusError           = "error"
-	SourceStatusSchemaDrift     = "schema_drift"
-	SourceStatusLeaseSkipped    = "lease_skipped"
-	SourceStatusDisabledUntil   = "disabled_until"
-	SourceStatusFailClosed      = "fail_closed"
+	SourceStatusOK            = "ok"
+	SourceStatusStale         = "stale"
+	SourceStatusError         = "error"
+	SourceStatusSchemaDrift   = "schema_drift"
+	SourceStatusLeaseSkipped  = "lease_skipped"
+	SourceStatusDisabledUntil = "disabled_until"
+	SourceStatusFailClosed    = "fail_closed"
 )
 
 // SourceType enum used by t_listing_source_state.
@@ -157,23 +157,23 @@ const (
 
 // Candidate is the read model of t_listing_candidate.
 type Candidate struct {
-	ID                    int64
-	CanonicalSymbol       string
-	DisplaySymbol         string
-	MarketSurface         string
-	InstrumentKind        string
-	LifecycleStatus       string
-	LifecycleStatusLabel  string
-	EvidenceKind          string
-	ConfidenceLevel       string
-	BusinessScore         *float64
-	BusinessScoreVersion  string
-	Recommendation        string
-	RecommendationLabel   string
-	SourcePlatforms       []string
-	Top30Enrichment       json.RawMessage
-	FirstObservedAt       time.Time
-	LastObservedAt        time.Time
+	ID                   int64
+	CanonicalSymbol      string
+	DisplaySymbol        string
+	MarketSurface        string
+	InstrumentKind       string
+	LifecycleStatus      string
+	LifecycleStatusLabel string
+	EvidenceKind         string
+	ConfidenceLevel      string
+	BusinessScore        *float64
+	BusinessScoreVersion string
+	Recommendation       string
+	RecommendationLabel  string
+	SourcePlatforms      []string
+	Top30Enrichment      json.RawMessage
+	FirstObservedAt      time.Time
+	LastObservedAt       time.Time
 }
 
 // SignalObservation is the read/write model of t_listing_signal_observation.
@@ -256,11 +256,11 @@ type DeliveryAttempt struct {
 
 // CandidateFilter narrows the list returned by Repository.ListCandidates.
 type CandidateFilter struct {
-	Limit         int
-	Status        string
-	EvidenceKind  string
-	Platform      string
-	Symbol        string
+	Limit        int
+	Status       string
+	EvidenceKind string
+	Platform     string
+	Symbol       string
 }
 
 // DeliveryFilter narrows the list returned by Repository.ListDeliveries.

@@ -237,7 +237,7 @@ func TestEnrichFundingRankBySignSkipsIncompleteMissingAndZero(t *testing.T) {
 		makeRow("binance", ptr(0.0090), domain.StatusComplete),
 		makeRow("bingx", nil, domain.StatusUnsupported),
 		makeRow("mexc", ptr(0.0010), domain.StatusStale),
-		makeRow("lighter", ptr(0.0), domain.StatusComplete), // exactly zero → neither cohort
+		makeRow("lighter", ptr(0.0), domain.StatusComplete),    // exactly zero → neither cohort
 		{Platform: "kraken", DisplaySymbol: "BTC-USDT (perp)"}, // funding nil
 		makeRow("edgeX", ptr(0.0050), domain.StatusComplete),
 	}

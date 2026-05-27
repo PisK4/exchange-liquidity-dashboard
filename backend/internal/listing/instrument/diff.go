@@ -8,18 +8,18 @@ import "time"
 // turn the event into a SignalObservation without re-reading the
 // snapshot row.
 type DiffEvent struct {
-	Subtype          string
-	Platform         string
-	APISymbol        string
-	CanonicalSymbol  string
-	MarketSurface    string
-	InstrumentKind   string
-	StatusFrom       string
-	StatusTo         string
-	ListingTimeFrom  *time.Time
-	ListingTimeTo    *time.Time
-	RawJSONHashFrom  string
-	RawJSONHashTo    string
+	Subtype         string
+	Platform        string
+	APISymbol       string
+	CanonicalSymbol string
+	MarketSurface   string
+	InstrumentKind  string
+	StatusFrom      string
+	StatusTo        string
+	ListingTimeFrom *time.Time
+	ListingTimeTo   *time.Time
+	RawJSONHashFrom string
+	RawJSONHashTo   string
 }
 
 // Diff compares the previous snapshot (nil for first sighting) with

@@ -48,11 +48,11 @@ func TestBuildTop30PushEventsExcludesListedAndUnknown(t *testing.T) {
 
 func TestRenderTop30PostMessageContainsSymbolAndAction(t *testing.T) {
 	event := Top30PushEvent{
-		Symbol:        "ABC-USDT (perp)",
-		Action:        "优先上架",
-		MaxCoverage:   7,
-		DashboardURL:  "https://dashboard.example.test/top30?symbol=ABC-USDT",
-		SnapshotDate:  "2026-05-27",
+		Symbol:       "ABC-USDT (perp)",
+		Action:       "优先上架",
+		MaxCoverage:  7,
+		DashboardURL: "https://dashboard.example.test/top30?symbol=ABC-USDT",
+		SnapshotDate: "2026-05-27",
 		Platforms: []Top30PlatformEvidence{
 			{Platform: "binance", Rank: 3, Volume24HUSD: 1000},
 			{Platform: "okx", Rank: 8, Volume24HUSD: 800},

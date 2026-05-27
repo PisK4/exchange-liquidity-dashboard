@@ -200,10 +200,10 @@ type PlatformSnapshot struct {
 	//     pull the median toward itself and dampen the diff.
 	//   - Slippage diff is published per bucket; the frontend joins
 	//     by the same bucket key it uses for WorstSlippageBP.
-	VsMedianSpreadBP   *float64           `json:"vs_median_spread_bp,omitempty"`
-	VsMedianSlippageBP map[string]float64 `json:"vs_median_slippage_bp,omitempty"`
-	Verdict            string             `json:"verdict,omitempty"`
-	Funding            *PlatformFundingRate    `json:"funding,omitempty"`
+	VsMedianSpreadBP   *float64             `json:"vs_median_spread_bp,omitempty"`
+	VsMedianSlippageBP map[string]float64   `json:"vs_median_slippage_bp,omitempty"`
+	Verdict            string               `json:"verdict,omitempty"`
+	Funding            *PlatformFundingRate `json:"funding,omitempty"`
 }
 
 // PlatformFundingRate carries the funding-rate observation for a single
