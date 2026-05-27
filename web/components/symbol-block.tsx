@@ -198,15 +198,6 @@ export function SymbolBlock({
             {kpis?.edgex_24h_share_status === 'stale'
               ? '—'
               : pct(kpis?.edgex_24h_share_pct)}
-            {kpis?.edgex_24h_share_status === 'partial' ? (
-              <span
-                className="panel-tag muted"
-                style={{ marginLeft: 6 }}
-                title="edgeX 原生 ticker 暂不可用，已用 CoinGecko 当日数据兜底"
-              >
-                via CG
-              </span>
-            ) : null}
           </div>
         </section>
         {/*
