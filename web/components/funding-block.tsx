@@ -2,7 +2,6 @@
 
 import { BarChart } from '@/components/chart-primitives';
 import { PlatformCell } from '@/components/platform-cell';
-import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import {
   FUNDING_SIGN_CONVENTION_TOOLTIP,
@@ -24,15 +23,23 @@ import type { FrontendURLLookup, LiquiditySnapshot, PlatformRow } from '@/lib/ap
 //      8h small), competitor median (8h only — cross-period mix has no
 //      single native representation), and edgeX vs median delta (8h only,
 //      same reason).
-//   3. A span-24 cross-platform BarChart, sorted ascending on 8h
-//      equivalent (= bar length) so "who is cheapest" is visually
-//      faithful. Each row's printed label is dual-format:
-//          big   = native rate "+0.0050% / 4h" (contract-truthful)
-//          small = "8h ≈ +0.0100%"             (comparison anchor)
-//      A footnote restates the rule once so operators don't
-//      misinterpret bar lengths.
-//   4. A span-24 detail table mirroring the chart but exposing
-//      vs-median, rank, and snapshot timestamp columns.
+//   3. A span-24 BarChart of "Δ to competitor median" (rate_8h − median).
+//      Earlier iterations plotted absolute 8h equivalents, but the
+//      magnitudes are ~±0.005-0.01% and the visual rendering compressed
+//      every bar into an indistinguishable square around the signed
+//      zero line; worse, the right-side dual-format labels duplicated
+//      the detail table verbatim. Rebasing the chart against the
+//      competitor median moves zero to the comparison anchor operators
+//      care about ("vs the market") and dramatically expands the
+//      effective dynamic range — the signal the table cannot give.
+//      edgeX is colored accent green; competitors blue; unsupported grey.
+//   4. A span-24 detail table holding the contract-truthful data:
+//      platform, native rate (with period folded inline as
+//      "+0.0025% / 4h"), 8h equivalent, vs median (8h), and rank.
+//      Earlier columns (native period, snapshot timestamp, status)
+//      were dropped per operator feedback — period is now inside the
+//      native-rate cell, the snapshot timestamp is redundant with the
+//      tab-level refresh tag, and missing data already surfaces as '—'.
 //
 // 数据通路：reuse the LiquiditySnapshot fan-out (liquidityByCanonical)
 // already produced by DashboardClient — its rows[].funding and
@@ -53,13 +60,6 @@ function pickFundingRows(rows: PlatformRow[]) {
 function formatSampleCount(samples?: number) {
   if (typeof samples !== 'number' || samples < 0) return '0';
   return String(samples);
-}
-
-function formatTimestamp(ts?: string) {
-  if (!ts) return '—';
-  const date = new Date(ts);
-  if (Number.isNaN(date.getTime())) return '—';
-  return date.toLocaleString('zh-CN', { hour12: false });
 }
 
 export function FundingBlock({
@@ -104,11 +104,24 @@ export function FundingBlock({
       : null;
 
   const usableRows = pickFundingRows(rows);
+  // Detail table keeps the absolute 8h-ascending order operators
+  // recognised from the prior bar chart.
   const sortedRows = [...rows].sort((a, b) => {
     const av = typeof a.funding?.rate_8h === 'number' ? a.funding.rate_8h : Number.POSITIVE_INFINITY;
     const bv = typeof b.funding?.rate_8h === 'number' ? b.funding.rate_8h : Number.POSITIVE_INFINITY;
     return av - bv;
   });
+  // For the Δ-to-median chart we sort by delta (rate_8h - median)
+  // ascending so the most-below-median venues sit at the top and the
+  // most-above sit at the bottom. Rows without a usable rate fall to
+  // the bottom via Infinity so the visible series is contiguous.
+  const deltaRows = medianStatus === 'complete' && typeof median === 'number'
+    ? [...rows].sort((a, b) => {
+        const av = typeof a.funding?.rate_8h === 'number' ? a.funding.rate_8h - median : Number.POSITIVE_INFINITY;
+        const bv = typeof b.funding?.rate_8h === 'number' ? b.funding.rate_8h - median : Number.POSITIVE_INFINITY;
+        return av - bv;
+      })
+    : [];
 
   return (
     <section
@@ -173,21 +186,28 @@ export function FundingBlock({
         </section>
         <section className="panel span-24 row-h-md">
           <div className="panel-head">
-            <span className="panel-title">跨平台资金费率对比</span>
-            <span className="panel-sub">· 条形按 8h 当量升序排序</span>
+            <span className="panel-title">对竞品中位数偏离 (Δ, 8h)</span>
+            <span className="panel-sub">
+              · 零点 = 竞品中位数 · 正值 = 比竞品贵, 负值 = 比竞品便宜
+            </span>
             <span className="panel-tag muted">5min 刷新</span>
           </div>
-          {usableRows.length === 0 ? (
+          {medianStatus !== 'complete' || typeof median !== 'number' ? (
             <StatusEmptyState
               status="stale"
-              message="尚未观测到该 symbol 的 funding 数据，等待下一次拉取"
+              message={
+                usableRows.length === 0
+                  ? '尚未观测到该 symbol 的 funding 数据，等待下一次拉取'
+                  : `竞品样本不足 3 家（${medianSamples}/3），暂不展示偏离图`
+              }
             />
           ) : (
             <BarChart
               signed
-              rows={sortedRows.map(row => {
+              rows={deltaRows.map(row => {
                 const f = row.funding;
                 const usable = f && typeof f.rate_8h === 'number' && Number.isFinite(f.rate_8h);
+                const delta = usable ? (f!.rate_8h as number) - median : undefined;
                 let color: string;
                 if (!usable) {
                   color = unsupportedColor;
@@ -198,7 +218,7 @@ export function FundingBlock({
                 }
                 return {
                   label: row.platform,
-                  value: usable ? (f?.rate_8h as number) : undefined,
+                  value: delta,
                   status: fundingDisplayStatus(f),
                   color,
                 };
@@ -206,21 +226,20 @@ export function FundingBlock({
               format={(value, row) => {
                 const original = rows.find(r => r.platform === row.label);
                 const f = original?.funding;
-                const native = formatNativeRateWithPeriod(f?.rate_native, f?.period_hours);
-                const eq8h = formatFundingRate8h(value);
-                return `${native} · 8h ≈ ${eq8h}`;
+                const rate8h = formatFundingRate8h(f?.rate_8h);
+                const deltaLabel = formatFundingDelta(value);
+                return `Δ ${deltaLabel} (8h ${rate8h})`;
               }}
             />
           )}
           <p className="panel-foot-note">
-            条形长度 = 8h 当量；右侧大号 = 原生周期上的真实费率，&ldquo;8h ≈ …&rdquo; 为归一后的对比单位。
-            竞品中位数与 vs 中位数 delta 仅能以 8h 当量表达。
+            Δ = 8h 当量 − 竞品中位数 ({formatFundingRate8h(median)})。括号内为该平台原始 8h 当量。
           </p>
         </section>
         <section className="panel span-24">
           <div className="panel-head">
             <span className="panel-title">资金费率明细</span>
-            <span className="panel-sub">· 每行=一个平台 · 原始与 8h 当量并列</span>
+            <span className="panel-sub">· 每行=一个平台 · 原生费率含周期 tag</span>
             <span className="panel-tag muted">CSV 可导</span>
           </div>
           <div className="table-wrap">
@@ -229,18 +248,14 @@ export function FundingBlock({
                 <tr>
                   <th>平台</th>
                   <th className="num">原生费率</th>
-                  <th className="num">原生周期</th>
                   <th className="num">8h 当量</th>
                   <th className="num">vs 中位数 (8h)</th>
                   <th className="num">排名</th>
-                  <th className="num">数据源时间戳</th>
-                  <th>状态</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedRows.map(row => {
                   const f = row.funding;
-                  const status = fundingDisplayStatus(f);
                   const isUsable = f && typeof f.rate_8h === 'number' && Number.isFinite(f.rate_8h);
                   return (
                     <tr key={row.platform}>
@@ -253,12 +268,7 @@ export function FundingBlock({
                       </td>
                       <td className="num">
                         {isUsable
-                          ? formatNativeRateWithPeriod(f?.rate_native, null).replace(/ \/ .*$/, '')
-                          : '—'}
-                      </td>
-                      <td className="num">
-                        {typeof f?.period_hours === 'number' && f.period_hours > 0
-                          ? `${f.period_hours}h`
+                          ? formatNativeRateWithPeriod(f?.rate_native, f?.period_hours)
                           : '—'}
                       </td>
                       <td className="num">
@@ -270,13 +280,7 @@ export function FundingBlock({
                           : '—'}
                       </td>
                       <td className="num">
-                        {typeof f?.rank === 'number' ? f.rank : '—'}
-                      </td>
-                      <td className="num muted">{formatTimestamp(f?.snapshot_ts)}</td>
-                      <td>
-                        {status === 'complete'
-                          ? <span className="badge b-ok">complete</span>
-                          : <StatusBadge status={status} />}
+                        {typeof f?.rank === 'number' && f.rank > 0 ? f.rank : '—'}
                       </td>
                     </tr>
                   );

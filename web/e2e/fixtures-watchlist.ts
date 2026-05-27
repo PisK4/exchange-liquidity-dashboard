@@ -50,17 +50,24 @@ function fundingFor(platform: string, symbol: string) {
   // without further scaling. Magnitudes here mirror real BTC funding
   // levels (~0.005-0.015% per 8h) so the fixture exercises realistic
   // precision instead of vanishingly small numbers that all round to 0.
+  // rank reflects the ascending 8h ordering across the four complete
+  // fixture rows: edgeX 0.0050 → 1, bybit 0.0060 → 2, binance 0.0090
+  // → 3, okx 0.0120 → 4. vs_median_8h is rate_8h - median (median =
+  // 0.0090). Both fields are normally populated by the Go store's
+  // enrichFundingVsMedianRows + enrichFundingRankRows; the fixture
+  // mirrors that contract so e2e tests exercise the same wire shape
+  // the production backend emits.
   if (platform === 'edgeX') {
-    return { platform, period_hours: 4, rate_native: 0.0025, rate_8h: 0.0050, status: 'complete', snapshot_ts: now };
+    return { platform, period_hours: 4, rate_native: 0.0025, rate_8h: 0.0050, status: 'complete', snapshot_ts: now, vs_median_8h: -0.0040, rank: 1 };
   }
   if (platform === 'binance') {
-    return { platform, period_hours: 8, rate_native: 0.0090, rate_8h: 0.0090, status: 'complete', snapshot_ts: now };
+    return { platform, period_hours: 8, rate_native: 0.0090, rate_8h: 0.0090, status: 'complete', snapshot_ts: now, vs_median_8h: 0, rank: 3 };
   }
   if (platform === 'okx') {
-    return { platform, period_hours: 8, rate_native: 0.0120, rate_8h: 0.0120, status: 'complete', snapshot_ts: now };
+    return { platform, period_hours: 8, rate_native: 0.0120, rate_8h: 0.0120, status: 'complete', snapshot_ts: now, vs_median_8h: 0.0030, rank: 4 };
   }
   if (platform === 'bybit') {
-    return { platform, period_hours: 8, rate_native: 0.0060, rate_8h: 0.0060, status: 'complete', snapshot_ts: now };
+    return { platform, period_hours: 8, rate_native: 0.0060, rate_8h: 0.0060, status: 'complete', snapshot_ts: now, vs_median_8h: -0.0030, rank: 2 };
   }
   // bingx in the v2.1 catalog is marked unsupported for funding; that
   // status must propagate through to the UI as muted '—'.

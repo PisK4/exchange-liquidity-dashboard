@@ -15,12 +15,18 @@ import { routeWatchlistAPI } from './fixtures-watchlist';
 //      defeat the whole purpose of this surface.
 //   4. Median + delta cards correctly surface as 8h-only with sample
 //      counts, because a cross-period median has no native counterpart.
-//   5. Cross-platform BarChart sort order = ascending 8h equivalent.
-//   6. Detail table exposes the per-row columns the operator needs
-//      (native rate, period, 8h, vs median, rank, status).
-//   7. Unsupported platforms surface explicitly (StatusBadge) instead
-//      of as fabricated zero — preserving funding.go's "no defaults"
-//      contract at the UI boundary.
+//   5. Δ-to-median BarChart — earlier "absolute 8h equivalent" form
+//      compressed every bar into a near-zero square and duplicated the
+//      detail table; this spec locks the rebased form (zero =
+//      competitor median, edgeX displayed against the comparison
+//      anchor) plus ascending-by-Δ sort order.
+//   6. Detail table exposes the slim column set operators asked for
+//      after iteration round-1: 平台, 原生费率 (with period folded
+//      inline as "+0.0025% / 4h"), 8h 当量, vs 中位数 (8h), 排名 —
+//      dropping the prior 原生周期 / 数据源时间戳 / 状态 columns.
+//   7. Unsupported platforms surface explicitly with em-dash cells
+//      and a real rank ('—') instead of fabricated zero — preserving
+//      funding.go's "no defaults" contract at the UI boundary.
 //   8. Watchlist multi-symbol fan-out — adding ETH to the chip list
 //      stacks a second FundingBlock with its own KPI / chart / table.
 
@@ -88,58 +94,74 @@ test('vs 竞品中位数 delta card shows signed 8h delta with directional glyph
   await expect(deltaCard).toContainText('-0.0040%');
 });
 
-test('cross-platform BarChart sorts ascending on 8h equivalent and shows dual-format labels', async ({ page }) => {
+test('Δ-to-median BarChart sorts ascending on Δ and shows Δ + 8h-equivalent labels', async ({ page }) => {
   await page.goto('/?tab=funding');
   const block = page.getByTestId('funding-block-BTC');
-  // The cross-platform chart panel has panel-title "跨平台资金费率对比"
-  // and contains the BarChart rows.
-  const chartPanel = block.locator('section.panel').filter({ hasText: '跨平台资金费率对比' }).first();
+  // The Δ-to-median chart panel has panel-title "对竞品中位数偏离 (Δ, 8h)".
+  const chartPanel = block.locator('section.panel').filter({ hasText: '对竞品中位数偏离' }).first();
   await expect(chartPanel).toBeVisible();
-  // Each bar row's <b> tag carries the formatted label. Capture them in
-  // DOM order and verify the order matches ascending rate_8h:
-  //   edgeX (0.0050) → bybit (0.0060) → binance (0.0090) → okx (0.0120)
-  // → bingx (unsupported, last via Infinity sort fallback).
+  // Fixture median = 0.0090. Δ values:
+  //   edgeX  (0.0050 - 0.0090) = -0.0040
+  //   bybit  (0.0060 - 0.0090) = -0.0030
+  //   binance(0.0090 - 0.0090) =  0
+  //   okx    (0.0120 - 0.0090) = +0.0030
+  //   bingx  (unsupported, value undefined → falls to end via Infinity).
   const labels = await chartPanel.locator('.bar-row b').allInnerTexts();
   expect(labels.length).toBeGreaterThanOrEqual(4);
-  // edgeX row carries the dual-format label.
-  expect(labels[0]).toContain('+0.0025% / 4h');
-  expect(labels[0]).toContain('8h ≈ +0.0050%');
-  // bybit second, with its 8h-only label since native period is 8h.
-  expect(labels[1]).toContain('+0.0060% / 8h');
-  // binance third.
-  expect(labels[2]).toContain('+0.0090% / 8h');
-  // okx fourth.
-  expect(labels[3]).toContain('+0.0120% / 8h');
-  // Footnote explains the bar-length convention so operators don't
-  // misread the chart.
-  await expect(chartPanel).toContainText('条形长度 = 8h 当量');
+  expect(labels[0]).toContain('Δ -0.0040%');
+  expect(labels[0]).toContain('8h +0.0050%');
+  expect(labels[1]).toContain('Δ -0.0030%');
+  expect(labels[2]).toContain('Δ +0.0000%');
+  expect(labels[3]).toContain('Δ +0.0030%');
+  // Footnote restates the comparison anchor.
+  await expect(chartPanel).toContainText('Δ = 8h 当量 − 竞品中位数');
 });
 
-test('detail table exposes native / period / 8h / vs median / rank / timestamp / status columns', async ({ page }) => {
+test('detail table exposes slim 5-column shape (平台 / 原生费率 / 8h / vs 中位数 / 排名)', async ({ page }) => {
   await page.goto('/?tab=funding');
   const block = page.getByTestId('funding-block-BTC');
   const detail = block.locator('section.panel').filter({ hasText: '资金费率明细' }).first();
   await expect(detail).toBeVisible();
-  for (const header of ['平台', '原生费率', '原生周期', '8h 当量', 'vs 中位数 (8h)', '排名', '数据源时间戳', '状态']) {
+  // Expected headers (the slim set chosen after iteration round-1).
+  for (const header of ['平台', '原生费率', '8h 当量', 'vs 中位数 (8h)', '排名']) {
     await expect(detail).toContainText(header);
   }
-  // edgeX row: native rate 0.0025 (no period suffix in this column),
-  // period 4h, 8h equivalent +0.0050%, status badge "complete".
-  await expect(detail.locator('tbody')).toContainText('+0.0025%');
-  await expect(detail.locator('tbody')).toContainText('4h');
-  await expect(detail.locator('tbody')).toContainText('+0.0050%');
+  // The dropped headers must NOT appear.
+  for (const dropped of ['原生周期', '数据源时间戳', '状态']) {
+    await expect(detail.locator('thead')).not.toContainText(dropped);
+  }
+  // edgeX row: native rate cell now has period folded inline as
+  // "+0.0025% / 4h" instead of split across two columns.
+  const edgeRow = detail.locator('tbody tr').filter({ hasText: 'edgeX' });
+  await expect(edgeRow).toContainText('+0.0025% / 4h');
+  await expect(edgeRow).toContainText('+0.0050%');
+  // Rank populated by the backend enrichFundingRankRows helper —
+  // edgeX is the cheapest of the 4 complete rows → rank 1.
+  await expect(edgeRow.locator('td.num').last()).toHaveText('1');
 });
 
-test('unsupported platform (bingx) renders explicit em-dash and unsupported status badge', async ({ page }) => {
+test('detail table renders the full ascending rank ladder for complete rows', async ({ page }) => {
   await page.goto('/?tab=funding');
   const block = page.getByTestId('funding-block-BTC');
   const detail = block.locator('section.panel').filter({ hasText: '资金费率明细' }).first();
-  // The bingx row exists but its rate cells must be '—' and the
-  // status column must surface the StatusBadge.
+  // Ranks: edgeX=1, bybit=2, binance=3, okx=4.
+  const ranks: Record<string, string> = { edgeX: '1', bybit: '2', binance: '3', okx: '4' };
+  for (const [platform, rank] of Object.entries(ranks)) {
+    const row = detail.locator('tbody tr').filter({ hasText: platform });
+    await expect(row.locator('td.num').last()).toHaveText(rank);
+  }
+});
+
+test('unsupported platform (bingx) renders em-dash in every numeric cell including 排名', async ({ page }) => {
+  await page.goto('/?tab=funding');
+  const block = page.getByTestId('funding-block-BTC');
+  const detail = block.locator('section.panel').filter({ hasText: '资金费率明细' }).first();
+  // bingx fixture is unsupported → backend cannot assign a rank, the
+  // table cell must surface '—' rather than a fabricated zero.
   const bingxRow = detail.locator('tbody tr').filter({ hasText: 'bingx' });
   await expect(bingxRow).toBeVisible();
   await expect(bingxRow).toContainText('—');
-  await expect(bingxRow).toContainText('unsupported');
+  await expect(bingxRow.locator('td.num').last()).toHaveText('—');
 });
 
 test('multi-symbol watchlist stacks one FundingBlock per chip', async ({ page }) => {
