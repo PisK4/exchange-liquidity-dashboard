@@ -31,6 +31,21 @@ export function money(value?: number) {
   if (abs >= 1_000_000_000) return `${sign}$${(abs / 1_000_000_000).toFixed(2)}B`;
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(2)}M`;
   if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(2)}k`;
+  if (abs >= 100) return `${sign}$${abs.toFixed(0)}`;
+  if (abs >= 10) return `${sign}$${abs.toFixed(1)}`;
+  if (abs >= 1) return `${sign}$${abs.toFixed(2)}`;
+  if (abs >= 0.01) return `${sign}$${abs.toFixed(2)}`;
+  return `${sign}<$0.01`;
+}
+
+export function usdLabel(value?: number) {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return '$—';
+  if (value === 0) return '$0';
+  const abs = Math.abs(value);
+  const sign = value < 0 ? '-' : '';
+  if (abs < 0.01) return `${sign}<$0.01`;
+  if (abs < 10) return `${sign}$${abs.toFixed(2)}`;
+  if (abs < 100) return `${sign}$${abs.toFixed(1)}`;
   return `${sign}$${abs.toFixed(0)}`;
 }
 

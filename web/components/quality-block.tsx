@@ -5,7 +5,7 @@ import { BarChart } from '@/components/chart-primitives';
 import { PlatformCell } from '@/components/platform-cell';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { VerdictBadge } from '@/components/dashboard-shell';
-import { bp, money, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow } from '@/lib/api/client';
+import { bp, money, usdLabel, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow } from '@/lib/api/client';
 
 // QualityBlock is the Quality Tab counterpart of SymbolBlock: each
 // watchlist symbol renders into its own section.panel.span-24 frame
@@ -69,10 +69,6 @@ function spreadUSD(mid?: number, spreadBp?: number) {
 function slippageUSD(bucket: string, slippageBp?: number) {
   const amount = Number(bucket);
   return typeof slippageBp === 'number' && Number.isFinite(amount) ? amount * slippageBp / 10_000 : undefined;
-}
-
-function usdLabel(value?: number, digits = 2) {
-  return typeof value === 'number' ? `$${value.toFixed(digits)}` : '$—';
 }
 
 function rowDisplayAvailable(row: PlatformRow) {
@@ -173,7 +169,7 @@ export function QualityBlock({
           <div className="big-number">
             {typeof edgeSlippageBp === 'number' ? bp(edgeSlippageBp) : '—'}
           </div>
-          <div className="subline">{typeof edgeSlippageUSD === 'number' ? `≈ ${usdLabel(edgeSlippageUSD, 0)}` : '—'}</div>
+          <div className="subline">{typeof edgeSlippageUSD === 'number' ? `≈ ${usdLabel(edgeSlippageUSD)}` : '—'}</div>
         </section>
         <section className="panel span-8 row-h-sm">
           <div className="panel-head">
@@ -216,7 +212,7 @@ export function QualityBlock({
               color: row.platform === 'edgeX' ? edgexAccent : '#73bf69',
             }))}
             sort="asc"
-            format={value => `${(value ?? 0).toFixed(2)} bp · ${usdLabel(slippageUSD(bucket, value), 0)}`}
+            format={value => `${(value ?? 0).toFixed(2)} bp · ${usdLabel(slippageUSD(bucket, value))}`}
           />
         </section>
         <section className="panel span-8 row-h-md">

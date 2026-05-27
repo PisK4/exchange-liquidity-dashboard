@@ -2,7 +2,7 @@
 
 import { BarChart } from '@/components/chart-primitives';
 import { StatusEmptyState } from '@/components/status-empty-state';
-import { bp, pct, type LiquiditySnapshot } from '@/lib/api/client';
+import { bp, pct, usdLabel, type LiquiditySnapshot } from '@/lib/api/client';
 import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingPeriodTag, formatFundingRate8h } from '@/lib/funding-format';
 
 // QualityCard reads a LiquiditySnapshot-shaped object: that snapshot
@@ -162,7 +162,7 @@ export function QualityCard({
           <dd>
             {bp(kpis?.edgex_spread_bp)}
             {typeof edgeSpreadUSD === 'number' && (
-              <span className="watchlist-funding-delta muted">  · ${edgeSpreadUSD.toFixed(2)}</span>
+              <span className="watchlist-funding-delta muted">  · {usdLabel(edgeSpreadUSD)}</span>
             )}
           </dd>
         </div>
@@ -175,7 +175,7 @@ export function QualityCard({
           <dd>
             {typeof edgeSlippage === 'number' ? bp(edgeSlippage) : '—'}
             {typeof edgeSlippageUSD === 'number' && (
-              <span className="watchlist-funding-delta muted">  · ${edgeSlippageUSD.toFixed(0)}</span>
+              <span className="watchlist-funding-delta muted">  · {usdLabel(edgeSlippageUSD)}</span>
             )}
           </dd>
         </div>
@@ -215,7 +215,7 @@ export function QualityCard({
         {slippageChartRows.some(r => typeof r.value === 'number') ? (
           <BarChart
             rows={slippageChartRows}
-            format={value => `${(value ?? 0).toFixed(2)} bp · ${typeof value === 'number' ? `$${(slippageUSD(buckets[slippageChartRows.findIndex(r => r.value === value)] ?? bucket, value) ?? 0).toFixed(0)}` : ''}`}
+            format={value => `${(value ?? 0).toFixed(2)} bp · ${typeof value === 'number' ? usdLabel(slippageUSD(buckets[slippageChartRows.findIndex(r => r.value === value)] ?? bucket, value)) : ''}`}
           />
         ) : (
           <div className="watchlist-card-chart-empty muted">该标的暂无可绘制的滑点数据</div>
