@@ -1,5 +1,6 @@
 'use client';
 
+import { FundingDivergeBar } from '@/components/funding-diverge-bar';
 import { PlatformCell } from '@/components/platform-cell';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import {
@@ -174,6 +175,19 @@ export function FundingBlock({
           <div className="subline muted">
             {medianStatus === 'complete' ? '正值 = edgeX 多头付出 > 竞品中位数' : ''}
           </div>
+        </section>
+        <section className="panel span-24">
+          <div className="panel-head">
+            <span className="panel-title">8h 当量方向与强度</span>
+            <span className="panel-sub">
+              · 0% 居中 · 正向（红）= 多头付出 · 负向（青）= 空头付出 · 条长按本组最大绝对值归一
+            </span>
+          </div>
+          <FundingDivergeBar
+            rows={rows}
+            displaySymbol={snapshot.symbol ?? displayName}
+            lookup={lookup}
+          />
         </section>
         <section className="panel span-24">
           <div className="panel-head">
