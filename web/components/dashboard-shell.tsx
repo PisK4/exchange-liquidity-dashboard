@@ -4,6 +4,7 @@ import { PlatformCell, platformDisplayName } from '@/components/platform-cell';
 import { ShareTrendChart, type ShareTrendPoint } from '@/components/share-trend-chart';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
+import { FundingBlock } from '@/components/funding-block';
 import { QualityBlock } from '@/components/quality-block';
 import { SymbolBlock } from '@/components/symbol-block';
 import { Top30DivergenceView } from '@/components/top30-divergence-view';
@@ -58,6 +59,7 @@ function mergeQualityIntoLiquidity(
 
 const tabs = [
   ['monitor', '流动性监控'],
+  ['funding', '资金费率'],
   ['quality', '盘口质量'],
   ['share', '市占率'],
   ['top30', 'Top30 成交量'],
@@ -228,7 +230,7 @@ export function DashboardShell({
   const tier = query.tier ?? '0.10%';
   const bucket = query.bucket ?? '100000';
   const platform = query.platform ?? data.top30.platform ?? 'binance';
-  const needsControls = tab === 'monitor' || tab === 'quality';
+  const needsControls = tab === 'monitor' || tab === 'quality' || tab === 'funding';
   const categories = data.meta.categories ?? [];
   const activeCategory = query.category ?? 'all';
 
@@ -250,6 +252,7 @@ export function DashboardShell({
       </nav>
       <main className="dashboard-main">
         {needsControls ? <DashboardControls query={{ ...query, tab }} categories={categories} activeCategory={activeCategory} activeCanonical={symbolCtx.canonical} watchlist={watchlist} onWatchlistChange={onWatchlistChange} /> : null}
+        {tab === 'funding' ? <FundingTab data={data} symbolCtx={symbolCtx} watchlist={watchlist} allSymbols={(data.meta.categories ?? []).flatMap(c => c.symbols)} onWatchlistChange={onWatchlistChange} /> : null}
         {tab === 'quality' ? <QualityTab data={data} query={query} bucket={bucket} symbolCtx={symbolCtx} watchlist={watchlist} allSymbols={(data.meta.categories ?? []).flatMap(c => c.symbols)} onWatchlistChange={onWatchlistChange} /> : null}
         {tab === 'share' ? <ShareTab data={data.share} query={query} /> : null}
         {tab === 'top30' ? <Top30Tab data={data.top30} divergence={data.top30Divergence} lookup={data.lookup} query={query} platform={platform} /> : null}
@@ -331,6 +334,63 @@ function LiquidityTab({
 }
 
 type SymbolMeta = NonNullable<DashboardMeta['categories']>[number]['symbols'][number];
+
+// FundingTab is the dedicated 资金费率 surface, sitting between the
+// Liquidity and Quality Tabs. It mirrors the v2 stacked-block layout:
+// any watchlist length renders as `FundingBlock × N`, each block
+// showing one symbol's cross-platform funding rates with native +
+// 8h-equivalent dual-format labels.
+//
+// The block data is sourced from data.liquidityByCanonical — the
+// existing per-symbol Liquidity fan-out already carries rows[].funding
+// and the funding KPIs (edgex_funding_rate_8h, competitor_funding_
+// rate_median_8h, etc.) populated by Store.attachFundingLocked +
+// enrichFundingVsMedianRows on the backend. Reusing that fan-out
+// avoids a new per-symbol HTTP endpoint while preserving the 5min
+// refresh cadence shared across the dashboard.
+function FundingTab({
+  data,
+  symbolCtx,
+  watchlist,
+  allSymbols,
+  onWatchlistChange,
+}: {
+  data: DashboardData;
+  symbolCtx: SymbolContext;
+  watchlist: string[];
+  allSymbols: SymbolMeta[];
+  onWatchlistChange: (next: string[]) => void;
+}) {
+  const blocks = watchlist.length > 0 ? watchlist : [symbolCtx.canonical];
+  return (
+    <div className="page-content active">
+      <div className="section-bar">
+        <span>3.3 · <b>资金费率</b></span>
+        <div className="line" />
+        <span>{blocks.length} 个标的 · 8h 归一对比</span>
+      </div>
+      <WatchlistToolbar items={watchlist} symbols={allSymbols} onChange={onWatchlistChange} />
+      <div className="grid">
+        {blocks.map(sym => {
+          const canonical = normalizeSymbol(sym);
+          const meta = allSymbols.find(s => s.canonical.toUpperCase() === canonical);
+          const snap =
+            data.liquidityByCanonical[canonical]
+            ?? (canonical === symbolCtx.canonical.toUpperCase() ? data.liquidity : null);
+          return (
+            <FundingBlock
+              key={canonical}
+              canonical={canonical}
+              displayName={meta?.display_name ?? sym}
+              snapshot={snap}
+              lookup={data.lookup}
+            />
+          );
+        })}
+      </div>
+    </div>
+  );
+}
 
 function QualityTab({ data, query: _query, bucket, symbolCtx, watchlist, allSymbols, onWatchlistChange }: { data: DashboardData; query: Query; bucket: string; symbolCtx: SymbolContext; watchlist: string[]; allSymbols: SymbolMeta[]; onWatchlistChange: (next: string[]) => void }) {
   const buckets = (data.quality.slippage_buckets_usd ?? [50_000, 100_000, 500_000, 1_000_000]).map(String);

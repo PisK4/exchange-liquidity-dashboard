@@ -285,10 +285,10 @@ table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
 .quality-card-chart .bar-chart { font-size: 11px; }
 .quality-card-foot { padding: 4px 12px 10px; font-size: 11px; line-height: 1.5; border-top: 1px dashed var(--border); margin: 4px 8px 0; }
 .quality-bucket-bar { display: flex; align-items: center; gap: 10px; padding: 6px 4px 4px; }
-.symbol-block, .quality-block { padding: 0; margin-bottom: 6px; }
-.symbol-block > .panel-head, .quality-block > .panel-head { background: #181c22; }
-.symbol-block > .panel-head .panel-title, .quality-block > .panel-head .panel-title { font-size: 14px; }
-.symbol-block > .grid, .quality-block > .grid { padding: 10px; }
+.symbol-block, .quality-block, .funding-block { padding: 0; margin-bottom: 6px; }
+.symbol-block > .panel-head, .quality-block > .panel-head, .funding-block > .panel-head { background: #181c22; }
+.symbol-block > .panel-head .panel-title, .quality-block > .panel-head .panel-title, .funding-block > .panel-head .panel-title { font-size: 14px; }
+.symbol-block > .grid, .quality-block > .grid, .funding-block > .grid { padding: 10px; }
 .symbol-block-mode-toggle { margin-left: auto; }
 .sm-bar-grid {
   display: grid;
