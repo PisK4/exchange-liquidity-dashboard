@@ -883,6 +883,9 @@
           "edgex_24h_share_pct": {
             "type": "number"
           },
+          "edgex_24h_share_status": {
+            "$ref": "#/components/schemas/ApiStatus"
+          },
           "symbol_share_7d_pct": {
             "type": "number"
           },

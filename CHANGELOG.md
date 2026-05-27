@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Liquidity tab "24h share" no longer stalls at 0.00%** when edgeX's
+  `pro.edgex.exchange` REST ticker is blocked by Cloudflare (HTTP 403
+  with a "Just a moment..." interstitial). `liquidityKPIsLocked` now
+  resolves each platform's 24h volume via a two-tier source order:
+  (1) native ticker when `Status == complete`; (2) the same-day
+  CoinGecko per-symbol daily aggregate (already persisted to
+  `dailySymbolVolumes` for V1 BTC/ETH/SOL and every platform's CG
+  Top60). MEXC×0.4 / Gate×0.5 discounts continue to apply only at
+  compute time.
+- **Adapter transport failures now report `Status: error`** instead of
+  `unsupported`. `unsupported` is reserved for "no catalog entry /
+  unknown platform"; transient 4xx/5xx, timeouts, and parse failures
+  surface as `error` so downstream KPI logic, collection counters,
+  and operator dashboards can tell upstream pressure from a
+  legitimate scope gap.
+
+### Added
+
+- **`edgex_24h_share_status`** field on the Liquidity KPI payload
+  (`complete` | `partial` | `stale`). The frontend renders `—` when
+  `stale` and tags the value `via CG` when `partial`, so operators
+  can distinguish "edgeX really has no volume" from "edgeX native
+  ticker is degraded and we are borrowing from CoinGecko".
+- Runbook entry **§3.6 Liquidity tab "24h share" shows 0.00%** with
+  the diagnosis + mitigation flow for the Cloudflare-403 scenario.
+
 ## [1.0.0] - 2026-05-23
 
 First production-ready release. Ships the complete V1 liquidity

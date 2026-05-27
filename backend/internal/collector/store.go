@@ -1227,23 +1227,17 @@ func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians, str
 			edge = r
 		}
 	}
-	// 24h symbol-level share continues to use native volumes per symbol
-	// because CoinGecko's /derivatives ticker is platform-level, not
-	// per-symbol; mixing the two would conflate denominators.
-	share := 0.0
-	denom := 0.0
-	for _, v := range s.volumes {
-		if v.DisplaySymbol == symbol && v.Status == domain.StatusComplete {
-			adj := indicators.AdjustedVolume(v.Platform, v.Volume24HUSD)
-			denom += adj
-			if v.Platform == "edgeX" {
-				share = adj
-			}
-		}
-	}
-	if denom > 0 {
-		share = share / denom * 100
-	}
+	// 24h symbol-level share uses native ticker per (platform, symbol) as
+	// the primary source, with CoinGecko's per-symbol /derivatives ticker
+	// (already persisted to s.dailySymbolVolumes for V1 BTC/ETH/SOL +
+	// every platform's CG Top60) as a same-day fallback. The fallback
+	// covers the case where a single platform's REST ticker is throttled
+	// or blocked (e.g. edgeX's pro.exchange Cloudflare 403) while the rest
+	// of the cohort still reports complete. symbolShare24hLocked returns
+	// a status label so the KPI can advertise whether the reading is
+	// fully native ("complete"), native-with-CG-bridges ("partial"), or
+	// stale (no usable reading for edgeX in either channel).
+	share, shareStatus := s.symbolShare24hLocked(symbol)
 	share7dPct, share7dStatus, shareWoWStatus := s.symbolShare7dLocked(symbol)
 	spread10mBp, spread10mStatus := s.edgexSpread10mLocked(symbol)
 	out := map[string]any{
@@ -1254,6 +1248,7 @@ func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians, str
 		"edgex_spread_bp":                  edge.SpreadBP,
 		"edgex_spread_10m_status":          spread10mStatus,
 		"edgex_24h_share_pct":              share,
+		"edgex_24h_share_status":           shareStatus,
 		"symbol_share_7d_status":           share7dStatus,
 		"symbol_share_wow_status":          shareWoWStatus,
 	}
@@ -1286,6 +1281,89 @@ func (s *Store) liquidityKPIsLocked(rows []domain.PlatformSnapshot, medians, str
 		out["edgex_funding_rate_8h_status"] = domain.StatusStale
 	}
 	return out
+}
+
+// symbolShare24hLocked computes the per-symbol 24h market-share KPI for
+// edgeX with a two-tier source hierarchy.
+//
+// For each configured platform we resolve a usable 24h USD volume reading
+// in this order:
+//
+//  1. Native ticker (s.volumes), if Status == complete and value > 0.
+//  2. CoinGecko's per-symbol daily aggregate for the current UTC day
+//     (s.dailySymbolVolumes, keyed by the canonical 'BASE-USDT (perp)'
+//     form), if Status == complete and value > 0.
+//
+// Both tiers are MEXC×0.4 / Gate×0.5 adjusted via indicators.AdjustedVolume
+// only at compute time so persisted rows stay raw USD.
+//
+// The status label rolls up the per-platform resolution:
+//   - complete: every configured platform resolved through tier 1 (native).
+//   - partial:  at least one platform fell through to tier 2 (CG) and
+//     edgeX itself resolved (either tier). The numeric share is usable.
+//   - stale:    edgeX failed both tiers. The numeric share defaults to 0
+//     and callers should suppress display.
+//
+// This bridges short upstream gaps (e.g. Cloudflare 403 on pro.edgex.
+// exchange's REST ticker while the depth endpoint stays reachable) by
+// borrowing CoinGecko's per-symbol /derivatives reading, mirroring the
+// platform-level Share Tab's R3 rule. Non-V1 symbols (stocks, commodities,
+// indices) typically have no CoinGecko row; for those the fallback is a
+// no-op and behaviour matches the pre-fallback path.
+func (s *Store) symbolShare24hLocked(symbol string) (float64, string) {
+	if symbol == "" || len(s.cfg.Platforms) == 0 {
+		return 0, domain.StatusStale
+	}
+	today := startOfUTCDay(time.Now().UTC())
+	canonical := canonicalDailyKey(symbol)
+
+	resolve := func(platform string) (float64, string, bool) {
+		if v, ok := s.volumes[key(platform, symbol)]; ok &&
+			v.Status == domain.StatusComplete && v.Volume24HUSD > 0 {
+			return v.Volume24HUSD, domain.DataSourceNative, true
+		}
+		for _, r := range s.dailySymbolVolumes[key(platform, canonical)] {
+			if !r.Day.Equal(today) {
+				continue
+			}
+			if r.Status != domain.StatusComplete || r.Volume24HUSD <= 0 {
+				continue
+			}
+			return r.Volume24HUSD, domain.DataSourceCoinGecko, true
+		}
+		return 0, "", false
+	}
+
+	var share, denom float64
+	var edgexResolved bool
+	usedFallback := false
+	for _, p := range s.cfg.Platforms {
+		vol, src, ok := resolve(p)
+		if !ok {
+			continue
+		}
+		if src == domain.DataSourceCoinGecko {
+			usedFallback = true
+		}
+		adj := indicators.AdjustedVolume(p, vol)
+		denom += adj
+		if p == "edgeX" {
+			share = adj
+			edgexResolved = true
+		}
+	}
+	if denom > 0 {
+		share = share / denom * 100
+	}
+
+	status := domain.StatusComplete
+	switch {
+	case !edgexResolved:
+		status = domain.StatusStale
+	case usedFallback:
+		status = domain.StatusPartial
+	}
+	return share, status
 }
 
 // symbolShare7dLocked computes the 单币种 7d 市占率 KPI:

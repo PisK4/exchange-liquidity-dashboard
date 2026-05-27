@@ -162,6 +162,7 @@ func (a RESTAdapter) FetchTicker(ctx context.Context, sub domain.SymbolSub) (dom
 	}
 	var raw float64
 	var err error
+	unknownPlatform := false
 	switch a.Platform {
 	case "binance":
 		raw, err = a.fetchBinanceVolume(ctx, sub)
@@ -184,10 +185,20 @@ func (a RESTAdapter) FetchTicker(ctx context.Context, sub domain.SymbolSub) (dom
 	case "lighter":
 		raw, err = a.fetchLighterVolume(ctx, sub)
 	default:
+		unknownPlatform = true
 		err = fmt.Errorf("unsupported platform %s", a.Platform)
 	}
 	if err != nil {
 		vol.Error = err.Error()
+		// Reserve StatusUnsupported for "we have no adapter / catalog
+		// entry for this platform"; transient upstream failures (HTTP
+		// 4xx/5xx, timeouts, malformed payloads) get StatusError so
+		// downstream KPI logic (e.g. liquidityKPIsLocked CG fallback)
+		// can distinguish "platform is broken right now" from "platform
+		// is not in scope".
+		if !unknownPlatform {
+			vol.Status = domain.StatusError
+		}
 		return vol, err
 	}
 	vol.Volume24HUSD = raw

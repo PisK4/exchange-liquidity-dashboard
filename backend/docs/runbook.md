@@ -107,6 +107,72 @@ supported_platform_count=0; the frontend now has an e2e regression
 guard (`web/e2e/dashboard.spec.ts: zero-platform canonical renders
 without crashing`) so a future config drift cannot ship a UI crash.
 
+### 3.6 Liquidity tab "24h share" shows 0.00% (or flips to "—")
+
+Symptom: the per-symbol Liquidity panel renders `24h share 0.00%` or
+`24h share —` (with a `via CG` tag) on otherwise healthy crypto
+symbols (BTC/ETH/SOL/DOGE/BNB).
+
+Diagnosis order:
+
+1. Check the new status field on the API surface:
+
+   ```
+   curl -fsS 'http://127.0.0.1:8080/api/snapshot/liquidity?symbol=ETH-USDT%20%28perp%29' \
+     | jq '.kpis | {edgex_24h_share_pct, edgex_24h_share_status}'
+   ```
+
+   - `status = "complete"` → all 10 platforms served native ticker;
+     nothing to do.
+   - `status = "partial"` → at least one platform fell through to the
+     CoinGecko same-day daily aggregate. edgeX is still rendered, but
+     a native channel is degraded. Inspect step 2 to find which one.
+   - `status = "stale"` → edgeX failed both native and CoinGecko
+     today-row. The numeric share is suppressed; the UI shows `—`.
+     This means CoinGecko hasn't published an edgeX per-symbol
+     aggregate for the current UTC day yet, AND the native ticker is
+     broken; treat as a real incident.
+
+2. Find which native ticker is failing:
+
+   ```
+   docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -e \
+     "SELECT platform, status, error_message, snapshot_ts
+        FROM t_symbol_volume_snapshot
+       WHERE display_symbol='ETH-USDT (perp)'
+         AND snapshot_ts >= NOW() - INTERVAL 1 HOUR
+       ORDER BY snapshot_ts DESC LIMIT 60;"
+   ```
+
+   Look for `status = error` (transient upstream failure;
+   `error_message` carries the HTTP / parse diagnostic) versus
+   `status = unsupported` (catalog entry missing — different bug,
+   re-run `make catalog`).
+
+3. Most common cause: edgeX's `pro.edgex.exchange/api/v1/public/quote/getTicker`
+   intermittently returns HTTP 403 with a Cloudflare interstitial
+   ("Just a moment..."). The depth endpoint usually stays reachable.
+   Mitigations:
+
+   - Confirm the outbound proxy / egress IP. If the dashboard runs
+     behind a shared NAT egress that Cloudflare has flagged, route
+     edgeX through a clean proxy (`Runtime.exchange_proxy` in the
+     main config) or move to a different egress.
+   - The fallback path is automatic: while edgeX's native ticker is
+     blocked, `liquidityKPIsLocked` borrows CoinGecko's per-symbol
+     `/derivatives` reading (the same channel that powers the
+     platform-level Share tab). The numeric KPI keeps tracking the
+     correct value; only the `status` flips from `complete` to
+     `partial` and the UI tags it `via CG`.
+
+4. Note: this fallback only covers symbols CoinGecko indexes — V1
+   BTC/ETH/SOL and each platform's Top60 by 24h volume. Long-tail
+   synthetics on edgeX (AAPL / GOLD / META / CRCL / HOOD …) have no
+   CoinGecko row, so the `status` will go `stale` if their native
+   ticker breaks. For those symbols edgeX is usually the only venue,
+   so a 100% share is the natural state and a `stale` reading is
+   itself the alert.
+
 ## 4. Catalog Re-generation Workflow
 
 Cadence: monthly, plus ad-hoc when an exchange announces a relisting.

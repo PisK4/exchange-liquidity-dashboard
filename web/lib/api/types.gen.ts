@@ -625,6 +625,7 @@ export interface components {
             edgex_spread_10m_bp?: number;
             edgex_spread_10m_status?: components["schemas"]["ApiStatus"];
             edgex_24h_share_pct?: number;
+            edgex_24h_share_status?: components["schemas"]["ApiStatus"];
             symbol_share_7d_pct?: number;
             symbol_share_7d_status?: components["schemas"]["ApiStatus"];
             symbol_share_wow_status?: components["schemas"]["ApiStatus"];
