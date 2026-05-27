@@ -272,10 +272,10 @@ export function DashboardShell({
   );
 }
 
-// FundingKpiPanel and FundingCell were removed when 资金费率 was
-// moved out of Quality Tab. They will be reintroduced (or replaced)
-// in the dedicated 资金费率 surface follow-up. quality-funding-row.tsx
-// is kept on disk for that follow-up to reuse.
+// The legacy FundingKpiPanel / FundingCell / QualityFundingRow helpers
+// have been superseded by the dedicated 资金费率 Tab + FundingBlock
+// component; Quality Tab no longer surfaces funding data and any
+// cross-platform comparison should be done on the new tab.
 
 function LiquidityTab({
   data,
