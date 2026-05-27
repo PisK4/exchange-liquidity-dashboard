@@ -11,6 +11,79 @@ import (
 	"edgex-dashboard/backend/internal/domain"
 )
 
+func TestListingSchemaIncludedInInitSchemaSQL(t *testing.T) {
+	for _, table := range []string{
+		"t_listing_instrument_snapshot",
+		"t_listing_announcement",
+		"t_listing_announcement_symbol",
+		"t_listing_signal_observation",
+		"t_listing_candidate",
+		"t_listing_candidate_signal",
+		"t_listing_source_state",
+		"t_listing_worker_lease",
+		"t_listing_risk_plan",
+		"t_listing_decision",
+		"t_listing_watchlist",
+		"t_listing_action_dispatch",
+		"t_listing_delivery_outbox",
+		"t_listing_delivery_attempt",
+	} {
+		if !contains(initSchemaSQL, "CREATE TABLE IF NOT EXISTS "+table) {
+			t.Fatalf("initSchemaSQL missing CREATE TABLE for %s", table)
+		}
+	}
+	if contains(initSchemaSQL, "webhook_url") {
+		t.Fatalf("initSchemaSQL must not persist full webhook URL")
+	}
+}
+
+func TestListingMigrationUpAndDownExist(t *testing.T) {
+	upPath := filepath.Join("..", "..", "migrations", "000010_listing_agent_p1.up.sql")
+	downPath := filepath.Join("..", "..", "migrations", "000010_listing_agent_p1.down.sql")
+	up, err := os.ReadFile(upPath)
+	if err != nil {
+		t.Fatalf("read up migration: %v", err)
+	}
+	down, err := os.ReadFile(downPath)
+	if err != nil {
+		t.Fatalf("read down migration: %v", err)
+	}
+	upStr := string(up)
+	downStr := string(down)
+	for _, table := range []string{
+		"t_listing_instrument_snapshot",
+		"t_listing_announcement",
+		"t_listing_announcement_symbol",
+		"t_listing_signal_observation",
+		"t_listing_candidate",
+		"t_listing_candidate_signal",
+		"t_listing_source_state",
+		"t_listing_worker_lease",
+		"t_listing_risk_plan",
+		"t_listing_decision",
+		"t_listing_watchlist",
+		"t_listing_action_dispatch",
+		"t_listing_delivery_outbox",
+		"t_listing_delivery_attempt",
+	} {
+		if !contains(upStr, "CREATE TABLE IF NOT EXISTS "+table) {
+			t.Fatalf("up migration missing %s", table)
+		}
+		if !contains(downStr, "DROP TABLE IF EXISTS "+table) {
+			t.Fatalf("down migration missing %s", table)
+		}
+	}
+	if contains(upStr, "webhook_url") {
+		t.Fatalf("up migration must not persist full webhook URL")
+	}
+	if !contains(upStr, "uk_listing_delivery_dedupe") {
+		t.Fatalf("up migration must declare delivery outbox dedupe unique key")
+	}
+	if !contains(upStr, "uk_listing_candidate_identity") {
+		t.Fatalf("up migration must declare candidate identity unique key")
+	}
+}
+
 func TestInitSchemaIncludesPersistenceTables(t *testing.T) {
 	required := []string{
 		"CREATE TABLE IF NOT EXISTS t_symbol_mapping",

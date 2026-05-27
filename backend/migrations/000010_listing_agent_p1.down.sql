@@ -1,0 +1,14 @@
+DROP TABLE IF EXISTS t_listing_delivery_attempt;
+DROP TABLE IF EXISTS t_listing_delivery_outbox;
+DROP TABLE IF EXISTS t_listing_action_dispatch;
+DROP TABLE IF EXISTS t_listing_watchlist;
+DROP TABLE IF EXISTS t_listing_decision;
+DROP TABLE IF EXISTS t_listing_risk_plan;
+DROP TABLE IF EXISTS t_listing_candidate_signal;
+DROP TABLE IF EXISTS t_listing_candidate;
+DROP TABLE IF EXISTS t_listing_signal_observation;
+DROP TABLE IF EXISTS t_listing_announcement_symbol;
+DROP TABLE IF EXISTS t_listing_announcement;
+DROP TABLE IF EXISTS t_listing_instrument_snapshot;
+DROP TABLE IF EXISTS t_listing_worker_lease;
+DROP TABLE IF EXISTS t_listing_source_state;

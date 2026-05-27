@@ -106,10 +106,12 @@ migrate-up:
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000007_snapshot_ts_indexes.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000008_drop_empty_tables.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000009_top30_unique_key.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000010_listing_agent_p1.up.sql"
 
 migrate-down:
 	@echo "Apply backend/migrations/*.down.sql to MySQL DSN: $(MYSQL_DSN)"
-	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000009_top30_unique_key.down.sql"
+	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000010_listing_agent_p1.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000009_top30_unique_key.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000008_drop_empty_tables.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000007_snapshot_ts_indexes.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000006_widen_partial_reason.down.sql"
