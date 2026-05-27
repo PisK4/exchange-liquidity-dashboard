@@ -142,6 +142,22 @@ test('detail table renders the full ascending rank ladder for complete rows', as
   }
 });
 
+test('1h-period venue (hyperliquid) bumps native rate precision to 6dp instead of collapsing to +0.0000%', async ({ page }) => {
+  await page.goto('/?tab=funding');
+  const block = page.getByTestId('funding-block-BTC');
+  const detail = block.locator('section.panel').filter({ hasText: '资金费率明细' }).first();
+  // Hyperliquid fixture: rate_native=0.000025 with period_hours=1.
+  // At the dashboard's default 4dp precision this would collapse to
+  // "+0.0000% / 1h" — looking like missing data. The formatter must
+  // detect the collapse and re-render with 6dp so the actual
+  // magnitude is visible to the operator.
+  const hlRow = detail.locator('tbody tr').filter({ hasText: 'hyperliquid' });
+  await expect(hlRow).toBeVisible();
+  await expect(hlRow).toContainText('+0.000025% / 1h');
+  // Sanity: the misleading 4dp collapsed form must NOT appear in the row.
+  await expect(hlRow).not.toContainText('+0.0000% / 1h');
+});
+
 test('unsupported platform (bingx) renders em-dash in every numeric cell including 排名', async ({ page }) => {
   await page.goto('/?tab=funding');
   const block = page.getByTestId('funding-block-BTC');

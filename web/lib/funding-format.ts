@@ -69,12 +69,25 @@ export function formatFundingDelta(delta?: number | null): string {
 // posture: silently defaulting to 8h would mask a config drift.
 export function formatNativeRateWithPeriod(rate?: number | null, periodHours?: number | null): string {
   if (typeof rate !== 'number' || !Number.isFinite(rate)) return '—';
-  const sign = rate >= 0 ? '+' : '';
-  const formatted = `${sign}${rate.toFixed(4)}%`;
-  if (typeof periodHours === 'number' && Number.isFinite(periodHours) && periodHours > 0) {
-    return `${formatted} / ${periodHours}h`;
+  // The dashboard's default 4dp precision is calibrated to 8h-equivalent
+  // values (typically 0.0001–0.005%). When a venue settles every 1h
+  // (Hyperliquid, Lighter) the native per-period reading is roughly
+  // 1/8 of the 8h equivalent, so a perfectly real +0.0002% per 8h
+  // reading collapses to "+0.0000% / 1h" at 4dp — looking to operators
+  // like a missing-data bug rather than a tiny-but-real rate. Detect
+  // that collapse and re-render with 6dp so the actual magnitude
+  // survives. The 6dp cap matches CoinGecko's published precision and
+  // prevents microscopic numerical noise from masquerading as signal.
+  let formatted = rate.toFixed(4);
+  if (rate !== 0 && parseFloat(formatted) === 0) {
+    formatted = rate.toFixed(6);
   }
-  return formatted;
+  const sign = rate >= 0 ? '+' : '';
+  const label = `${sign}${formatted}%`;
+  if (typeof periodHours === 'number' && Number.isFinite(periodHours) && periodHours > 0) {
+    return `${label} / ${periodHours}h`;
+  }
+  return label;
 }
 
 // formatFundingPeriodTag renders the native settlement period as a short

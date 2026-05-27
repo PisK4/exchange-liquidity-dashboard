@@ -69,6 +69,17 @@ function fundingFor(platform: string, symbol: string) {
   if (platform === 'bybit') {
     return { platform, period_hours: 8, rate_native: 0.0060, rate_8h: 0.0060, status: 'complete', snapshot_ts: now, vs_median_8h: -0.0030, rank: 2 };
   }
+  // hyperliquid settles funding every 1h. The 8h equivalent is tiny
+  // (≈+0.0002%) and the native 1h rate is ~1/8 of that (≈+0.000025%).
+  // At 4dp the native value collapses to "+0.0000%" — the formatter
+  // must bump to 6dp on this case so the actual magnitude survives.
+  // Rank 0 here means "do not enter the rank ladder" — the fixture
+  // keeps hyperliquid out of the deterministic 1..4 sequence the
+  // detail-table rank ladder test asserts on, since the 0.0002% rate
+  // would slot in below edgeX and shift every other rank.
+  if (platform === 'hyperliquid') {
+    return { platform, period_hours: 1, rate_native: 0.000025, rate_8h: 0.0002, status: 'complete', snapshot_ts: now, vs_median_8h: -0.0088, rank: 0 };
+  }
   // bingx in the v2.1 catalog is marked unsupported for funding; that
   // status must propagate through to the UI as muted '—'.
   if (platform === 'bingx') {
@@ -78,7 +89,7 @@ function fundingFor(platform: string, symbol: string) {
   return null;
 }
 
-const platforms = ['edgeX', 'binance', 'okx', 'bybit', 'bingx'];
+const platforms = ['edgeX', 'binance', 'okx', 'bybit', 'hyperliquid', 'bingx'];
 
 const categorySymbols = [
   { canonical: 'BTC', display_name: 'BTC-USD', display_symbol: 'BTC-USDT (perp)', asset_category: 'crypto', instrument_kind: 'canonical', market_surface: 'perp', supported_platform_count: platforms.length },
