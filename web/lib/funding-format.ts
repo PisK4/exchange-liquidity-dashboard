@@ -76,6 +76,33 @@ export function formatFundingDelta(delta?: number | null): string {
   return formatPercentAdaptive(delta);
 }
 
+// formatFundingAPR renders an annualised-percentage-rate (APR)
+// equivalent for an 8h funding-rate reading. The conversion is
+// `rate8h * 3 * 365` -- 3 funding periods per day, 365 days per year,
+// straight-line (non-compounded) because perp funding cashflows are
+// settled and paid out per period rather than reinvested into the
+// position notional. We deliberately do NOT compound: an operator
+// looking at APR wants a back-of-envelope "what does holding this
+// position cost over a year" number, which the simple multiplier
+// gives; using `(1+r)^1095 - 1` would over-inflate small rates by a
+// factor that depends entirely on the rate itself and break
+// linearity with the underlying 8h cell.
+//
+// Returns '—' for null / undefined / non-finite so it can be piped
+// next to any 8h cell without branching at the call site. Precision
+// is fixed to 2dp since APR magnitudes (typically a few percent up
+// to double-digits) don't need the 4-6dp adaptive rule the per-period
+// formatter uses.
+//
+// Worked example: edgeX 8h equivalent of +0.0050% becomes
+// 0.0050 * 1095 = +5.475% APR (rounded to +5.48%).
+export function formatFundingAPR(rate8h?: number | null): string {
+  if (typeof rate8h !== 'number' || !Number.isFinite(rate8h)) return '—';
+  const apr = rate8h * 3 * 365;
+  const sign = apr >= 0 ? '+' : '';
+  return `${sign}${apr.toFixed(2)}% APR`;
+}
+
 // formatNativeRateWithPeriod renders the platform's native funding
 // rate plus its native settlement period in a single inline label such
 // as "+0.0050% / 4h". This is the canonical "contract-truthful" form

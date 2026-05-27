@@ -372,6 +372,11 @@ table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
 .funding-diverge-row.is-edgex .funding-diverge-fill.positive { background: var(--bad); box-shadow: inset 0 0 0 1px rgba(255,255,255,.7); }
 .funding-diverge-row.is-edgex .funding-diverge-fill.negative { background: #4fc3a1; box-shadow: inset 0 0 0 1px rgba(255,255,255,.7); }
 .funding-diverge-value { text-align: right; font-variant-numeric: tabular-nums; font-size: 12px; }
+/* APR equivalent shown next to 8h funding values in KPI cards. Kept
+   visually subordinate (smaller, muted) so the per-period number
+   stays the dominant reading; APR is a "what does this mean for me"
+   secondary translation, not a replacement metric. */
+.apr-hint { font-size: 12px; font-weight: 400; font-variant-numeric: tabular-nums; cursor: help; }
 .symbol-block, .quality-block, .funding-block { padding: 0; margin-bottom: 6px; }
 .symbol-block > .panel-head, .quality-block > .panel-head, .funding-block > .panel-head { background: #181c22; }
 .symbol-block > .panel-head .panel-title, .quality-block > .panel-head .panel-title, .funding-block > .panel-head .panel-title { font-size: 14px; }

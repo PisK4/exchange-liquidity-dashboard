@@ -6,6 +6,7 @@ import { StatusEmptyState } from '@/components/status-empty-state';
 import {
   FUNDING_SIGN_CONVENTION_TOOLTIP,
   directionGlyph,
+  formatFundingAPR,
   formatFundingDelta,
   formatFundingRate8h,
   formatNativeRateWithPeriod,
@@ -142,6 +143,12 @@ export function FundingBlock({
           </div>
           <div className="subline">
             8h 当量 {formatFundingRate8h(edgeRate8h)}
+            <span
+              className="muted apr-hint"
+              title="年化简单折算：rate_8h × 3 × 365 = APR（非复利，便于跨周期持仓成本估算）"
+            >
+              {' '}≈ {formatFundingAPR(edgeRate8h)}
+            </span>
           </div>
         </section>
         <section className="panel span-8 row-h-sm">
@@ -151,6 +158,14 @@ export function FundingBlock({
           </div>
           <div className="big-number">
             {medianStatus === 'complete' ? formatFundingRate8h(median) : '—'}
+            {medianStatus === 'complete' ? (
+              <span
+                className="muted apr-hint"
+                title="年化简单折算：rate_8h × 3 × 365 = APR（非复利）"
+              >
+                {' '}≈ {formatFundingAPR(median)}
+              </span>
+            ) : null}
           </div>
           <div className="subline muted">
             {medianStatus === 'complete'
@@ -166,6 +181,14 @@ export function FundingBlock({
           <div className="big-number">
             {medianStatus === 'complete' ? formatFundingDelta(delta) : '—'}
             <span className="muted">{directionGlyph(delta)}</span>
+            {medianStatus === 'complete' && typeof delta === 'number' ? (
+              <span
+                className="muted apr-hint"
+                title="年化简单折算：delta_8h × 3 × 365 = APR 差额（非复利）"
+              >
+                {' '}≈ {formatFundingAPR(delta)}
+              </span>
+            ) : null}
           </div>
           <div className="subline muted">
             {medianStatus === 'complete' && typeof edgeRate8h === 'number' && typeof median === 'number'
