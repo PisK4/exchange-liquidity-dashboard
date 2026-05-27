@@ -48,6 +48,44 @@ function imbalanceSignClass(value?: number | null): string {
   return '';
 }
 
+// Per-metric "materially significant" thresholds (in bp) for the
+// vs-median quality coloring. A diff smaller than the threshold in
+// magnitude renders neutral so noise near the median doesn't paint
+// the whole table green/red. Numbers chosen as half-an-order-of-
+// magnitude of typical operating range for each bucket:
+//   spread typical 0.5-5 bp → 0.5 bp threshold
+//   50K slippage 0.5-3 bp → 0.5 bp
+//   100K slippage 1-5 bp → 1 bp
+//   500K slippage 3-15 bp → 2 bp
+//   1M slippage 5-30 bp → 5 bp
+// Tunable: if operators report too many cells stay neutral, drop the
+// thresholds; if too many flip on tiny diffs, raise them.
+const QUALITY_THRESHOLD_BP: Record<string, number> = {
+  spread: 0.5,
+  '50000': 0.5,
+  '100000': 1,
+  '500000': 2,
+  '1000000': 5,
+};
+
+// qualityThresholdClass picks q-good (this row's value is materially
+// LOWER than median = better for lower-is-better metrics) or q-bad
+// (materially HIGHER = worse) based on the signed diff. nil/undefined
+// diff (median cohort too small) → neutral; sub-threshold diff →
+// neutral. The threshold is metric-specific and lives in
+// QUALITY_THRESHOLD_BP above.
+function qualityThresholdClass(
+  diff: number | null | undefined,
+  thresholdKey: string,
+): string {
+  if (typeof diff !== 'number' || !Number.isFinite(diff)) return '';
+  const threshold = QUALITY_THRESHOLD_BP[thresholdKey];
+  if (typeof threshold !== 'number' || threshold <= 0) return '';
+  if (diff <= -threshold) return 'q-good';
+  if (diff >= threshold) return 'q-bad';
+  return '';
+}
+
 function bucketShortLabel(bucket: string) {
   const amount = Number(bucket);
   if (!Number.isFinite(amount)) return bucket;
@@ -235,7 +273,7 @@ export function QualityBlock({
           <div className="panel-head">
             <span className="panel-title">盘口质量明细</span>
             <span className="panel-sub">
-              · 每行=一个平台 · Imbalance 红=BID 偏多 / 青=ASK 偏多（颜色仅表方向，|x|&gt;30% 才偏离健康）
+              · Spread/滑点 绿=优于竞品中位数 红=劣于（按桶阈值）· Imbalance 红/青=BID/ASK 偏多（仅方向，|x|&gt;30% 偏离健康）
             </span>
             <span className="panel-tag muted">CSV 可导</span>
           </div>
@@ -267,13 +305,13 @@ export function QualityBlock({
                         lookup={lookup}
                       />
                     </td>
-                    <td className="num">{bp(row.spread_bp)}</td>
+                    <td className={`num ${qualityThresholdClass(row.vs_median_spread_bp, 'spread')}`}>{bp(row.spread_bp)}</td>
                     <td className="num">{money(row.mid_price)}</td>
                     <td className={`num ${imbalanceSignClass(row.imbalance_pct)}`}>{signedPct(row.imbalance_pct)}</td>
-                    <td className="num">{bp(row.worst_slippage_bp?.['50000'])}</td>
-                    <td className="num">{bp(row.worst_slippage_bp?.['100000'])}</td>
-                    <td className="num">{bp(row.worst_slippage_bp?.['500000'])}</td>
-                    <td className="num">{bp(row.worst_slippage_bp?.['1000000'])}</td>
+                    <td className={`num ${qualityThresholdClass(row.vs_median_slippage_bp?.['50000'], '50000')}`}>{bp(row.worst_slippage_bp?.['50000'])}</td>
+                    <td className={`num ${qualityThresholdClass(row.vs_median_slippage_bp?.['100000'], '100000')}`}>{bp(row.worst_slippage_bp?.['100000'])}</td>
+                    <td className={`num ${qualityThresholdClass(row.vs_median_slippage_bp?.['500000'], '500000')}`}>{bp(row.worst_slippage_bp?.['500000'])}</td>
+                    <td className={`num ${qualityThresholdClass(row.vs_median_slippage_bp?.['1000000'], '1000000')}`}>{bp(row.worst_slippage_bp?.['1000000'])}</td>
                     <td><VerdictBadge verdict={row.verdict} /></td>
                   </tr>
                 ))}

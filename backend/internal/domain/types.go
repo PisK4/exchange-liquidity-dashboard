@@ -181,8 +181,29 @@ type PlatformSnapshot struct {
 	BuySlippageBP        map[string]float64      `json:"buy_slippage_bp"`
 	SellSlippageBP       map[string]float64      `json:"sell_slippage_bp"`
 	WorstSlippageBP      map[string]float64      `json:"worst_slippage_bp,omitempty"`
-	Verdict              string                  `json:"verdict,omitempty"`
-	Funding              *PlatformFundingRate    `json:"funding,omitempty"`
+	// VsMedianSpreadBP / VsMedianSlippageBP carry the per-row signed
+	// difference vs the competitor median (excluding edgeX) for the
+	// same metric: positive value = this venue is worse than median
+	// (more spread / more slippage); negative = better. The frontend
+	// uses these to threshold-color the 盘口质量明细 cells so an
+	// operator can read "this row is significantly better / worse
+	// than the rest" without doing the subtraction manually.
+	//
+	// Conventions:
+	//   - Pointers so the wire format omits the field when the
+	//     median cohort is too small (< 3 complete competitor
+	//     samples). A nil pointer encodes "no comparison available",
+	//     distinct from "exactly on the median".
+	//   - edgeX rows are included in the output (every row carries
+	//     vs_median for its own value), but the median itself is
+	//     computed across competitors only — otherwise edgeX would
+	//     pull the median toward itself and dampen the diff.
+	//   - Slippage diff is published per bucket; the frontend joins
+	//     by the same bucket key it uses for WorstSlippageBP.
+	VsMedianSpreadBP   *float64           `json:"vs_median_spread_bp,omitempty"`
+	VsMedianSlippageBP map[string]float64 `json:"vs_median_slippage_bp,omitempty"`
+	Verdict            string             `json:"verdict,omitempty"`
+	Funding            *PlatformFundingRate    `json:"funding,omitempty"`
 }
 
 // PlatformFundingRate carries the funding-rate observation for a single

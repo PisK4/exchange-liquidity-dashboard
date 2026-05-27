@@ -15,6 +15,12 @@ import { routeWatchlistAPI } from './fixtures-watchlist';
 //      the sign of imbalance_pct. Color encodes direction (BID-heavy
 //      vs ASK-heavy) only; magnitude / health is still read from the
 //      number itself and the |x|>30% threshold in the panel-sub.
+//   C. Spread and slippage cells paint .q-good (better than competitor
+//      median by ≥ per-metric threshold) or .q-bad (worse by ≥
+//      threshold). Backend produces signed vs_median_spread_bp and
+//      vs_median_slippage_bp per row; frontend applies per-metric
+//      thresholds (0.5 / 0.5 / 1 / 2 / 5 bp for spread / 50K / 100K
+//      / 500K / 1M slippage). Sub-threshold or missing diffs → neutral.
 
 test.beforeEach(async ({ page }) => {
   await routeWatchlistAPI(page);
@@ -65,6 +71,67 @@ test('Imbalance panel-sub explains color is direction only, not optimality', asy
   // The sub-text must make the "color = direction, magnitude = health"
   // distinction explicit so operators don't read red as "this row is
   // unhealthy" (a healthy +5% BID-heavy row is still red).
-  await expect(detail).toContainText('颜色仅表方向');
+  await expect(detail).toContainText('仅方向');
   await expect(detail).toContainText('30%');
+});
+
+test('edgeX spread cell paints q-good when materially better than competitor median', async ({ page }) => {
+  await page.goto('/?tab=quality');
+  const block = page.getByTestId('quality-block-BTC');
+  const detail = block.locator('section.panel').filter({ hasText: '盘口质量明细' }).first();
+  // Fixture: edgeX spread 1.1 bp, competitor median 2.3 bp → diff
+  // -1.2 bp (well past the 0.5 bp threshold) → q-good.
+  // td.num index 0 = Spread (bp).
+  const edgeRow = detail.locator('tbody tr').filter({ hasText: 'edgeX' });
+  await expect(edgeRow.locator('td.num').nth(0)).toHaveClass(/q-good/);
+});
+
+test('bingx spread cell paints q-bad when materially worse than competitor median', async ({ page }) => {
+  await page.goto('/?tab=quality');
+  const block = page.getByTestId('quality-block-BTC');
+  const detail = block.locator('section.panel').filter({ hasText: '盘口质量明细' }).first();
+  // Fixture: bingx spread 3.1 bp, competitor median 2.3 bp → diff
+  // +0.8 bp (past the 0.5 bp threshold) → q-bad.
+  const bingxRow = detail.locator('tbody tr').filter({ hasText: 'bingx' });
+  await expect(bingxRow.locator('td.num').nth(0)).toHaveClass(/q-bad/);
+});
+
+test('rows within threshold render neutral (no q-* class)', async ({ page }) => {
+  await page.goto('/?tab=quality');
+  const block = page.getByTestId('quality-block-BTC');
+  const detail = block.locator('section.panel').filter({ hasText: '盘口质量明细' }).first();
+  // Fixture: bybit spread 2.3 bp = median → diff 0 → neutral.
+  // okx spread 1.9 bp → diff -0.4 bp (under the 0.5 bp threshold)
+  // → neutral.
+  for (const platform of ['bybit', 'okx']) {
+    const row = detail.locator('tbody tr').filter({ hasText: platform });
+    const spreadCell = row.locator('td.num').nth(0);
+    await expect(spreadCell).not.toHaveClass(/q-good/);
+    await expect(spreadCell).not.toHaveClass(/q-bad/);
+  }
+});
+
+test('slippage cells render neutral when every row matches the median (diff 0)', async ({ page }) => {
+  await page.goto('/?tab=quality');
+  const block = page.getByTestId('quality-block-BTC');
+  const detail = block.locator('section.panel').filter({ hasText: '盘口质量明细' }).first();
+  // Fixture intentionally sets vs_median_slippage_bp = 0 for every
+  // bucket on every row, so the 4 slippage cells must all stay
+  // neutral. td.num indices 3..6 = 50K / 100K / 500K / 1M.
+  const edgeRow = detail.locator('tbody tr').filter({ hasText: 'edgeX' });
+  for (const i of [3, 4, 5, 6]) {
+    const cell = edgeRow.locator('td.num').nth(i);
+    await expect(cell).not.toHaveClass(/q-good/);
+    await expect(cell).not.toHaveClass(/q-bad/);
+  }
+});
+
+test('panel-sub mentions spread/slippage threshold semantics', async ({ page }) => {
+  await page.goto('/?tab=quality');
+  const block = page.getByTestId('quality-block-BTC');
+  const detail = block.locator('section.panel').filter({ hasText: '盘口质量明细' }).first();
+  // Operators need to see what "绿" / "红" mean on the spread /
+  // slippage cells right above the table.
+  await expect(detail).toContainText('优于竞品中位数');
+  await expect(detail).toContainText('阈值');
 });

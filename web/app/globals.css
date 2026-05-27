@@ -253,6 +253,16 @@ table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
    sign = which side is heavier — color does NOT imply good/bad). */
 .sign-positive { color: var(--bad); }
 .sign-negative { color: #4fc3a1; }
+/* Threshold-based quality coloring for 盘口质量明细 (q-good = this
+   row's value is materially LOWER than competitor median, q-bad =
+   materially HIGHER). Used on metrics where lower-is-better (spread,
+   slippage). Distinct from .sign-* because here the color encodes
+   "good vs bad relative to peers", not "+ vs - sign". --ok exists
+   in the palette and matches --accent visually, but staying with
+   --ok keeps the semantic split clean: --accent is reserved for
+   edgeX identity, --ok is for "this measurement is healthy". */
+.q-good { color: var(--ok); }
+.q-bad { color: var(--bad); }
 /* edgeX row in the funding detail table picks up a soft green tint so
    the eye lands on it first, matching the highlight convention used
    in other tabs' edgeX-vs-competitor surfaces. */

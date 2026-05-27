@@ -799,6 +799,13 @@
           "worst_slippage_bp": {
             "$ref": "#/components/schemas/NumberMap"
           },
+          "vs_median_spread_bp": {
+            "type": "number",
+            "nullable": true
+          },
+          "vs_median_slippage_bp": {
+            "$ref": "#/components/schemas/NumberMap"
+          },
           "verdict": {
             "type": "string"
           },

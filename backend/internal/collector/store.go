@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"log"
+	"math"
 	"os"
 	"sort"
 	"strings"
@@ -668,6 +669,7 @@ func (s *Store) Liquidity(symbol string) map[string]any {
 	fundingMedian, fundingSamples, fundingMedianStatus := competitorFundingMedian8h(rows)
 	rows = enrichFundingVsMedianRows(rows, fundingMedian, fundingMedianStatus)
 	rows = enrichFundingRankBySignRows(rows)
+	rows = enrichQualityVsMedianRows(rows)
 	return map[string]any{
 		"symbol":                           symbol,
 		"snapshot_ts":                      latestTS(rows),
@@ -698,6 +700,7 @@ func (s *Store) Quality(symbol string) map[string]any {
 	fundingMedian, fundingSamples, fundingMedianStatus := competitorFundingMedian8h(rows)
 	rows = enrichFundingVsMedianRows(rows, fundingMedian, fundingMedianStatus)
 	rows = enrichFundingRankBySignRows(rows)
+	rows = enrichQualityVsMedianRows(rows)
 	kpis := map[string]any{
 		"competitor_funding_rate_median_8h_status":  fundingMedianStatus,
 		"competitor_funding_rate_median_8h_samples": fundingSamples,
@@ -1593,6 +1596,147 @@ func enrichFundingVsMedianRows(rows []domain.PlatformSnapshot, median float64, m
 		rows[i].Funding = f
 	}
 	return rows
+}
+
+// enrichQualityVsMedianRows publishes per-row signed differences vs
+// the competitor median for spread_bp and each slippage bucket. The
+// frontend uses these to threshold-color the 盘口质量明细 cells so an
+// operator can read "this row is materially better/worse than the
+// rest" at a glance.
+//
+// Contract mirrors competitorFundingMedian8h:
+//   - Competitor cohort EXCLUDES edgeX; otherwise edgeX's own value
+//     would pull the median toward itself and dampen the diff for
+//     edgeX rows (the surface that operators actually care about).
+//   - Status filter requires depth_status == complete | partial |
+//     aggregated_orderbook | ws_limited_depth — all the depth states
+//     where the underlying measurement actually exists. We mirror
+//     the existing rowDisplayAvailable logic from the frontend so a
+//     stale / unsupported / error row never enters the cohort.
+//   - Minimum 3 competitor samples per metric, otherwise nil (UI
+//     renders neutral). 3 matches funding's threshold and is the
+//     minimum where "median" is meaningfully different from "the one
+//     other available value".
+//   - vs_median is signed: positive = this row's value is HIGHER
+//     than median (worse for "lower is better" metrics like spread
+//     and slippage); negative = LOWER than median (better).
+//   - edgeX rows DO get vs_median populated for their own value
+//     even though they're excluded from the cohort — operators
+//     need to see edgeX's own diff vs the competitor median.
+//
+// Slippage diff is published per bucket (one entry per WorstSlippageBP
+// key). Buckets that don't have at least 3 complete competitor
+// samples are silently omitted from the per-row map, so the UI
+// renders neutral on a per-bucket basis rather than blanking the
+// whole row.
+func enrichQualityVsMedianRows(rows []domain.PlatformSnapshot) []domain.PlatformSnapshot {
+	if len(rows) == 0 {
+		return rows
+	}
+	competitorReady := func(s string) bool {
+		switch s {
+		case domain.StatusComplete, domain.StatusPartial,
+			domain.StatusAggregatedOrderbook, domain.StatusWSLimitedDepth:
+			return true
+		}
+		return false
+	}
+	// 1. Spread cohort: collect competitor spread values.
+	spreadSamples := make([]float64, 0, len(rows))
+	for _, row := range rows {
+		if row.Platform == "edgeX" {
+			continue
+		}
+		if !competitorReady(row.DepthStatus) {
+			continue
+		}
+		if row.SpreadBP == 0 {
+			// SpreadBP is plain float64 (not pointer), so 0 can mean
+			// either "exactly zero spread" or "no value populated".
+			// In practice non-edgeX 0-spread doesn't happen on real
+			// exchanges; treating 0 as "missing" matches how the
+			// frontend reads the field today.
+			continue
+		}
+		spreadSamples = append(spreadSamples, row.SpreadBP)
+	}
+	spreadMedian, spreadOK := medianFloat64(spreadSamples)
+
+	// 2. Slippage cohorts: one per bucket key present anywhere.
+	bucketKeys := make(map[string]struct{})
+	for _, row := range rows {
+		for k := range row.WorstSlippageBP {
+			bucketKeys[k] = struct{}{}
+		}
+	}
+	slippageMedians := make(map[string]float64, len(bucketKeys))
+	for k := range bucketKeys {
+		samples := make([]float64, 0, len(rows))
+		for _, row := range rows {
+			if row.Platform == "edgeX" {
+				continue
+			}
+			if !competitorReady(row.DepthStatus) {
+				continue
+			}
+			v, ok := row.WorstSlippageBP[k]
+			if !ok || !isFiniteFloat(v) {
+				continue
+			}
+			samples = append(samples, v)
+		}
+		if m, ok := medianFloat64(samples); ok {
+			slippageMedians[k] = m
+		}
+	}
+
+	// 3. Write back: each row gets vs_median fields for whichever
+	// metrics actually had ≥ 3 competitor samples.
+	for i := range rows {
+		row := &rows[i]
+		// Spread
+		if spreadOK && row.SpreadBP != 0 {
+			diff := row.SpreadBP - spreadMedian
+			row.VsMedianSpreadBP = &diff
+		}
+		// Slippage per bucket
+		if len(slippageMedians) > 0 && len(row.WorstSlippageBP) > 0 {
+			out := make(map[string]float64, len(row.WorstSlippageBP))
+			for k, v := range row.WorstSlippageBP {
+				m, ok := slippageMedians[k]
+				if !ok || !isFiniteFloat(v) {
+					continue
+				}
+				out[k] = v - m
+			}
+			if len(out) > 0 {
+				row.VsMedianSlippageBP = out
+			}
+		}
+	}
+	return rows
+}
+
+// medianFloat64 returns the median if >= 3 samples, with bool false
+// otherwise. The 3-sample threshold matches the funding median
+// contract — below it, "median" degenerates into "the one other
+// number you saw" and the comparison loses meaning.
+func medianFloat64(samples []float64) (float64, bool) {
+	if len(samples) < 3 {
+		return 0, false
+	}
+	sorted := make([]float64, len(samples))
+	copy(sorted, samples)
+	sort.Float64s(sorted)
+	n := len(sorted)
+	if n%2 == 1 {
+		return sorted[n/2], true
+	}
+	return (sorted[n/2-1] + sorted[n/2]) / 2, true
+}
+
+func isFiniteFloat(v float64) bool {
+	return !math.IsNaN(v) && !math.IsInf(v, 0)
 }
 
 // enrichFundingRankBySignRows assigns sign-bucketed 1-based ranks to

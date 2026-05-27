@@ -597,6 +597,8 @@ export interface components {
             buy_slippage_bp: components["schemas"]["NumberMap"];
             sell_slippage_bp: components["schemas"]["NumberMap"];
             worst_slippage_bp?: components["schemas"]["NumberMap"];
+            vs_median_spread_bp?: number | null;
+            vs_median_slippage_bp?: components["schemas"]["NumberMap"];
             verdict?: string;
             funding?: components["schemas"]["PlatformFundingRate"];
         };

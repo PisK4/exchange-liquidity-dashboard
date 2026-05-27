@@ -141,23 +141,41 @@ function liquidityFor(symbolDisplay: string) {
   const meta = categorySymbols.find(s => s.display_symbol === symbolDisplay || s.canonical === symbolDisplay);
   const canonical = meta?.canonical ?? 'BTC';
   const scale = depthScale[canonical] ?? 1;
-  const rows = platforms.map((platform, i) => ({
-    platform,
-    display_symbol: meta?.display_symbol ?? symbolDisplay,
-    snapshot_ts: now,
-    source_endpoint: 'fixture',
-    depth_status: 'complete',
-    mid_price: 68_000 + i * 10,
-    spread_bp: 1.1 + i * 0.4,
-    imbalance_pct: platform === 'edgeX' ? 6.25 : -3.5,
-    depth_by_tier: depthByTier(scale),
-    vs_median_by_tier: { '0.10%': platform === 'edgeX' ? 1.2 : 0.9 },
-    buy_slippage_bp: { '50000': 0.8, '100000': 1.3, '500000': 4.2, '1000000': 8.5 },
-    sell_slippage_bp: { '50000': 0.9, '100000': 1.4, '500000': 4.5, '1000000': 8.9 },
-    worst_slippage_bp: { '50000': 0.9, '100000': 1.4, '500000': 4.5, '1000000': 8.9 },
-    verdict: '健康',
-    funding: fundingFor(platform, canonical),
-  }));
+  // Per-row spread varies linearly so the vs-median cohort exercises
+  // the q-good / q-bad threshold coloring rather than collapsing to
+  // neutral. Competitor spreads (i=1..5): 1.5, 1.9, 2.3, 2.7, 3.1 →
+  // median = 2.3. edgeX (i=0) at 1.1 → diff = -1.2 (≤ -0.5 threshold
+  // → q-good). bingx (i=5) at 3.1 → diff = +0.8 (≥ +0.5 → q-bad).
+  // Slippage stays uniform across rows so vs_median_slippage = 0 for
+  // every bucket — exercises the "no coloring at exactly the median"
+  // path.
+  const rows = platforms.map((platform, i) => {
+    const spreadBp = 1.1 + i * 0.4;
+    const spreadMedian = 2.3;
+    return {
+      platform,
+      display_symbol: meta?.display_symbol ?? symbolDisplay,
+      snapshot_ts: now,
+      source_endpoint: 'fixture',
+      depth_status: 'complete',
+      mid_price: 68_000 + i * 10,
+      spread_bp: spreadBp,
+      imbalance_pct: platform === 'edgeX' ? 6.25 : -3.5,
+      depth_by_tier: depthByTier(scale),
+      vs_median_by_tier: { '0.10%': platform === 'edgeX' ? 1.2 : 0.9 },
+      buy_slippage_bp: { '50000': 0.8, '100000': 1.3, '500000': 4.2, '1000000': 8.5 },
+      sell_slippage_bp: { '50000': 0.9, '100000': 1.4, '500000': 4.5, '1000000': 8.9 },
+      worst_slippage_bp: { '50000': 0.9, '100000': 1.4, '500000': 4.5, '1000000': 8.9 },
+      // vs_median_* mirrors what the backend's enrichQualityVsMedianRows
+      // helper would inject. Slippage diffs are all 0 because every row
+      // shares the same bucket values — that's deliberate and tests
+      // the "diff < threshold → neutral" branch.
+      vs_median_spread_bp: spreadBp - spreadMedian,
+      vs_median_slippage_bp: { '50000': 0, '100000': 0, '500000': 0, '1000000': 0 },
+      verdict: '健康',
+      funding: fundingFor(platform, canonical),
+    };
+  });
   // Median is computed across the three complete competitor rows
   // (binance 0.0090, okx 0.0120, bybit 0.0060) = 0.0090.
   return {
