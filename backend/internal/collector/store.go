@@ -667,6 +667,7 @@ func (s *Store) Liquidity(symbol string) map[string]any {
 	rows = enrichLiquidityRows(rows, medians)
 	fundingMedian, fundingSamples, fundingMedianStatus := competitorFundingMedian8h(rows)
 	rows = enrichFundingVsMedianRows(rows, fundingMedian, fundingMedianStatus)
+	rows = enrichFundingRankRows(rows)
 	return map[string]any{
 		"symbol":                           symbol,
 		"snapshot_ts":                      latestTS(rows),
@@ -696,6 +697,7 @@ func (s *Store) Quality(symbol string) map[string]any {
 	rows = enrichQualityRows(rows)
 	fundingMedian, fundingSamples, fundingMedianStatus := competitorFundingMedian8h(rows)
 	rows = enrichFundingVsMedianRows(rows, fundingMedian, fundingMedianStatus)
+	rows = enrichFundingRankRows(rows)
 	kpis := map[string]any{
 		"competitor_funding_rate_median_8h_status":  fundingMedianStatus,
 		"competitor_funding_rate_median_8h_samples": fundingSamples,
@@ -1589,6 +1591,45 @@ func enrichFundingVsMedianRows(rows []domain.PlatformSnapshot, median float64, m
 		delta := *f.Rate8h - median
 		f.VsMedian8h = &delta
 		rows[i].Funding = f
+	}
+	return rows
+}
+
+// enrichFundingRankRows assigns an absolute 1-based ascending rank to
+// each row's Funding.Rank based on Rate8h. edgeX is included in the
+// population because the 资金费率 Tab detail table renders the rank
+// alongside the platform name, and operators expect a stable answer
+// to "where does edgeX sit in the N-venue ladder right now".
+//
+// Rows whose funding observation is missing or whose status is not
+// complete are intentionally skipped — assigning them an arbitrary
+// integer would invent ordering information from absent data, and
+// the wire-format "rank=0" sentinel already maps to the UI's '—'.
+// Among complete rows ties are broken by stable platform order so
+// the rank is deterministic across polls.
+func enrichFundingRankRows(rows []domain.PlatformSnapshot) []domain.PlatformSnapshot {
+	type candidate struct {
+		index int
+		rate  float64
+	}
+	candidates := make([]candidate, 0, len(rows))
+	for i, row := range rows {
+		f := row.Funding
+		if f == nil || f.Rate8h == nil || f.Status != domain.StatusComplete {
+			continue
+		}
+		candidates = append(candidates, candidate{index: i, rate: *f.Rate8h})
+	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		return candidates[i].rate < candidates[j].rate
+	})
+	for rank, c := range candidates {
+		f := rows[c.index].Funding
+		if f == nil {
+			continue
+		}
+		f.Rank = rank + 1
+		rows[c.index].Funding = f
 	}
 	return rows
 }

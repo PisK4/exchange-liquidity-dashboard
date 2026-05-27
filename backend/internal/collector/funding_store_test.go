@@ -185,6 +185,83 @@ func TestStoreAttachFundingLockedFillsFromMap(t *testing.T) {
 	}
 }
 
+func TestEnrichFundingRankRowsAssignsAscending(t *testing.T) {
+	rows := []domain.PlatformSnapshot{
+		makeRow("binance", ptr(0.0090), domain.StatusComplete),
+		makeRow("okx", ptr(0.0120), domain.StatusComplete),
+		makeRow("bybit", ptr(0.0060), domain.StatusComplete),
+		makeRow("edgeX", ptr(0.0050), domain.StatusComplete),
+	}
+	rows = enrichFundingRankRows(rows)
+	want := map[string]int{
+		"edgeX":   1,
+		"bybit":   2,
+		"binance": 3,
+		"okx":     4,
+	}
+	for _, row := range rows {
+		if row.Funding == nil {
+			t.Fatalf("%s funding should not be nil", row.Platform)
+		}
+		if got := row.Funding.Rank; got != want[row.Platform] {
+			t.Fatalf("%s rank = %d, want %d", row.Platform, got, want[row.Platform])
+		}
+	}
+}
+
+func TestEnrichFundingRankRowsSkipsIncompleteAndMissing(t *testing.T) {
+	rows := []domain.PlatformSnapshot{
+		makeRow("binance", ptr(0.0090), domain.StatusComplete),
+		makeRow("bingx", nil, domain.StatusUnsupported),
+		makeRow("mexc", ptr(0.0010), domain.StatusStale),
+		{Platform: "kraken", DisplaySymbol: "BTC-USDT (perp)"}, // funding nil
+		makeRow("edgeX", ptr(0.0050), domain.StatusComplete),
+	}
+	rows = enrichFundingRankRows(rows)
+	// edgeX 0.0050 → rank 1; binance 0.0090 → rank 2.
+	// bingx (unsupported), mexc (stale), kraken (no funding) stay at rank 0.
+	for _, row := range rows {
+		switch row.Platform {
+		case "edgeX":
+			if row.Funding.Rank != 1 {
+				t.Fatalf("edgeX rank = %d, want 1", row.Funding.Rank)
+			}
+		case "binance":
+			if row.Funding.Rank != 2 {
+				t.Fatalf("binance rank = %d, want 2", row.Funding.Rank)
+			}
+		case "bingx", "mexc":
+			if row.Funding.Rank != 0 {
+				t.Fatalf("%s rank = %d, want 0 (incomplete should not be ranked)", row.Platform, row.Funding.Rank)
+			}
+		case "kraken":
+			if row.Funding != nil {
+				t.Fatalf("kraken funding should remain nil, got %+v", row.Funding)
+			}
+		}
+	}
+}
+
+func TestEnrichFundingRankRowsStableOnTies(t *testing.T) {
+	rows := []domain.PlatformSnapshot{
+		makeRow("binance", ptr(0.0050), domain.StatusComplete),
+		makeRow("okx", ptr(0.0050), domain.StatusComplete),
+		makeRow("bybit", ptr(0.0050), domain.StatusComplete),
+	}
+	rows = enrichFundingRankRows(rows)
+	// SliceStable preserves input order on equal keys.
+	want := map[string]int{
+		"binance": 1,
+		"okx":     2,
+		"bybit":   3,
+	}
+	for _, row := range rows {
+		if got := row.Funding.Rank; got != want[row.Platform] {
+			t.Fatalf("%s rank = %d, want %d (stable order on ties)", row.Platform, got, want[row.Platform])
+		}
+	}
+}
+
 func TestFindPlatformRow(t *testing.T) {
 	rows := []domain.PlatformSnapshot{
 		{Platform: "binance"},
