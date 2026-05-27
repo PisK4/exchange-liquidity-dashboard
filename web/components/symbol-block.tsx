@@ -2,13 +2,81 @@
 
 import { useState } from 'react';
 import { displayTierLabel, tierLabels, tierSeries } from '@/components/dashboard-shell';
-// 已隐藏的 Y 轴方案对照预览（与下方 JSX 注释中的 <SqrtLineChart> /
-// <DualRangeLineChart> 配对，回滚时同步取消注释）：
-// import { DualRangeLineChart } from '@/components/dual-range-line-chart';
-// import { SqrtLineChart } from '@/components/sqrt-line-chart';
 import { LineChart } from '@/components/line-chart';
+import { SmallMultiplesBarChart } from '@/components/small-multiples-bar-chart';
 import { StatusEmptyState } from '@/components/status-empty-state';
-import { bp, moneyAuto, pct, ratio, type FrontendURLLookup, type LiquiditySnapshot } from '@/lib/api/client';
+import { bp, moneyAuto, pct, ratio, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow } from '@/lib/api/client';
+
+type DepthChartMode = 'line' | 'bar';
+
+const depthChartModeItems: Array<{ value: DepthChartMode; label: string }> = [
+  { value: 'line', label: '曲线' },
+  { value: 'bar', label: '条形' },
+];
+
+type DepthSide = 'bid_usd' | 'ask_usd' | 'total_usd';
+
+function DepthChartSection({
+  canonical,
+  displayName,
+  rows,
+  side,
+  sideKey,
+  title,
+}: {
+  canonical: string;
+  displayName: string;
+  rows: PlatformRow[];
+  side: DepthSide;
+  sideKey: 'bid' | 'ask' | 'total';
+  title: string;
+}) {
+  const [mode, setMode] = useState<DepthChartMode>('line');
+  const series = tierSeries(rows, side);
+  const displayLabels = tierLabels.map(displayTierLabel);
+  const ariaTitle = `${displayName} ${title}`;
+  const sectionClass = mode === 'line' ? 'panel span-8 row-h-md' : 'panel span-24';
+
+  return (
+    <section className={sectionClass}>
+      <div className="panel-head">
+        <span className="panel-title">{title}</span>
+        <span className="panel-sub">
+          {mode === 'line' ? '· 曲线视图' : '· 档位分布，4 档独立 X 轴，平台按深度降序'}
+        </span>
+        <span
+          className="pill-group pill-group-mini symbol-block-mode-toggle"
+          role="tablist"
+          aria-label={`${ariaTitle} 视图`}
+        >
+          {depthChartModeItems.map(item => (
+            <button
+              key={item.value}
+              type="button"
+              role="tab"
+              aria-selected={mode === item.value}
+              className={`pill pill-mini ${mode === item.value ? 'active' : ''}`}
+              onClick={() => setMode(item.value)}
+              data-testid={`symbol-block-mode-${canonical}-${sideKey}-${item.value}`}
+            >
+              {item.label}
+            </button>
+          ))}
+        </span>
+      </div>
+      {mode === 'line' ? (
+        <LineChart ariaLabel={`${ariaTitle} 曲线`} labels={displayLabels} series={series} />
+      ) : (
+        <SmallMultiplesBarChart
+          ariaLabel={`${ariaTitle} 档位分布`}
+          tierLabels={tierLabels}
+          displayLabels={displayLabels}
+          series={series}
+        />
+      )}
+    </section>
+  );
+}
 
 // SymbolBlock renders one symbol's full V1 liquidity view inside a
 // dedicated outer section.panel frame. Single-symbol and multi-symbol
@@ -126,79 +194,49 @@ export function SymbolBlock({
           </div>
           <div className="big-number">{bp(kpis?.edgex_spread_bp)}</div>
           <div className="subline">
-            24h share {pct(kpis?.edgex_24h_share_pct)}
+            24h share{' '}
+            {kpis?.edgex_24h_share_status === 'stale'
+              ? '—'
+              : pct(kpis?.edgex_24h_share_pct)}
+            {kpis?.edgex_24h_share_status === 'partial' ? (
+              <span
+                className="panel-tag muted"
+                style={{ marginLeft: 6 }}
+                title="edgeX 原生 ticker 暂不可用，已用 CoinGecko 当日数据兜底"
+              >
+                via CG
+              </span>
+            ) : null}
           </div>
         </section>
         {/*
         已隐藏：edgeX 资金费率 (FundingKpiPanel)
         <FundingKpiPanel kpis={kpis} />
         */}
-        <section className="panel span-8 row-h-md">
-          <div className="panel-head">
-            <span className="panel-title">买盘深度曲线 BID</span>
-          </div>
-          <LineChart
-            ariaLabel={`${displayName} 买盘深度曲线 BID`}
-            labels={tierLabels.map(displayTierLabel)}
-            series={tierSeries(rows, 'bid_usd')}
-          />
-        </section>
-        <section className="panel span-8 row-h-md">
-          <div className="panel-head">
-            <span className="panel-title">卖盘深度曲线 ASK</span>
-          </div>
-          <LineChart
-            ariaLabel={`${displayName} 卖盘深度曲线 ASK`}
-            labels={tierLabels.map(displayTierLabel)}
-            series={tierSeries(rows, 'ask_usd')}
-          />
-        </section>
-        <section className="panel span-8 row-h-md">
-          <div className="panel-head">
-            <span className="panel-title">合计深度曲线 BID + ASK</span>
-          </div>
-          <LineChart
-            ariaLabel={`${displayName} 合计深度曲线 BID + ASK`}
-            labels={tierLabels.map(displayTierLabel)}
-            series={tierSeries(rows, 'total_usd')}
-          />
-        </section>
-        {/*
-          已隐藏：方案 Sqrt Y 轴预览（保留 JSX 以便日后回滚 / 重新评估）
-          - Sqrt 通过数据预变换 + Y tick 平方反变换实现
-          - 大档位被压缩、低档位被抬起；edgeX 不再贴 X 轴
-          - Y 轴 tick / tooltip 仍显示真实 USD（sqrt 仅用于绘制）
-          - 完全决策后可与 sqrt-line-chart.tsx 一并清理
-        <section className="panel span-24 row-h-md">
-          <div className="panel-head">
-            <span className="panel-title">方案 Sqrt Y 轴预览 · 合计深度 BID + ASK</span>
-            <span className="panel-sub">· 与上方线性 Y 轴对照评估</span>
-          </div>
-          <SqrtLineChart
-            ariaLabel={`${displayName} Sqrt Y 轴预览 合计深度`}
-            labels={tierLabels.map(displayTierLabel)}
-            series={tierSeries(rows, 'total_usd')}
-          />
-        </section>
-        */}
-        {/*
-          已隐藏：方案 DualRange 双面板预览（保留 JSX 以便日后回滚 / 重新评估）
-          - 左：低价档位 ±0.05% / ±0.10%（贴近盘口），Y 轴自适应小量级
-          - 右：高价档位 ±1% / ±2%（远离盘口），Y 轴自适应大量级
-          - 两侧各自独立线性 Y 轴；保留绝对 USD 语义
-          - 完全决策后可与 dual-range-line-chart.tsx 一并清理
-        <section className="panel span-24">
-          <div className="panel-head">
-            <span className="panel-title">方案 DualRange 双面板预览 · 合计深度 BID + ASK</span>
-            <span className="panel-sub">· 低/高档位拆分，各自独立 Y 轴</span>
-          </div>
-          <DualRangeLineChart
-            ariaLabel={`${displayName} DualRange 预览 合计深度`}
-            labels={tierLabels.map(displayTierLabel)}
-            series={tierSeries(rows, 'total_usd')}
-          />
-        </section>
-        */}
+        <DepthChartSection
+          canonical={canonical}
+          displayName={displayName}
+          rows={rows}
+          side="bid_usd"
+          sideKey="bid"
+          title="买盘深度 BID"
+        />
+        <DepthChartSection
+          canonical={canonical}
+          displayName={displayName}
+          rows={rows}
+          side="ask_usd"
+          sideKey="ask"
+          title="卖盘深度 ASK"
+        />
+        <DepthChartSection
+          canonical={canonical}
+          displayName={displayName}
+          rows={rows}
+          side="total_usd"
+          sideKey="total"
+          title="合计深度 BID + ASK"
+        />
         {/*
         已隐藏：深度明细 · 平台 × 档位 (USD) 表格
         <section className="panel span-24">
