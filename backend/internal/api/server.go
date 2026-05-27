@@ -17,8 +17,9 @@ import (
 var Version = "dev"
 
 type Server struct {
-	cfg   config.Config
-	store StoreReader
+	cfg     config.Config
+	store   StoreReader
+	listing ListingReader
 }
 
 type StoreReader interface {
@@ -38,8 +39,12 @@ type StoreReader interface {
 	RuntimeConfig() config.Runtime
 }
 
-func NewServer(cfg config.Config, store StoreReader) *Server {
-	return &Server{cfg: cfg, store: store}
+func NewServer(cfg config.Config, store StoreReader, opts ...Option) *Server {
+	s := &Server{cfg: cfg, store: store}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *Server) Routes() http.Handler {
@@ -56,6 +61,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/snapshot/top30/divergence", s.top30Divergence)
 	mux.HandleFunc("/api/collection-status", s.collectionStatus)
 	mux.HandleFunc("/api/runtime-config", s.runtimeConfig)
+	s.registerListingRoutes(mux)
 	return cors(mux)
 }
 
