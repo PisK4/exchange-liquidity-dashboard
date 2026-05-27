@@ -242,7 +242,10 @@ export function QualityBlock({
               </thead>
               <tbody>
                 {rows.map(row => (
-                  <tr key={row.platform}>
+                  <tr
+                    key={row.platform}
+                    className={row.platform === 'edgeX' ? 'r-edgex' : undefined}
+                  >
                     <td>
                       <PlatformCell
                         platform={row.platform}
