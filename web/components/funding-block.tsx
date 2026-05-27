@@ -186,10 +186,10 @@ export function FundingBlock({
                 <tr>
                   <th>平台</th>
                   <th className="num">原生费率</th>
-                  <th className="num">8h 当量</th>
+                  <th className="num">8h 折算费率</th>
                   <th className="num">vs 中位数 (8h)</th>
-                  <th className="num">正费率排名</th>
-                  <th className="num">负费率排名</th>
+                  <th className="num">正费率排名 (8h)</th>
+                  <th className="num">负费率排名 (8h)</th>
                 </tr>
               </thead>
               <tbody>
