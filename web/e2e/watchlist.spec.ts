@@ -228,11 +228,13 @@ test('clicking 查看明细 on a QualityCard collapses to single-symbol V1 quali
   await expect(page).toHaveURL(/watchlist=ETH/);
 });
 
-test('add button disables at MAX_WATCHLIST cap (10)', async ({ page }) => {
-  // We only have 4 fixture symbols; build a URL with the 4 available
-  // symbols duplicated up to 10 entries — dedupeAndCap collapses dupes
-  // so the trigger should NOT disable. Then add via addInitScript to
-  // seed exactly 10 unique entries to assert the disable behaviour.
+test('manage-favorites trigger stays enabled at MAX_WATCHLIST cap so users can drop entries', async ({ page }) => {
+  // After the picker refactor the toolbar trigger is renamed
+  // "管理自选 ▾" and is always enabled — even at the 10-symbol cap —
+  // because the operator still needs to open the dropdown to remove a
+  // favorite before they can add another one. The picker itself takes
+  // over cap-enforcement: each unfavorited row's ★ button becomes
+  // disabled when watchlist.length >= MAX_WATCHLIST.
   await page.addInitScript(() => {
     window.localStorage.setItem(
       'edgex-dashboard:watchlist:v1',
@@ -240,5 +242,12 @@ test('add button disables at MAX_WATCHLIST cap (10)', async ({ page }) => {
     );
   });
   await page.goto('/');
-  await expect(page.getByTestId('watchlist-add-trigger')).toBeDisabled();
+  const trigger = page.getByTestId('watchlist-add-trigger');
+  await expect(trigger).toBeEnabled();
+  // Open the dropdown — the BTC star (already favorited) stays enabled
+  // so the operator can free a slot; if any non-favorited symbol shows
+  // in the dropdown its ★ is the cap-disabled control under test.
+  await trigger.click();
+  const btcStar = page.getByTestId('watchlist-add-star-BTC');
+  await expect(btcStar).toBeEnabled();
 });
