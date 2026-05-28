@@ -394,7 +394,7 @@ func (s *Store) persistTop30(ctx context.Context, platform string, rows []domain
 			platform, row.Symbol, row.Rank, row.Volume24HUSD,
 			v7d, d7d,
 			nullInt(row.CoverageCount),
-			boolToTinyInt(row.EdgexListed),
+			edgexListedTinyInt(row.EdgexListed, row.ListedStatus),
 			nullString(row.Action),
 			defaultString(row.DataSource, domain.DataSourceCoinGecko),
 			nullString(row.SourceEndpoint),
@@ -412,6 +412,23 @@ func boolToTinyInt(b bool) sql.NullInt64 {
 		return sql.NullInt64{}
 	}
 	return sql.NullInt64{Int64: 1, Valid: true}
+}
+
+// edgexListedTinyInt writes the t_top30_snapshot.edgex_listed column so
+// downstream consumers (notably the Listing Agent Top30 hot-gap push)
+// can distinguish "known not listed" from "unknown / universe missing".
+// listedStatus == domain.StatusComplete means the listed_universe lookup
+// ran successfully; any other status (empty, insufficient_history, ...)
+// means we never resolved a real listing flag and must persist NULL so
+// BuildTop30PushEvents can fail-close on that row.
+func edgexListedTinyInt(listed bool, listedStatus string) sql.NullInt64 {
+	if listedStatus != domain.StatusComplete {
+		return sql.NullInt64{}
+	}
+	if listed {
+		return sql.NullInt64{Int64: 1, Valid: true}
+	}
+	return sql.NullInt64{Int64: 0, Valid: true}
 }
 
 func boolToInt(b bool) int {

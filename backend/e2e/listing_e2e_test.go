@@ -402,7 +402,8 @@ func TestListingAgentE2E_FullPipeline(t *testing.T) {
 		defer webhook.Close()
 
 		webhookCfg := cfg
-		webhookCfg.Runtime.ListingAgent.Delivery.Top30WebhookURL = webhook.URL
+		webhookCfg.Alert.Enabled = true
+		webhookCfg.Alert.WebHookP3 = webhook.URL
 		engineWithWebhook := listing.NewEngine(webhookCfg, repo, listing.EngineDeps{
 			Now:          func() time.Time { return runNow },
 			LoadUniverse: loadE2EUniverse,
@@ -419,6 +420,16 @@ func TestListingAgentE2E_FullPipeline(t *testing.T) {
 		}
 		if receivedCT != "application/json; charset=utf-8" {
 			t.Fatalf("webhook content-type = %q", receivedCT)
+		}
+		if !json.Valid(receivedBody) {
+			t.Fatalf("webhook body is not json: %s", string(receivedBody))
+		}
+		var body map[string]any
+		if err := json.Unmarshal(receivedBody, &body); err != nil {
+			t.Fatalf("unmarshal webhook body: %v", err)
+		}
+		if body["msg_type"] != "post" {
+			t.Fatalf("webhook msg_type = %v, want post; body=%s", body["msg_type"], string(receivedBody))
 		}
 
 		// Outbox must be marked sent, attempt row must exist.

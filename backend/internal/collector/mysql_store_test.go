@@ -695,3 +695,33 @@ func TestShareReturnsFormalFieldsAndInsufficientHistory(t *testing.T) {
 		t.Fatalf("expected insufficient_history historical share, got %+v", historical)
 	}
 }
+
+func TestEdgexListedTinyIntDistinguishesKnownFalseFromUnknown(t *testing.T) {
+	t.Parallel()
+	cases := []struct {
+		name      string
+		listed    bool
+		status    string
+		wantValid bool
+		wantValue int64
+	}{
+		{"known_not_listed", false, domain.StatusComplete, true, 0},
+		{"known_listed", true, domain.StatusComplete, true, 1},
+		{"unknown_status_empty", false, "", false, 0},
+		{"unknown_status_insufficient", false, domain.StatusInsufficientHistory, false, 0},
+		{"listed_true_but_status_missing_writes_null", true, "", false, 0},
+	}
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := edgexListedTinyInt(tc.listed, tc.status)
+			if got.Valid != tc.wantValid {
+				t.Fatalf("Valid mismatch: got %v, want %v", got.Valid, tc.wantValid)
+			}
+			if tc.wantValid && got.Int64 != tc.wantValue {
+				t.Fatalf("Int64 mismatch: got %d, want %d", got.Int64, tc.wantValue)
+			}
+		})
+	}
+}

@@ -202,9 +202,13 @@ func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (To
 	}
 	events := BuildTop30PushEvents(rows, latest)
 	for _, ev := range events {
-		payload, err := json.Marshal(ev)
+		signalPayload, err := json.Marshal(ev)
 		if err != nil {
 			return Top30PushResult{Events: len(events)}, fmt.Errorf("marshal event: %w", err)
+		}
+		outboxPayload, err := RenderTop30PostMessage(ev)
+		if err != nil {
+			return Top30PushResult{Events: len(events)}, fmt.Errorf("render top30 post message: %w", err)
 		}
 		signal := SignalObservation{
 			SignalType:      SignalTop30HotGap,
@@ -216,7 +220,7 @@ func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (To
 			InstrumentKind:  "canonical",
 			ObservedAt:      now,
 			Fingerprint:     fmt.Sprintf("top30_hot_gap|%s|%s|%s", ev.Symbol, ev.Action, ev.SnapshotDate),
-			PayloadJSON:     payload,
+			PayloadJSON:     signalPayload,
 		}
 		if _, _, err := repo.InsertSignal(ctx, signal); err != nil {
 			return Top30PushResult{}, fmt.Errorf("insert top30 signal: %w", err)
@@ -237,7 +241,7 @@ func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (To
 			TargetChannel: DeliveryChannelLarkTop30,
 			Status:        status,
 			MaxAttempts:   maxAttempts,
-			PayloadJSON:   payload,
+			PayloadJSON:   outboxPayload,
 			NextAttemptAt: ptrTime(now),
 			CreatedAt:     now,
 			UpdatedAt:     now,

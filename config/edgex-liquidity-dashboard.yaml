@@ -12,13 +12,16 @@ Database:
 
 Alert:
   AppName: edgex-liquidity-dashboard
-  Enabled: false
+  Enabled: true
   FeishuUid: ""
   DestPhoneNumber: ""
   Business: ""
   ServerUrl: ""
   WebHookP12: ""
-  WebHookP3: ""
+  # Listing Agent Top30 hot-gap Lark bot webhook. This top-level Alert
+  # block mirrors the Nacos-style service alert config used by other
+  # EdgeX services; Listing Agent only consumes it, not its own module.
+  WebHookP3: "https://open.larksuite.com/open-apis/bot/v2/hook/2983a36c-de31-4190-99b4-e256662bb8f7"
   WebHookP45: ""
 
 Catalog:
@@ -189,11 +192,11 @@ Runtime:
             poll_interval: 5m
     delivery:
       enabled: true
-      # Webhook URL is never persisted to MySQL or printed in logs. Leave
-      # blank in committed yaml; resolve at runtime from
-      # top30_webhook_url_env (default LARK_LISTING_TOP30_WEBHOOK_URL).
+      # Webhook target is configured in the top-level Alert block so the
+      # same YAML shape can be promoted to Nacos. Keep delivery here for
+      # Listing-specific retry/outbox toggles only.
       top30_webhook_url: ""
-      top30_webhook_url_env: LARK_LISTING_TOP30_WEBHOOK_URL
+      top30_webhook_url_env: ""
       top30_webhook_secret: ""
       dashboard_base_url: ""
     top30_push:

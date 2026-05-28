@@ -1,6 +1,7 @@
 package listing
 
 import (
+	"encoding/json"
 	"testing"
 	"time"
 )
@@ -67,6 +68,13 @@ func TestRenderTop30PostMessageContainsSymbolAndAction(t *testing.T) {
 		if !contains(bs, want) {
 			t.Fatalf("missing %q in body: %s", want, bs)
 		}
+	}
+	var decoded map[string]any
+	if err := json.Unmarshal(body, &decoded); err != nil {
+		t.Fatalf("body is not json: %v", err)
+	}
+	if decoded["msg_type"] != "post" {
+		t.Fatalf("msg_type = %v, want post", decoded["msg_type"])
 	}
 }
 

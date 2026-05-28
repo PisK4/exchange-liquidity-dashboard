@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"edgex-dashboard/backend/internal/config"
@@ -84,7 +85,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	}
 
 	// Step 2: produce Top30 push outbox rows.
-	webhook := resolveWebhookURL(e.cfg.Runtime.ListingAgent.Delivery)
+	webhook := resolveWebhookURL(e.cfg)
 	top30, top30Err := ProduceTop30Push(ctx, e.repo, Top30Deps{
 		LoadUniverse:  e.deps.LoadUniverse,
 		Now:           e.deps.Now,
@@ -141,12 +142,16 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 }
 
-func resolveWebhookURL(cfg config.ListingDeliveryConfig) string {
-	if cfg.Top30WebhookURL != "" {
-		return cfg.Top30WebhookURL
+func resolveWebhookURL(cfg config.Config) string {
+	if cfg.Alert.Enabled && strings.TrimSpace(cfg.Alert.WebHookP3) != "" {
+		return cfg.Alert.WebHookP3
 	}
-	if cfg.Top30WebhookURLEnv != "" {
-		return os.Getenv(cfg.Top30WebhookURLEnv)
+	delivery := cfg.Runtime.ListingAgent.Delivery
+	if delivery.Top30WebhookURL != "" {
+		return delivery.Top30WebhookURL
+	}
+	if delivery.Top30WebhookURLEnv != "" {
+		return os.Getenv(delivery.Top30WebhookURLEnv)
 	}
 	return ""
 }
