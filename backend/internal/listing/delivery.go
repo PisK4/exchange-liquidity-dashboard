@@ -29,6 +29,13 @@ type DeliveryDeps struct {
 	// RetryBackoff returns the wait time for the n-th retry attempt
 	// (1-based). When nil, an exponential default is used.
 	RetryBackoff func(attempt int) time.Duration
+	// DedupeKeyPrefix, when non-empty, restricts the drain to outbox
+	// rows whose dedupe_key starts with this exact prefix (`LIKE
+	// 'prefix%'`). Production callers leave it empty so the drain
+	// covers every due row; smoke / preview scripts set it to a
+	// runtime-unique marker so test rows can flow through the real
+	// drain path without ever clobbering production traffic.
+	DedupeKeyPrefix string
 }
 
 // DeliveryResult is the per-run summary of a DrainDueOutbox call.
@@ -66,7 +73,7 @@ func DrainDueOutbox(ctx context.Context, repo *Repository, deps DeliveryDeps) (D
 		deps.RetryBackoff = defaultRetryBackoff
 	}
 	now := deps.Now()
-	rows, err := repo.loadDueOutbox(ctx, now, deps.BatchSize)
+	rows, err := repo.loadDueOutbox(ctx, now, deps.BatchSize, deps.DedupeKeyPrefix)
 	if err != nil {
 		return DeliveryResult{}, fmt.Errorf("load due outbox: %w", err)
 	}
@@ -185,19 +192,29 @@ func postLarkWebhook(ctx context.Context, client *http.Client, url, secret strin
 // pending or retry and whose next_attempt_at is due. Disabled rows
 // are intentionally returned too so a webhook URL re-introduction
 // (operator flips the flag back on) can re-evaluate them.
-func (r *Repository) loadDueOutbox(ctx context.Context, now time.Time, limit int) ([]DeliveryOutbox, error) {
+//
+// When dedupeKeyPrefix is non-empty the query is further restricted
+// to dedupe_key LIKE 'prefix%'. Production callers pass "" (no extra
+// filter) and behaviour is identical to before; smoke / preview
+// scripts pass a runtime-unique marker so test rows flow through the
+// real drain path in isolation from live traffic.
+func (r *Repository) loadDueOutbox(ctx context.Context, now time.Time, limit int, dedupeKeyPrefix string) ([]DeliveryOutbox, error) {
 	if r.db == nil {
 		return nil, errors.New("listing delivery: no db attached")
 	}
-	rows, err := r.db.QueryContext(ctx,
-		`SELECT id, event_type, dedupe_key, target_channel, status, attempt_count, max_attempts,
+	args := []any{OutboxStatusPending, OutboxStatusRetry, now}
+	query := `SELECT id, event_type, dedupe_key, target_channel, status, attempt_count, max_attempts,
 		         next_attempt_at, payload_json, last_error, sent_at, created_at, updated_at
 		    FROM t_listing_delivery_outbox
-		   WHERE status IN (?, ?) AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
-		   ORDER BY next_attempt_at ASC
-		   LIMIT ?`,
-		OutboxStatusPending, OutboxStatusRetry, now, limit,
-	)
+		   WHERE status IN (?, ?) AND (next_attempt_at IS NULL OR next_attempt_at <= ?)`
+	if strings.TrimSpace(dedupeKeyPrefix) != "" {
+		query += ` AND dedupe_key LIKE ?`
+		args = append(args, dedupeKeyPrefix+"%")
+	}
+	query += ` ORDER BY next_attempt_at ASC
+		   LIMIT ?`
+	args = append(args, limit)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}

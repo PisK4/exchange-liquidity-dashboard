@@ -101,6 +101,55 @@ func TestLarkSignProducesStableHash(t *testing.T) {
 	}
 }
 
+func TestDrainDueOutboxAppliesDedupeKeyPrefixFilter(t *testing.T) {
+	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	// Smoke prefix isolation: only rows whose dedupe_key starts with
+	// the prefix are drained, even if production rows are also
+	// pending. The mock will refuse to match if the LIKE clause is
+	// missing from the SQL or the arg ordering is wrong, so this is
+	// effectively an assertion on the query shape too.
+	prefix := "lark_push_test|abc123|"
+	rows := sqlmock.NewRows([]string{
+		"id", "event_type", "dedupe_key", "target_channel", "status", "attempt_count", "max_attempts",
+		"next_attempt_at", "payload_json", "last_error", "sent_at", "created_at", "updated_at",
+	}).AddRow(
+		int64(99), DeliveryEventTop30HotGap, prefix+"top30_hot_gap|ABC|优先上架|2026-05-27",
+		DeliveryChannelLarkTop30, OutboxStatusPending, 0, 5, now.Add(-time.Minute),
+		[]byte(`{"msg_type":"post","content":{}}`), nil, nil, now, now,
+	)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_delivery_outbox WHERE status IN .+ AND dedupe_key LIKE`).
+		WithArgs(OutboxStatusPending, OutboxStatusRetry, now, prefix+"%", 50).
+		WillReturnRows(rows)
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_delivery_outbox SET status")).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_delivery_attempt")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	result, err := DrainDueOutbox(context.Background(), repo, DeliveryDeps{
+		WebhookURL:      srv.URL,
+		Client:          srv.Client(),
+		Now:             func() time.Time { return now },
+		DedupeKeyPrefix: prefix,
+	})
+	if err != nil {
+		t.Fatalf("DrainDueOutbox err = %v", err)
+	}
+	if result.Sent != 1 {
+		t.Fatalf("result = %+v want Sent=1", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestDrainDueOutboxAttachesLarkSignWhenSecretSet(t *testing.T) {
 	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newRepoWithMock(t, now)
