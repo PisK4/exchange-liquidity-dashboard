@@ -39,11 +39,12 @@ type EngineDeps struct {
 
 // RunSummary aggregates per-stage results from a single RunOnce tick.
 type RunSummary struct {
-	Fusion    FusionResult
-	Top30Push Top30PushResult
-	Delivery  DeliveryResult
-	Started   time.Time
-	Finished  time.Time
+	Fusion          FusionResult
+	Top30Push       Top30PushResult
+	DivergencePush  DivergencePushResult
+	Delivery        DeliveryResult
+	Started         time.Time
+	Finished        time.Time
 }
 
 // NewEngine wires an Engine with concrete dependencies. The
@@ -136,6 +137,22 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 		e.deps.Logger.Printf("listing engine: top30 push error: %v", top30Err)
 	}
 
+	// Step 2b: produce divergence push outbox rows (#2-#5). Shares the
+	// same webhook + max-attempts knobs as the hot-gap path because
+	// both target the same Lark channel.
+	divergence, divErr := ProduceDivergencePush(ctx, e.repo, DivergenceDeps{
+		Now:           e.deps.Now,
+		DashboardBase: e.cfg.Runtime.ListingAgent.Delivery.DashboardBaseURL,
+		WebhookURL:    webhook,
+		MaxAttempts:   e.cfg.Runtime.ListingAgent.Worker.MaxAttempts,
+		DivergenceCfg: e.cfg.Runtime.Top30Divergence,
+		PushCfg:       e.cfg.Runtime.ListingAgent.Top30DivergencePush,
+	})
+	summary.DivergencePush = divergence
+	if divErr != nil {
+		e.deps.Logger.Printf("listing engine: divergence push error: %v", divErr)
+	}
+
 	// Step 3: drain due outbox. Empty webhook URL marks rows as disabled
 	// without producing a network call; this is intentional so smoke
 	// tests can run without a webhook configured.
@@ -171,7 +188,7 @@ func (e *Engine) Run(ctx context.Context) error {
 		if err != nil {
 			e.deps.Logger.Printf("listing engine: tick error: %v", err)
 		}
-		e.deps.Logger.Printf("listing engine tick: fusion=%+v top30=%+v delivery=%+v", summary.Fusion, summary.Top30Push, summary.Delivery)
+		e.deps.Logger.Printf("listing engine tick: fusion=%+v top30=%+v divergence=%+v delivery=%+v", summary.Fusion, summary.Top30Push, summary.DivergencePush, summary.Delivery)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()

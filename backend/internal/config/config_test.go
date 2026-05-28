@@ -758,6 +758,11 @@ Runtime:
       enabled: true
       poll_interval: 5m
       stale_after: 15m
+    top30_divergence_push:
+      enabled: true
+      top_n_per_card: 8
+      stale_after: 12m
+      send_spacing: 45s
     candidate:
       merge_window: 14d
 `
@@ -804,6 +809,9 @@ Runtime:
 	}
 	if got := cfg.Runtime.ListingAgent.Top30Push.PollInterval; got != 5*time.Minute {
 		t.Fatalf("top30 poll_interval = %s", got)
+	}
+	if got := cfg.Runtime.ListingAgent.Top30DivergencePush; !got.Enabled || got.TopNPerCard != 8 || got.StaleAfter != 12*time.Minute || got.SendSpacing != 45*time.Second {
+		t.Fatalf("top30_divergence_push config = %+v", got)
 	}
 	if got := cfg.Runtime.ListingAgent.Candidate.MergeWindow; got != 14*24*time.Hour {
 		t.Fatalf("merge_window = %s", got)
