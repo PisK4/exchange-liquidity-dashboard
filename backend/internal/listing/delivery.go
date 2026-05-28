@@ -236,6 +236,20 @@ func (r *Repository) updateOutboxAfterSend(ctx context.Context, id int64, status
 	return err
 }
 
+// recordAttempt writes one audit row per (outbox_id, attempt_no).
+// The ON DUPLICATE KEY UPDATE clause keeps the worker idempotent
+// across operator interventions: when an outbox row's attempt_count
+// is manually reset (e.g. to re-drive a stuck row through DrainDueOutbox)
+// the next delivery attempt may reuse an attempt_no that already
+// exists in t_listing_delivery_attempt. Without the upsert, the
+// duplicate-key error bubbles up from DrainDueOutbox before
+// out.Sent/Failed/Retried is incremented, so the operator sees a
+// misleading delivery summary even though the outbox row itself was
+// updated correctly. Upserting the latest status / http_status /
+// error / response_body / attempted_at onto the existing audit row
+// matches operator intent ("this is the latest attempt") and keeps
+// the unique key intact for production traffic where attempt_no is
+// monotonic and the conflict path is never taken.
 func (r *Repository) recordAttempt(ctx context.Context, outboxID int64, attempt int, status string, httpStatus *int, errMsg, responseBody string, attemptedAt time.Time) error {
 	var http any
 	if httpStatus != nil {
@@ -244,7 +258,14 @@ func (r *Repository) recordAttempt(ctx context.Context, outboxID int64, attempt 
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO t_listing_delivery_attempt
 		   (outbox_id, attempt_no, status, http_status, error_message, attempted_at, response_body, latency_ms)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   status = VALUES(status),
+		   http_status = VALUES(http_status),
+		   error_message = VALUES(error_message),
+		   attempted_at = VALUES(attempted_at),
+		   response_body = VALUES(response_body),
+		   latency_ms = VALUES(latency_ms)`,
 		outboxID, attempt, status, http, nullString(errMsg), attemptedAt, nullString(responseBody), 0,
 	)
 	return err

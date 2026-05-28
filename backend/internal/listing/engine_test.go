@@ -2,6 +2,7 @@ package listing
 
 import (
 	"context"
+	"net/http"
 	"regexp"
 	"testing"
 	"time"
@@ -97,4 +98,46 @@ func TestEngineRunOnceDrainsOutboxWhenUniverseLoaded(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)
 	}
+}
+
+func TestBuildDeliveryHTTPClientWiresProxyOnlyWhenConfigured(t *testing.T) {
+	t.Parallel()
+	t.Run("blank proxy returns default client", func(t *testing.T) {
+		t.Parallel()
+		client, err := buildDeliveryHTTPClient("")
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		if client != nil && client.Transport != nil {
+			t.Fatalf("expected DefaultClient (nil transport), got %+v", client.Transport)
+		}
+	})
+	t.Run("valid proxy installs http.ProxyURL transport", func(t *testing.T) {
+		t.Parallel()
+		client, err := buildDeliveryHTTPClient("http://host.docker.internal:7897")
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+		tr, ok := client.Transport.(*http.Transport)
+		if !ok {
+			t.Fatalf("transport type = %T, want *http.Transport", client.Transport)
+		}
+		if tr.Proxy == nil {
+			t.Fatalf("transport.Proxy should be non-nil for configured proxy")
+		}
+		req, _ := http.NewRequest("GET", "https://open.larksuite.com/", nil)
+		got, err := tr.Proxy(req)
+		if err != nil {
+			t.Fatalf("proxy resolver err: %v", err)
+		}
+		if got == nil || got.String() != "http://host.docker.internal:7897" {
+			t.Fatalf("resolved proxy = %v, want http://host.docker.internal:7897", got)
+		}
+	})
+	t.Run("malformed proxy url surfaces an error", func(t *testing.T) {
+		t.Parallel()
+		if _, err := buildDeliveryHTTPClient("not-a-url"); err == nil {
+			t.Fatalf("expected error for malformed proxy, got nil")
+		}
+	})
 }

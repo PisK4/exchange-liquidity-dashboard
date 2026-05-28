@@ -199,6 +199,15 @@ Runtime:
       top30_webhook_url_env: ""
       top30_webhook_secret: ""
       dashboard_base_url: ""
+      # Optional HTTP/HTTPS proxy for the Lark webhook delivery client
+      # only. Do NOT promote this to a process-wide HTTPS_PROXY env --
+      # that would also route the 9 native exchange REST adapters and
+      # the CoinGecko collector through this proxy and pollute their
+      # latency measurements. Leave blank when the deployment can dial
+      # open.larksuite.com directly (e.g. in production). Local Docker
+      # stacks on macOS typically need the same host proxy used for
+      # exchanges, here e.g. http://host.docker.internal:7897.
+      proxy: "http://host.docker.internal:7897"
     top30_push:
       enabled: true
       poll_interval: 5m

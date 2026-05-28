@@ -127,6 +127,14 @@ type ListingDeliveryConfig struct {
 	Top30WebhookURLEnv string `json:"top30_webhook_url_env,omitempty"`
 	Top30WebhookSecret string `json:"-"`
 	DashboardBaseURL   string `json:"dashboard_base_url,omitempty"`
+	// Proxy is an optional HTTP/HTTPS proxy URL used exclusively by the
+	// Lark webhook delivery client. It is intentionally scoped to this
+	// config (rather than promoted to a process-level HTTPS_PROXY env)
+	// because the 9 native exchange adapters and CoinGecko collector
+	// have their own proxy knobs and a process-wide setting would
+	// pollute their latency measurements. Leave blank to dial Lark
+	// directly.
+	Proxy string `json:"proxy,omitempty"`
 }
 
 // ListingTop30PushConfig controls the Top30 hot-gap producer worker.
@@ -709,6 +717,7 @@ type listingDeliveryFile struct {
 	Top30WebhookURLEnv string `yaml:"top30_webhook_url_env"`
 	Top30WebhookSecret string `yaml:"top30_webhook_secret"`
 	DashboardBaseURL   string `yaml:"dashboard_base_url"`
+	Proxy              string `yaml:"proxy"`
 }
 
 type listingTop30PushFile struct {
@@ -1258,6 +1267,9 @@ func applyListingDeliveryFile(base ListingDeliveryConfig, file listingDeliveryFi
 	}
 	if file.DashboardBaseURL != "" {
 		base.DashboardBaseURL = file.DashboardBaseURL
+	}
+	if file.Proxy != "" {
+		base.Proxy = file.Proxy
 	}
 	return base
 }

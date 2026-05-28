@@ -3,8 +3,10 @@ package listing
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -52,7 +54,15 @@ func NewEngine(cfg config.Config, repo *Repository, deps EngineDeps) *Engine {
 		deps.Now = func() time.Time { return time.Now().UTC() }
 	}
 	if deps.HTTPClient == nil {
-		deps.HTTPClient = http.DefaultClient
+		proxy := strings.TrimSpace(cfg.Runtime.ListingAgent.Delivery.Proxy)
+		client, err := buildDeliveryHTTPClient(proxy)
+		if err != nil {
+			log.Printf("listing engine: delivery proxy %q ignored: %v", proxy, err)
+			client = http.DefaultClient
+		} else if proxy != "" {
+			log.Printf("listing engine: delivery http client routed through proxy %q", proxy)
+		}
+		deps.HTTPClient = client
 	}
 	if deps.OwnerID == "" {
 		deps.OwnerID, _ = os.Hostname()
@@ -64,6 +74,31 @@ func NewEngine(cfg config.Config, repo *Repository, deps EngineDeps) *Engine {
 		deps.Logger = log.Default()
 	}
 	return &Engine{cfg: cfg, repo: repo, deps: deps}
+}
+
+// buildDeliveryHTTPClient returns an *http.Client whose Transport
+// routes every outbound request through proxyURL. Returns the package
+// default client when proxyURL is blank so production deployments
+// without a configured proxy keep their previous behaviour. The
+// resulting client is intentionally only used by the Listing Agent
+// delivery worker; the 9 exchange adapters and the CoinGecko
+// collector continue to honour their own per-client proxy knobs so
+// latency measurements are not polluted by a shared transport.
+func buildDeliveryHTTPClient(proxyURL string) (*http.Client, error) {
+	proxyURL = strings.TrimSpace(proxyURL)
+	if proxyURL == "" {
+		return http.DefaultClient, nil
+	}
+	parsed, err := url.Parse(proxyURL)
+	if err != nil {
+		return nil, fmt.Errorf("parse proxy url: %w", err)
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return nil, fmt.Errorf("proxy url missing scheme or host: %q", proxyURL)
+	}
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	transport.Proxy = http.ProxyURL(parsed)
+	return &http.Client{Transport: transport}, nil
 }
 
 // RunOnce executes one full tick of the listing pipeline. Each stage

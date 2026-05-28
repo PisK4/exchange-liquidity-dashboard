@@ -156,7 +156,6 @@ func main() {
 	if roleStartsListing(*role) && cfg.Runtime.ListingAgent.Enabled && listingRepo != nil {
 		engine := listing.NewEngine(cfg, listingRepo, listing.EngineDeps{
 			LoadUniverse: listingUniverseLoader,
-			HTTPClient:   http.DefaultClient,
 		})
 		if *runOnce && *role == "listing" {
 			summary, err := engine.RunOnce(ctx)
