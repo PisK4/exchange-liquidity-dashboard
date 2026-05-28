@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"edgex-dashboard/backend/internal/config"
+	"edgex-dashboard/backend/internal/divergence"
 	"edgex-dashboard/backend/internal/domain"
 )
 
@@ -262,6 +263,10 @@ func TestTop30Divergence_MergesAcrossQuoteVariants(t *testing.T) {
 }
 
 func TestCanonicaliseDivergenceSymbol(t *testing.T) {
+	// The canonicalisation rule now lives in internal/divergence;
+	// keep this collector-level test as a thin guard that the shim
+	// still forwards the same behaviour, plus the legacy case set the
+	// store-side wired into.
 	cases := []struct {
 		in, want string
 	}{
@@ -278,13 +283,17 @@ func TestCanonicaliseDivergenceSymbol(t *testing.T) {
 		{"   ", ""},
 	}
 	for _, tc := range cases {
-		if got := canonicaliseDivergenceSymbol(tc.in); got != tc.want {
-			t.Errorf("canonicaliseDivergenceSymbol(%q) = %q, want %q", tc.in, got, tc.want)
+		if got := divergence.CanonicaliseSymbol(tc.in); got != tc.want {
+			t.Errorf("divergence.CanonicaliseSymbol(%q) = %q, want %q", tc.in, got, tc.want)
 		}
 	}
 }
 
 func TestClassifyDivergence(t *testing.T) {
+	// Classification likewise lives in internal/divergence; the
+	// thin-shim Top30Divergence forwards verbatim. This test keeps the
+	// old collector-level assertions running so the renamed export
+	// surface is still wired correctly.
 	one, two, eleven := 1, 2, 11
 	cases := []struct {
 		name     string
@@ -301,7 +310,7 @@ func TestClassifyDivergence(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := classifyDivergence(tc.cex, tc.dex, tc.thresh); got != tc.want {
+			if got := divergence.ClassifyDivergence(tc.cex, tc.dex, tc.thresh); got != tc.want {
 				t.Fatalf("got %q, want %q", got, tc.want)
 			}
 		})
