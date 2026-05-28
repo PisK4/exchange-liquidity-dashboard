@@ -116,12 +116,15 @@ var divergenceCategories = map[string]divergenceCategoryConfig{
 //  1. Build a canonical→*bool lookup from rows so the three-state
 //     edgex_listed filter survives the divergence aggregation
 //     boundary.
+//
 //  2. Call divergence.Compute to get the per-class aggregates and the
 //     classified divergence rows.
+//
 //  3. Filter divergence rows on the *EdgexListed==false red line
 //     (nil → drop; *true → drop). This is the alert-side strict
 //     filter, separate from the KPI counter on the API path which
 //     preserves legacy "any not-known-listed counts" behaviour.
+//
 //  4. Per card category, pick rows and sort by the category's natural
 //     ordering:
 //

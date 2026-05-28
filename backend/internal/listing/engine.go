@@ -39,12 +39,12 @@ type EngineDeps struct {
 
 // RunSummary aggregates per-stage results from a single RunOnce tick.
 type RunSummary struct {
-	Fusion          FusionResult
-	Top30Push       Top30PushResult
-	DivergencePush  DivergencePushResult
-	Delivery        DeliveryResult
-	Started         time.Time
-	Finished        time.Time
+	Fusion         FusionResult
+	Top30Push      Top30PushResult
+	DivergencePush DivergencePushResult
+	Delivery       DeliveryResult
+	Started        time.Time
+	Finished       time.Time
 }
 
 // NewEngine wires an Engine with concrete dependencies. The

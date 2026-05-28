@@ -61,13 +61,13 @@ type Runtime struct {
 // 2026-05-27-Listing-Agent-P1-主链路方案设计.md §16 and §23 for the
 // authoritative knobs.
 type ListingAgentConfig struct {
-	Enabled              bool                         `json:"enabled"`
-	Worker               ListingWorkerConfig          `json:"worker"`
-	Sources              ListingSourcesConfig         `json:"sources"`
-	Delivery             ListingDeliveryConfig        `json:"delivery"`
-	Top30Push            ListingTop30PushConfig       `json:"top30_push"`
-	Top30DivergencePush  Top30DivergencePushConfig    `json:"top30_divergence_push"`
-	Candidate            ListingCandidateConfig       `json:"candidate"`
+	Enabled             bool                      `json:"enabled"`
+	Worker              ListingWorkerConfig       `json:"worker"`
+	Sources             ListingSourcesConfig      `json:"sources"`
+	Delivery            ListingDeliveryConfig     `json:"delivery"`
+	Top30Push           ListingTop30PushConfig    `json:"top30_push"`
+	Top30DivergencePush Top30DivergencePushConfig `json:"top30_divergence_push"`
+	Candidate           ListingCandidateConfig    `json:"candidate"`
 }
 
 // Top30DivergencePushConfig controls the CEX/DEX divergence Lark
@@ -82,10 +82,10 @@ type ListingAgentConfig struct {
 // NextAttemptAt across the four category cards written in one tick,
 // matching top30_push's burst-control story.
 type Top30DivergencePushConfig struct {
-	Enabled      bool          `json:"enabled"`
-	TopNPerCard  int           `json:"top_n_per_card"`
-	StaleAfter   time.Duration `json:"stale_after"`
-	SendSpacing  time.Duration `json:"send_spacing"`
+	Enabled     bool          `json:"enabled"`
+	TopNPerCard int           `json:"top_n_per_card"`
+	StaleAfter  time.Duration `json:"stale_after"`
+	SendSpacing time.Duration `json:"send_spacing"`
 }
 
 // ListingWorkerConfig controls the per-source worker lease and the
@@ -721,13 +721,13 @@ type runtimeFile struct {
 }
 
 type listingAgentFile struct {
-	Enabled             *bool                        `yaml:"enabled"`
-	Worker              *listingWorkerFile           `yaml:"worker"`
-	Sources             *listingSourcesFile          `yaml:"sources"`
-	Delivery            *listingDeliveryFile         `yaml:"delivery"`
-	Top30Push           *listingTop30PushFile        `yaml:"top30_push"`
-	Top30DivergencePush *top30DivergencePushFile     `yaml:"top30_divergence_push"`
-	Candidate           *listingCandidateFile        `yaml:"candidate"`
+	Enabled             *bool                    `yaml:"enabled"`
+	Worker              *listingWorkerFile       `yaml:"worker"`
+	Sources             *listingSourcesFile      `yaml:"sources"`
+	Delivery            *listingDeliveryFile     `yaml:"delivery"`
+	Top30Push           *listingTop30PushFile    `yaml:"top30_push"`
+	Top30DivergencePush *top30DivergencePushFile `yaml:"top30_divergence_push"`
+	Candidate           *listingCandidateFile    `yaml:"candidate"`
 }
 
 type top30DivergencePushFile struct {
