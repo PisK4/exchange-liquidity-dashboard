@@ -1,5 +1,29 @@
 # 平台流动性 Dashboard 正式版接口覆盖记录
 
+## 状态更新（2026-05-28）
+
+本文是 V1 视觉对齐阶段（2026-05 中旬）的"接口覆盖快照"，描述了**当时**哪些 API 返回真实数据、哪些以 `unsupported` 保留前端结构。**下方"尚未实现或仍存在问题的接口能力"章节里多个 `unsupported` 项目已被后续 feature 落地实现**：
+
+| 当时状态 | 现状 | 由哪个 feature 取代 |
+|---|---|---|
+| `share?window=7d\|30d` → `status=unsupported` | 已实现，按窗口聚合 share/denominator/trend | `top30-share-history-backfill.md` |
+| `trend.status=unsupported` | 已实现，30d 时序点真实绘制 | `top30-share-history-backfill.md` |
+| `top30?surface=perp` → 顶层 `unsupported` | 已实现 live ranking + `volume_7d_usd` / `delta_7d_pct` / `edgex_listed` / `competitor_top30_coverage` / `suggested_action` | `top30-share-history-backfill.md` |
+| `symbol_share_7d_status` / `symbol_share_wow_status` / `edgex_spread_10m_status` → `unsupported` | 全部 complete，KPI 卡正式显示数值 | `top30-share-history-backfill.md` |
+
+后续又叠加了：
+
+- **盘口深度 4 档多视图选择 + loose 灰度展示** — `adapter-four-tier-depth.md`
+- **24h share CoinGecko fallback**（解决 BTC/ETH 偶尔 0.00% 的问题）— `liquidity-24h-share-cg-fallback.md`
+- **跨平台资金费率独立 Tab + APR 副线 + diverging bar** — `funding-rate.md`
+- **流动性 Watchlist 多 symbol 垂直堆叠 + 每图 line/bar 切换** — `liquidity-watchlist.md`
+- **9 家原生 adapter + Lighter WS 走可选代理**（解决容器内 GFW 阻断）— `native-exchange-proxy.md`
+- **Listing Agent Top30 hot-gap Lark 推送**（CoinGecko Top30 → outbox → 飞书群）— `listing-agent-top30-hot-gap-push.md`
+
+下方原始章节作为历史记录保留，方便审阅当时的设计决策与 review 修正，但 `unsupported` 字段标注**不再是当前生产状态**——以上方表格 + 链接的新文档为准。
+
+---
+
 ## 背景
 
 本轮改造目标是将 HTML 原型中的视觉结构落成 `edgex-dashboard` 正式版前端，同时保持“真实数据优先、不造假”的数据原则。当前后端已经具备部分实时盘口、深度和 24h 成交量能力；暂未实现的历史、市占率趋势和 Top30 live ranking 能力统一以 `unsupported` 返回，并由前端保留正式展示结构。
