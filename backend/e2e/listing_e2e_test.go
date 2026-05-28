@@ -428,8 +428,8 @@ func TestListingAgentE2E_FullPipeline(t *testing.T) {
 		if err := json.Unmarshal(receivedBody, &body); err != nil {
 			t.Fatalf("unmarshal webhook body: %v", err)
 		}
-		if body["msg_type"] != "post" {
-			t.Fatalf("webhook msg_type = %v, want post; body=%s", body["msg_type"], string(receivedBody))
+		if body["msg_type"] != "interactive" {
+			t.Fatalf("webhook msg_type = %v, want interactive; body=%s", body["msg_type"], string(receivedBody))
 		}
 
 		// Outbox must be marked sent, attempt row must exist.

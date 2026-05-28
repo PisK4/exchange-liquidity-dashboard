@@ -198,7 +198,20 @@ Runtime:
       top30_webhook_url: ""
       top30_webhook_url_env: ""
       top30_webhook_secret: ""
-      dashboard_base_url: ""
+      # Dashboard base URL embedded into the Top30 push card's
+      # "📊 查看 Top30 详情" primary button. The renderer appends
+      # "?symbol=<display_symbol>" (or "&symbol=" if the base already
+      # has a query string), so put your tab pre-selection here, e.g.
+      # "https://dashboard.example.com/?tab=top30". When this field is
+      # empty the primary button is suppressed (the K-line secondary
+      # button still renders). Different deployments fill this with
+      # their own URL — local Docker stacks typically use something
+      # like "http://localhost:3001/?tab=top30"; production should set
+      # the public dashboard hostname here. The preview CLI in
+      # backend/scripts/top30-preview reads this same value via
+      # --config-dir, so changing it here covers both the production
+      # listing engine and ad-hoc operator previews.
+      dashboard_base_url: "https://exchange-liquidity-dashboard-pisk4s-projects.vercel.app/?tab=top30"
       # Optional HTTP/HTTPS proxy for the Lark webhook delivery client
       # only. Do NOT promote this to a process-wide HTTPS_PROXY env --
       # that would also route the 9 native exchange REST adapters and
