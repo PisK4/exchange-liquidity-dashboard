@@ -141,10 +141,28 @@ type ListingDeliveryConfig struct {
 // StaleAfter is the maximum age of the newest t_top30_snapshot row
 // before the producer marks the source as stale and stops generating
 // new outbox entries.
+//
+// AutoQuietAfterStreakDays auto-suppresses pushes for a (display_symbol,
+// action) pair once it has stayed in the hot-gap funnel for that many
+// consecutive UTC days. The signal observation row is still recorded so
+// the streak counter stays accurate; only the outbox insert is skipped.
+// Set to 0 to disable. Default 3 days.
+//
+// MaxPerTick caps the number of outbox rows the delivery worker drains
+// per engine tick. Combined with SendSpacing this prevents UTC-rollover
+// floods. 0 falls back to the delivery default (50). Default 2.
+//
+// SendSpacing staggers NextAttemptAt across rows inserted in the same
+// ProduceTop30Push pass: the i-th row gets (now + i * SendSpacing).
+// Drain then naturally serializes them across subsequent ticks. Default
+// 10 minutes.
 type ListingTop30PushConfig struct {
-	Enabled      bool          `json:"enabled"`
-	PollInterval time.Duration `json:"poll_interval"`
-	StaleAfter   time.Duration `json:"stale_after"`
+	Enabled                  bool          `json:"enabled"`
+	PollInterval             time.Duration `json:"poll_interval"`
+	StaleAfter               time.Duration `json:"stale_after"`
+	AutoQuietAfterStreakDays int           `json:"auto_quiet_after_streak_days"`
+	MaxPerTick               int           `json:"max_per_tick"`
+	SendSpacing              time.Duration `json:"send_spacing"`
 }
 
 // ListingCandidateConfig holds candidate fusion knobs that are not
@@ -523,9 +541,12 @@ func defaultListingAgentConfig() ListingAgentConfig {
 			Top30WebhookURLEnv: "LARK_LISTING_TOP30_WEBHOOK_URL",
 		},
 		Top30Push: ListingTop30PushConfig{
-			Enabled:      true,
-			PollInterval: 5 * time.Minute,
-			StaleAfter:   15 * time.Minute,
+			AutoQuietAfterStreakDays: 3,
+			MaxPerTick:               2,
+			SendSpacing:              10 * time.Minute,
+			Enabled:                  true,
+			PollInterval:             5 * time.Minute,
+			StaleAfter:               15 * time.Minute,
 		},
 		Candidate: ListingCandidateConfig{
 			MergeWindow: 14 * 24 * time.Hour,
@@ -721,9 +742,12 @@ type listingDeliveryFile struct {
 }
 
 type listingTop30PushFile struct {
-	Enabled      *bool  `yaml:"enabled"`
-	PollInterval string `yaml:"poll_interval"`
-	StaleAfter   string `yaml:"stale_after"`
+	Enabled                  *bool  `yaml:"enabled"`
+	PollInterval             string `yaml:"poll_interval"`
+	StaleAfter               string `yaml:"stale_after"`
+	AutoQuietAfterStreakDays *int   `yaml:"auto_quiet_after_streak_days"`
+	MaxPerTick               *int   `yaml:"max_per_tick"`
+	SendSpacing              string `yaml:"send_spacing"`
 }
 
 type listingCandidateFile struct {
@@ -1291,6 +1315,28 @@ func applyListingTop30PushFile(base ListingTop30PushConfig, file listingTop30Pus
 			return ListingTop30PushConfig{}, fmt.Errorf("listing_agent.top30_push.stale_after: %w", err)
 		}
 		base.StaleAfter = d
+	}
+	if file.AutoQuietAfterStreakDays != nil {
+		if *file.AutoQuietAfterStreakDays < 0 {
+			return ListingTop30PushConfig{}, fmt.Errorf("listing_agent.top30_push.auto_quiet_after_streak_days: must be >= 0")
+		}
+		base.AutoQuietAfterStreakDays = *file.AutoQuietAfterStreakDays
+	}
+	if file.MaxPerTick != nil {
+		if *file.MaxPerTick < 0 {
+			return ListingTop30PushConfig{}, fmt.Errorf("listing_agent.top30_push.max_per_tick: must be >= 0")
+		}
+		base.MaxPerTick = *file.MaxPerTick
+	}
+	if file.SendSpacing != "" {
+		d, err := time.ParseDuration(file.SendSpacing)
+		if err != nil {
+			return ListingTop30PushConfig{}, fmt.Errorf("listing_agent.top30_push.send_spacing: %w", err)
+		}
+		if d < 0 {
+			return ListingTop30PushConfig{}, fmt.Errorf("listing_agent.top30_push.send_spacing: must be >= 0")
+		}
+		base.SendSpacing = d
 	}
 	return base, nil
 }

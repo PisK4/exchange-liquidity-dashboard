@@ -570,19 +570,22 @@ func humanUSD(v float64) string {
 // listed universe is unavailable, materialises Top30PushEvents, and
 // writes the matching signal + outbox rows.
 type Top30Deps struct {
-	LoadUniverse  func() (*config.ListedUniverse, error)
-	Now           func() time.Time
-	DashboardBase string
-	WebhookURL    string
-	MaxAttempts   int
-	StaleAfter    time.Duration
+	LoadUniverse             func() (*config.ListedUniverse, error)
+	Now                      func() time.Time
+	DashboardBase            string
+	WebhookURL               string
+	MaxAttempts              int
+	StaleAfter               time.Duration
+	AutoQuietAfterStreakDays int
+	SendSpacing              time.Duration
 }
 
 type Top30PushResult struct {
-	Events     int
-	Signals    int
-	OutboxRows int
-	FailClosed string
+	Events      int
+	Signals     int
+	OutboxRows  int
+	AutoQuieted int
+	FailClosed  string
 }
 
 func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (Top30PushResult, error) {
@@ -615,6 +618,12 @@ func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (To
 		return Top30PushResult{FailClosed: "snapshot_stale"}, nil
 	}
 	events := BuildTop30PushEvents(rows, latest)
+	result := Top30PushResult{Events: len(events)}
+	// outboxBatchIdx tracks the index among events that ACTUALLY get
+	// inserted into the outbox in this pass. It is the input to
+	// SendSpacing staggering, so that auto-quieted events do not
+	// "consume" a slot in the staggering schedule.
+	outboxBatchIdx := 0
 	for i := range events {
 		ev := &events[i]
 		ev.TriggerTime = now
@@ -634,10 +643,6 @@ func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (To
 		if err != nil {
 			return Top30PushResult{Events: len(events)}, fmt.Errorf("marshal event: %w", err)
 		}
-		outboxPayload, err := RenderTop30PostMessage(*ev)
-		if err != nil {
-			return Top30PushResult{Events: len(events)}, fmt.Errorf("render top30 post message: %w", err)
-		}
 		signal := SignalObservation{
 			SignalType:      SignalTop30HotGap,
 			SignalSubtype:   ev.Action,
@@ -650,8 +655,25 @@ func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (To
 			Fingerprint:     fmt.Sprintf("top30_hot_gap|%s|%s|%s", ev.Symbol, ev.Action, ev.SnapshotDate),
 			PayloadJSON:     signalPayload,
 		}
+		// Always record the signal observation, even when we auto-quiet
+		// the outbox push. The streak counter MUST keep counting so a
+		// gap day doesn't reset the streak and re-trigger a NEW-flag
+		// push on day N+1.
 		if _, _, err := repo.InsertSignal(ctx, signal); err != nil {
 			return Top30PushResult{}, fmt.Errorf("insert top30 signal: %w", err)
+		}
+		result.Signals++
+		// Auto-quiet: same (symbol, action) has been pushing for
+		// N consecutive days; suppress the alert so the channel does
+		// not fatigue. Operators can still see the symbol on the
+		// Dashboard Top30 tab.
+		if deps.AutoQuietAfterStreakDays > 0 && ev.StreakDays >= deps.AutoQuietAfterStreakDays {
+			result.AutoQuieted++
+			continue
+		}
+		outboxPayload, err := RenderTop30PostMessage(*ev)
+		if err != nil {
+			return Top30PushResult{Events: len(events)}, fmt.Errorf("render top30 post message: %w", err)
 		}
 		var status string
 		if strings.TrimSpace(deps.WebhookURL) == "" {
@@ -663,6 +685,14 @@ func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (To
 		if maxAttempts <= 0 {
 			maxAttempts = 5
 		}
+		// Stagger NextAttemptAt across the kept events. The 0-th row
+		// is due immediately; subsequent rows wait i*SendSpacing so the
+		// drain worker naturally serializes them across ticks. When
+		// SendSpacing is 0 the stagger collapses to "all due now".
+		nextAttempt := now
+		if deps.SendSpacing > 0 {
+			nextAttempt = now.Add(time.Duration(outboxBatchIdx) * deps.SendSpacing)
+		}
 		if err := repo.insertOutbox(ctx, DeliveryOutbox{
 			EventType:     DeliveryEventTop30HotGap,
 			DedupeKey:     ev.DedupeKey,
@@ -670,14 +700,16 @@ func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (To
 			Status:        status,
 			MaxAttempts:   maxAttempts,
 			PayloadJSON:   outboxPayload,
-			NextAttemptAt: ptrTime(now),
+			NextAttemptAt: ptrTime(nextAttempt),
 			CreatedAt:     now,
 			UpdatedAt:     now,
 		}); err != nil {
 			return Top30PushResult{}, fmt.Errorf("insert outbox: %w", err)
 		}
+		result.OutboxRows++
+		outboxBatchIdx++
 	}
-	return Top30PushResult{Events: len(events), Signals: len(events), OutboxRows: len(events)}, nil
+	return result, nil
 }
 
 func extractBase(displaySymbol string) string {

@@ -122,12 +122,14 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	// Step 2: produce Top30 push outbox rows.
 	webhook := resolveWebhookURL(e.cfg)
 	top30, top30Err := ProduceTop30Push(ctx, e.repo, Top30Deps{
-		LoadUniverse:  e.deps.LoadUniverse,
-		Now:           e.deps.Now,
-		DashboardBase: e.cfg.Runtime.ListingAgent.Delivery.DashboardBaseURL,
-		WebhookURL:    webhook,
-		MaxAttempts:   e.cfg.Runtime.ListingAgent.Worker.MaxAttempts,
-		StaleAfter:    e.cfg.Runtime.ListingAgent.Top30Push.StaleAfter,
+		LoadUniverse:             e.deps.LoadUniverse,
+		Now:                      e.deps.Now,
+		DashboardBase:            e.cfg.Runtime.ListingAgent.Delivery.DashboardBaseURL,
+		WebhookURL:               webhook,
+		MaxAttempts:              e.cfg.Runtime.ListingAgent.Worker.MaxAttempts,
+		StaleAfter:               e.cfg.Runtime.ListingAgent.Top30Push.StaleAfter,
+		AutoQuietAfterStreakDays: e.cfg.Runtime.ListingAgent.Top30Push.AutoQuietAfterStreakDays,
+		SendSpacing:              e.cfg.Runtime.ListingAgent.Top30Push.SendSpacing,
 	})
 	summary.Top30Push = top30
 	if top30Err != nil {
@@ -142,6 +144,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 		WebhookSecret: e.cfg.Runtime.ListingAgent.Delivery.Top30WebhookSecret,
 		Client:        e.deps.HTTPClient,
 		Now:           e.deps.Now,
+		BatchSize:     e.cfg.Runtime.ListingAgent.Top30Push.MaxPerTick,
 	})
 	summary.Delivery = delivery
 	if deliveryErr != nil {

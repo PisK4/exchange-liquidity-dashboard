@@ -225,5 +225,26 @@ Runtime:
       enabled: true
       poll_interval: 5m
       stale_after: 15m
+      # Auto-quiet a (display_symbol, action) pair once it has stayed in
+      # the hot-gap funnel for this many consecutive UTC days. The
+      # signal observation row is still recorded so the streak counter
+      # stays accurate next day; only the outbox push is suppressed.
+      # Set to 0 to disable auto-quiet entirely. Default 3, i.e. day 1
+      # gets a NEW card, day 2 gets a "已第 2 天" card, day 3+ goes
+      # silent until the symbol falls out of the funnel.
+      auto_quiet_after_streak_days: 3
+      # Cap how many outbox rows the delivery worker drains per engine
+      # tick. Combined with send_spacing this prevents UTC-rollover
+      # floods from spamming the Lark group when many symbols cross
+      # the threshold simultaneously at 0:00 UTC. 0 falls back to the
+      # delivery default (50). Default 2.
+      max_per_tick: 2
+      # Stagger NextAttemptAt across rows inserted in the same producer
+      # pass: the i-th row is scheduled at (now + i * send_spacing).
+      # Drain naturally serializes them across subsequent ticks (and
+      # the WHERE next_attempt_at <= now filter), achieving a soft
+      # "one card every send_spacing" pace inside a single batch.
+      # Default 10m.
+      send_spacing: 10m
     candidate:
       merge_window: 14d
