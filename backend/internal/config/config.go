@@ -61,12 +61,31 @@ type Runtime struct {
 // 2026-05-27-Listing-Agent-P1-主链路方案设计.md §16 and §23 for the
 // authoritative knobs.
 type ListingAgentConfig struct {
-	Enabled   bool                   `json:"enabled"`
-	Worker    ListingWorkerConfig    `json:"worker"`
-	Sources   ListingSourcesConfig   `json:"sources"`
-	Delivery  ListingDeliveryConfig  `json:"delivery"`
-	Top30Push ListingTop30PushConfig `json:"top30_push"`
-	Candidate ListingCandidateConfig `json:"candidate"`
+	Enabled              bool                         `json:"enabled"`
+	Worker               ListingWorkerConfig          `json:"worker"`
+	Sources              ListingSourcesConfig         `json:"sources"`
+	Delivery             ListingDeliveryConfig        `json:"delivery"`
+	Top30Push            ListingTop30PushConfig       `json:"top30_push"`
+	Top30DivergencePush  Top30DivergencePushConfig    `json:"top30_divergence_push"`
+	Candidate            ListingCandidateConfig       `json:"candidate"`
+}
+
+// Top30DivergencePushConfig controls the CEX/DEX divergence Lark
+// alert cards (#2-#5). One UTC-day card per category at most; the
+// engine ticks at the shared ListingAgent cadence. Knobs that overlap
+// with the existing Top30 hot-gap push (max_attempts, max_per_tick)
+// are reused from top30_push so operators see a single set of dials.
+//
+// TopNPerCard caps how many rows each card lists; default 10. Empty
+// categories are skipped (no empty cards). StaleAfter mirrors
+// top30_push.stale_after default (15m). SendSpacing staggers
+// NextAttemptAt across the four category cards written in one tick,
+// matching top30_push's burst-control story.
+type Top30DivergencePushConfig struct {
+	Enabled      bool          `json:"enabled"`
+	TopNPerCard  int           `json:"top_n_per_card"`
+	StaleAfter   time.Duration `json:"stale_after"`
+	SendSpacing  time.Duration `json:"send_spacing"`
 }
 
 // ListingWorkerConfig controls the per-source worker lease and the
@@ -548,6 +567,12 @@ func defaultListingAgentConfig() ListingAgentConfig {
 			PollInterval:             5 * time.Minute,
 			StaleAfter:               15 * time.Minute,
 		},
+		Top30DivergencePush: Top30DivergencePushConfig{
+			Enabled:     true,
+			TopNPerCard: 10,
+			StaleAfter:  15 * time.Minute,
+			SendSpacing: 30 * time.Second,
+		},
 		Candidate: ListingCandidateConfig{
 			MergeWindow: 14 * 24 * time.Hour,
 		},
@@ -696,12 +721,20 @@ type runtimeFile struct {
 }
 
 type listingAgentFile struct {
-	Enabled   *bool                 `yaml:"enabled"`
-	Worker    *listingWorkerFile    `yaml:"worker"`
-	Sources   *listingSourcesFile   `yaml:"sources"`
-	Delivery  *listingDeliveryFile  `yaml:"delivery"`
-	Top30Push *listingTop30PushFile `yaml:"top30_push"`
-	Candidate *listingCandidateFile `yaml:"candidate"`
+	Enabled             *bool                        `yaml:"enabled"`
+	Worker              *listingWorkerFile           `yaml:"worker"`
+	Sources             *listingSourcesFile          `yaml:"sources"`
+	Delivery            *listingDeliveryFile         `yaml:"delivery"`
+	Top30Push           *listingTop30PushFile        `yaml:"top30_push"`
+	Top30DivergencePush *top30DivergencePushFile     `yaml:"top30_divergence_push"`
+	Candidate           *listingCandidateFile        `yaml:"candidate"`
+}
+
+type top30DivergencePushFile struct {
+	Enabled     *bool  `yaml:"enabled"`
+	TopNPerCard *int   `yaml:"top_n_per_card"`
+	StaleAfter  string `yaml:"stale_after"`
+	SendSpacing string `yaml:"send_spacing"`
 }
 
 type listingWorkerFile struct {
@@ -1183,6 +1216,13 @@ func applyListingAgentFile(base ListingAgentConfig, file listingAgentFile) (List
 		}
 		base.Top30Push = t
 	}
+	if file.Top30DivergencePush != nil {
+		t, err := applyTop30DivergencePushFile(base.Top30DivergencePush, *file.Top30DivergencePush)
+		if err != nil {
+			return ListingAgentConfig{}, err
+		}
+		base.Top30DivergencePush = t
+	}
 	if file.Candidate != nil {
 		c, err := applyListingCandidateFile(base.Candidate, *file.Candidate)
 		if err != nil {
@@ -1335,6 +1375,36 @@ func applyListingTop30PushFile(base ListingTop30PushConfig, file listingTop30Pus
 		}
 		if d < 0 {
 			return ListingTop30PushConfig{}, fmt.Errorf("listing_agent.top30_push.send_spacing: must be >= 0")
+		}
+		base.SendSpacing = d
+	}
+	return base, nil
+}
+
+func applyTop30DivergencePushFile(base Top30DivergencePushConfig, file top30DivergencePushFile) (Top30DivergencePushConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.TopNPerCard != nil {
+		if *file.TopNPerCard < 0 {
+			return Top30DivergencePushConfig{}, fmt.Errorf("listing_agent.top30_divergence_push.top_n_per_card: must be >= 0")
+		}
+		base.TopNPerCard = *file.TopNPerCard
+	}
+	if file.StaleAfter != "" {
+		d, err := time.ParseDuration(file.StaleAfter)
+		if err != nil {
+			return Top30DivergencePushConfig{}, fmt.Errorf("listing_agent.top30_divergence_push.stale_after: %w", err)
+		}
+		base.StaleAfter = d
+	}
+	if file.SendSpacing != "" {
+		d, err := time.ParseDuration(file.SendSpacing)
+		if err != nil {
+			return Top30DivergencePushConfig{}, fmt.Errorf("listing_agent.top30_divergence_push.send_spacing: %w", err)
+		}
+		if d < 0 {
+			return Top30DivergencePushConfig{}, fmt.Errorf("listing_agent.top30_divergence_push.send_spacing: must be >= 0")
 		}
 		base.SendSpacing = d
 	}

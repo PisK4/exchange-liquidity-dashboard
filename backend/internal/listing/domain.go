@@ -25,6 +25,7 @@ const (
 	SignalInstrumentDiff      = "instrument_diff"
 	SignalAnnouncementListing = "announcement_listing"
 	SignalTop30HotGap         = "top30_hot_gap"
+	SignalTop30Divergence     = "top30_divergence"
 	SignalManualSeed          = "manual_seed"
 )
 
@@ -147,7 +148,23 @@ const (
 
 // DeliveryEventTypes used in t_listing_delivery_outbox.event_type.
 const (
-	DeliveryEventTop30HotGap = "top30_hot_gap"
+	DeliveryEventTop30HotGap               = "top30_hot_gap"
+	DeliveryEventTop30DivergenceCEXOnly    = "top30_divergence_cex_only"
+	DeliveryEventTop30DivergenceDEXOnly    = "top30_divergence_dex_only"
+	DeliveryEventTop30DivergenceHeavyGap   = "top30_divergence_heavy_gap"
+	DeliveryEventTop30DivergenceBothHotGap = "top30_divergence_both_hot_gap"
+)
+
+// DivergenceCategoryKey identifies the category of a divergence push
+// card. It is the third path-component of the divergence dedupe key
+// (`top30_divergence|{category}|YYYY-MM-DD`) and the suffix on the
+// outbox event_type values above. Stable across the wire even when
+// the operator-facing label changes.
+const (
+	DivergenceCategoryCEXOnly    = "cex_only"
+	DivergenceCategoryDEXOnly    = "dex_only"
+	DivergenceCategoryHeavyGap   = "heavy_gap"
+	DivergenceCategoryBothHotGap = "both_hot_gap"
 )
 
 // DeliveryChannel enum stored in t_listing_delivery_outbox.target_channel.
