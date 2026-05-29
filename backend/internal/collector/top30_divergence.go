@@ -45,6 +45,7 @@ func (s *Store) Top30Divergence() domain.Top30DivergenceSnapshot {
 		CEXPlatforms:         cfg.CEXPlatforms,
 		DEXPlatforms:         cfg.DEXPlatforms,
 		SignificantRankDelta: cfg.SignificantRankDelta,
+		Resolver:             s.cfg.CanonicalIndex,
 	})
 }
 

@@ -61,7 +61,7 @@ func TestBuildDivergencePushEvents_ThreeStateFiltersOutNilAndListed(t *testing.T
 		rowForDiv("binance", 3, "BAZ", 400, nil, day),
 		rowForDiv("binance", 4, "QUX", 300, &unlisted, day),
 	}
-	events := BuildDivergencePushEvents(rows, divergenceCfg(), 10, day)
+	events := BuildDivergencePushEvents(rows, divergenceCfg(), nil, 10, day)
 	for _, ev := range events {
 		for _, row := range ev.Rows {
 			if row.Symbol == "BAR" {
@@ -80,7 +80,7 @@ func TestBuildDivergencePushEvents_DedupeKeyFormat(t *testing.T) {
 	rows := []Top30RowForPush{
 		rowForDiv("binance", 1, "FOO", 1000, &unlisted, day),
 	}
-	events := BuildDivergencePushEvents(rows, divergenceCfg(), 10, day)
+	events := BuildDivergencePushEvents(rows, divergenceCfg(), nil, 10, day)
 	if len(events) != 1 {
 		t.Fatalf("expected exactly one cex_only card, got %d (events=%+v)", len(events), events)
 	}
@@ -106,7 +106,7 @@ func TestBuildDivergencePushEvents_EmptyCategoryProducesNoCard(t *testing.T) {
 	rows := []Top30RowForPush{
 		rowForDiv("binance", 1, "FOO", 1000, &unlisted, day),
 	}
-	events := BuildDivergencePushEvents(rows, divergenceCfg(), 10, day)
+	events := BuildDivergencePushEvents(rows, divergenceCfg(), nil, 10, day)
 	categories := map[string]bool{}
 	for _, ev := range events {
 		categories[ev.Category] = true
@@ -140,7 +140,7 @@ func TestBuildDivergencePushEvents_FourFiveOverlapAllowed(t *testing.T) {
 	}
 	rows = append(rows, rowForDiv("hyperliquid", 12, "XYZ", 100, &unlisted, day))
 
-	events := BuildDivergencePushEvents(rows, divergenceCfg(), 30, day)
+	events := BuildDivergencePushEvents(rows, divergenceCfg(), nil, 30, day)
 	inHeavy := false
 	inBothHot := false
 	for _, ev := range events {
@@ -171,7 +171,7 @@ func TestBuildDivergencePushEvents_TopNTruncatesPerCard(t *testing.T) {
 	for i := 1; i <= 20; i++ {
 		rows = append(rows, rowForDiv("binance", i, "SYM"+itoaTwo(i), 1000-float64(i), &unlisted, day))
 	}
-	events := BuildDivergencePushEvents(rows, divergenceCfg(), 3, day)
+	events := BuildDivergencePushEvents(rows, divergenceCfg(), nil, 3, day)
 	for _, ev := range events {
 		if len(ev.Rows) > 3 {
 			t.Fatalf("category %s exceeded TopN=3: got %d rows", ev.Category, len(ev.Rows))

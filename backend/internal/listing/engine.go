@@ -147,6 +147,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 		MaxAttempts:   e.cfg.Runtime.ListingAgent.Worker.MaxAttempts,
 		DivergenceCfg: e.cfg.Runtime.Top30Divergence,
 		PushCfg:       e.cfg.Runtime.ListingAgent.Top30DivergencePush,
+		Resolver:      e.cfg.CanonicalIndex,
 	})
 	summary.DivergencePush = divergence
 	if divErr != nil {

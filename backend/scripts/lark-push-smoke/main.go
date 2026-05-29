@@ -174,7 +174,7 @@ func main() {
 		if topN <= 0 {
 			topN = 10
 		}
-		divEvents = listing.BuildDivergencePushEvents(rows, cfg.Runtime.Top30Divergence, topN, now)
+		divEvents = listing.BuildDivergencePushEvents(rows, cfg.Runtime.Top30Divergence, cfg.CanonicalIndex, topN, now)
 		for i := range divEvents {
 			ev := &divEvents[i]
 			ev.TriggerTime = now

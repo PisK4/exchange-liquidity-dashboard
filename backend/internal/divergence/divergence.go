@@ -48,10 +48,46 @@ type InputRow struct {
 // Config carries the venue-class assignments and the |Δrank|
 // threshold. Mirrors config.Top30DivergenceConfig but is duplicated
 // here so the package has no import edge into config.
+//
+// Resolver is an optional alias-aware canonicaliser. When non-nil it
+// is consulted after the per-symbol CanonicaliseSymbol pass so a
+// (platform, base) tuple like (edgeX, PAXG) or (binance, XAU) gets
+// folded onto the shared V1 canonical (GOLD). When nil, divergence
+// keeps the legacy identity behaviour where each platform's
+// post-normalisation symbol becomes its own bucket — this is what
+// existing tests and the V1 collector path still rely on.
 type Config struct {
 	CEXPlatforms         []string
 	DEXPlatforms         []string
 	SignificantRankDelta int
+	Resolver             CanonicalResolver
+}
+
+// CanonicalResolver maps a (platform, raw base asset) tuple to the
+// V1-canonical key used for cross-platform aggregation. Implementations
+// should be safe for concurrent reads, return the uppercased base
+// unchanged on a miss, and treat empty inputs as no-op.
+type CanonicalResolver interface {
+	ResolveCanonical(platform, base string) string
+}
+
+// resolveCanonical is the internal helper that combines
+// CanonicaliseSymbol (raw-form normalisation) with an optional
+// CanonicalResolver (alias-aware fold). Centralised so aggregateClass
+// and edgexListedSet stay in lock-step.
+func resolveCanonical(resolver CanonicalResolver, platform, symbol string) string {
+	canonical := CanonicaliseSymbol(symbol)
+	if canonical == "" {
+		return ""
+	}
+	if resolver == nil {
+		return canonical
+	}
+	resolved := resolver.ResolveCanonical(platform, canonical)
+	if resolved == "" {
+		return canonical
+	}
+	return resolved
 }
 
 // Compute aggregates the per-class Top30 from rows, outer-joins the
@@ -65,8 +101,8 @@ func Compute(rows []InputRow, cfg Config) domain.Top30DivergenceSnapshot {
 		threshold = 10
 	}
 
-	cexAgg, cexLatest := aggregateClass(rows, cexPlatforms)
-	dexAgg, dexLatest := aggregateClass(rows, dexPlatforms)
+	cexAgg, cexLatest := aggregateClass(rows, cexPlatforms, cfg.Resolver)
+	dexAgg, dexLatest := aggregateClass(rows, dexPlatforms, cfg.Resolver)
 
 	snapshotTS := cexLatest
 	if dexLatest.After(snapshotTS) {
@@ -85,7 +121,7 @@ func Compute(rows []InputRow, cfg Config) domain.Top30DivergenceSnapshot {
 	}
 
 	divergence := buildDivergenceRows(cexAgg, dexAgg, threshold)
-	listed := edgexListedSet(rows)
+	listed := edgexListedSet(rows, cfg.Resolver)
 	for i := range divergence {
 		if _, ok := listed[divergence[i].Symbol]; ok {
 			divergence[i].EdgexListed = true
@@ -124,10 +160,11 @@ func Compute(rows []InputRow, cfg Config) domain.Top30DivergenceSnapshot {
 }
 
 // aggregateClass sums Volume24HUSD across the configured platforms,
-// folds quote-variants onto the base asset, and returns the top-N
-// ranked aggregate plus the latest snapshot_ts seen across the rows.
-// Pure function.
-func aggregateClass(rows []InputRow, platforms []string) ([]domain.Top30AggregateRow, time.Time) {
+// folds quote-variants onto the base asset, optionally consults the
+// alias resolver to merge platform-specific aliases (PAXG/XAUT →
+// GOLD), and returns the top-N ranked aggregate plus the latest
+// snapshot_ts seen across the rows. Pure function.
+func aggregateClass(rows []InputRow, platforms []string, resolver CanonicalResolver) ([]domain.Top30AggregateRow, time.Time) {
 	if len(platforms) == 0 {
 		return nil, time.Time{}
 	}
@@ -151,7 +188,7 @@ func aggregateClass(rows []InputRow, platforms []string) ([]domain.Top30Aggregat
 		if row.Volume24HUSD <= 0 {
 			continue
 		}
-		canonical := CanonicaliseSymbol(row.Symbol)
+		canonical := resolveCanonical(resolver, row.Platform, row.Symbol)
 		if canonical == "" {
 			continue
 		}
@@ -204,13 +241,13 @@ func aggregateClass(rows []InputRow, platforms []string) ([]domain.Top30Aggregat
 // nil flag is never treated as listed; only *true counts. This mirrors
 // collector.edgexListedSetLocked but works on the union of all rows
 // (caller passes both class memberships in already).
-func edgexListedSet(rows []InputRow) map[string]struct{} {
+func edgexListedSet(rows []InputRow, resolver CanonicalResolver) map[string]struct{} {
 	out := map[string]struct{}{}
 	for _, row := range rows {
 		if row.EdgexListed == nil || !*row.EdgexListed {
 			continue
 		}
-		canonical := CanonicaliseSymbol(row.Symbol)
+		canonical := resolveCanonical(resolver, row.Platform, row.Symbol)
 		if canonical == "" {
 			continue
 		}
@@ -360,9 +397,38 @@ var quoteSuffixes = []string{
 	"-USDT", "-USDC", "-USD", "-BUSD", "-FDUSD", "-TUSD",
 }
 
+// namespacePrefixes lists per-platform symbol-namespace prefixes the
+// canonicaliser strips before alias resolution. Currently scoped to
+// Hyperliquid's HIP-2 "XYZ:" index perps (XYZ:CL, XYZ:NVDA, ...) which
+// are tokenized equities/commodities whose underlying ticker is the
+// part after the colon.
+var namespacePrefixes = []string{"XYZ:"}
+
+// scalePrefixes captures perp-product scale variants ("1000PEPE",
+// "10000COQ") used by binance / bybit / okx for assets whose unit
+// price is tiny. The underlying asset is identical to the
+// un-prefixed canonical, so for cross-platform Top30 aggregation we
+// strip these prefixes so the buckets merge.
+var scalePrefixes = []string{"10000", "1000"}
+
 // CanonicaliseSymbol normalises a Top30 Symbol to the base asset used
 // as the cross-camp join key. Exported so listing-side producers can
 // filter / compare canonical forms without re-implementing the rule.
+//
+// The rule order is intentional:
+//  1. trim + upper
+//  2. drop " (PERP)" / "-USDT" et al. quote suffixes
+//  3. drop platform namespace prefix ("XYZ:")
+//  4. unwrap "BASE(ALIAS)" parenthetical to BASE (the outer name is
+//     already the V1 canonical in every observed case — GOLD(XAU)
+//     → GOLD; SILVER(XAG) → SILVER)
+//  5. strip "1000" / "10000" perp-scale prefix so 1000PEPE collapses
+//     onto PEPE
+//
+// The output is still platform-agnostic — alias resolution
+// (PAXG/XAUT on edgeX → GOLD canonical) is a separate concern that
+// requires (platform, base) context and lives in the per-row
+// resolver pipeline.
 func CanonicaliseSymbol(symbol string) string {
 	s := strings.ToUpper(strings.TrimSpace(symbol))
 	if s == "" {
@@ -371,7 +437,26 @@ func CanonicaliseSymbol(symbol string) string {
 	s = strings.TrimSuffix(s, " (PERP)")
 	for _, suffix := range quoteSuffixes {
 		if strings.HasSuffix(s, suffix) {
-			return strings.TrimSuffix(s, suffix)
+			s = strings.TrimSuffix(s, suffix)
+			break
+		}
+	}
+	for _, prefix := range namespacePrefixes {
+		if strings.HasPrefix(s, prefix) {
+			rest := strings.TrimPrefix(s, prefix)
+			if rest != "" {
+				s = rest
+				break
+			}
+		}
+	}
+	if open := strings.IndexByte(s, '('); open > 0 && strings.HasSuffix(s, ")") {
+		s = s[:open]
+	}
+	for _, prefix := range scalePrefixes {
+		if strings.HasPrefix(s, prefix) && len(s) > len(prefix) {
+			s = strings.TrimPrefix(s, prefix)
+			break
 		}
 	}
 	return s

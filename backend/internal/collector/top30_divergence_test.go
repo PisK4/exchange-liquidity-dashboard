@@ -277,7 +277,15 @@ func TestCanonicaliseDivergenceSymbol(t *testing.T) {
 		{"ETH-BUSD (perp)", "ETH"},
 		{"ETH-FDUSD (perp)", "ETH"},
 		{"kPEPE-USDT (perp)", "KPEPE"},
-		{"1000PEPE-USDT (perp)", "1000PEPE"},
+		// Scale-prefix perp variants ("1000PEPE", "10000COQ") used to
+		// round-trip as their raw form; the canonicaliser now strips
+		// them so cross-platform Top30 buckets merge with the
+		// underlying ticker (PEPE / COQ).
+		{"1000PEPE-USDT (perp)", "PEPE"},
+		// Hyperliquid HIP-2 namespace prefix.
+		{"XYZ:CL-USD (perp)", "CL"},
+		// bingx-style BASE(ALIAS) parenthetical.
+		{"GOLD(XAU)-USDT (perp)", "GOLD"},
 		{"  HYPE-USDC (perp)  ", "HYPE"},
 		{"", ""},
 		{"   ", ""},

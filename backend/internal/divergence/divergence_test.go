@@ -1,6 +1,7 @@
 package divergence
 
 import (
+	"strings"
 	"testing"
 	"time"
 
@@ -129,6 +130,125 @@ func TestCompute_HeavyCategoryClassification(t *testing.T) {
 	}
 }
 
+// stubResolver is a minimal in-memory CanonicalResolver used to drive
+// the alias-aware aggregation tests below. The map key is
+// "<platformLower>|<baseUpper>" so the helper matches the
+// case-normalisation contract documented on CanonicalResolver.
+type stubResolver struct {
+	m map[string]string
+}
+
+func (s stubResolver) ResolveCanonical(platform, base string) string {
+	if s.m == nil {
+		return strings.ToUpper(base)
+	}
+	key := strings.ToLower(platform) + "|" + strings.ToUpper(base)
+	if v, ok := s.m[key]; ok {
+		return v
+	}
+	return strings.ToUpper(base)
+}
+
+func TestCompute_AliasResolverMergesGoldBucket(t *testing.T) {
+	// Five platforms publishing the same canonical (GOLD) under four
+	// different aliases — XAU, XAUT, PAXG, and the literal "GOLD".
+	// Without an alias resolver these would form four buckets and
+	// edgeX-listed-via-PAXG would not annotate the GOLD divergence row.
+	resolver := stubResolver{m: map[string]string{
+		"binance|XAU":      "GOLD",
+		"bitget|XAU":       "GOLD",
+		"bitget|XAUT":      "GOLD",
+		"bitget|PAXG":      "GOLD",
+		"hyperliquid|GOLD": "GOLD",
+		"edgex|XAUT":       "GOLD",
+		"edgex|PAXG":       "GOLD",
+	}}
+	cfg := Config{
+		CEXPlatforms:         []string{"binance", "bitget"},
+		DEXPlatforms:         []string{"hyperliquid", "edgeX"},
+		SignificantRankDelta: 5,
+		Resolver:             resolver,
+	}
+	rows := []InputRow{
+		mkRow("binance", 1, "XAU-USDT (perp)", 1000, boolPtr(false)),
+		mkRow("bitget", 1, "XAU-USDT (perp)", 500, boolPtr(false)),
+		mkRow("bitget", 2, "XAUT-USDT (perp)", 300, boolPtr(false)),
+		mkRow("bitget", 3, "PAXG-USDT (perp)", 200, boolPtr(false)),
+		mkRow("hyperliquid", 1, "XYZ:GOLD-USD (perp)", 800, nil),
+		mkRow("edgeX", 1, "XAUT-USD (perp)", 100, boolPtr(true)),
+		mkRow("edgeX", 2, "PAXG-USD (perp)", 80, boolPtr(true)),
+	}
+	snap := Compute(rows, cfg)
+	if len(snap.CEXTop30) != 1 || snap.CEXTop30[0].Symbol != "GOLD" {
+		t.Fatalf("CEX aggregate must collapse to GOLD, got %+v", snap.CEXTop30)
+	}
+	if got := snap.CEXTop30[0].AdjustedVolume24HUSD; got != 2000 {
+		t.Fatalf("GOLD CEX volume = %v, want 2000 (1000+500+300+200)", got)
+	}
+	if got := snap.CEXTop30[0].PlatformCount; got != 2 {
+		t.Fatalf("GOLD CEX platform_count = %d, want 2 (binance+bitget)", got)
+	}
+	if len(snap.DEXTop30) != 1 || snap.DEXTop30[0].Symbol != "GOLD" {
+		t.Fatalf("DEX aggregate must collapse to GOLD, got %+v", snap.DEXTop30)
+	}
+	if snap.DEXTop30[0].PlatformCount != 2 {
+		t.Fatalf("GOLD DEX platform_count = %d, want 2 (hyperliquid+edgeX)", snap.DEXTop30[0].PlatformCount)
+	}
+	var goldRow *domain.Top30DivergenceRow
+	for i := range snap.Divergence {
+		if snap.Divergence[i].Symbol == "GOLD" {
+			goldRow = &snap.Divergence[i]
+			break
+		}
+	}
+	if goldRow == nil {
+		t.Fatalf("GOLD divergence row missing; got %+v", snap.Divergence)
+	}
+	if !goldRow.EdgexListed {
+		t.Fatalf("GOLD divergence row must inherit EdgexListed=true via the edgeX PAXG/XAUT alias rows")
+	}
+}
+
+func TestCompute_AliasResolverMergesXyzIndexPerp(t *testing.T) {
+	// Hyperliquid's XYZ:CL collapses to CL (handled by
+	// CanonicaliseSymbol). The resolver then keeps it as CL because
+	// neither hyperliquid nor edgeX has an explicit "CL" alias entry
+	// in this stub, so the cross-class bucket joins naturally on
+	// "CL" with edgeX's plain CL-USD (perp) row.
+	resolver := stubResolver{m: map[string]string{}}
+	cfg := Config{
+		CEXPlatforms:         []string{"binance"},
+		DEXPlatforms:         []string{"hyperliquid", "edgeX"},
+		SignificantRankDelta: 5,
+		Resolver:             resolver,
+	}
+	rows := []InputRow{
+		mkRow("binance", 1, "CL-USDT (perp)", 1000, boolPtr(true)),
+		mkRow("hyperliquid", 1, "XYZ:CL-USD (perp)", 800, nil),
+		mkRow("edgeX", 1, "CL-USD (perp)", 100, boolPtr(true)),
+	}
+	snap := Compute(rows, cfg)
+	if len(snap.DEXTop30) != 1 || snap.DEXTop30[0].Symbol != "CL" {
+		t.Fatalf("DEX aggregate must collapse XYZ:CL + CL onto CL, got %+v", snap.DEXTop30)
+	}
+	if snap.DEXTop30[0].PlatformCount != 2 {
+		t.Fatalf("CL DEX platform_count = %d, want 2 (hyperliquid+edgeX)", snap.DEXTop30[0].PlatformCount)
+	}
+}
+
+func TestCompute_NilResolverIsBackwardCompatible(t *testing.T) {
+	rows := []InputRow{
+		mkRow("binance", 1, "BTC-USDT (perp)", 1000, nil),
+		mkRow("hyperliquid", 1, "BTC-USDC (perp)", 800, nil),
+	}
+	cfg := defaultConfig()
+	cfg.Resolver = nil
+	snap := Compute(rows, cfg)
+	if len(snap.CEXTop30) != 1 || snap.CEXTop30[0].Symbol != "BTC" {
+		t.Fatalf("nil resolver must not break the existing identity path: %+v", snap.CEXTop30)
+	}
+}
+
 func TestCompute_MergesAcrossQuoteVariants(t *testing.T) {
 	rows := []InputRow{
 		mkRow("binance", 1, "BTC-USDT (perp)", 1000, nil),
@@ -160,6 +280,32 @@ func TestCanonicaliseSymbol(t *testing.T) {
 		{"  HYPE-USDC (perp)  ", "HYPE"},
 		{"", ""},
 		{"   ", ""},
+
+		// Hyperliquid index-perp namespace prefix (HIP-2 "XYZ:" tickers).
+		{"XYZ:CL-USD (perp)", "CL"},
+		{"XYZ:NVDA-USD (perp)", "NVDA"},
+		{"XYZ:BRENTOIL-USD (perp)", "BRENTOIL"},
+		{"XYZ:GOLD-USD (perp)", "GOLD"},
+		{"XYZ:SP500-USD (perp)", "SP500"},
+
+		// 1000-scaled perp variants ("1000PEPE" on binance/bybit
+		// reports the same underlying liquidity as plain "PEPE" on
+		// gate/mexc/okx — they must aggregate into a single canonical).
+		{"1000PEPE-USDT (perp)", "PEPE"},
+		{"1000SHIB-USDT (perp)", "SHIB"},
+		{"1000BONK-USDT (perp)", "BONK"},
+		{"1000FLOKI-USDT (perp)", "FLOKI"},
+		// 10000-scaled (Asian memecoins on some venues) collapses too.
+		{"10000COQ-USDT (perp)", "COQ"},
+
+		// BASE(ALIAS) parenthetical (bingx publishes "GOLD(XAU)" /
+		// "SILVER(XAG)" — we prefer the outer BASE since it already
+		// matches a V1 canonical).
+		{"GOLD(XAU)-USDT (perp)", "GOLD"},
+		{"SILVER(XAG)-USDT (perp)", "SILVER"},
+
+		// Combinations:
+		{"XYZ:1000PEPE-USD (perp)", "PEPE"},
 	}
 	for _, tc := range cases {
 		if got := CanonicaliseSymbol(tc.in); got != tc.want {

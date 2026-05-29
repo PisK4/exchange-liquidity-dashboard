@@ -52,6 +52,14 @@ type DivergencePushRow struct {
 
 // DivergenceDeps mirrors the Top30Deps style so the engine can wire
 // both producers symmetrically.
+//
+// Resolver carries the alias-aware canonical lookup built from
+// symbol_mapping.yaml. When non-nil the producer folds platform
+// aliases (PAXG/XAUT/XAU → GOLD; CL/BRENTOIL → OIL; 1000PEPE/PEPE)
+// before the divergence aggregation so cross-platform buckets merge
+// onto a single canonical row. A nil resolver preserves legacy
+// identity behaviour for tests and preview tooling that have not
+// wired the config layer yet.
 type DivergenceDeps struct {
 	Now           func() time.Time
 	DashboardBase string
@@ -59,6 +67,7 @@ type DivergenceDeps struct {
 	MaxAttempts   int
 	DivergenceCfg config.Top30DivergenceConfig
 	PushCfg       config.Top30DivergencePushConfig
+	Resolver      divergence.CanonicalResolver
 }
 
 // DivergencePushResult summarises one ProduceDivergencePush call.
@@ -138,7 +147,7 @@ var divergenceCategories = map[string]divergenceCategoryConfig{
 // The caller (ProduceDivergencePush) injects DashboardURL and
 // TriggerTime; this builder leaves both unset so it can be exercised
 // from preview tooling without engine-side state.
-func BuildDivergencePushEvents(rows []Top30RowForPush, cfg config.Top30DivergenceConfig, topN int, day time.Time) []DivergencePushEvent {
+func BuildDivergencePushEvents(rows []Top30RowForPush, cfg config.Top30DivergenceConfig, resolver divergence.CanonicalResolver, topN int, day time.Time) []DivergencePushEvent {
 	if topN <= 0 {
 		topN = 10
 	}
@@ -148,6 +157,11 @@ func BuildDivergencePushEvents(rows []Top30RowForPush, cfg config.Top30Divergenc
 		canonical := divergence.CanonicaliseSymbol(row.Symbol)
 		if canonical == "" {
 			continue
+		}
+		if resolver != nil {
+			if resolved := resolver.ResolveCanonical(row.Platform, canonical); resolved != "" {
+				canonical = resolved
+			}
 		}
 		inputs = append(inputs, divergence.InputRow{
 			Platform:     row.Platform,
@@ -173,6 +187,7 @@ func BuildDivergencePushEvents(rows []Top30RowForPush, cfg config.Top30Divergenc
 		CEXPlatforms:         cfg.CEXPlatforms,
 		DEXPlatforms:         cfg.DEXPlatforms,
 		SignificantRankDelta: cfg.SignificantRankDelta,
+		Resolver:             resolver,
 	})
 
 	eligible := filterDivergenceRowsForAlert(snapshot.Divergence, knownByCanonical)
@@ -522,7 +537,7 @@ func ProduceDivergencePush(ctx context.Context, repo *Repository, deps Divergenc
 	if topN <= 0 {
 		topN = 10
 	}
-	events := BuildDivergencePushEvents(rows, deps.DivergenceCfg, topN, now)
+	events := BuildDivergencePushEvents(rows, deps.DivergenceCfg, deps.Resolver, topN, now)
 	result := DivergencePushResult{
 		Enabled:    true,
 		SnapshotTS: latest,

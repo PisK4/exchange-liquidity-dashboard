@@ -9,6 +9,8 @@ coverage/
 
 # Local generated binaries
 backend/build-catalog
+backend/divergence-preview
+backend/lark-push-smoke
 .factory
 docs
 

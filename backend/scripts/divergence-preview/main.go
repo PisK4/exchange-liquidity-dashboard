@@ -77,7 +77,7 @@ func main() {
 	log.Printf("latest snapshot ts=%s rows=%d", latest.UTC().Format(time.RFC3339), len(rows))
 
 	now := time.Now().UTC()
-	events := listing.BuildDivergencePushEvents(rows, cfg.Runtime.Top30Divergence, *topN, now)
+	events := listing.BuildDivergencePushEvents(rows, cfg.Runtime.Top30Divergence, cfg.CanonicalIndex, *topN, now)
 	log.Printf("built %d eligible divergence events", len(events))
 	events = filterCategories(events, *only)
 	if onlyTrim := strings.TrimSpace(*only); onlyTrim != "" {

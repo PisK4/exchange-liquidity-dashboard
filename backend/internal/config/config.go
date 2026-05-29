@@ -317,6 +317,10 @@ type Config struct {
 	Database  DatabaseConfig     `json:"database"`
 	Alert     AlertConfig        `json:"alert"`
 	Catalog   CatalogConfig      `json:"catalog"`
+	// CanonicalIndex is the reverse alias map built from
+	// symbol_mapping.yaml at Load time. nil when the YAML cannot be
+	// read; callers must treat the receiver as nil-safe.
+	CanonicalIndex *CanonicalIndex `json:"-"`
 }
 
 func (c Config) MySQLDSN() string {
@@ -382,6 +386,7 @@ func Load(configDir string) (Config, error) {
 	} else if len(symbols) > 0 && len(platforms) > 0 {
 		cfg.Platforms = platforms
 		cfg.Symbols = expandSymbols(symbols, platforms, endpoints)
+		cfg.CanonicalIndex = NewCanonicalIndex(symbols)
 	}
 
 	if !hasMain {
@@ -678,16 +683,17 @@ func defaultCoinGeckoConfig() CoinGeckoConfig {
 }
 
 type symbolYAML struct {
-	DisplaySymbol  string `yaml:"display_symbol"`
-	DisplayName    string `yaml:"display_name"`
-	Canonical      string `yaml:"canonical"`
-	AssetCategory  string `yaml:"asset_category"`
-	MarketSurface  string `yaml:"market_surface"`
-	InstrumentKind string `yaml:"instrument_kind"`
-	Lineage        string `yaml:"lineage"`
-	BaseAsset      string `yaml:"base_asset"`
-	QuoteAsset     string `yaml:"quote_asset"`
-	SettleAsset    string `yaml:"settle_asset"`
+	DisplaySymbol  string              `yaml:"display_symbol"`
+	DisplayName    string              `yaml:"display_name"`
+	Canonical      string              `yaml:"canonical"`
+	AssetCategory  string              `yaml:"asset_category"`
+	MarketSurface  string              `yaml:"market_surface"`
+	InstrumentKind string              `yaml:"instrument_kind"`
+	Lineage        string              `yaml:"lineage"`
+	BaseAsset      string              `yaml:"base_asset"`
+	QuoteAsset     string              `yaml:"quote_asset"`
+	SettleAsset    string              `yaml:"settle_asset"`
+	Aliases        map[string][]string `yaml:"aliases"`
 }
 
 type symbolFile struct {
