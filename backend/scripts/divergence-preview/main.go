@@ -32,6 +32,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 
 	"edgex-dashboard/backend/internal/config"
+	"edgex-dashboard/backend/internal/domain"
 	"edgex-dashboard/backend/internal/listing"
 )
 
@@ -45,6 +46,7 @@ func main() {
 		topN      = flag.Int("top-n", 10, "Max rows per card (default 10)")
 		dryRun    = flag.Bool("dry-run", false, "Print rendered card JSON to stdout but never POST")
 		only      = flag.String("only", "", "Optional comma-separated category filter (cex_only,dex_only,heavy_gap,both_hot_gap)")
+		fixture   = flag.String("fixture", "", "Comma-separated categories to inject synthetic events for (heavy_gap,both_hot_gap); useful when real data does not naturally trigger those cards. Real events from the snapshot are still emitted unless --only filters them out.")
 	)
 	flag.Parse()
 
@@ -79,6 +81,11 @@ func main() {
 	now := time.Now().UTC()
 	events := listing.BuildDivergencePushEvents(rows, cfg.Runtime.Top30Divergence, cfg.CanonicalIndex, *topN, now)
 	log.Printf("built %d eligible divergence events", len(events))
+	if fix := strings.TrimSpace(*fixture); fix != "" {
+		injected := buildFixtureEvents(fix, now)
+		events = append(events, injected...)
+		log.Printf("--fixture=%q applied; injected %d synthetic event(s)", fix, len(injected))
+	}
 	events = filterCategories(events, *only)
 	if onlyTrim := strings.TrimSpace(*only); onlyTrim != "" {
 		log.Printf("--only=%q applied; rendering %d events", onlyTrim, len(events))
@@ -208,6 +215,81 @@ func loadLatestRows(ctx context.Context, db *sql.DB) ([]listing.Top30RowForPush,
 		out = append(out, r)
 	}
 	return out, latest.Time, rows.Err()
+}
+
+// buildFixtureEvents returns synthetic DivergencePushEvent values for
+// the categories listed in `spec` (comma-separated). It is used during
+// card-visual smoke tests for #4 heavy_gap and #5 both_hot_gap when
+// the production snapshot does not naturally produce those categories
+// (e.g. after alias resolution + three-state filtering, no cross-camp
+// canonical satisfies edgex_listed=false). The synthesised rows use
+// plausible symbol names and rank/volume ranges so the card looks
+// representative; downstream rendering is identical to production.
+//
+// dedupe_key uses a `_fixture` suffix so anyone who copies the rendered
+// card JSON into the outbox by mistake can spot the synthetic origin.
+func buildFixtureEvents(spec string, triggerTime time.Time) []listing.DivergencePushEvent {
+	day := triggerTime.UTC().Format("2006-01-02")
+	wantHeavy := false
+	wantBothHot := false
+	for _, raw := range strings.Split(spec, ",") {
+		switch strings.TrimSpace(strings.ToLower(raw)) {
+		case listing.DivergenceCategoryHeavyGap, "heavy":
+			wantHeavy = true
+		case listing.DivergenceCategoryBothHotGap, "both", "both_hot":
+			wantBothHot = true
+		}
+	}
+
+	ip := func(v int) *int { return &v }
+	fp := func(v float64) *float64 { return &v }
+
+	kpi := domain.Top30DivergenceKPI{
+		CEXOnlyCount:  5,
+		DEXOnlyCount:  8,
+		HeavyCount:    6,
+		AlignedCount:  4,
+		EdgexGapCount: 14,
+	}
+
+	var out []listing.DivergencePushEvent
+	if wantHeavy {
+		out = append(out, listing.DivergencePushEvent{
+			Category:      listing.DivergenceCategoryHeavyGap,
+			CategoryLabel: "CEX vs DEX 显著分歧 · edgeX 未上线",
+			KPI:           kpi,
+			SnapshotTS:    triggerTime,
+			SnapshotDate:  day,
+			DedupeKey:     fmt.Sprintf("top30_divergence|%s|%s_fixture", listing.DivergenceCategoryHeavyGap, day),
+			TriggerTime:   triggerTime,
+			Rows: []listing.DivergencePushRow{
+				{Symbol: "ASTER", CEXRank: ip(5), DEXRank: ip(28), RankDelta: ip(23), CEXVolUSD: fp(1.42e9), DEXVolUSD: fp(38.4e6), CEXPlatforms: 6, DEXPlatforms: 1},
+				{Symbol: "TON", CEXRank: ip(20), DEXRank: ip(4), RankDelta: ip(16), CEXVolUSD: fp(412e6), DEXVolUSD: fp(540e6), CEXPlatforms: 5, DEXPlatforms: 2},
+				{Symbol: "SHIB", CEXRank: ip(8), DEXRank: ip(22), RankDelta: ip(14), CEXVolUSD: fp(880e6), DEXVolUSD: fp(72.1e6), CEXPlatforms: 7, DEXPlatforms: 1},
+				{Symbol: "LDO", CEXRank: ip(25), DEXRank: ip(11), RankDelta: ip(14), CEXVolUSD: fp(266e6), DEXVolUSD: fp(198e6), CEXPlatforms: 4, DEXPlatforms: 2},
+				{Symbol: "WIF", CEXRank: ip(15), DEXRank: ip(3), RankDelta: ip(12), CEXVolUSD: fp(623e6), DEXVolUSD: fp(710e6), CEXPlatforms: 5, DEXPlatforms: 2},
+			},
+		})
+	}
+	if wantBothHot {
+		out = append(out, listing.DivergencePushEvent{
+			Category:      listing.DivergenceCategoryBothHotGap,
+			CategoryLabel: "两阵营均热 · edgeX 未上线",
+			KPI:           kpi,
+			SnapshotTS:    triggerTime,
+			SnapshotDate:  day,
+			DedupeKey:     fmt.Sprintf("top30_divergence|%s|%s_fixture", listing.DivergenceCategoryBothHotGap, day),
+			TriggerTime:   triggerTime,
+			Rows: []listing.DivergencePushRow{
+				{Symbol: "HYPE", CEXRank: ip(18), DEXRank: ip(1), RankDelta: ip(17), CEXVolUSD: fp(310e6), DEXVolUSD: fp(1.08e9), CEXPlatforms: 4, DEXPlatforms: 2},
+				{Symbol: "WIF", CEXRank: ip(15), DEXRank: ip(3), RankDelta: ip(12), CEXVolUSD: fp(623e6), DEXVolUSD: fp(710e6), CEXPlatforms: 5, DEXPlatforms: 2},
+				{Symbol: "ASTER", CEXRank: ip(5), DEXRank: ip(6), RankDelta: ip(1), CEXVolUSD: fp(1.42e9), DEXVolUSD: fp(412e6), CEXPlatforms: 6, DEXPlatforms: 1},
+				{Symbol: "TIA", CEXRank: ip(11), DEXRank: ip(9), RankDelta: ip(2), CEXVolUSD: fp(720e6), DEXVolUSD: fp(184e6), CEXPlatforms: 5, DEXPlatforms: 2},
+				{Symbol: "DYDX", CEXRank: ip(20), DEXRank: ip(15), RankDelta: ip(5), CEXVolUSD: fp(258e6), DEXVolUSD: fp(98e6), CEXPlatforms: 3, DEXPlatforms: 2},
+			},
+		})
+	}
+	return out
 }
 
 func filterCategories(events []listing.DivergencePushEvent, only string) []listing.DivergencePushEvent {
