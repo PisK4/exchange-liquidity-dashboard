@@ -17,11 +17,12 @@ import (
 var Version = "dev"
 
 type Server struct {
-	cfg       config.Config
-	store     StoreReader
-	listing   ListingReader
-	decisions DecisionWriter
-	callback  ListingCallbackConfig
+	cfg        config.Config
+	store      StoreReader
+	listing    ListingReader
+	decisions  DecisionWriter
+	dispatcher DecisionDispatcher
+	callback   ListingCallbackConfig
 }
 
 type StoreReader interface {

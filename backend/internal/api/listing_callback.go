@@ -23,6 +23,15 @@ type DecisionWriter interface {
 	InsertDecision(ctx context.Context, d listing.DecisionRecord) (int64, bool, error)
 }
 
+// DecisionDispatcher is the optional companion that fans a decision
+// out to watchlist / action_dispatch / outbox. Wired via
+// WithListingDispatch; when nil the callback handler still records
+// the decision but skips the downstream side effects (useful for
+// tests that only care about the audit path).
+type DecisionDispatcher interface {
+	DispatchDecision(ctx context.Context, dec listing.DecisionRecord) (listing.DispatchResult, error)
+}
+
 // ListingCallbackConfig holds the runtime knobs the callback handler
 // reads: shared HMAC secret, ±MaxClockSkew window, operator open_id
 // whitelist, plus an injectable clock for tests. None of these are
@@ -39,6 +48,13 @@ type ListingCallbackConfig struct {
 // callback route. Leaving it unset disables the route (returns 503).
 func WithListingDecisionWriter(w DecisionWriter) Option {
 	return func(s *Server) { s.decisions = w }
+}
+
+// WithListingDispatch wires the decision dispatcher invoked after a
+// new decision lands. Leaving it nil means the route only records
+// the decision row and skips downstream watchlist / outbox writes.
+func WithListingDispatch(d DecisionDispatcher) Option {
+	return func(s *Server) { s.dispatcher = d }
 }
 
 // WithListingCallback configures the HMAC verification + operator
@@ -118,16 +134,29 @@ func (s *Server) listingCallback(w http.ResponseWriter, r *http.Request) {
 		writeListingError(w, err)
 		return
 	}
+	rec.ID = id
 	status := "recorded"
-	if !inserted {
-		status = "already_recorded"
-	}
-	writeJSON(w, map[string]any{
-		"status":      status,
+	resp := map[string]any{
 		"decision_id": id,
 		"action":      rec.Action,
 		"candidate":   rec.CandidateID,
-	})
+	}
+	if inserted && s.dispatcher != nil {
+		dispatchRes, err := s.dispatcher.DispatchDecision(r.Context(), rec)
+		if err != nil {
+			writeListingError(w, err)
+			return
+		}
+		resp["dispatch_id"] = dispatchRes.DispatchID
+		if dispatchRes.WatchlistID > 0 {
+			resp["watchlist_id"] = dispatchRes.WatchlistID
+		}
+		resp["outbox_rows"] = dispatchRes.OutboxRows
+	} else if !inserted {
+		status = "already_recorded"
+	}
+	resp["status"] = status
+	writeJSON(w, resp)
 }
 
 func (s *Server) callbackNow() time.Time {

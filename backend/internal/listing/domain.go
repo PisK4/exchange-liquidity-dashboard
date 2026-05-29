@@ -265,6 +265,70 @@ type DeliveryOutbox struct {
 	LastAttempt   *DeliveryAttempt
 }
 
+// Action dispatch enums. dispatch_type identifies which downstream
+// owner reacts to the row; target_channel is which Lark group (or
+// internal channel) receives the matching notification.
+const (
+	DispatchTypeListingOps = "listing_ops"
+	DispatchTypeMM         = "mm"
+	DispatchTypeWatchlist  = "watchlist"
+	DispatchTypeIgnore     = "ignore"
+)
+
+const (
+	DispatchChannelLarkListingOps = "lark_listing_ops"
+	DispatchChannelLarkMM         = "lark_mm"
+	DispatchChannelInternal       = "internal"
+)
+
+const (
+	DispatchStatusPending   = "pending"
+	DispatchStatusCompleted = "completed"
+	DispatchStatusFailed    = "failed"
+)
+
+// Watchlist status enum.
+const (
+	WatchStatusObserving = "observing"
+	WatchStatusListed    = "listed"
+	WatchStatusDropped   = "dropped"
+)
+
+// Action dispatch notification event types written into the delivery
+// outbox so listing-ops / MM groups receive a matching Lark card.
+const (
+	DeliveryEventListingActionListingOps = "listing_action_listing_ops"
+	DeliveryEventListingActionContactMM  = "listing_action_contact_mm"
+)
+
+// ActionDispatchRecord mirrors t_listing_action_dispatch.
+type ActionDispatchRecord struct {
+	ID            int64
+	CandidateID   int64
+	DecisionID    int64
+	DispatchType  string
+	TargetChannel string
+	Status        string
+	OutboxID      *int64
+	PayloadJSON   json.RawMessage
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
+}
+
+// WatchlistEntry mirrors t_listing_watchlist.
+type WatchlistEntry struct {
+	ID               int64
+	CandidateID      int64
+	CanonicalSymbol  string
+	MarketSurface    string
+	InstrumentKind   string
+	WatchStatus      string
+	WatchReason      string
+	SourceDecisionID int64
+	WatchStartedAt   time.Time
+	PayloadJSON      json.RawMessage
+}
+
 // DecisionRecord mirrors t_listing_decision. The struct is the write
 // model used by the Lark callback API; the unique key on
 // (candidate_id, operator_open_id, action, callback_ts) protects

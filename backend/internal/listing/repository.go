@@ -929,6 +929,63 @@ func (r *Repository) LatestRiskPlanByCandidate(ctx context.Context, candidateID 
 	return &p, rows.Err()
 }
 
+// InsertActionDispatch writes one audit row to t_listing_action_dispatch.
+// The row is INSERT-only; the producer can later mark it
+// completed via a separate UPDATE when the downstream side
+// (listing-ops group, MM channel) acknowledges receipt.
+func (r *Repository) InsertActionDispatch(ctx context.Context, row ActionDispatchRecord) (int64, error) {
+	if r.db == nil {
+		return 0, errors.New("listing repository: no db attached")
+	}
+	var outboxID any
+	if row.OutboxID != nil {
+		outboxID = *row.OutboxID
+	}
+	res, err := r.db.ExecContext(ctx,
+		`INSERT INTO t_listing_action_dispatch
+		   (candidate_id, decision_id, dispatch_type, target_channel, status, outbox_id, payload_json)
+		 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+		row.CandidateID, row.DecisionID, row.DispatchType, row.TargetChannel, row.Status,
+		outboxID, []byte(row.PayloadJSON),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// UpsertWatchlist writes a watchlist entry keyed on candidate_id (the
+// unique key uk_listing_watchlist_candidate). Re-clicking 进入观察 on
+// the same candidate refreshes the row in place rather than erroring
+// on duplicate key.
+func (r *Repository) UpsertWatchlist(ctx context.Context, w WatchlistEntry) (int64, error) {
+	if r.db == nil {
+		return 0, errors.New("listing repository: no db attached")
+	}
+	const query = `INSERT INTO t_listing_watchlist (
+	  candidate_id, canonical_symbol, market_surface, instrument_kind,
+	  watch_status, watch_reason, source_decision_id, watch_started_at, payload_json)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+	ON DUPLICATE KEY UPDATE
+	  canonical_symbol = VALUES(canonical_symbol),
+	  market_surface   = VALUES(market_surface),
+	  instrument_kind  = VALUES(instrument_kind),
+	  watch_status     = VALUES(watch_status),
+	  watch_reason     = VALUES(watch_reason),
+	  source_decision_id = VALUES(source_decision_id),
+	  watch_started_at = VALUES(watch_started_at),
+	  payload_json     = VALUES(payload_json)`
+	res, err := r.db.ExecContext(ctx, query,
+		w.CandidateID, w.CanonicalSymbol, w.MarketSurface, w.InstrumentKind,
+		w.WatchStatus, nullString(w.WatchReason), w.SourceDecisionID, w.WatchStartedAt,
+		[]byte(w.PayloadJSON),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
 // InsertDecision writes one t_listing_decision row. The unique key
 // on (candidate_id, operator_open_id, action, callback_ts) makes
 // the operation idempotent: a second click with the same callback_ts
