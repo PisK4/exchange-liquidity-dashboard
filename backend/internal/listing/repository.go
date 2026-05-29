@@ -929,6 +929,32 @@ func (r *Repository) LatestRiskPlanByCandidate(ctx context.Context, candidateID 
 	return &p, rows.Err()
 }
 
+// LatestDecisionForCandidate returns the action + callback_ts of the
+// most recent t_listing_decision row for the candidate. The bool is
+// false when no decision exists yet (first time the candidate is
+// considered). Used by the decision card producer to honour the
+// configurable ignore_cooldown without re-deriving the timestamp on
+// every tick.
+func (r *Repository) LatestDecisionForCandidate(ctx context.Context, candidateID int64) (string, time.Time, bool, error) {
+	if r.db == nil {
+		return "", time.Time{}, false, errors.New("listing repository: no db attached")
+	}
+	const query = `SELECT action, callback_ts FROM t_listing_decision
+	  WHERE candidate_id = ?
+	  ORDER BY callback_ts DESC, id DESC
+	  LIMIT 1`
+	var action string
+	var ts time.Time
+	err := r.db.QueryRowContext(ctx, query, candidateID).Scan(&action, &ts)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", time.Time{}, false, nil
+		}
+		return "", time.Time{}, false, err
+	}
+	return action, ts, true, nil
+}
+
 // ListDeliveries returns outbox rows that match the given filter. A
 // recent attempt summary is attached when available; callers should
 // surface this on the read-only /api/listing/deliveries endpoint.
