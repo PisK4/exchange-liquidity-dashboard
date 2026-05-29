@@ -2,12 +2,15 @@ package listing
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"regexp"
 	"testing"
 	"time"
 
 	"edgex-dashboard/backend/internal/config"
+	"edgex-dashboard/backend/internal/listing/announcement"
+	"edgex-dashboard/backend/internal/listing/instrument"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
@@ -185,6 +188,145 @@ func TestEngineRunOnceProducesDivergencePushWhenEnabled(t *testing.T) {
 	}
 	if summary.DivergencePush.Produced != 1 || summary.DivergencePush.Signals != 1 || summary.DivergencePush.OutboxRows != 1 {
 		t.Fatalf("DivergencePush = %+v, want Produced=1 Signals=1 OutboxRows=1", summary.DivergencePush)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+// TestEngineRunOnceDrivesInstrumentAndAnnouncementSourcesBeforeFusion
+// locks the Phase 1.5 wiring contract: every configured instrument /
+// announcement source must be invoked once per tick, wrapped in the
+// source-health upsert, BEFORE fusion runs. Running pollers in front
+// of fusion means newly inserted signals get picked up in the same
+// tick rather than waiting a full cycle, and source health rows are
+// visible immediately even on the first ever start.
+//
+// The test uses cold-start fixtures (no existing snapshots/announcements
+// rows) so the expectation surface is small and stable: each source
+// produces baseline writes only, no signals, no diff/symbol fan-out.
+func TestEngineRunOnceDrivesInstrumentAndAnnouncementSourcesBeforeFusion(t *testing.T) {
+	now := time.Date(2026, 5, 29, 19, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	// --- Instrument source (cold start, single BTC) ---
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT source_key, source_type, platform, status")).
+		WithArgs("listing/instrument/binance/usdm_futures").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"source_key", "source_type", "platform", "status",
+			"last_success_at", "last_error_at", "consecutive_error_count", "schema_drift_count",
+			"disabled_until", "last_error", "updated_at",
+		}))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM t_listing_instrument_snapshot")).
+		WithArgs("binance", "usdm_futures").
+		WillReturnRows(sqlmock.NewRows([]string{"present"}))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_source_state")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	// --- Announcement source (cold start, single perp ann) ---
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT source_key, source_type, platform, status")).
+		WithArgs("listing/announcement/bybit").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"source_key", "source_type", "platform", "status",
+			"last_success_at", "last_error_at", "consecutive_error_count", "schema_drift_count",
+			"disabled_until", "last_error", "updated_at",
+		}))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM t_listing_announcement")).
+		WithArgs("bybit").
+		WillReturnRows(sqlmock.NewRows([]string{"present"}))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_announcement")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_source_state")).
+		WillReturnResult(sqlmock.NewResult(2, 1))
+
+	// --- Fusion: no unfused signals. ---
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "signal_type", "signal_subtype", "source_platform", "market_type", "api_symbol", "api_market_id",
+			"canonical_symbol", "display_symbol", "base_asset", "quote_asset", "settle_asset",
+			"market_surface", "instrument_kind", "status_raw", "status_normalized", "confidence",
+			"observed_at", "source_snapshot_ts", "published_at", "listing_time_ts",
+			"source_endpoint", "source_url", "fingerprint", "payload_json", "raw_payload_json", "raw_payload_hash",
+		}))
+	// --- Top30: no snapshot rows. ---
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT MAX(snapshot_ts) FROM t_top30_snapshot")).
+		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(nil))
+	// --- Delivery drain: no due rows. ---
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_delivery_outbox WHERE status IN`).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "event_type", "dedupe_key", "target_channel", "status", "attempt_count", "max_attempts",
+			"next_attempt_at", "payload_json", "last_error", "sent_at", "created_at", "updated_at",
+		}))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	cfg := config.Config{}
+	cfg.Runtime.ListingAgent = config.ListingAgentConfig{
+		Enabled:   true,
+		Worker:    config.ListingWorkerConfig{MaxAttempts: 5},
+		Top30Push: config.ListingTop30PushConfig{StaleAfter: time.Hour},
+		Delivery:  config.ListingDeliveryConfig{Enabled: true},
+	}
+
+	instrCalls := 0
+	annCalls := 0
+	engine := NewEngine(cfg, repo, EngineDeps{
+		Now:          func() time.Time { return now },
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		InstrumentSources: []InstrumentSource{{
+			Platform:   "binance",
+			MarketType: "usdm_futures",
+			SourceKey:  "listing/instrument/binance/usdm_futures",
+			Fetch: func(ctx context.Context) ([]instrument.NormalizedInstrument, error) {
+				instrCalls++
+				return []instrument.NormalizedInstrument{{
+					Platform: "binance", MarketType: "usdm_futures", APISymbol: "BTCUSDT",
+					CanonicalSymbol: "BTC", MarketSurface: "perp", InstrumentKind: "canonical",
+					StatusNormalized: "active", RawJSON: json.RawMessage(`{"symbol":"BTCUSDT"}`),
+					RawJSONHash: "engine-test-btc",
+				}}, nil
+			},
+		}},
+		AnnouncementSources: []AnnouncementSource{{
+			Platform:  "bybit",
+			SourceKey: "listing/announcement/bybit",
+			Fetch: func(ctx context.Context) ([]json.RawMessage, error) {
+				annCalls++
+				return []json.RawMessage{json.RawMessage(`{}`)}, nil
+			},
+			Parse: func(raw json.RawMessage) (announcement.ParsedAnnouncement, error) {
+				return announcement.ParsedAnnouncement{
+					Platform:        "bybit",
+					AnnouncementID:  "ann-engine-001",
+					Title:           "ABC Perpetual Contract Listing",
+					ParseConfidence: announcement.ConfidenceHigh,
+					RawPayloadJSON:  json.RawMessage(`{"id":"ann-engine-001"}`),
+					RawPayloadHash:  "engine-test-ann",
+				}, nil
+			},
+		}},
+	})
+
+	summary, err := engine.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce err = %v", err)
+	}
+	if instrCalls != 1 || annCalls != 1 {
+		t.Errorf("source calls instrument=%d announcement=%d, want 1/1", instrCalls, annCalls)
+	}
+	if len(summary.InstrumentPolls) != 1 || !summary.InstrumentPolls[0].Baseline {
+		t.Errorf("InstrumentPolls = %+v, want one baseline pass", summary.InstrumentPolls)
+	}
+	if len(summary.AnnouncementPolls) != 1 || !summary.AnnouncementPolls[0].Baseline {
+		t.Errorf("AnnouncementPolls = %+v, want one baseline pass", summary.AnnouncementPolls)
+	}
+	if len(summary.InstrumentHealth) != 1 || summary.InstrumentHealth[0].Status != SourceStatusOK {
+		t.Errorf("InstrumentHealth = %+v, want one ok entry", summary.InstrumentHealth)
+	}
+	if len(summary.AnnouncementHealth) != 1 || summary.AnnouncementHealth[0].Status != SourceStatusOK {
+		t.Errorf("AnnouncementHealth = %+v, want one ok entry", summary.AnnouncementHealth)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)

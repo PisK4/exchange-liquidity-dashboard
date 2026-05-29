@@ -35,17 +35,28 @@ type EngineDeps struct {
 	OwnerID      string
 	// Logger is used when non-nil; defaults to the standard logger.
 	Logger *log.Logger
+	// InstrumentSources and AnnouncementSources drive the #6 / #7
+	// detection paths. Each source is wrapped in PollWithSourceHealth
+	// so a flaky upstream rolls into disabled_until rather than
+	// burning the engine tick. The slices stay nil for environments
+	// that have not wired the pollers (existing engine tests).
+	InstrumentSources   []InstrumentSource
+	AnnouncementSources []AnnouncementSource
 }
 
 // RunSummary aggregates per-stage results from a single RunOnce tick.
 type RunSummary struct {
-	Fusion         FusionResult
-	Top30Push      Top30PushResult
-	DivergencePush DivergencePushResult
-	LiquidityAlert LiquidityAlertResult
-	Delivery       DeliveryResult
-	Started        time.Time
-	Finished       time.Time
+	InstrumentPolls    []InstrumentPollResult
+	AnnouncementPolls  []AnnouncementPollResult
+	InstrumentHealth   []PollHealthOutcome
+	AnnouncementHealth []PollHealthOutcome
+	Fusion             FusionResult
+	Top30Push          Top30PushResult
+	DivergencePush     DivergencePushResult
+	LiquidityAlert     LiquidityAlertResult
+	Delivery           DeliveryResult
+	Started            time.Time
+	Finished           time.Time
 }
 
 // NewEngine wires an Engine with concrete dependencies. The
@@ -110,6 +121,52 @@ func buildDeliveryHTTPClient(proxyURL string) (*http.Client, error) {
 func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	start := e.deps.Now()
 	summary := RunSummary{Started: start}
+
+	// Step 0a: drive each instrument source through the source-health
+	// wrapper. The wrapper handles disabled_until + counter logic so
+	// a transient upstream outage does not keep retrying every tick.
+	// Failures are logged but do NOT short-circuit later stages — the
+	// engine intentionally remains best-effort so one bad source
+	// cannot stall the fusion / push / liquidity pipelines.
+	pollHealthCfg := PollHealthDeps{Now: e.deps.Now}
+	for _, src := range e.deps.InstrumentSources {
+		key := SourceHealthKey{SourceKey: src.SourceKey, SourceType: SourceTypeInstrument, Platform: src.Platform}
+		if key.SourceKey == "" {
+			key.SourceKey = fmt.Sprintf("listing/instrument/%s/%s", src.Platform, src.MarketType)
+		}
+		var pollRes InstrumentPollResult
+		outcome, err := PollWithSourceHealth(ctx, e.repo, key, pollHealthCfg, func(ctx context.Context) error {
+			var pollErr error
+			pollRes, pollErr = RunInstrumentPoll(ctx, e.repo, src, InstrumentPollDeps{Now: e.deps.Now})
+			return pollErr
+		})
+		summary.InstrumentHealth = append(summary.InstrumentHealth, outcome)
+		summary.InstrumentPolls = append(summary.InstrumentPolls, pollRes)
+		if err != nil {
+			e.deps.Logger.Printf("listing engine: instrument poll %s: %v", key.SourceKey, err)
+		}
+	}
+
+	// Step 0b: same pattern for the announcement sources. Running
+	// pollers BEFORE fusion lets newly inserted signals get picked
+	// up in the same tick rather than waiting for the next interval.
+	for _, src := range e.deps.AnnouncementSources {
+		key := SourceHealthKey{SourceKey: src.SourceKey, SourceType: SourceTypeAnnouncement, Platform: src.Platform}
+		if key.SourceKey == "" {
+			key.SourceKey = fmt.Sprintf("listing/announcement/%s", src.Platform)
+		}
+		var pollRes AnnouncementPollResult
+		outcome, err := PollWithSourceHealth(ctx, e.repo, key, pollHealthCfg, func(ctx context.Context) error {
+			var pollErr error
+			pollRes, pollErr = RunAnnouncementPoll(ctx, e.repo, src, AnnouncementPollDeps{Now: e.deps.Now})
+			return pollErr
+		})
+		summary.AnnouncementHealth = append(summary.AnnouncementHealth, outcome)
+		summary.AnnouncementPolls = append(summary.AnnouncementPolls, pollRes)
+		if err != nil {
+			e.deps.Logger.Printf("listing engine: announcement poll %s: %v", key.SourceKey, err)
+		}
+	}
 
 	// Step 1: fuse any unfused signals into candidates.
 	fusion, fusionErr := FuseSignals(ctx, e.repo, FusionDeps{
