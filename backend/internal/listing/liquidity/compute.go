@@ -29,16 +29,12 @@ const EdgexPlatform = "edgex"
 //
 // Then emit at most two candidates:
 //   - lag: edgex < median * cfg.LagThreshold
-//   - worst: edgexRank == TotalPlatforms (i.e. the LAST place when
-//     1-indexed; spec calls this "倒数第一" semantically — the PRD
-//     says "倒数第二" but the only safe interpretation when edgeX
-//     is at the bottom of the ladder is "last", because if edgeX
-//     is N-1 there must be something below it which we already
-//     ranked. The spec doc clarifies: rank == N-1 in 0-indexed,
-//     which equals "last 0-indexed", i.e. TotalPlatforms-1 in
-//     1-indexed terms. We unify both rules to "edgeX is at the
-//     bottom of the ranking" because PRD-wise that is the strongest
-//     possible signal anyway).
+//   - worst: edgexRank == TotalPlatforms (1-indexed depth bottom).
+//     2026-05-29-listing-agent.md Phase 0 freezes the worst_depth
+//     semantic to "edgeX is the LAST ranked platform"; the older PRD
+//     "倒数第二" wording is intentionally NOT honoured because depth
+//     bottom is the strongest possible signal and avoids the
+//     definitional drift between 0-indexed N-1 and 1-indexed N-1.
 //
 // IMPORTANT: we intentionally use 1-indexed Rank in the output
 // candidate (1 == strongest) because that's how the card renders

@@ -23,9 +23,13 @@ const (
 	// tier drops below `LagThreshold * competitor median`. PRD §3.7
 	// default LagThreshold = 0.5 (i.e. edgeX < half the median).
 	KindLiquidityLag AlertKind = "liquidity_lag"
-	// KindWorstDepth fires when edgeX's depth is the second-lowest
-	// (rank == N-1, 0-indexed; N == total platforms including
-	// edgeX). PRD §3.7: "edgeX 在所有可对比平台中深度排名倒数第二".
+	// KindWorstDepth fires when edgeX is at the depth bottom — i.e.
+	// 1-indexed `edgexRank == TotalPlatforms` (TotalPlatforms counts
+	// edgeX itself). This is the safe strong signal: when something
+	// ranks below edgeX we still have a comparator, so 'bottom' is
+	// unambiguously the worst-possible position. Phase 0 of the
+	// 2026-05-29-listing-agent.md spec freezes this semantic; the
+	// older PRD wording 'second-to-last' is intentionally NOT used.
 	KindWorstDepth AlertKind = "worst_depth"
 )
 
