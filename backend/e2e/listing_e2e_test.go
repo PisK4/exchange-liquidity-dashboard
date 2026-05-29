@@ -455,6 +455,177 @@ func TestListingAgentE2E_FullPipeline(t *testing.T) {
 	})
 }
 
+// TestListingAgentE2E_EvidenceKindMatrix locks the Phase 1 acceptance
+// criterion from 2026-05-29-listing-agent.md: "E2E 覆盖三类 evidence
+// kind". Each sub-test seeds exactly the signal mix the fusion engine
+// expects for one evidence_kind, runs RunOnce, and asserts the
+// resulting candidate carries the right (evidence_kind, lifecycle,
+// recommendation) triple. The cases stay independent — each sub-test
+// truncates the listing tables first so a regression in one branch
+// cannot mask a regression in another.
+func TestListingAgentE2E_EvidenceKindMatrix(t *testing.T) {
+	db := openDB(t)
+	defer db.Close()
+	if err := collector.ApplyMigrations(db); err != nil {
+		t.Fatalf("apply migrations: %v", err)
+	}
+	repo := listing.NewRepository(db)
+	cfg := config.Config{}
+	cfg.Runtime.ListingAgent = config.ListingAgentConfig{
+		Enabled:   true,
+		Worker:    config.ListingWorkerConfig{MaxAttempts: 5},
+		Top30Push: config.ListingTop30PushConfig{Enabled: true, StaleAfter: time.Hour},
+		Delivery:  config.ListingDeliveryConfig{Enabled: true},
+	}
+
+	runFusion := func(t *testing.T, now time.Time) listing.RunSummary {
+		t.Helper()
+		engine := listing.NewEngine(cfg, repo, listing.EngineDeps{
+			Now:          func() time.Time { return now },
+			LoadUniverse: loadE2EUniverse,
+		})
+		summary, err := engine.RunOnce(context.Background())
+		if err != nil {
+			t.Fatalf("RunOnce: %v", err)
+		}
+		return summary
+	}
+
+	t.Run("announcement_and_api → confirmed_listing_candidate", func(t *testing.T) {
+		truncateListingTables(t, db)
+		now := time.Now().UTC().Truncate(time.Second)
+		// Same fixture as TestListingAgentE2E_FullPipeline.seedSignals
+		// but inlined here so the matrix stays independently runnable.
+		ann := listing.SignalObservation{
+			SignalType:      listing.SignalAnnouncementListing,
+			SignalSubtype:   listing.AnnouncementPerpListing,
+			SourcePlatform:  "binance",
+			CanonicalSymbol: e2eCanonicalSymbol,
+			DisplaySymbol:   e2eDisplaySymbol,
+			MarketSurface:   "perp",
+			InstrumentKind:  "canonical",
+			ObservedAt:      now.Add(-30 * time.Second),
+			Fingerprint:     fmt.Sprintf("announcement_listing|binance|e2e-mat-ann-1|%s|perp|canonical", e2eCanonicalSymbol),
+			PayloadJSON:     json.RawMessage(`{"announcement_id":"e2e-mat-ann-1"}`),
+		}
+		if _, _, err := repo.InsertSignal(context.Background(), ann); err != nil {
+			t.Fatalf("insert ann: %v", err)
+		}
+		inst := listing.SignalObservation{
+			SignalType:       listing.SignalInstrumentDiff,
+			SignalSubtype:    listing.DiffNewSymbol,
+			SourcePlatform:   "binance",
+			MarketType:       "usdm_futures",
+			APISymbol:        "E2EZZZUSDT",
+			CanonicalSymbol:  e2eCanonicalSymbol,
+			DisplaySymbol:    e2eDisplaySymbol,
+			MarketSurface:    "perp",
+			InstrumentKind:   "canonical",
+			StatusNormalized: "active",
+			ObservedAt:       now,
+			Fingerprint:      fmt.Sprintf("instrument_diff|binance|usdm_futures|E2EZZZUSDT|new_symbol||hash-%s", e2eCanonicalSymbol),
+			PayloadJSON:      json.RawMessage(`{"diff_subtype":"new_symbol"}`),
+		}
+		if _, _, err := repo.InsertSignal(context.Background(), inst); err != nil {
+			t.Fatalf("insert inst: %v", err)
+		}
+		summary := runFusion(t, now)
+		if summary.Fusion.Candidates != 1 {
+			t.Fatalf("candidates = %d, want 1; summary=%+v", summary.Fusion.Candidates, summary.Fusion)
+		}
+		candidates, err := repo.ListCandidates(context.Background(), listing.CandidateFilter{Limit: 1})
+		if err != nil || len(candidates) != 1 {
+			t.Fatalf("ListCandidates: %v", err)
+		}
+		got := candidates[0]
+		if got.EvidenceKind != listing.EvidenceAnnouncementAndAPI {
+			t.Errorf("evidence_kind = %q, want announcement_and_api", got.EvidenceKind)
+		}
+		if got.LifecycleStatus != listing.LifecycleConfirmedListingCandidate {
+			t.Errorf("lifecycle = %q, want confirmed_listing_candidate", got.LifecycleStatus)
+		}
+		if got.Recommendation != listing.RecommendationPrepareListing {
+			t.Errorf("recommendation = %q, want prepare_listing", got.Recommendation)
+		}
+	})
+
+	t.Run("instrument_diff_only → api_detected_no_announcement", func(t *testing.T) {
+		truncateListingTables(t, db)
+		now := time.Now().UTC().Truncate(time.Second)
+		inst := listing.SignalObservation{
+			SignalType:       listing.SignalInstrumentDiff,
+			SignalSubtype:    listing.DiffNewSymbol,
+			SourcePlatform:   "binance",
+			MarketType:       "usdm_futures",
+			APISymbol:        "E2EZZZUSDT",
+			CanonicalSymbol:  e2eCanonicalSymbol,
+			DisplaySymbol:    e2eDisplaySymbol,
+			MarketSurface:    "perp",
+			InstrumentKind:   "canonical",
+			StatusNormalized: "active",
+			ObservedAt:       now,
+			Fingerprint:      fmt.Sprintf("instrument_diff|binance|usdm_futures|E2EZZZUSDT|new_symbol||hash-only-%s", e2eCanonicalSymbol),
+			PayloadJSON:      json.RawMessage(`{"diff_subtype":"new_symbol"}`),
+		}
+		if _, _, err := repo.InsertSignal(context.Background(), inst); err != nil {
+			t.Fatalf("insert inst: %v", err)
+		}
+		summary := runFusion(t, now)
+		if summary.Fusion.Candidates != 1 {
+			t.Fatalf("candidates = %d, want 1; summary=%+v", summary.Fusion.Candidates, summary.Fusion)
+		}
+		candidates, err := repo.ListCandidates(context.Background(), listing.CandidateFilter{Limit: 1})
+		if err != nil || len(candidates) != 1 {
+			t.Fatalf("ListCandidates: %v", err)
+		}
+		got := candidates[0]
+		if got.EvidenceKind != listing.EvidenceInstrumentDiffOnly {
+			t.Errorf("evidence_kind = %q, want instrument_diff_only", got.EvidenceKind)
+		}
+		if got.LifecycleStatus != listing.LifecycleAPIDetectedNoAnnouncement {
+			t.Errorf("lifecycle = %q, want api_detected_no_announcement", got.LifecycleStatus)
+		}
+	})
+
+	t.Run("announcement_pending_api → announced_pending_api_confirmation", func(t *testing.T) {
+		truncateListingTables(t, db)
+		now := time.Now().UTC().Truncate(time.Second)
+		ann := listing.SignalObservation{
+			SignalType:      listing.SignalAnnouncementListing,
+			SignalSubtype:   listing.AnnouncementPerpListing,
+			SourcePlatform:  "bybit",
+			CanonicalSymbol: e2eCanonicalSymbol,
+			DisplaySymbol:   e2eDisplaySymbol,
+			MarketSurface:   "perp",
+			InstrumentKind:  "canonical",
+			ObservedAt:      now,
+			Fingerprint:     fmt.Sprintf("announcement_listing|bybit|e2e-mat-pend-1|%s|perp|canonical", e2eCanonicalSymbol),
+			PayloadJSON:     json.RawMessage(`{"announcement_id":"e2e-mat-pend-1"}`),
+		}
+		if _, _, err := repo.InsertSignal(context.Background(), ann); err != nil {
+			t.Fatalf("insert ann: %v", err)
+		}
+		summary := runFusion(t, now)
+		if summary.Fusion.Candidates != 1 {
+			t.Fatalf("candidates = %d, want 1; summary=%+v", summary.Fusion.Candidates, summary.Fusion)
+		}
+		candidates, err := repo.ListCandidates(context.Background(), listing.CandidateFilter{Limit: 1})
+		if err != nil || len(candidates) != 1 {
+			t.Fatalf("ListCandidates: %v", err)
+		}
+		got := candidates[0]
+		if got.EvidenceKind != listing.EvidenceAnnouncementPendingAPI {
+			t.Errorf("evidence_kind = %q, want announcement_pending_api", got.EvidenceKind)
+		}
+		if got.LifecycleStatus != listing.LifecycleAnnouncedPendingAPI {
+			t.Errorf("lifecycle = %q, want announced_pending_api_confirmation", got.LifecycleStatus)
+		}
+		if got.Recommendation == listing.RecommendationPrepareListing {
+			t.Errorf("recommendation = prepare_listing, but announcement_pending_api MUST NOT auto-advance to prepare_listing")
+		}
+	})
+}
+
 // readBody is a small helper that drains an http.Request body.
 func readBody(r *http.Request) ([]byte, error) {
 	buf := make([]byte, 0, 4096)

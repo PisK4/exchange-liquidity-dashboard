@@ -239,7 +239,7 @@ func TestRunInstrumentPollDiffSubtypePropagatesToSignal(t *testing.T) {
 	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_signal_observation")).
 		WithArgs(
 			SignalInstrumentDiff,
-			sqlmock.AnyArg(), // signal_subtype = "delisted" (assert below via custom matcher would be heavier; we check via SignalsEmitted)
+			sqlmock.AnyArg(),            // signal_subtype = "delisted" (assert below via custom matcher would be heavier; we check via SignalsEmitted)
 			"binance", sqlmock.AnyArg(), // platform / market_type
 			sqlmock.AnyArg(), sqlmock.AnyArg(), // api_symbol, api_market_id
 			"BTC", sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(),
