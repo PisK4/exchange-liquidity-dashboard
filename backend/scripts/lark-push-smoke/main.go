@@ -67,6 +67,7 @@ import (
 
 	"edgex-dashboard/backend/internal/config"
 	"edgex-dashboard/backend/internal/listing"
+	"edgex-dashboard/backend/internal/listing/liquidity"
 )
 
 // smokePrefix is the stable dedupe_key marker for every smoke run.
@@ -109,7 +110,7 @@ func main() {
 		log.Fatal("missing webhook URL: pass --webhook-url, or fill Alert.WebHookP3 / listing_agent.delivery.top30_webhook_url in config-dir.\n" +
 			"  The script REQUIRES a webhook because the whole point is to verify the live POST works.")
 	}
-	includeHotGap, includeDivergence, err := parseIncludeFlag(*include)
+	includeHotGap, includeDivergence, includeLiquidity, err := parseIncludeFlag(*include)
 	if err != nil {
 		log.Fatalf("--include: %v", err)
 	}
@@ -138,21 +139,28 @@ func main() {
 	}
 	log.Printf("[phase 1] pre-cleanup: removed %d leftover smoke row(s)", stale)
 
-	// --- Phase 2: load latest snapshot
-	rows, snapshotTS, err := loadLatestRows(ctx, db)
-	if err != nil {
-		log.Fatalf("phase2 load snapshot: %v", err)
+	// --- Phase 2: load latest snapshot (top30 / divergence only)
+	now := time.Now().UTC()
+	var rows []listing.Top30RowForPush
+	var snapshotTS time.Time
+	if includeHotGap || includeDivergence {
+		rows, snapshotTS, err = loadLatestRows(ctx, db)
+		if err != nil {
+			log.Fatalf("phase2 load snapshot: %v", err)
+		}
+		if snapshotTS.IsZero() {
+			log.Fatal("phase2 load snapshot: t_top30_snapshot is empty; cannot smoke-test")
+		}
+		log.Printf("[phase 2] snapshot ts=%s, rows=%d", snapshotTS.UTC().Format(time.RFC3339), len(rows))
+	} else {
+		log.Printf("[phase 2] skipped — liquidity-only run does not depend on t_top30_snapshot")
 	}
-	if snapshotTS.IsZero() {
-		log.Fatal("phase2 load snapshot: t_top30_snapshot is empty; cannot smoke-test")
-	}
-	log.Printf("[phase 2] snapshot ts=%s, rows=%d", snapshotTS.UTC().Format(time.RFC3339), len(rows))
 
 	// --- Phase 3: build events from production helpers
-	now := time.Now().UTC()
 	dashboardBase := strings.TrimSpace(*dashboard)
 	var hotGapEvents []listing.Top30PushEvent
 	var divEvents []listing.DivergencePushEvent
+	var liquidityCards []liquidity.CardPayload
 	if includeHotGap {
 		hotGapEvents = listing.BuildTop30PushEvents(rows, snapshotTS)
 		for i := range hotGapEvents {
@@ -183,19 +191,31 @@ func main() {
 			}
 		}
 	}
-	if len(hotGapEvents) == 0 && len(divEvents) == 0 {
-		log.Fatal("phase3 build: no eligible cards produced from latest snapshot.\n" +
-			"  Either the snapshot has no hot-gap unlisted symbols and no CEX/DEX divergence rows,\n" +
-			"  or --include filtered everything out. Smoke cannot proceed without at least one card.")
+	if includeLiquidity {
+		lagThreshold := cfg.Runtime.ListingAgent.LiquidityAlert.LagThreshold
+		if lagThreshold <= 0 {
+			lagThreshold = 0.5
+		}
+		liquidityCards = buildLiquiditySmokeFixtures(dashboardBase, lagThreshold)
+		for i := range liquidityCards {
+			liquidityCards[i].EvaluatedAt = now
+		}
 	}
-	log.Printf("[phase 3] built %d hot-gap event(s), %d divergence event(s)", len(hotGapEvents), len(divEvents))
+	if len(hotGapEvents) == 0 && len(divEvents) == 0 && len(liquidityCards) == 0 {
+		log.Fatal("phase3 build: no eligible cards produced.\n" +
+			"  Either the snapshot has no hot-gap unlisted symbols and no CEX/DEX divergence rows,\n" +
+			"  the liquidity fixture set was empty, or --include filtered everything out.\n" +
+			"  Smoke cannot proceed without at least one card.")
+	}
+	log.Printf("[phase 3] built %d hot-gap event(s), %d divergence event(s), %d liquidity card(s)",
+		len(hotGapEvents), len(divEvents), len(liquidityCards))
 
 	// --- Phase 4: insert smoke outbox rows
-	inserted, err := insertSmokeOutbox(ctx, db, runPrefix, hotGapEvents, divEvents, *maxAttempts, now)
+	inserted, err := insertSmokeOutbox(ctx, db, runPrefix, hotGapEvents, divEvents, liquidityCards, *maxAttempts, now)
 	if err != nil {
 		log.Fatalf("phase4 insert: %v", err)
 	}
-	expected := len(hotGapEvents) + len(divEvents)
+	expected := len(hotGapEvents) + len(divEvents) + len(liquidityCards)
 	if inserted != expected {
 		log.Fatalf("phase4 insert: expected %d rows, got %d (dedupe collision with prior run? nonce reuse?)", expected, inserted)
 	}
@@ -238,7 +258,7 @@ func main() {
 	log.Printf("[phase 6] idempotency OK: re-drain returned %+v", redrainResult)
 
 	// --- Phase 7: dedupe uniqueness (re-insert same dedupe_keys -> 0 rows affected)
-	reinserted, err := insertSmokeOutbox(ctx, db, runPrefix, hotGapEvents, divEvents, *maxAttempts, now)
+	reinserted, err := insertSmokeOutbox(ctx, db, runPrefix, hotGapEvents, divEvents, liquidityCards, *maxAttempts, now)
 	if err != nil {
 		log.Fatalf("phase7 dedupe insert: %v", err)
 	}
@@ -329,16 +349,18 @@ func rewriteHostInternalForLocalShell(raw string) string {
 	return parsed.String()
 }
 
-func parseIncludeFlag(raw string) (hotGap, divergence bool, err error) {
+func parseIncludeFlag(raw string) (hotGap, divergence, liquidity bool, err error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "", "all":
-		return true, true, nil
+		return true, true, true, nil
 	case "hot_gap", "hotgap", "top30", "#1":
-		return true, false, nil
+		return true, false, false, nil
 	case "divergence", "div", "#2-#5":
-		return false, true, nil
+		return false, true, false, nil
+	case "liquidity", "liq", "#10-#11", "#10", "#11":
+		return false, false, true, nil
 	}
-	return false, false, fmt.Errorf("unrecognised --include=%q (allowed: all | hot_gap | divergence)", raw)
+	return false, false, false, fmt.Errorf("unrecognised --include=%q (allowed: all | hot_gap | divergence | liquidity)", raw)
 }
 
 func loadLatestRows(ctx context.Context, db *sql.DB) ([]listing.Top30RowForPush, time.Time, error) {
@@ -388,7 +410,7 @@ func loadLatestRows(ctx context.Context, db *sql.DB) ([]listing.Top30RowForPush,
 // The script uses raw SQL rather than the package-private
 // repository.insertOutbox helper so production code stays untouched.
 // The column list mirrors backend/migrations/000010_listing_agent_p1.up.sql.
-func insertSmokeOutbox(ctx context.Context, db *sql.DB, runPrefix string, hotGapEvents []listing.Top30PushEvent, divEvents []listing.DivergencePushEvent, maxAttempts int, now time.Time) (int, error) {
+func insertSmokeOutbox(ctx context.Context, db *sql.DB, runPrefix string, hotGapEvents []listing.Top30PushEvent, divEvents []listing.DivergencePushEvent, liquidityCards []liquidity.CardPayload, maxAttempts int, now time.Time) (int, error) {
 	stmt, err := db.PrepareContext(ctx,
 		`INSERT IGNORE INTO t_listing_delivery_outbox
 		   (event_type, dedupe_key, target_channel, status, attempt_count, max_attempts,
@@ -434,7 +456,38 @@ func insertSmokeOutbox(ctx context.Context, db *sql.DB, runPrefix string, hotGap
 		n, _ := res.RowsAffected()
 		inserted += int(n)
 	}
+
+	for _, card := range liquidityCards {
+		dedupe := runPrefix + card.DedupeKey
+		card.DedupeKey = dedupe
+		payload, err := liquidity.RenderLiquidityPostMessage(card)
+		if err != nil {
+			return inserted, fmt.Errorf("render liquidity %s/%s: %w", card.Kind, card.Canonical, err)
+		}
+		eventType := liquidityEventTypeForKind(card.Kind)
+		res, err := stmt.ExecContext(ctx,
+			eventType, dedupe, listing.DeliveryChannelLarkLiquidity,
+			listing.OutboxStatusPending, maxAttempts, nextAttempt, payload, now, now)
+		if err != nil {
+			return inserted, fmt.Errorf("insert liquidity %s/%s: %w", card.Kind, card.Canonical, err)
+		}
+		n, _ := res.RowsAffected()
+		inserted += int(n)
+	}
 	return inserted, nil
+}
+
+// liquidityEventTypeForKind mirrors the mapping inside the production
+// liquidity producer so smoke outbox rows carry the same event_type
+// values DrainDueOutbox would resolve to the liquidity webhook.
+func liquidityEventTypeForKind(kind liquidity.AlertKind) string {
+	switch kind {
+	case liquidity.KindLiquidityLag:
+		return listing.DeliveryEventLiquidityLag
+	case liquidity.KindWorstDepth:
+		return listing.DeliveryEventWorstDepth
+	}
+	return string(kind)
 }
 
 // divergenceEventTypeForCategory mirrors the mapping used by
@@ -498,4 +551,115 @@ func buildHTTPClient(proxyURL string) *http.Client {
 	tr := http.DefaultTransport.(*http.Transport).Clone()
 	tr.Proxy = http.ProxyURL(parsed)
 	return &http.Client{Transport: tr, Timeout: 10 * time.Second}
+}
+
+// buildLiquiditySmokeFixtures returns three deterministic liquidity
+// cards covering the first / reissue / clear phases so one smoke run
+// exercises every visual + state-machine payload the production
+// engine will emit. The numbers are chosen to look representative
+// without being identical across scenarios; the dedupe_key marker is
+// "_smoke" so the smoke wrap-prefix (lark_push_test|<nonce>|...) never
+// collides with the preview CLI's "_fixture" marker.
+//
+// This intentionally stays self-contained (not shared with
+// liquidity-alert-preview) so the smoke harness has no build-time
+// dependency on scripts/liquidity-alert-preview, which keeps the two
+// tools independently iterable.
+func buildLiquiditySmokeFixtures(dashboardBase string, lagThreshold float64) []liquidity.CardPayload {
+	now := time.Now().UTC()
+	tier := "0.10%"
+	dash := func(canonical string) string {
+		return liquidity.BuildDashboardURL(dashboardBase, canonical, tier)
+	}
+	lagFirst := liquidity.CardPayload{
+		Kind:             liquidity.KindLiquidityLag,
+		Phase:            liquidity.PhaseFirst,
+		Canonical:        "BTC",
+		DisplaySymbol:    "BTC-USDT (perp)",
+		Tier:             tier,
+		SeveritySeq:      1,
+		FirstTriggeredAt: now,
+		EvaluatedAt:      now,
+		EdgexDepth:       2_400_000,
+		MedianDepth:      5_800_000,
+		Ratio:            2_400_000.0 / 5_800_000.0,
+		LagThreshold:     lagThreshold,
+		Comparators:      8,
+		TotalPlatforms:   9,
+		EdgexRank:        6,
+		Platforms: []liquidity.AlertPlatformRow{
+			{Platform: "binance", DepthUSD: 8_500_000, Rank: 1},
+			{Platform: "okx", DepthUSD: 7_100_000, Rank: 2},
+			{Platform: "bybit", DepthUSD: 6_200_000, Rank: 3},
+			{Platform: "bitget", DepthUSD: 5_800_000, Rank: 4, IsMedian: true},
+			{Platform: "gate", DepthUSD: 3_800_000, Rank: 5},
+			{Platform: "edgeX", DepthUSD: 2_400_000, Rank: 6, IsEdgex: true},
+			{Platform: "bingx", DepthUSD: 1_900_000, Rank: 7},
+			{Platform: "mexc", DepthUSD: 1_400_000, Rank: 8},
+			{Platform: "hyperliquid", DepthUSD: 800_000, Rank: 9},
+		},
+		DashboardURL: dash("BTC"),
+		DedupeKey:    "liquidity_lag|BTC|seq1|first_smoke",
+	}
+	lagReissue := liquidity.CardPayload{
+		Kind:             liquidity.KindLiquidityLag,
+		Phase:            liquidity.PhaseReissue,
+		Canonical:        "ETH",
+		DisplaySymbol:    "ETH-USDT (perp)",
+		Tier:             tier,
+		SeveritySeq:      1,
+		ReissueIdx:       1,
+		FirstTriggeredAt: now.Add(-9 * time.Hour),
+		EvaluatedAt:      now,
+		EdgexDepth:       1_050_000,
+		MedianDepth:      2_900_000,
+		Ratio:            1_050_000.0 / 2_900_000.0,
+		LagThreshold:     lagThreshold,
+		Comparators:      7,
+		TotalPlatforms:   8,
+		EdgexRank:        6,
+		Platforms: []liquidity.AlertPlatformRow{
+			{Platform: "binance", DepthUSD: 4_200_000, Rank: 1},
+			{Platform: "okx", DepthUSD: 3_400_000, Rank: 2},
+			{Platform: "bybit", DepthUSD: 2_900_000, Rank: 3, IsMedian: true},
+			{Platform: "bitget", DepthUSD: 2_900_000, Rank: 4, IsMedian: true},
+			{Platform: "gate", DepthUSD: 2_100_000, Rank: 5},
+			{Platform: "edgeX", DepthUSD: 1_050_000, Rank: 6, IsEdgex: true},
+			{Platform: "bingx", DepthUSD: 720_000, Rank: 7},
+			{Platform: "mexc", DepthUSD: 410_000, Rank: 8},
+		},
+		DashboardURL: dash("ETH"),
+		DedupeKey:    "liquidity_lag|ETH|seq1|reissue2_smoke",
+	}
+	clear := liquidity.CardPayload{
+		Kind:             liquidity.KindLiquidityLag,
+		Phase:            liquidity.PhaseClear,
+		Canonical:        "SOL",
+		DisplaySymbol:    "SOL-USDT (perp)",
+		Tier:             tier,
+		SeveritySeq:      1,
+		FirstTriggeredAt: now.Add(-14 * time.Hour),
+		EvaluatedAt:      now,
+		EdgexDepth:       6_100_000,
+		MedianDepth:      5_900_000,
+		Ratio:            6_100_000.0 / 5_900_000.0,
+		LagThreshold:     lagThreshold,
+		Comparators:      8,
+		TotalPlatforms:   9,
+		EdgexRank:        4,
+		Platforms: []liquidity.AlertPlatformRow{
+			{Platform: "binance", DepthUSD: 8_400_000, Rank: 1},
+			{Platform: "okx", DepthUSD: 7_000_000, Rank: 2},
+			{Platform: "bybit", DepthUSD: 6_300_000, Rank: 3},
+			{Platform: "edgeX", DepthUSD: 6_100_000, Rank: 4, IsEdgex: true},
+			{Platform: "bitget", DepthUSD: 5_900_000, Rank: 5, IsMedian: true},
+			{Platform: "gate", DepthUSD: 3_700_000, Rank: 6},
+			{Platform: "bingx", DepthUSD: 1_800_000, Rank: 7},
+			{Platform: "mexc", DepthUSD: 1_400_000, Rank: 8},
+			{Platform: "hyperliquid", DepthUSD: 780_000, Rank: 9},
+		},
+		DashboardURL: dash("SOL"),
+		DedupeKey:    "liquidity_lag|SOL|seq1|clear_smoke",
+	}
+	return []liquidity.CardPayload{lagFirst, lagReissue, clear}
 }
