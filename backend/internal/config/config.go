@@ -864,6 +864,21 @@ type listingAgentFile struct {
 	Top30DivergencePush *top30DivergencePushFile `yaml:"top30_divergence_push"`
 	LiquidityAlert      *liquidityAlertFile      `yaml:"liquidity_alert"`
 	Candidate           *listingCandidateFile    `yaml:"candidate"`
+	DecisionCard        *listingDecisionCardFile `yaml:"decision_card"`
+}
+
+type listingDecisionCardFile struct {
+	Enabled        *bool                        `yaml:"enabled"`
+	IgnoreCooldown string                       `yaml:"ignore_cooldown"`
+	MaxPerTick     *int                         `yaml:"max_per_tick"`
+	Callback       *listingDecisionCallbackFile `yaml:"callback"`
+}
+
+type listingDecisionCallbackFile struct {
+	Secret        string   `yaml:"secret"`
+	SecretEnv     string   `yaml:"secret_env"`
+	MaxClockSkew  string   `yaml:"max_clock_skew"`
+	OperatorAllow []string `yaml:"operator_allow"`
 }
 
 type liquidityAlertFile struct {
@@ -1402,6 +1417,66 @@ func applyListingAgentFile(base ListingAgentConfig, file listingAgentFile) (List
 			return ListingAgentConfig{}, err
 		}
 		base.Candidate = c
+	}
+	if file.DecisionCard != nil {
+		dc, err := applyListingDecisionCardFile(base.DecisionCard, *file.DecisionCard)
+		if err != nil {
+			return ListingAgentConfig{}, err
+		}
+		base.DecisionCard = dc
+	}
+	return base, nil
+}
+
+func applyListingDecisionCardFile(base ListingDecisionCardConfig, file listingDecisionCardFile) (ListingDecisionCardConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.IgnoreCooldown != "" {
+		d, err := time.ParseDuration(file.IgnoreCooldown)
+		if err != nil {
+			return ListingDecisionCardConfig{}, fmt.Errorf("listing_agent.decision_card.ignore_cooldown: %w", err)
+		}
+		if d <= 0 {
+			return ListingDecisionCardConfig{}, fmt.Errorf("listing_agent.decision_card.ignore_cooldown: must be > 0")
+		}
+		base.IgnoreCooldown = d
+	}
+	if file.MaxPerTick != nil {
+		if *file.MaxPerTick < 0 {
+			return ListingDecisionCardConfig{}, fmt.Errorf("listing_agent.decision_card.max_per_tick: must be >= 0")
+		}
+		base.MaxPerTick = *file.MaxPerTick
+	}
+	if file.Callback != nil {
+		cb, err := applyListingDecisionCallbackFile(base.Callback, *file.Callback)
+		if err != nil {
+			return ListingDecisionCardConfig{}, err
+		}
+		base.Callback = cb
+	}
+	return base, nil
+}
+
+func applyListingDecisionCallbackFile(base ListingDecisionCallbackConfig, file listingDecisionCallbackFile) (ListingDecisionCallbackConfig, error) {
+	if file.Secret != "" {
+		base.Secret = file.Secret
+	}
+	if file.SecretEnv != "" {
+		base.SecretEnv = file.SecretEnv
+	}
+	if file.MaxClockSkew != "" {
+		d, err := time.ParseDuration(file.MaxClockSkew)
+		if err != nil {
+			return ListingDecisionCallbackConfig{}, fmt.Errorf("listing_agent.decision_card.callback.max_clock_skew: %w", err)
+		}
+		if d <= 0 {
+			return ListingDecisionCallbackConfig{}, fmt.Errorf("listing_agent.decision_card.callback.max_clock_skew: must be > 0")
+		}
+		base.MaxClockSkew = d
+	}
+	if len(file.OperatorAllow) > 0 {
+		base.OperatorAllow = append([]string(nil), file.OperatorAllow...)
 	}
 	return base, nil
 }

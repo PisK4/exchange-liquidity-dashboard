@@ -765,6 +765,16 @@ Runtime:
       send_spacing: 45s
     candidate:
       merge_window: 14d
+    decision_card:
+      enabled: true
+      ignore_cooldown: 36h
+      max_per_tick: 3
+      callback:
+        secret_env: LARK_LISTING_CALLBACK_SECRET
+        max_clock_skew: 120s
+        operator_allow:
+          - ou_ops_alice
+          - ou_ops_bob
 `
 	if err := os.WriteFile(filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
@@ -815,6 +825,25 @@ Runtime:
 	}
 	if got := cfg.Runtime.ListingAgent.Candidate.MergeWindow; got != 14*24*time.Hour {
 		t.Fatalf("merge_window = %s", got)
+	}
+	dc := cfg.Runtime.ListingAgent.DecisionCard
+	if !dc.Enabled {
+		t.Fatalf("decision_card.enabled = false, want true")
+	}
+	if dc.IgnoreCooldown != 36*time.Hour {
+		t.Fatalf("decision_card.ignore_cooldown = %s, want 36h", dc.IgnoreCooldown)
+	}
+	if dc.MaxPerTick != 3 {
+		t.Fatalf("decision_card.max_per_tick = %d, want 3", dc.MaxPerTick)
+	}
+	if dc.Callback.SecretEnv != "LARK_LISTING_CALLBACK_SECRET" {
+		t.Fatalf("decision_card.callback.secret_env = %q", dc.Callback.SecretEnv)
+	}
+	if dc.Callback.MaxClockSkew != 120*time.Second {
+		t.Fatalf("decision_card.callback.max_clock_skew = %s", dc.Callback.MaxClockSkew)
+	}
+	if got := dc.Callback.OperatorAllow; len(got) != 2 || got[0] != "ou_ops_alice" || got[1] != "ou_ops_bob" {
+		t.Fatalf("decision_card.callback.operator_allow = %v", got)
 	}
 	// instrument source roster overrides defaults: only binance is configured here.
 	if len(cfg.Runtime.ListingAgent.Sources.InstrumentDiff.Polls) != 1 {
