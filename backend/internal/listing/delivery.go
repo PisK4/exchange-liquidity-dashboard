@@ -23,9 +23,17 @@ import (
 type DeliveryDeps struct {
 	WebhookURL    string
 	WebhookSecret string
-	Client        *http.Client
-	Now           func() time.Time
-	BatchSize     int
+	// ResolveWebhook, when non-nil, is called per outbox row to pick
+	// the destination webhook (and its secret) based on the row's
+	// event_type. Engine wiring sets this so listing-announcement
+	// rows go to cfg.Alert.Webhooks.Listing and liquidity rows go to
+	// cfg.Alert.Webhooks.Liquidity. When nil, WebhookURL /
+	// WebhookSecret are used for every row (legacy path used by
+	// tests and the single-webhook deployment).
+	ResolveWebhook func(eventType string) (url, secret string)
+	Client         *http.Client
+	Now            func() time.Time
+	BatchSize      int
 	// RetryBackoff returns the wait time for the n-th retry attempt
 	// (1-based). When nil, an exponential default is used.
 	RetryBackoff func(attempt int) time.Duration
@@ -79,8 +87,9 @@ func DrainDueOutbox(ctx context.Context, repo *Repository, deps DeliveryDeps) (D
 	}
 	out := DeliveryResult{}
 	for _, row := range rows {
+		webhookURL, webhookSecret := resolveRowWebhook(deps, row.EventType)
 		// Treat empty webhook URL as disabled regardless of stored status.
-		if strings.TrimSpace(deps.WebhookURL) == "" {
+		if strings.TrimSpace(webhookURL) == "" {
 			if err := repo.markOutboxDisabled(ctx, row.ID, now); err != nil {
 				return out, fmt.Errorf("mark disabled %d: %w", row.ID, err)
 			}
@@ -88,7 +97,7 @@ func DrainDueOutbox(ctx context.Context, repo *Repository, deps DeliveryDeps) (D
 			continue
 		}
 		attempt := row.AttemptCount + 1
-		body, sendErr := postLarkWebhook(ctx, deps.Client, deps.WebhookURL, deps.WebhookSecret, row.PayloadJSON, now)
+		body, sendErr := postLarkWebhook(ctx, deps.Client, webhookURL, webhookSecret, row.PayloadJSON, now)
 		status := OutboxStatusSent
 		var httpStatus *int
 		var errMsg string
@@ -123,6 +132,21 @@ func DrainDueOutbox(ctx context.Context, repo *Repository, deps DeliveryDeps) (D
 		}
 	}
 	return out, nil
+}
+
+// resolveRowWebhook returns the webhook URL + secret to use for the
+// given outbox row's event_type. When deps.ResolveWebhook is wired
+// it owns the routing; otherwise the legacy single-webhook fields
+// (WebhookURL / WebhookSecret) are returned so existing call sites
+// (tests, smoke scripts) keep working unchanged.
+func resolveRowWebhook(deps DeliveryDeps, eventType string) (string, string) {
+	if deps.ResolveWebhook != nil {
+		if url, secret := deps.ResolveWebhook(eventType); strings.TrimSpace(url) != "" {
+			return url, secret
+		}
+		return "", ""
+	}
+	return deps.WebhookURL, deps.WebhookSecret
 }
 
 // LarkSign returns the base64-encoded HMAC-SHA256 signature Lark /

@@ -153,6 +153,12 @@ const (
 	DeliveryEventTop30DivergenceDEXOnly    = "top30_divergence_dex_only"
 	DeliveryEventTop30DivergenceHeavyGap   = "top30_divergence_heavy_gap"
 	DeliveryEventTop30DivergenceBothHotGap = "top30_divergence_both_hot_gap"
+	// Liquidity-alert event types (P3 Dashboard #10/#11). These go
+	// into a separate Lark group (cfg.Alert.Webhooks.Liquidity) so
+	// the operator can mute/forward them independently from listing
+	// announcements.
+	DeliveryEventLiquidityLag = "liquidity_lag"
+	DeliveryEventWorstDepth   = "worst_depth"
 )
 
 // DivergenceCategoryKey identifies the category of a divergence push
@@ -169,7 +175,8 @@ const (
 
 // DeliveryChannel enum stored in t_listing_delivery_outbox.target_channel.
 const (
-	DeliveryChannelLarkTop30 = "lark_top30"
+	DeliveryChannelLarkTop30     = "lark_top30"
+	DeliveryChannelLarkLiquidity = "lark_liquidity"
 )
 
 // Candidate is the read model of t_listing_candidate.

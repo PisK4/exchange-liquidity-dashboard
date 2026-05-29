@@ -67,7 +67,55 @@ type ListingAgentConfig struct {
 	Delivery            ListingDeliveryConfig     `json:"delivery"`
 	Top30Push           ListingTop30PushConfig    `json:"top30_push"`
 	Top30DivergencePush Top30DivergencePushConfig `json:"top30_divergence_push"`
+	LiquidityAlert      LiquidityAlertConfig      `json:"liquidity_alert"`
 	Candidate           ListingCandidateConfig    `json:"candidate"`
+}
+
+// LiquidityAlertConfig is the Dashboard liquidity-lag (#10) /
+// worst-depth (#11) alert tuning block. See
+// architecture/方案设计/EdgeX运营/Listing/
+// 2026-05-29-Listing-Agent-Dashboard-Liquidity-Alerts-#10-#11.md §5
+// for the business semantics and
+// docs/feat/listing-agent-liquidity-alert.md §8 for runbook context.
+//
+// Defaults are conservative: Enabled=false so the SG environment
+// has to opt in explicitly after observing one cycle of dry-run
+// outbox rows.
+type LiquidityAlertConfig struct {
+	Enabled bool `json:"enabled"`
+	// DepthTierPct selects which `t_orderbook_snapshot.tier` row
+	// the alerts read. Default 0.001 (0.1%). Valid alternatives in
+	// V1: 0.0005 / 0.01 / 0.02.
+	DepthTierPct float64 `json:"depth_tier_pct"`
+	// LagThreshold is the median multiplier below which #10 fires.
+	// 0.5 == "edgeX < 50% of competitor median". Range (0, 1).
+	LagThreshold float64 `json:"lag_threshold"`
+	// MinComparators is the minimum count of non-edgeX platforms
+	// that must report a fresh, successful depth snapshot before
+	// either alert can fire. PRD §3.7 specifies <3 must not trigger.
+	MinComparators int `json:"min_comparators"`
+	// ReissueInterval is the cooldown between repeat pushes while
+	// an alert remains active. Default 6h.
+	ReissueInterval time.Duration `json:"reissue_interval"`
+	// ClearConsecutive is the number of evaluation rounds in a row
+	// where the trigger condition must be false before the alert
+	// state flips from active → cleared. With PollInterval=5m and
+	// ClearConsecutive=3 the effective hysteresis is 15 minutes.
+	ClearConsecutive int `json:"clear_consecutive"`
+	// StaleAfter bounds the freshness of a single platform's depth
+	// snapshot. Snapshots older than this are excluded from the
+	// median and rank computation (not zeroed out).
+	StaleAfter time.Duration `json:"stale_after"`
+	// PollInterval is the engine cadence for re-evaluating alerts.
+	// Should be ≥ the depth collector cadence (5m in V1).
+	PollInterval time.Duration `json:"poll_interval"`
+	// MaxPerTick caps the number of new outbox rows the producer
+	// emits per tick. Defense against the "100 canonicals trigger
+	// at once after a deploy" burst.
+	MaxPerTick int `json:"max_per_tick"`
+	// SendSpacing staggers NextAttemptAt across rows written in
+	// the same producer pass.
+	SendSpacing time.Duration `json:"send_spacing"`
 }
 
 // Top30DivergencePushConfig controls the CEX/DEX divergence Lark
@@ -298,9 +346,30 @@ type AlertConfig struct {
 	DestPhoneNumber string `json:"dest_phone_number,omitempty"`
 	Business        string `json:"business,omitempty"`
 	ServerURL       string `json:"server_url,omitempty"`
-	WebHookP12      string `json:"webhook_p12,omitempty"`
-	WebHookP3       string `json:"webhook_p3,omitempty"`
-	WebHookP45      string `json:"webhook_p45,omitempty"`
+	// Webhooks routes alerts by business module (listing /
+	// liquidity / ...). Replaces the legacy priority-named
+	// WebHookP12 / P3 / P45 fields. On Load, when Webhooks.Listing
+	// is empty and the legacy WebHookP3 is set, the loader auto-
+	// migrates WebHookP3 → Webhooks.Listing so existing nacos
+	// configs keep working without redeploy.
+	Webhooks AlertWebhooks `json:"webhooks"`
+
+	// Deprecated. Kept so existing nacos / yaml configs continue
+	// loading during the rollout. New code MUST NOT read these
+	// directly; route lookups go through Webhooks.<channel>.
+	WebHookP12 string `json:"webhook_p12,omitempty"`
+	WebHookP3  string `json:"webhook_p3,omitempty"`
+	WebHookP45 string `json:"webhook_p45,omitempty"`
+}
+
+// AlertWebhooks maps each business module to its Lark bot URL.
+// listing currently hosts the Top30 hot-gap (#1) and CEX/DEX
+// divergence (#2-#5) cards. liquidity hosts the dashboard depth
+// alerts (#10 liquidity_lag / #11 worst_depth). Future modules add
+// new fields here, NOT new priority lanes.
+type AlertWebhooks struct {
+	Listing   string `json:"listing,omitempty"   yaml:"Listing"`
+	Liquidity string `json:"liquidity,omitempty" yaml:"Liquidity"`
 }
 
 type CatalogConfig struct {
@@ -578,9 +647,28 @@ func defaultListingAgentConfig() ListingAgentConfig {
 			StaleAfter:  15 * time.Minute,
 			SendSpacing: 30 * time.Second,
 		},
+		LiquidityAlert: defaultLiquidityAlertConfig(),
 		Candidate: ListingCandidateConfig{
 			MergeWindow: 14 * 24 * time.Hour,
 		},
+	}
+}
+
+// defaultLiquidityAlertConfig keeps the feature OFF by default; the SG
+// rollout flips Enabled=true once the dry-run outbox rows from one
+// reissue cycle look clean. The thresholds match the spec §5.2 table.
+func defaultLiquidityAlertConfig() LiquidityAlertConfig {
+	return LiquidityAlertConfig{
+		Enabled:          false,
+		DepthTierPct:     0.001,
+		LagThreshold:     0.5,
+		MinComparators:   3,
+		ReissueInterval:  6 * time.Hour,
+		ClearConsecutive: 3,
+		StaleAfter:       30 * time.Minute,
+		PollInterval:     5 * time.Minute,
+		MaxPerTick:       5,
+		SendSpacing:      0,
 	}
 }
 
@@ -733,7 +821,21 @@ type listingAgentFile struct {
 	Delivery            *listingDeliveryFile     `yaml:"delivery"`
 	Top30Push           *listingTop30PushFile    `yaml:"top30_push"`
 	Top30DivergencePush *top30DivergencePushFile `yaml:"top30_divergence_push"`
+	LiquidityAlert      *liquidityAlertFile      `yaml:"liquidity_alert"`
 	Candidate           *listingCandidateFile    `yaml:"candidate"`
+}
+
+type liquidityAlertFile struct {
+	Enabled          *bool    `yaml:"enabled"`
+	DepthTierPct     *float64 `yaml:"depth_tier_pct"`
+	LagThreshold     *float64 `yaml:"lag_threshold"`
+	MinComparators   *int     `yaml:"min_comparators"`
+	ReissueInterval  string   `yaml:"reissue_interval"`
+	ClearConsecutive *int     `yaml:"clear_consecutive"`
+	StaleAfter       string   `yaml:"stale_after"`
+	PollInterval     string   `yaml:"poll_interval"`
+	MaxPerTick       *int     `yaml:"max_per_tick"`
+	SendSpacing      string   `yaml:"send_spacing"`
 }
 
 type top30DivergencePushFile struct {
@@ -814,15 +916,21 @@ type databaseFile struct {
 }
 
 type alertFile struct {
-	AppName         string `yaml:"AppName"`
-	Enabled         *bool  `yaml:"Enabled"`
-	FeishuUid       string `yaml:"FeishuUid"`
-	DestPhoneNumber string `yaml:"DestPhoneNumber"`
-	Business        string `yaml:"Business"`
-	ServerURL       string `yaml:"ServerUrl"`
-	WebHookP12      string `yaml:"WebHookP12"`
-	WebHookP3       string `yaml:"WebHookP3"`
-	WebHookP45      string `yaml:"WebHookP45"`
+	AppName         string             `yaml:"AppName"`
+	Enabled         *bool              `yaml:"Enabled"`
+	FeishuUid       string             `yaml:"FeishuUid"`
+	DestPhoneNumber string             `yaml:"DestPhoneNumber"`
+	Business        string             `yaml:"Business"`
+	ServerURL       string             `yaml:"ServerUrl"`
+	Webhooks        *alertWebhooksFile `yaml:"Webhooks"`
+	WebHookP12      string             `yaml:"WebHookP12"`
+	WebHookP3       string             `yaml:"WebHookP3"`
+	WebHookP45      string             `yaml:"WebHookP45"`
+}
+
+type alertWebhooksFile struct {
+	Listing   string `yaml:"Listing"`
+	Liquidity string `yaml:"Liquidity"`
 }
 
 type catalogFile struct {
@@ -1064,6 +1172,16 @@ func (f alertFile) toConfig() AlertConfig {
 	if f.Enabled != nil {
 		enabled = *f.Enabled
 	}
+	var hooks AlertWebhooks
+	if f.Webhooks != nil {
+		hooks = AlertWebhooks{
+			Listing:   strings.TrimSpace(f.Webhooks.Listing),
+			Liquidity: strings.TrimSpace(f.Webhooks.Liquidity),
+		}
+	}
+	if hooks.Listing == "" && strings.TrimSpace(f.WebHookP3) != "" {
+		hooks.Listing = strings.TrimSpace(f.WebHookP3)
+	}
 	return AlertConfig{
 		AppName:         f.AppName,
 		Enabled:         enabled,
@@ -1071,6 +1189,7 @@ func (f alertFile) toConfig() AlertConfig {
 		DestPhoneNumber: f.DestPhoneNumber,
 		Business:        f.Business,
 		ServerURL:       f.ServerURL,
+		Webhooks:        hooks,
 		WebHookP12:      f.WebHookP12,
 		WebHookP3:       f.WebHookP3,
 		WebHookP45:      f.WebHookP45,
@@ -1228,6 +1347,13 @@ func applyListingAgentFile(base ListingAgentConfig, file listingAgentFile) (List
 			return ListingAgentConfig{}, err
 		}
 		base.Top30DivergencePush = t
+	}
+	if file.LiquidityAlert != nil {
+		la, err := applyLiquidityAlertFile(base.LiquidityAlert, *file.LiquidityAlert)
+		if err != nil {
+			return ListingAgentConfig{}, err
+		}
+		base.LiquidityAlert = la
 	}
 	if file.Candidate != nil {
 		c, err := applyListingCandidateFile(base.Candidate, *file.Candidate)
@@ -1424,6 +1550,83 @@ func applyListingCandidateFile(base ListingCandidateConfig, file listingCandidat
 			return ListingCandidateConfig{}, fmt.Errorf("listing_agent.candidate.merge_window: %w", err)
 		}
 		base.MergeWindow = d
+	}
+	return base, nil
+}
+
+func applyLiquidityAlertFile(base LiquidityAlertConfig, file liquidityAlertFile) (LiquidityAlertConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.DepthTierPct != nil {
+		if *file.DepthTierPct <= 0 {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.depth_tier_pct: must be > 0")
+		}
+		base.DepthTierPct = *file.DepthTierPct
+	}
+	if file.LagThreshold != nil {
+		if *file.LagThreshold <= 0 || *file.LagThreshold >= 1 {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.lag_threshold: must be in (0, 1)")
+		}
+		base.LagThreshold = *file.LagThreshold
+	}
+	if file.MinComparators != nil {
+		if *file.MinComparators < 1 {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.min_comparators: must be >= 1")
+		}
+		base.MinComparators = *file.MinComparators
+	}
+	if file.ReissueInterval != "" {
+		d, err := time.ParseDuration(file.ReissueInterval)
+		if err != nil {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.reissue_interval: %w", err)
+		}
+		if d <= 0 {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.reissue_interval: must be > 0")
+		}
+		base.ReissueInterval = d
+	}
+	if file.ClearConsecutive != nil {
+		if *file.ClearConsecutive < 1 {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.clear_consecutive: must be >= 1")
+		}
+		base.ClearConsecutive = *file.ClearConsecutive
+	}
+	if file.StaleAfter != "" {
+		d, err := time.ParseDuration(file.StaleAfter)
+		if err != nil {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.stale_after: %w", err)
+		}
+		if d <= 0 {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.stale_after: must be > 0")
+		}
+		base.StaleAfter = d
+	}
+	if file.PollInterval != "" {
+		d, err := time.ParseDuration(file.PollInterval)
+		if err != nil {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.poll_interval: %w", err)
+		}
+		if d <= 0 {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.poll_interval: must be > 0")
+		}
+		base.PollInterval = d
+	}
+	if file.MaxPerTick != nil {
+		if *file.MaxPerTick < 0 {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.max_per_tick: must be >= 0")
+		}
+		base.MaxPerTick = *file.MaxPerTick
+	}
+	if file.SendSpacing != "" {
+		d, err := time.ParseDuration(file.SendSpacing)
+		if err != nil {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.send_spacing: %w", err)
+		}
+		if d < 0 {
+			return LiquidityAlertConfig{}, fmt.Errorf("listing_agent.liquidity_alert.send_spacing: must be >= 0")
+		}
+		base.SendSpacing = d
 	}
 	return base, nil
 }

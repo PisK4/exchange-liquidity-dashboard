@@ -130,3 +130,55 @@ func TestCanonicalIndex_CrossPlatformFallbackSkippedOnConflict(t *testing.T) {
 		t.Errorf("ambiguous alias must not auto-resolve; got %q", got)
 	}
 }
+
+func TestCanonicalIndex_IsPlatformExclusive(t *testing.T) {
+	idx := NewCanonicalIndex([]symbolYAML{
+		{
+			Canonical: "GOLD",
+			Aliases: map[string][]string{
+				"binance":     {"XAU"},
+				"edgeX":       {"PAXG"},
+				"hyperliquid": {"XAU"},
+			},
+		},
+		{
+			Canonical: "HYPE_INDEX",
+			Aliases: map[string][]string{
+				"hyperliquid": {"XYZ:CL"},
+			},
+		},
+		{
+			Canonical: "LIGHTER_ONLY",
+			Aliases: map[string][]string{
+				"lighter": {"WEIRD"},
+			},
+		},
+		{
+			Canonical: "PROMISED_NOTHING",
+			Aliases:   map[string][]string{"binance": {}}, // empty alias list — not declared
+		},
+	})
+
+	cases := []struct {
+		canonical string
+		want      bool
+	}{
+		{"GOLD", false},             // 3 platforms → not exclusive
+		{"HYPE_INDEX", true},        // hyperliquid only
+		{"LIGHTER_ONLY", true},      // lighter only
+		{"PROMISED_NOTHING", false}, // declared but no alias → no platform counted; falls through to false
+		{"BTC", false},              // unknown canonical → false (conservative)
+		{"gold", false},             // case-insensitive
+		{"  GOLD  ", false},         // trimmed
+	}
+	for _, tc := range cases {
+		if got := idx.IsPlatformExclusive(tc.canonical); got != tc.want {
+			t.Errorf("IsPlatformExclusive(%q) = %v, want %v", tc.canonical, got, tc.want)
+		}
+	}
+
+	var nilIdx *CanonicalIndex
+	if nilIdx.IsPlatformExclusive("GOLD") {
+		t.Error("nil receiver should return false")
+	}
+}

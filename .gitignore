@@ -11,6 +11,8 @@ coverage/
 backend/build-catalog
 backend/divergence-preview
 backend/lark-push-smoke
+backend/liquidity-alert-preview
+backend/top30-preview
 .factory
 docs
 

@@ -23,6 +23,20 @@ Alert:
   # EdgeX services; Listing Agent only consumes it, not its own module.
   WebHookP3: "https://open.larksuite.com/open-apis/bot/v2/hook/2983a36c-de31-4190-99b4-e256662bb8f7"
   WebHookP45: ""
+  # Business-module routing. Webhooks.Listing replaces WebHookP3 and
+  # holds Top30 hot-gap (#1) + CEX/DEX divergence (#2-#5) cards.
+  # Webhooks.Liquidity is a separate bot dedicated to Dashboard
+  # liquidity-lag (#10) and worst-depth (#11) cards so operators can
+  # mute / forward those independently. Leave Webhooks.* empty to
+  # fall back to the legacy WebHookP3 (Listing only). New deployments
+  # SHOULD migrate to Webhooks; this is the long-term schema.
+  Webhooks:
+    Listing: "https://open.larksuite.com/open-apis/bot/v2/hook/2983a36c-de31-4190-99b4-e256662bb8f7"
+    # Leave empty so liquidity_alert.enabled=true cannot accidentally
+    # cross-post into the Listing group. Operators provision a
+    # dedicated bot in the Liquidity group and paste its URL here
+    # before flipping enabled=true.
+    Liquidity: ""
 
 Catalog:
   ExchangeEndpointsFile: exchange_endpoints.yaml
@@ -246,5 +260,35 @@ Runtime:
       # "one card every send_spacing" pace inside a single batch.
       # Default 10m.
       send_spacing: 10m
+    # Dashboard liquidity-alert (#10 / #11) tuning. Enabled=false by
+    # default so SG can dry-run one outbox cycle before flipping
+    # webhook delivery on. See architecture/方案设计/EdgeX运营/Listing/
+    # 2026-05-29-Listing-Agent-Dashboard-Liquidity-Alerts-#10-#11.md.
+    liquidity_alert:
+      enabled: false
+      # Depth tier the alert reads — must match a tier present in
+      # Runtime.depth_tiers above so the freshness JOIN finds rows.
+      depth_tier_pct: 0.001
+      # edgeX < lag_threshold × competitor_median → fires #10. 0.5
+      # means "below half the median".
+      lag_threshold: 0.5
+      # Minimum non-edgeX platforms with fresh, displayable depth at
+      # this tier before any alert can fire. Spec §1 red line.
+      min_comparators: 3
+      # Re-emit cadence while the alert stays active.
+      reissue_interval: 6h
+      # Number of consecutive evaluation rounds the trigger must be
+      # false before flipping active → cleared (hysteresis).
+      clear_consecutive: 3
+      # Snapshot freshness window. Older rows are excluded from the
+      # median/rank.
+      stale_after: 30m
+      # Engine cadence for re-evaluating alerts. Should be ≥ the
+      # depth collector cadence (5m).
+      poll_interval: 5m
+      # Cap on new outbox rows per producer tick.
+      max_per_tick: 5
+      # Stagger NextAttemptAt across rows written in one tick.
+      send_spacing: 30s
     candidate:
       merge_window: 14d

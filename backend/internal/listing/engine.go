@@ -42,6 +42,7 @@ type RunSummary struct {
 	Fusion         FusionResult
 	Top30Push      Top30PushResult
 	DivergencePush DivergencePushResult
+	LiquidityAlert LiquidityAlertResult
 	Delivery       DeliveryResult
 	Started        time.Time
 	Finished       time.Time
@@ -121,12 +122,13 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	}
 
 	// Step 2: produce Top30 push outbox rows.
-	webhook := resolveWebhookURL(e.cfg)
+	listingWebhook := resolveListingWebhookURL(e.cfg)
+	liquidityWebhook := resolveLiquidityWebhookURL(e.cfg)
 	top30, top30Err := ProduceTop30Push(ctx, e.repo, Top30Deps{
 		LoadUniverse:             e.deps.LoadUniverse,
 		Now:                      e.deps.Now,
 		DashboardBase:            e.cfg.Runtime.ListingAgent.Delivery.DashboardBaseURL,
-		WebhookURL:               webhook,
+		WebhookURL:               listingWebhook,
 		MaxAttempts:              e.cfg.Runtime.ListingAgent.Worker.MaxAttempts,
 		StaleAfter:               e.cfg.Runtime.ListingAgent.Top30Push.StaleAfter,
 		AutoQuietAfterStreakDays: e.cfg.Runtime.ListingAgent.Top30Push.AutoQuietAfterStreakDays,
@@ -143,7 +145,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	divergence, divErr := ProduceDivergencePush(ctx, e.repo, DivergenceDeps{
 		Now:           e.deps.Now,
 		DashboardBase: e.cfg.Runtime.ListingAgent.Delivery.DashboardBaseURL,
-		WebhookURL:    webhook,
+		WebhookURL:    listingWebhook,
 		MaxAttempts:   e.cfg.Runtime.ListingAgent.Worker.MaxAttempts,
 		DivergenceCfg: e.cfg.Runtime.Top30Divergence,
 		PushCfg:       e.cfg.Runtime.ListingAgent.Top30DivergencePush,
@@ -154,15 +156,43 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 		e.deps.Logger.Printf("listing engine: divergence push error: %v", divErr)
 	}
 
+	// Step 2c: produce Dashboard liquidity-alert outbox rows (#10 / #11).
+	// Routes to cfg.Alert.Webhooks.Liquidity, NOT the listing webhook,
+	// so operators can mute / forward liquidity alerts independently
+	// from listing announcements.
+	liquidityAlert, laErr := ProduceLiquidityAlertPush(ctx, e.repo, LiquidityAlertDeps{
+		LoadUniverse:  e.deps.LoadUniverse,
+		Now:           e.deps.Now,
+		DashboardBase: e.cfg.Runtime.ListingAgent.Delivery.DashboardBaseURL,
+		WebhookURL:    liquidityWebhook,
+		MaxAttempts:   e.cfg.Runtime.ListingAgent.Worker.MaxAttempts,
+		Cfg:           e.cfg.Runtime.ListingAgent.LiquidityAlert,
+		Index:         e.cfg.CanonicalIndex,
+	})
+	summary.LiquidityAlert = liquidityAlert
+	if laErr != nil {
+		e.deps.Logger.Printf("listing engine: liquidity alert push error: %v", laErr)
+	}
+
 	// Step 3: drain due outbox. Empty webhook URL marks rows as disabled
 	// without producing a network call; this is intentional so smoke
-	// tests can run without a webhook configured.
+	// tests can run without a webhook configured. The per-row resolver
+	// routes listing-announcement events to cfg.Alert.Webhooks.Listing
+	// and liquidity events to cfg.Alert.Webhooks.Liquidity.
+	webhookSecret := e.cfg.Runtime.ListingAgent.Delivery.Top30WebhookSecret
 	delivery, deliveryErr := DrainDueOutbox(ctx, e.repo, DeliveryDeps{
-		WebhookURL:    webhook,
-		WebhookSecret: e.cfg.Runtime.ListingAgent.Delivery.Top30WebhookSecret,
-		Client:        e.deps.HTTPClient,
-		Now:           e.deps.Now,
-		BatchSize:     e.cfg.Runtime.ListingAgent.Top30Push.MaxPerTick,
+		WebhookURL:    listingWebhook,
+		WebhookSecret: webhookSecret,
+		ResolveWebhook: func(eventType string) (string, string) {
+			switch eventType {
+			case DeliveryEventLiquidityLag, DeliveryEventWorstDepth:
+				return liquidityWebhook, webhookSecret
+			}
+			return listingWebhook, webhookSecret
+		},
+		Client:    e.deps.HTTPClient,
+		Now:       e.deps.Now,
+		BatchSize: e.cfg.Runtime.ListingAgent.Top30Push.MaxPerTick,
 	})
 	summary.Delivery = delivery
 	if deliveryErr != nil {
@@ -189,7 +219,8 @@ func (e *Engine) Run(ctx context.Context) error {
 		if err != nil {
 			e.deps.Logger.Printf("listing engine: tick error: %v", err)
 		}
-		e.deps.Logger.Printf("listing engine tick: fusion=%+v top30=%+v divergence=%+v delivery=%+v", summary.Fusion, summary.Top30Push, summary.DivergencePush, summary.Delivery)
+		e.deps.Logger.Printf("listing engine tick: fusion=%+v top30=%+v divergence=%+v liquidity=%+v delivery=%+v",
+			summary.Fusion, summary.Top30Push, summary.DivergencePush, summary.LiquidityAlert, summary.Delivery)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -198,9 +229,19 @@ func (e *Engine) Run(ctx context.Context) error {
 	}
 }
 
-func resolveWebhookURL(cfg config.Config) string {
-	if cfg.Alert.Enabled && strings.TrimSpace(cfg.Alert.WebHookP3) != "" {
-		return cfg.Alert.WebHookP3
+// resolveListingWebhookURL picks the webhook for listing-announcement
+// cards (Top30 hot-gap + CEX/DEX divergence). Resolution order:
+//  1. cfg.Alert.Webhooks.Listing  (new business-module routing)
+//  2. cfg.Alert.WebHookP3         (legacy, kept for back-compat)
+//  3. cfg.Runtime...Top30WebhookURL / *URLEnv
+func resolveListingWebhookURL(cfg config.Config) string {
+	if cfg.Alert.Enabled {
+		if u := strings.TrimSpace(cfg.Alert.Webhooks.Listing); u != "" {
+			return u
+		}
+		if u := strings.TrimSpace(cfg.Alert.WebHookP3); u != "" {
+			return u
+		}
 	}
 	delivery := cfg.Runtime.ListingAgent.Delivery
 	if delivery.Top30WebhookURL != "" {
@@ -208,6 +249,20 @@ func resolveWebhookURL(cfg config.Config) string {
 	}
 	if delivery.Top30WebhookURLEnv != "" {
 		return os.Getenv(delivery.Top30WebhookURLEnv)
+	}
+	return ""
+}
+
+// resolveLiquidityWebhookURL picks the webhook for Dashboard
+// liquidity-alert cards (#10 / #11). Returns empty when not
+// configured, which makes the producer enqueue rows with status =
+// disabled so the operator sees them in the outbox table without
+// any external traffic firing. New surface — no legacy fallback.
+func resolveLiquidityWebhookURL(cfg config.Config) string {
+	if cfg.Alert.Enabled {
+		if u := strings.TrimSpace(cfg.Alert.Webhooks.Liquidity); u != "" {
+			return u
+		}
 	}
 	return ""
 }
