@@ -247,6 +247,138 @@ func TestRepositoryUpsertAnnouncementInsertsParent(t *testing.T) {
 	}
 }
 
+// TestRepositoryUpsertInstrumentSnapshotInserts locks the write side
+// of t_listing_instrument_snapshot: the first sighting of a (platform,
+// market_type, api_symbol) triple must produce an INSERT ... ON
+// DUPLICATE KEY UPDATE row, carry the normalizer version, and stamp
+// last_seen_at to the caller-provided clock. Phase 1 of
+// 2026-05-29-listing-agent.md needs this helper as the foundation
+// for both the bootstrap baseline pass and the steady-state diff loop.
+func TestRepositoryUpsertInstrumentSnapshotInserts(t *testing.T) {
+	now := time.Date(2026, 5, 29, 16, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	snap := InstrumentSnapshot{
+		Platform:          "binance",
+		MarketType:        "usdm_futures",
+		APISymbol:         "BTCUSDT",
+		DisplaySymbol:     "BTCUSDT",
+		CanonicalSymbol:   "BTC",
+		BaseAsset:         "BTC",
+		QuoteAsset:        "USDT",
+		SettleAsset:       "USDT",
+		MarketSurface:     "perp",
+		InstrumentKind:    "canonical",
+		ContractType:      "PERPETUAL",
+		StatusRaw:         "TRADING",
+		StatusNormalized:  "active",
+		StatusFieldName:   "status",
+		ListingTimeTS:     &now,
+		LastSeenAt:        now,
+		RawJSON:           json.RawMessage(`{"symbol":"BTCUSDT"}`),
+		RawJSONHash:       "deadbeef",
+		NormalizerVersion: "v1",
+	}
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	if err := repo.UpsertInstrumentSnapshot(context.Background(), snap); err != nil {
+		t.Fatalf("UpsertInstrumentSnapshot err = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+// TestRepositoryLatestInstrumentSnapshotByKeyReturnsRowOrNil ensures
+// the loader returns a populated *InstrumentSnapshot when the row
+// exists and nil when it does not, so callers can use a single
+// non-nil check to mean "we have a prev to diff against".
+func TestRepositoryLatestInstrumentSnapshotByKeyReturnsRowOrNil(t *testing.T) {
+	now := time.Date(2026, 5, 29, 16, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	cols := []string{
+		"id", "platform", "market_type", "api_symbol", "api_market_id", "display_symbol",
+		"canonical_symbol", "base_asset", "quote_asset", "settle_asset", "market_surface",
+		"instrument_kind", "contract_type", "status_raw", "status_normalized",
+		"status_field_name", "listing_time_ts", "listing_time_field_name", "delist_flag",
+		"first_seen_at", "previous_seen_at", "last_seen_at", "raw_json", "raw_json_hash",
+		"normalizer_version",
+	}
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, platform, market_type, api_symbol")).
+		WithArgs("binance", "usdm_futures", "BTCUSDT").
+		WillReturnRows(sqlmock.NewRows(cols).AddRow(
+			int64(1), "binance", "usdm_futures", "BTCUSDT", nil, "BTCUSDT",
+			"BTC", "BTC", "USDT", "USDT", "perp",
+			"canonical", "PERPETUAL", "TRADING", "active",
+			"status", now, nil, false,
+			now, nil, now, []byte(`{"symbol":"BTCUSDT"}`), "deadbeef",
+			"v1",
+		))
+
+	got, err := repo.LatestInstrumentSnapshotByKey(context.Background(), "binance", "usdm_futures", "BTCUSDT")
+	if err != nil {
+		t.Fatalf("Load existing err = %v", err)
+	}
+	if got == nil || got.RawJSONHash != "deadbeef" {
+		t.Fatalf("got = %+v, want snapshot with hash=deadbeef", got)
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, platform, market_type, api_symbol")).
+		WithArgs("binance", "usdm_futures", "MISSING").
+		WillReturnRows(sqlmock.NewRows(cols))
+
+	missing, err := repo.LatestInstrumentSnapshotByKey(context.Background(), "binance", "usdm_futures", "MISSING")
+	if err != nil {
+		t.Fatalf("Load missing err = %v", err)
+	}
+	if missing != nil {
+		t.Fatalf("Load missing = %+v, want nil", missing)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+// TestRepositoryHasInstrumentBaselineFlagsFirstRun is the bootstrap
+// guard used by the poller: a brand-new platform must NOT emit
+// new_symbol signals on its first poll. The helper answers the
+// "do we already have any prior rows for this platform?" question
+// the Diff() function expects to be lifted out of the data layer.
+func TestRepositoryHasInstrumentBaselineFlagsFirstRun(t *testing.T) {
+	now := time.Date(2026, 5, 29, 16, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM t_listing_instrument_snapshot")).
+		WithArgs("binance", "usdm_futures").
+		WillReturnRows(sqlmock.NewRows([]string{"present"}).AddRow(int64(1)))
+	got, err := repo.HasInstrumentBaseline(context.Background(), "binance", "usdm_futures")
+	if err != nil {
+		t.Fatalf("HasInstrumentBaseline err = %v", err)
+	}
+	if !got {
+		t.Fatalf("HasInstrumentBaseline = false, want true when row exists")
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM t_listing_instrument_snapshot")).
+		WithArgs("bybit", "linear").
+		WillReturnRows(sqlmock.NewRows([]string{"present"}))
+	got, err = repo.HasInstrumentBaseline(context.Background(), "bybit", "linear")
+	if err != nil {
+		t.Fatalf("HasInstrumentBaseline cold err = %v", err)
+	}
+	if got {
+		t.Fatalf("HasInstrumentBaseline cold = true, want false on first run")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestRepositoryInsertAnnouncementSymbolAndSignalChains(t *testing.T) {
 	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newRepoWithMock(t, now)

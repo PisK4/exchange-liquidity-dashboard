@@ -314,3 +314,39 @@ type CandidateUpsert struct {
 	Top30Enrichment      json.RawMessage
 	ObservedAt           time.Time
 }
+
+// InstrumentSnapshot mirrors one row of t_listing_instrument_snapshot.
+// It is the per-platform `prev` view the instrument Diff consumes;
+// the poller loads it before fetching new payload, computes the
+// diff, then writes the new view through UpsertInstrumentSnapshot.
+//
+// The struct intentionally embeds the columns the migration owns
+// (first/previous/last_seen_at + raw_json + raw_json_hash) so callers
+// can rebuild the production audit trail without a second lookup.
+type InstrumentSnapshot struct {
+	ID                   int64
+	Platform             string
+	MarketType           string
+	APISymbol            string
+	APIMarketID          string
+	DisplaySymbol        string
+	CanonicalSymbol      string
+	BaseAsset            string
+	QuoteAsset           string
+	SettleAsset          string
+	MarketSurface        string
+	InstrumentKind       string
+	ContractType         string
+	StatusRaw            string
+	StatusNormalized     string
+	StatusFieldName      string
+	ListingTimeTS        *time.Time
+	ListingTimeFieldName string
+	DelistFlag           bool
+	FirstSeenAt          time.Time
+	PreviousSeenAt       *time.Time
+	LastSeenAt           time.Time
+	RawJSON              json.RawMessage
+	RawJSONHash          string
+	NormalizerVersion    string
+}

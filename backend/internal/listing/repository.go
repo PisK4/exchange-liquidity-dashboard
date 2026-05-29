@@ -558,6 +558,181 @@ func (r *Repository) UpsertSourceState(ctx context.Context, s SourceState) error
 	return err
 }
 
+// UpsertInstrumentSnapshot writes the latest normalized view of one
+// exchange instrument to t_listing_instrument_snapshot. The unique
+// key (platform, market_type, api_symbol) carries first_seen_at
+// forward across updates; previous_seen_at is rolled from the prior
+// last_seen_at so the audit trail keeps the two most recent ticks.
+//
+// The caller (instrument poller) is responsible for loading the prior
+// snapshot first, computing the diff, and only then upserting; this
+// helper does NOT emit signals.
+func (r *Repository) UpsertInstrumentSnapshot(ctx context.Context, s InstrumentSnapshot) error {
+	if r.db == nil {
+		return errors.New("listing repository: no db attached")
+	}
+	if s.LastSeenAt.IsZero() {
+		s.LastSeenAt = r.now()
+	}
+	if s.FirstSeenAt.IsZero() {
+		s.FirstSeenAt = s.LastSeenAt
+	}
+	if len(s.RawJSON) == 0 {
+		s.RawJSON = json.RawMessage(`{}`)
+	}
+	const query = `INSERT INTO t_listing_instrument_snapshot
+	  (platform, market_type, api_symbol, api_market_id, display_symbol, canonical_symbol,
+	   base_asset, quote_asset, settle_asset, market_surface, instrument_kind, contract_type,
+	   status_raw, status_normalized, status_field_name, listing_time_ts, listing_time_field_name,
+	   delist_flag, first_seen_at, last_seen_at, raw_json, raw_json_hash, normalizer_version)
+	  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	  ON DUPLICATE KEY UPDATE
+	    api_market_id = VALUES(api_market_id),
+	    display_symbol = VALUES(display_symbol),
+	    canonical_symbol = VALUES(canonical_symbol),
+	    base_asset = VALUES(base_asset),
+	    quote_asset = VALUES(quote_asset),
+	    settle_asset = VALUES(settle_asset),
+	    market_surface = VALUES(market_surface),
+	    instrument_kind = VALUES(instrument_kind),
+	    contract_type = VALUES(contract_type),
+	    status_raw = VALUES(status_raw),
+	    status_normalized = VALUES(status_normalized),
+	    status_field_name = VALUES(status_field_name),
+	    listing_time_ts = VALUES(listing_time_ts),
+	    listing_time_field_name = VALUES(listing_time_field_name),
+	    delist_flag = VALUES(delist_flag),
+	    previous_seen_at = last_seen_at,
+	    last_seen_at = VALUES(last_seen_at),
+	    raw_json = VALUES(raw_json),
+	    raw_json_hash = VALUES(raw_json_hash),
+	    normalizer_version = VALUES(normalizer_version)`
+	_, err := r.db.ExecContext(ctx, query,
+		s.Platform, s.MarketType, s.APISymbol, nullString(s.APIMarketID), nullString(s.DisplaySymbol), nullString(s.CanonicalSymbol),
+		nullString(s.BaseAsset), nullString(s.QuoteAsset), nullString(s.SettleAsset),
+		s.MarketSurface, s.InstrumentKind, nullString(s.ContractType),
+		nullString(s.StatusRaw), s.StatusNormalized, nullString(s.StatusFieldName),
+		nullTimePtr(s.ListingTimeTS), nullString(s.ListingTimeFieldName),
+		s.DelistFlag, s.FirstSeenAt, s.LastSeenAt, []byte(s.RawJSON), s.RawJSONHash, s.NormalizerVersion,
+	)
+	return err
+}
+
+// LatestInstrumentSnapshotByKey returns the current row keyed by
+// (platform, market_type, api_symbol) or nil when none exists. The
+// poller uses the nil return as the "no prev to diff against" signal.
+func (r *Repository) LatestInstrumentSnapshotByKey(ctx context.Context, platform, marketType, apiSymbol string) (*InstrumentSnapshot, error) {
+	if r.db == nil {
+		return nil, errors.New("listing repository: no db attached")
+	}
+	const query = `SELECT id, platform, market_type, api_symbol, api_market_id, display_symbol,
+	  canonical_symbol, base_asset, quote_asset, settle_asset, market_surface,
+	  instrument_kind, contract_type, status_raw, status_normalized,
+	  status_field_name, listing_time_ts, listing_time_field_name, delist_flag,
+	  first_seen_at, previous_seen_at, last_seen_at, raw_json, raw_json_hash,
+	  normalizer_version
+	  FROM t_listing_instrument_snapshot
+	  WHERE platform = ? AND market_type = ? AND api_symbol = ?
+	  LIMIT 1`
+	rows, err := r.db.QueryContext(ctx, query, platform, marketType, apiSymbol)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, rows.Err()
+	}
+	var (
+		out                InstrumentSnapshot
+		apiMarketID        sql.NullString
+		displaySymbol      sql.NullString
+		canonicalSymbol    sql.NullString
+		baseAsset          sql.NullString
+		quoteAsset         sql.NullString
+		settleAsset        sql.NullString
+		contractType       sql.NullString
+		statusRaw          sql.NullString
+		statusFieldName    sql.NullString
+		listingTimeTS      sql.NullTime
+		listingTimeFieldNm sql.NullString
+		previousSeenAt     sql.NullTime
+		rawJSON            []byte
+	)
+	if err := rows.Scan(
+		&out.ID, &out.Platform, &out.MarketType, &out.APISymbol, &apiMarketID, &displaySymbol,
+		&canonicalSymbol, &baseAsset, &quoteAsset, &settleAsset, &out.MarketSurface,
+		&out.InstrumentKind, &contractType, &statusRaw, &out.StatusNormalized,
+		&statusFieldName, &listingTimeTS, &listingTimeFieldNm, &out.DelistFlag,
+		&out.FirstSeenAt, &previousSeenAt, &out.LastSeenAt, &rawJSON, &out.RawJSONHash,
+		&out.NormalizerVersion,
+	); err != nil {
+		return nil, err
+	}
+	if apiMarketID.Valid {
+		out.APIMarketID = apiMarketID.String
+	}
+	if displaySymbol.Valid {
+		out.DisplaySymbol = displaySymbol.String
+	}
+	if canonicalSymbol.Valid {
+		out.CanonicalSymbol = canonicalSymbol.String
+	}
+	if baseAsset.Valid {
+		out.BaseAsset = baseAsset.String
+	}
+	if quoteAsset.Valid {
+		out.QuoteAsset = quoteAsset.String
+	}
+	if settleAsset.Valid {
+		out.SettleAsset = settleAsset.String
+	}
+	if contractType.Valid {
+		out.ContractType = contractType.String
+	}
+	if statusRaw.Valid {
+		out.StatusRaw = statusRaw.String
+	}
+	if statusFieldName.Valid {
+		out.StatusFieldName = statusFieldName.String
+	}
+	if listingTimeTS.Valid {
+		t := listingTimeTS.Time
+		out.ListingTimeTS = &t
+	}
+	if listingTimeFieldNm.Valid {
+		out.ListingTimeFieldName = listingTimeFieldNm.String
+	}
+	if previousSeenAt.Valid {
+		t := previousSeenAt.Time
+		out.PreviousSeenAt = &t
+	}
+	out.RawJSON = json.RawMessage(append([]byte(nil), rawJSON...))
+	return &out, rows.Err()
+}
+
+// HasInstrumentBaseline returns true when t_listing_instrument_snapshot
+// already contains at least one row for the (platform, market_type)
+// pair. The instrument poller uses this to gate cold-start: a brand-
+// new platform must NOT emit new_symbol signals on its first poll,
+// otherwise every existing exchange instrument would be misreported
+// as a fresh listing.
+func (r *Repository) HasInstrumentBaseline(ctx context.Context, platform, marketType string) (bool, error) {
+	if r.db == nil {
+		return false, errors.New("listing repository: no db attached")
+	}
+	const query = `SELECT 1 FROM t_listing_instrument_snapshot
+	  WHERE platform = ? AND market_type = ? LIMIT 1`
+	var present int
+	err := r.db.QueryRowContext(ctx, query, platform, marketType).Scan(&present)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return present == 1, nil
+}
+
 // ListDeliveries returns outbox rows that match the given filter. A
 // recent attempt summary is attached when available; callers should
 // surface this on the read-only /api/listing/deliveries endpoint.
