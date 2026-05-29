@@ -781,6 +781,53 @@ func (r *Repository) HasInstrumentBaseline(ctx context.Context, platform, market
 	return present == 1, nil
 }
 
+// HasAnnouncementBaseline is the announcement counterpart of
+// HasInstrumentBaseline: true iff t_listing_announcement already
+// contains at least one row for the given platform. The announcement
+// poller uses this to decide whether the current pass should write
+// announcement_listing signals (warm path) or only persist the
+// parent row (cold-start baseline-only). Without it a fresh deploy
+// would post every historical announcement as a new perp candidate.
+func (r *Repository) HasAnnouncementBaseline(ctx context.Context, platform string) (bool, error) {
+	if r.db == nil {
+		return false, errors.New("listing repository: no db attached")
+	}
+	const query = `SELECT 1 FROM t_listing_announcement
+	  WHERE platform = ? LIMIT 1`
+	var present int
+	err := r.db.QueryRowContext(ctx, query, platform).Scan(&present)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return present == 1, nil
+}
+
+// HasAnnouncementForExternalID returns true when the (platform,
+// announcement_id) pair already exists, which the poller uses to
+// decide between baseline write (cold start) and signal emission
+// (warm path, only for newly observed announcements). Without this
+// guard a re-fetch of the same CMS page would emit duplicate signals
+// alongside the idempotent INSERT — visible to operators as noise.
+func (r *Repository) HasAnnouncementForExternalID(ctx context.Context, platform, announcementID string) (bool, error) {
+	if r.db == nil {
+		return false, errors.New("listing repository: no db attached")
+	}
+	const query = `SELECT 1 FROM t_listing_announcement
+	  WHERE platform = ? AND announcement_id = ? LIMIT 1`
+	var present int
+	err := r.db.QueryRowContext(ctx, query, platform, announcementID).Scan(&present)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return present == 1, nil
+}
+
 // ListDeliveries returns outbox rows that match the given filter. A
 // recent attempt summary is attached when available; callers should
 // surface this on the read-only /api/listing/deliveries endpoint.
