@@ -929,6 +929,55 @@ func (r *Repository) LatestRiskPlanByCandidate(ctx context.Context, candidateID 
 	return &p, rows.Err()
 }
 
+// InsertDecision writes one t_listing_decision row. The unique key
+// on (candidate_id, operator_open_id, action, callback_ts) makes
+// the operation idempotent: a second click with the same callback_ts
+// (truncated to seconds upstream) returns inserted=false plus the
+// existing id so the API layer can surface a stable 200 OK shape.
+func (r *Repository) InsertDecision(ctx context.Context, d DecisionRecord) (int64, bool, error) {
+	if r.db == nil {
+		return 0, false, errors.New("listing repository: no db attached")
+	}
+	verified := 0
+	if d.SignatureVerified {
+		verified = 1
+	}
+	const query = `INSERT IGNORE INTO t_listing_decision (
+	  candidate_id, card_id, message_id, operator_open_id, action, reason,
+	  signature_verified, callback_payload_json, callback_ts)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	res, err := r.db.ExecContext(ctx, query,
+		d.CandidateID,
+		nullString(d.CardID),
+		nullString(d.MessageID),
+		d.OperatorOpenID,
+		d.Action,
+		nullString(d.Reason),
+		verified,
+		[]byte(d.CallbackPayloadJSON),
+		d.CallbackTS,
+	)
+	if err != nil {
+		return 0, false, err
+	}
+	affected, _ := res.RowsAffected()
+	if affected > 0 {
+		id, _ := res.LastInsertId()
+		return id, true, nil
+	}
+	var existing int64
+	err = r.db.QueryRowContext(ctx,
+		`SELECT id FROM t_listing_decision
+		  WHERE candidate_id = ? AND operator_open_id = ? AND action = ? AND callback_ts = ?
+		  LIMIT 1`,
+		d.CandidateID, d.OperatorOpenID, d.Action, d.CallbackTS,
+	).Scan(&existing)
+	if err != nil {
+		return 0, false, err
+	}
+	return existing, false, nil
+}
+
 // LatestDecisionForCandidate returns the action + callback_ts of the
 // most recent t_listing_decision row for the candidate. The bool is
 // false when no decision exists yet (first time the candidate is

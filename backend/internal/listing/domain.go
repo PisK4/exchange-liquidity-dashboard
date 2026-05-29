@@ -265,6 +265,26 @@ type DeliveryOutbox struct {
 	LastAttempt   *DeliveryAttempt
 }
 
+// DecisionRecord mirrors t_listing_decision. The struct is the write
+// model used by the Lark callback API; the unique key on
+// (candidate_id, operator_open_id, action, callback_ts) protects
+// against double-click bursts. CallbackTS is truncated to seconds
+// before insert so the unique key cannot be defeated by
+// sub-millisecond differences between two card clicks.
+type DecisionRecord struct {
+	ID                  int64
+	CandidateID         int64
+	CardID              string
+	MessageID           string
+	OperatorOpenID      string
+	Action              string
+	Reason              string
+	SignatureVerified   bool
+	CallbackPayloadJSON json.RawMessage
+	CallbackTS          time.Time
+	CreatedAt           time.Time
+}
+
 // DeliveryAttempt mirrors t_listing_delivery_attempt.
 type DeliveryAttempt struct {
 	ID           int64

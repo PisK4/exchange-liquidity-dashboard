@@ -44,6 +44,7 @@ func (s *Server) registerListingRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("/api/listing/candidates/", s.listingCandidateDetail)
 	mux.HandleFunc("/api/listing/source-health", s.listingSourceHealth)
 	mux.HandleFunc("/api/listing/deliveries", s.listingDeliveries)
+	s.registerListingCallback(mux)
 }
 
 func (s *Server) listingCandidates(w http.ResponseWriter, r *http.Request) {
