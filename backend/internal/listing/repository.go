@@ -527,6 +527,54 @@ func (r *Repository) ListSourceHealth(ctx context.Context) ([]SourceState, error
 	return out, rows.Err()
 }
 
+// LoadSourceState reads the current row for source_key, or nil if no
+// row exists yet (i.e. the source has not produced a health entry).
+// The wrapper Phase 1.3 adds uses the nil return as the
+// "first observation" branch when bootstrapping a new source.
+func (r *Repository) LoadSourceState(ctx context.Context, sourceKey string) (*SourceState, error) {
+	if r.db == nil {
+		return nil, errors.New("listing repository: no db attached")
+	}
+	const query = `SELECT source_key, source_type, platform, status,
+	  last_success_at, last_error_at, consecutive_error_count, schema_drift_count,
+	  disabled_until, last_error, updated_at
+	  FROM t_listing_source_state
+	  WHERE source_key = ?
+	  LIMIT 1`
+	rows, err := r.db.QueryContext(ctx, query, sourceKey)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, rows.Err()
+	}
+	var s SourceState
+	var lastSuccess, lastError, disabledUntil sql.NullTime
+	var lastErr sql.NullString
+	if err := rows.Scan(&s.SourceKey, &s.SourceType, &s.Platform, &s.Status,
+		&lastSuccess, &lastError, &s.ConsecutiveErrorCount, &s.SchemaDriftCount,
+		&disabledUntil, &lastErr, &s.UpdatedAt); err != nil {
+		return nil, err
+	}
+	if lastSuccess.Valid {
+		t := lastSuccess.Time
+		s.LastSuccessAt = &t
+	}
+	if lastError.Valid {
+		t := lastError.Time
+		s.LastErrorAt = &t
+	}
+	if disabledUntil.Valid {
+		t := disabledUntil.Time
+		s.DisabledUntil = &t
+	}
+	if lastErr.Valid {
+		s.LastError = lastErr.String
+	}
+	return &s, rows.Err()
+}
+
 // UpsertSourceState writes the latest health for a single source key.
 func (r *Repository) UpsertSourceState(ctx context.Context, s SourceState) error {
 	if r.db == nil {
