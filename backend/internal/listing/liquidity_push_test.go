@@ -230,6 +230,82 @@ func TestProduceLiquidityAlertPushSilentWhenWithinCooldown(t *testing.T) {
 	}
 }
 
+// TestProduceLiquidityAlertPushIdempotentOnDedupeConflict locks down
+// Phase-0 step §4.3 of 2026-05-29-listing-agent.md: when two engine
+// instances race on the same (kind, canonical, severity_seq, phase),
+// the loser's INSERT IGNORE returns RowsAffected=0 instead of a
+// duplicate-key error. The producer MUST treat that as a successful
+// no-op:
+//
+//   - no error bubbles up
+//   - UpsertAlertState still runs so the state row converges to the
+//     winner's last_evaluated_at (this is safe because both racers
+//     computed the same NewState from the same depth matrix)
+//   - the outbox does not gain a duplicate row, so the downstream
+//     Lark webhook only ever sees one card per (kind, canonical) seq
+//
+// This is the contract that lets us SKIP introducing a producer-side
+// CAS or a worker_lease on the alert state table: dedupe_key UNIQUE
+// + INSERT IGNORE on t_listing_delivery_outbox is the source of truth
+// for "single push per alert event".
+func TestProduceLiquidityAlertPushIdempotentOnDedupeConflict(t *testing.T) {
+	now := time.Date(2026, 5, 29, 3, 0, 0, 0, time.UTC)
+	snapshotTS := now.Add(-2 * time.Minute)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+
+	// Same depth matrix as TestProduceLiquidityAlertPushFirstTrigger:
+	// BTC with edgeX 2.4M vs competitor median 6.0M → lag fires.
+	rows := sqlmock.NewRows([]string{
+		"platform", "display_symbol", "snapshot_ts", "bid_usd", "ask_usd", "total_usd",
+	}).
+		AddRow("edgex", "BTC-USDT (perp)", snapshotTS, 1.2e6, 1.2e6, 2.4e6).
+		AddRow("binance", "BTC-USDT (perp)", snapshotTS, 4.0e6, 4.5e6, 8.5e6).
+		AddRow("okx", "BTC-USDT (perp)", snapshotTS, 3.5e6, 3.6e6, 7.1e6).
+		AddRow("bybit", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6).
+		AddRow("bitget", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6).
+		AddRow("mexc", "BTC-USDT (perp)", snapshotTS, 0.5e6, 0.5e6, 1.0e6)
+	mock.ExpectQuery(`FROM t_orderbook_snapshot`).WillReturnRows(rows)
+
+	mock.ExpectQuery(`FROM t_listing_alert_state\s+WHERE alert_kind IN`).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"alert_kind", "canonical_symbol", "status", "severity_seq", "reissue_count", "clear_streak",
+			"first_triggered_at", "last_pushed_at", "last_evaluated_at",
+		}))
+	mock.ExpectQuery(`FROM t_listing_alert_state\s+WHERE alert_kind = \? AND canonical_symbol = \?`).
+		WithArgs("liquidity_lag", "BTC").
+		WillReturnRows(sqlmock.NewRows([]string{
+			"status", "severity_seq", "reissue_count", "clear_streak",
+			"first_triggered_at", "last_pushed_at", "last_evaluated_at",
+		}))
+
+	// INSERT IGNORE collides on dedupe_key — RowsAffected=0 simulates
+	// the loser side of a multi-instance race. The producer MUST NOT
+	// error out here; the unique-key collision is the intended dedupe.
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_delivery_outbox")).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	// State upsert still runs so the row converges to last_evaluated_at=now.
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_alert_state")).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	res, err := ProduceLiquidityAlertPush(context.Background(), repo, LiquidityAlertDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+		MaxAttempts:  5,
+		Cfg:          liquidityCfg(),
+	})
+	if err != nil {
+		t.Fatalf("dedupe collision must not surface as error, got %v", err)
+	}
+	if res.FailClosed != "" {
+		t.Fatalf("FailClosed = %q, want empty (dedupe collision is a no-op)", res.FailClosed)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestMysqlTierLabelMatchesCollectorFormat(t *testing.T) {
 	cases := []struct {
 		in   float64
