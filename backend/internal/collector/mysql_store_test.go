@@ -84,6 +84,63 @@ func TestListingMigrationUpAndDownExist(t *testing.T) {
 	}
 }
 
+// TestInitSchemaIncludesListingAlertState locks down Phase-0 step §4.1
+// of 2026-05-29-listing-agent.md: t_listing_alert_state MUST live in
+// initSchemaSQL so ApplyMigrations creates it during collector boot.
+// Without this row the liquidity alert state machine silently no-ops
+// in production (LoadAlertState returns ErrNoRows, every tick looks
+// like a first-trigger, multi-instance dedupe leaks).
+func TestInitSchemaIncludesListingAlertState(t *testing.T) {
+	if !contains(initSchemaSQL, "CREATE TABLE IF NOT EXISTS t_listing_alert_state") {
+		t.Fatalf("initSchemaSQL missing CREATE TABLE for t_listing_alert_state")
+	}
+	required := []string{
+		"alert_kind VARCHAR",
+		"canonical_symbol VARCHAR",
+		"severity_seq INT",
+		"reissue_count INT",
+		"clear_streak INT",
+		"first_triggered_at TIMESTAMP",
+		"last_pushed_at TIMESTAMP",
+		"last_evaluated_at TIMESTAMP",
+		"last_severity_json JSON",
+		"uk_listing_alert_state",
+	}
+	for _, snippet := range required {
+		if !contains(initSchemaSQL, snippet) {
+			t.Fatalf("initSchemaSQL t_listing_alert_state missing %q", snippet)
+		}
+	}
+}
+
+// TestListingAlertStateMigrationUpAndDownExist locks down the on-disk
+// migration files for t_listing_alert_state. The file pair is the
+// audit trail for manual `mysql < migration.sql` runs; the in-code
+// initSchemaSQL is the runtime path. Both MUST stay in sync.
+func TestListingAlertStateMigrationUpAndDownExist(t *testing.T) {
+	upPath := filepath.Join("..", "..", "migrations", "000011_listing_alert_state.up.sql")
+	downPath := filepath.Join("..", "..", "migrations", "000011_listing_alert_state.down.sql")
+	up, err := os.ReadFile(upPath)
+	if err != nil {
+		t.Fatalf("read up migration: %v", err)
+	}
+	down, err := os.ReadFile(downPath)
+	if err != nil {
+		t.Fatalf("read down migration: %v", err)
+	}
+	upStr := string(up)
+	downStr := string(down)
+	if !contains(upStr, "CREATE TABLE IF NOT EXISTS t_listing_alert_state") {
+		t.Fatalf("up migration missing CREATE TABLE for t_listing_alert_state")
+	}
+	if !contains(upStr, "uk_listing_alert_state") {
+		t.Fatalf("up migration must declare alert state unique key")
+	}
+	if !contains(downStr, "DROP TABLE IF EXISTS t_listing_alert_state") {
+		t.Fatalf("down migration missing DROP TABLE for t_listing_alert_state")
+	}
+}
+
 func TestInitSchemaIncludesPersistenceTables(t *testing.T) {
 	required := []string{
 		"CREATE TABLE IF NOT EXISTS t_symbol_mapping",

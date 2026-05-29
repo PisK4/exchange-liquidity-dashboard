@@ -135,6 +135,54 @@ func TestComputeWorstDepthOnly(t *testing.T) {
 	}
 }
 
+// TestComputeWorstDepthSemanticsLockedToBottom freezes Phase-0 step
+// §4.2 of 2026-05-29-listing-agent.md: #11 worst_depth fires iff
+// edgeX is the LAST entry (edgexRank == TotalPlatforms, i.e. depth
+// bottom). When edgeX sits at rank N-1 (second-to-last) the spec
+// explicitly requires worst_depth NOT to fire — that's the weaker
+// "second-from-bottom" signal which we intentionally do NOT alert on
+// during this experiment. Lag may still fire independently; this
+// test isolates by keeping the ratio above the lag threshold.
+func TestComputeWorstDepthSemanticsLockedToBottom(t *testing.T) {
+	t.Run("rank N (last) fires worst_depth", func(t *testing.T) {
+		matrix := mkMatrix(map[string]map[string]float64{
+			"BTC": {
+				"binance": 5_000_000,
+				"okx":     4_500_000,
+				"bybit":   4_000_000,
+				"bitget":  3_500_000, // median = (4.0+4.5)/2 = 4.25M
+				"edgeX":   3_000_000, // ratio 3.0/4.25 ≈ 0.71 → no lag; last place → worst fires
+			},
+		})
+		got := Compute(matrix, newFakeUniverse("BTC"), &fakeResolver{}, defaultCfg(), time.Now())
+		if len(got) != 1 || got[0].Kind != KindWorstDepth {
+			t.Fatalf("rank N must produce exactly one worst_depth candidate, got %+v", got)
+		}
+		if got[0].EdgexRank != got[0].TotalPlatforms {
+			t.Fatalf("edgexRank = %d, TotalPlatforms = %d; want equal", got[0].EdgexRank, got[0].TotalPlatforms)
+		}
+	})
+
+	t.Run("rank N-1 (second-to-last) does NOT fire worst_depth", func(t *testing.T) {
+		matrix := mkMatrix(map[string]map[string]float64{
+			"BTC": {
+				"binance": 5_000_000,
+				"okx":     4_500_000,
+				"bybit":   4_000_000,
+				"bitget":  3_500_000, // median = (4.0+4.5)/2 = 4.25M
+				"edgeX":   3_000_000, // ratio 3.0/4.25 ≈ 0.71 → no lag; second-to-last
+				"mexc":    2_500_000, // pushes edgeX up to rank 5 (N-1); mexc at rank 6 (N)
+			},
+		})
+		got := Compute(matrix, newFakeUniverse("BTC"), &fakeResolver{}, defaultCfg(), time.Now())
+		for _, c := range got {
+			if c.Kind == KindWorstDepth {
+				t.Fatalf("edgeX at rank N-1 must NOT fire worst_depth, got %+v", c)
+			}
+		}
+	})
+}
+
 func TestComputeBothKindsAtOnce(t *testing.T) {
 	matrix := mkMatrix(map[string]map[string]float64{
 		"SOL": {
