@@ -153,6 +153,7 @@ func main() {
 	listingUniverseLoader := func() (*config.ListedUniverse, error) {
 		return config.LoadListedUniverse(universePath)
 	}
+	resolveListingCallbackSecret(&cfg)
 	if roleStartsListing(*role) && cfg.Runtime.ListingAgent.Enabled && listingRepo != nil {
 		engine := listing.NewEngine(cfg, listingRepo, listing.EngineDeps{
 			LoadUniverse: listingUniverseLoader,
@@ -183,6 +184,7 @@ func main() {
 	opts := []api.Option{}
 	if listingRepo != nil {
 		opts = append(opts, api.WithListingReader(listingRepo))
+		opts = append(opts, listingDecisionOptions(cfg, listingRepo)...)
 	}
 	server := api.NewServer(cfg, store, opts...)
 	log.Printf("EdgeX liquidity dashboard API listening on %s", *addr)
@@ -267,4 +269,44 @@ func resolveMySQLDSN(flagValue string, cfg config.Config) string {
 		return flagValue
 	}
 	return cfg.MySQLDSN()
+}
+
+// resolveListingCallbackSecret mirrors the Delivery.Top30WebhookURLEnv
+// pattern: if the operator left Callback.Secret blank in YAML but set
+// Callback.SecretEnv, pick the secret up from the environment so it
+// never has to be persisted to disk. Leaves the existing Secret in
+// place when both are configured (yaml wins, matching the precedence
+// the delivery webhook uses).
+func resolveListingCallbackSecret(cfg *config.Config) {
+	cb := &cfg.Runtime.ListingAgent.DecisionCard.Callback
+	if cb.Secret != "" || cb.SecretEnv == "" {
+		return
+	}
+	cb.Secret = os.Getenv(cb.SecretEnv)
+}
+
+// listingDecisionOptions wires the Phase 2 callback / dispatch
+// surface onto the api server. The callback route stays inert
+// (returns 503 from listingCallback) when DecisionCard.Enabled is
+// false OR the secret is missing OR the operator whitelist is empty;
+// all three conditions must hold for the callback to actually accept
+// clicks, so a partial yaml does not accidentally open the route.
+func listingDecisionOptions(cfg config.Config, repo *listing.Repository) []api.Option {
+	dc := cfg.Runtime.ListingAgent.DecisionCard
+	opts := []api.Option{
+		api.WithListingDecisionWriter(repo),
+		api.WithListingDispatch(listing.NewRepoDispatcher(repo, nil)),
+	}
+	if dc.Enabled && dc.Callback.Secret != "" && len(dc.Callback.OperatorAllow) > 0 {
+		opts = append(opts, api.WithListingCallback(api.ListingCallbackConfig{
+			Secret:        dc.Callback.Secret,
+			MaxClockSkew:  dc.Callback.MaxClockSkew,
+			OperatorAllow: append([]string(nil), dc.Callback.OperatorAllow...),
+		}))
+		log.Printf("listing callback route armed (operators=%d, max_clock_skew=%s)", len(dc.Callback.OperatorAllow), dc.Callback.MaxClockSkew)
+	} else {
+		log.Printf("listing callback route disabled (enabled=%t, has_secret=%t, operators=%d)",
+			dc.Enabled, dc.Callback.Secret != "", len(dc.Callback.OperatorAllow))
+	}
+	return opts
 }
