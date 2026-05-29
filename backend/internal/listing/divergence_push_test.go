@@ -426,6 +426,301 @@ func TestProduceDivergencePush_FailClosedOnStale(t *testing.T) {
 	}
 }
 
+// TestBuildDivergencePushEvents_PopulatesPlatformDetails locks in the
+// per-platform sub-row data plumbing. ALLO appears on 5 CEX venues
+// at distinct ranks; the resulting cex_only row must surface all 5
+// in NativeRank-ASC order so the renderer can build the "binance #15
+// · okx #18 · bybit #21 · ..." sub-line.
+func TestBuildDivergencePushEvents_PopulatesPlatformDetails(t *testing.T) {
+	day := time.Date(2026, 5, 29, 0, 0, 0, 0, time.UTC)
+	unlisted := false
+	rows := []Top30RowForPush{
+		rowForDiv("binance", 15, "ALLO", 200e6, &unlisted, day),
+		rowForDiv("okx", 18, "ALLO", 180e6, &unlisted, day),
+		rowForDiv("bybit", 21, "ALLO", 150e6, &unlisted, day),
+		rowForDiv("bitget", 24, "ALLO", 120e6, &unlisted, day),
+		rowForDiv("bingx", 27, "ALLO", 100e6, &unlisted, day),
+	}
+	events := BuildDivergencePushEvents(rows, divergenceCfg(), nil, 10, day)
+	if len(events) != 1 || events[0].Category != DivergenceCategoryCEXOnly {
+		t.Fatalf("expected single cex_only event, got %+v", events)
+	}
+	ev := events[0]
+	if len(ev.Rows) != 1 || ev.Rows[0].Symbol != "ALLO" {
+		t.Fatalf("expected ALLO row only, got %+v", ev.Rows)
+	}
+	got := ev.Rows[0].CEXPlatformDetails
+	want := []DivergencePushPlatform{
+		{Platform: "binance", NativeRank: 15, Volume24HUSD: 200e6},
+		{Platform: "okx", NativeRank: 18, Volume24HUSD: 180e6},
+		{Platform: "bybit", NativeRank: 21, Volume24HUSD: 150e6},
+		{Platform: "bitget", NativeRank: 24, Volume24HUSD: 120e6},
+		{Platform: "bingx", NativeRank: 27, Volume24HUSD: 100e6},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("CEXPlatformDetails len = %d, want %d (got %+v)", len(got), len(want), got)
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			t.Fatalf("CEXPlatformDetails[%d] = %+v, want %+v", i, got[i], want[i])
+		}
+	}
+	if len(ev.Rows[0].DEXPlatformDetails) != 0 {
+		t.Fatalf("cex_only row must not carry DEX details, got %+v", ev.Rows[0].DEXPlatformDetails)
+	}
+}
+
+// TestBuildDivergencePushEvents_TieBreakOnPlatformCount asserts the
+// new secondary sort: when two cex_only canonicals share the same
+// CEXRank, the one with more contributing platforms wins. This makes
+// "硬信号" (broad consensus) bubble to the top within a tied rank.
+func TestBuildDivergencePushEvents_TieBreakOnPlatformCount(t *testing.T) {
+	day := time.Date(2026, 5, 29, 0, 0, 0, 0, time.UTC)
+	unlisted := false
+	// Two canonicals both yielding CEXRank=1 in the aggregate by
+	// virtue of being the only members of the CEX universe each. We
+	// engineer the tie by giving them equal aggregated volume, then
+	// look at the sort tie-break (broad > narrow).
+	rows := []Top30RowForPush{
+		rowForDiv("binance", 1, "BROAD", 100, &unlisted, day),
+		rowForDiv("okx", 1, "BROAD", 100, &unlisted, day),
+		rowForDiv("bybit", 1, "BROAD", 100, &unlisted, day),
+		rowForDiv("bitget", 1, "NARROW", 300, &unlisted, day),
+	}
+	events := BuildDivergencePushEvents(rows, divergenceCfg(), nil, 10, day)
+	if len(events) != 1 {
+		t.Fatalf("expected single cex_only event, got %d", len(events))
+	}
+	// NARROW has higher single-platform volume (300) so it should
+	// take aggregate rank 1; BROAD aggregates to 300 too (100×3) → tie.
+	// The new tie-break on CEXPlatformCount DESC makes BROAD (3
+	// platforms) outrank NARROW (1 platform) when ranks tie.
+	var broadIdx, narrowIdx = -1, -1
+	for i, r := range events[0].Rows {
+		switch r.Symbol {
+		case "BROAD":
+			broadIdx = i
+		case "NARROW":
+			narrowIdx = i
+		}
+	}
+	if broadIdx < 0 || narrowIdx < 0 {
+		t.Fatalf("rows missing BROAD or NARROW: %+v", events[0].Rows)
+	}
+	// Both rows have aggregate rank 1 (tie on volume) — assert
+	// PlatformCount tie-break ordering.
+	if derefInt(events[0].Rows[broadIdx].CEXRank) == derefInt(events[0].Rows[narrowIdx].CEXRank) {
+		if broadIdx > narrowIdx {
+			t.Fatalf("on a tied CEXRank, BROAD (3 platforms) must outrank NARROW (1 platform); got positions BROAD=%d NARROW=%d", broadIdx, narrowIdx)
+		}
+	}
+}
+
+// TestBuildDivergencePushEvents_CardKPIForCEXOnly checks the per-card
+// KPI strip metadata: distribution buckets, total volume, and the
+// "strongest" pick (PlatformCount DESC, Rank ASC).
+func TestBuildDivergencePushEvents_CardKPIForCEXOnly(t *testing.T) {
+	day := time.Date(2026, 5, 29, 0, 0, 0, 0, time.UTC)
+	unlisted := false
+	// Engineer three CEX-only canonicals with distinct breadth:
+	//   ALLO: 5 platforms → BroadCount
+	//   GUA : 3 platforms → MidCount
+	//   ESP : 1 platform  → NarrowCount
+	rows := []Top30RowForPush{
+		rowForDiv("binance", 15, "ALLO", 200e6, &unlisted, day),
+		rowForDiv("okx", 18, "ALLO", 180e6, &unlisted, day),
+		rowForDiv("bybit", 21, "ALLO", 150e6, &unlisted, day),
+		rowForDiv("bitget", 24, "ALLO", 120e6, &unlisted, day),
+		rowForDiv("bingx", 27, "ALLO", 100e6, &unlisted, day),
+
+		rowForDiv("binance", 22, "GUA", 80e6, &unlisted, day),
+		rowForDiv("okx", 25, "GUA", 70e6, &unlisted, day),
+		rowForDiv("mexc", 29, "GUA", 50e6, &unlisted, day),
+
+		rowForDiv("bingx", 28, "ESP", 60e6, &unlisted, day),
+	}
+	events := BuildDivergencePushEvents(rows, divergenceCfg(), nil, 10, day)
+	if len(events) != 1 {
+		t.Fatalf("expected single cex_only event, got %+v", events)
+	}
+	card := events[0].CardKPI
+	if card == nil {
+		t.Fatalf("CardKPI must be populated for cex_only category")
+	}
+	if card.TotalEligible != 3 {
+		t.Fatalf("TotalEligible = %d, want 3", card.TotalEligible)
+	}
+	if card.BroadCount != 1 || card.MidCount != 1 || card.NarrowCount != 1 {
+		t.Fatalf("distribution = (%d,%d,%d), want (1,1,1)", card.BroadCount, card.MidCount, card.NarrowCount)
+	}
+	if card.OppositeCampLabel != "DEX" {
+		t.Fatalf("OppositeCampLabel = %q, want DEX", card.OppositeCampLabel)
+	}
+	// "最硬" = highest PlatformCount → ALLO (5 平台)
+	if card.StrongestSymbol != "ALLO" {
+		t.Fatalf("StrongestSymbol = %q, want ALLO", card.StrongestSymbol)
+	}
+	if card.StrongestPlatforms != 5 {
+		t.Fatalf("StrongestPlatforms = %d, want 5", card.StrongestPlatforms)
+	}
+	totalVol := 200e6 + 180e6 + 150e6 + 120e6 + 100e6 + 80e6 + 70e6 + 50e6 + 60e6
+	if card.SideVolUSD != totalVol {
+		t.Fatalf("SideVolUSD = %v, want %v", card.SideVolUSD, totalVol)
+	}
+}
+
+// TestBuildDivergencePushEvents_CardKPINilForHeavyAndBothHot makes
+// sure heavy_gap and both_hot_gap still ship the legacy global KPI
+// strip (i.e. CardKPI stays nil).
+func TestBuildDivergencePushEvents_CardKPINilForHeavyAndBothHot(t *testing.T) {
+	day := time.Date(2026, 5, 29, 0, 0, 0, 0, time.UTC)
+	unlisted := false
+	rows := []Top30RowForPush{
+		rowForDiv("binance", 1, "XYZ", 1000, &unlisted, day),
+	}
+	for i := 2; i <= 9; i++ {
+		rows = append(rows, rowForDiv("binance", i, "CXFILL"+itoaTwo(i), 900-float64(i), &unlisted, day))
+	}
+	rows = append(rows, rowForDiv("binance", 10, "CXEND", 50, &unlisted, day))
+	for i := 1; i <= 11; i++ {
+		rows = append(rows, rowForDiv("hyperliquid", i, "DXFILL"+itoaTwo(i), 900-float64(i), &unlisted, day))
+	}
+	rows = append(rows, rowForDiv("hyperliquid", 12, "XYZ", 100, &unlisted, day))
+
+	events := BuildDivergencePushEvents(rows, divergenceCfg(), nil, 30, day)
+	for _, ev := range events {
+		switch ev.Category {
+		case DivergenceCategoryHeavyGap, DivergenceCategoryBothHotGap:
+			if ev.CardKPI != nil {
+				t.Fatalf("category %s must keep legacy global KPI (CardKPI=nil); got %+v", ev.Category, ev.CardKPI)
+			}
+		}
+	}
+}
+
+// TestRenderDivergencePostMessage_CEXOnlyTwoLineFormat asserts the
+// new sub-row "binance #15 · okx #18 · ..." appears verbatim, and
+// the KPI strip carries the per-card distribution + opposite-camp
+// absence tag.
+func TestRenderDivergencePostMessage_CEXOnlyTwoLineFormat(t *testing.T) {
+	cex := 15
+	cexVol := 857.75e6
+	ev := DivergencePushEvent{
+		Category:      DivergenceCategoryCEXOnly,
+		CategoryLabel: "CEX 独有热门 · edgeX 未上线",
+		Rows: []DivergencePushRow{
+			{
+				Symbol:       "ALLO",
+				CEXRank:      &cex,
+				CEXVolUSD:    &cexVol,
+				CEXPlatforms: 5,
+				CEXPlatformDetails: []DivergencePushPlatform{
+					{Platform: "binance", NativeRank: 15},
+					{Platform: "okx", NativeRank: 18},
+					{Platform: "bybit", NativeRank: 21},
+					{Platform: "bitget", NativeRank: 24},
+					{Platform: "bingx", NativeRank: 27},
+				},
+			},
+		},
+		CardKPI: &DivergenceCardKPI{
+			TotalEligible:      13,
+			BroadCount:         2,
+			MidCount:           5,
+			NarrowCount:        6,
+			SideVolUSD:         3.5e9,
+			StrongestSymbol:    "ALLO",
+			StrongestPlatforms: 5,
+			StrongestBestRank:  15,
+			OppositeCampLabel:  "DEX",
+		},
+		SnapshotDate: "2026-05-29",
+		DedupeKey:    "top30_divergence|cex_only|2026-05-29",
+		DashboardURL: "https://dashboard.example.test/?tab=top30",
+		TriggerTime:  time.Date(2026, 5, 29, 3, 54, 0, 0, time.UTC),
+	}
+	body, err := RenderDivergencePostMessage(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{
+		// KPI strip (new per-card format)
+		"本卡 13 项",
+		"5+ 平台 **2**",
+		"3-4 平台 **5**",
+		"1-2 平台 **6**",
+		"DEX 阵营 **0 家** ❌",
+		"CEX 合计 24h **$3.50B**",
+		"最硬 **ALLO**（5 家 · 最佳 #15）",
+		// Per-row main + sub
+		"ALLO",
+		"CEX 合计 24h **$857.75M**",
+		"binance #15 · okx #18 · bybit #21 · bitget #24 · bingx #27",
+	}
+	bs := string(body)
+	for _, w := range want {
+		if !strings.Contains(bs, w) {
+			t.Fatalf("missing %q in body:\n%s", w, bs)
+		}
+	}
+	// Ensure the legacy four-field global KPI strip is NOT present
+	// for this card (sanity: the new strip replaced it).
+	if strings.Contains(bs, "**显著分歧**") {
+		t.Fatalf("legacy global KPI strip leaked into cex_only card:\n%s", bs)
+	}
+}
+
+// TestRenderDivergencePostMessage_DEXOnlyOppositeCampLabel mirrors the
+// CEX-only test on the DEX side so the symmetric "CEX 阵营 0 家 ❌"
+// path is exercised.
+func TestRenderDivergencePostMessage_DEXOnlyOppositeCampLabel(t *testing.T) {
+	dex := 6
+	dexVol := 267.75e6
+	ev := DivergencePushEvent{
+		Category:      DivergenceCategoryDEXOnly,
+		CategoryLabel: "DEX 独有热门 · edgeX 未上线",
+		Rows: []DivergencePushRow{
+			{
+				Symbol:       "XYZ100",
+				DEXRank:      &dex,
+				DEXVolUSD:    &dexVol,
+				DEXPlatforms: 1,
+				DEXPlatformDetails: []DivergencePushPlatform{
+					{Platform: "hyperliquid", NativeRank: 6},
+				},
+			},
+		},
+		CardKPI: &DivergenceCardKPI{
+			TotalEligible:      7,
+			BroadCount:         0,
+			MidCount:           0,
+			NarrowCount:        7,
+			SideVolUSD:         432e6,
+			StrongestSymbol:    "XYZ100",
+			StrongestPlatforms: 1,
+			StrongestBestRank:  6,
+			OppositeCampLabel:  "CEX",
+		},
+		SnapshotDate: "2026-05-29",
+		DedupeKey:    "top30_divergence|dex_only|2026-05-29",
+		TriggerTime:  time.Date(2026, 5, 29, 3, 54, 0, 0, time.UTC),
+	}
+	body, err := RenderDivergencePostMessage(ev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	bs := string(body)
+	for _, w := range []string{
+		"CEX 阵营 **0 家** ❌",
+		"DEX 合计 24h",
+		"hyperliquid #6",
+	} {
+		if !strings.Contains(bs, w) {
+			t.Fatalf("missing %q in body:\n%s", w, bs)
+		}
+	}
+}
+
 func divergenceTestKPI() domain.Top30DivergenceKPI {
 	return domain.Top30DivergenceKPI{
 		CEXOnlyCount:  3,

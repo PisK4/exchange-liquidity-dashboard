@@ -28,6 +28,7 @@ type DivergencePushEvent struct {
 	CategoryLabel string                    `json:"category_label"`
 	Rows          []DivergencePushRow       `json:"rows"`
 	KPI           domain.Top30DivergenceKPI `json:"kpi"`
+	CardKPI       *DivergenceCardKPI        `json:"card_kpi,omitempty"`
 	SnapshotTS    time.Time                 `json:"snapshot_ts"`
 	SnapshotDate  string                    `json:"snapshot_date"`
 	DedupeKey     string                    `json:"dedupe_key"`
@@ -39,15 +40,62 @@ type DivergencePushEvent struct {
 // DEXRank are *int because each card omits one side depending on its
 // category (cex_only has no DEXRank, dex_only has no CEXRank). The
 // renderer fans this out into the per-card table layout.
+//
+// CEXPlatformDetails / DEXPlatformDetails carry the per-platform
+// native ranks that contributed to the canonical bucket. The renderer
+// uses these for the cex_only / dex_only two-line layout so operators
+// see "binance #15 · okx #18 · ..." instead of just a count. Both
+// slices are sorted by NativeRank ASC; missing or unresolved
+// platforms simply do not appear.
 type DivergencePushRow struct {
-	Symbol       string   `json:"symbol"`
-	CEXRank      *int     `json:"cex_rank,omitempty"`
-	DEXRank      *int     `json:"dex_rank,omitempty"`
-	RankDelta    *int     `json:"rank_delta,omitempty"`
-	CEXVolUSD    *float64 `json:"cex_volume_24h_usd,omitempty"`
-	DEXVolUSD    *float64 `json:"dex_volume_24h_usd,omitempty"`
-	CEXPlatforms int      `json:"cex_platform_count"`
-	DEXPlatforms int      `json:"dex_platform_count"`
+	Symbol             string                   `json:"symbol"`
+	CEXRank            *int                     `json:"cex_rank,omitempty"`
+	DEXRank            *int                     `json:"dex_rank,omitempty"`
+	RankDelta          *int                     `json:"rank_delta,omitempty"`
+	CEXVolUSD          *float64                 `json:"cex_volume_24h_usd,omitempty"`
+	DEXVolUSD          *float64                 `json:"dex_volume_24h_usd,omitempty"`
+	CEXPlatforms       int                      `json:"cex_platform_count"`
+	DEXPlatforms       int                      `json:"dex_platform_count"`
+	CEXPlatformDetails []DivergencePushPlatform `json:"cex_platform_details,omitempty"`
+	DEXPlatformDetails []DivergencePushPlatform `json:"dex_platform_details,omitempty"`
+}
+
+// DivergencePushPlatform is one entry of a row's per-platform
+// breakdown. NativeRank is the platform-local Top30 rank as reported
+// by the source adapter — distinct from the canonical-aggregate rank
+// computed by divergence.aggregateClass. Volume is the platform's own
+// 24h figure pre-aggregation.
+type DivergencePushPlatform struct {
+	Platform     string  `json:"platform"`
+	NativeRank   int     `json:"native_rank"`
+	Volume24HUSD float64 `json:"volume_24h_usd,omitempty"`
+}
+
+// DivergenceCardKPI is the per-card summary strip used by the
+// cex_only / dex_only renderers. It replaces the (cross-card) global
+// KPI on those two cards so operators see the distribution and
+// "headline pick" of the category they are currently looking at.
+//
+// TotalEligible is the count before TopN truncation; the field
+// triplet (BroadCount/MidCount/NarrowCount) bins canonicals by
+// PlatformCount so the operator can tell at a glance how many of the
+// listed candidates are "broad" (5+ platforms) vs "narrow" (1-2).
+// SideVolUSD sums the in-camp 24h volume across all eligible
+// canonicals so the strip carries one quick aggregate figure.
+//
+// OppositeCampLabel is the human-facing "DEX" / "CEX" name used in
+// the reverse-camp tag ("DEX 阵营 0 家 ❌") shown once on the strip
+// instead of repeating on every row.
+type DivergenceCardKPI struct {
+	TotalEligible      int     `json:"total_eligible"`
+	BroadCount         int     `json:"broad_count"`
+	MidCount           int     `json:"mid_count"`
+	NarrowCount        int     `json:"narrow_count"`
+	SideVolUSD         float64 `json:"side_volume_24h_usd"`
+	StrongestSymbol    string  `json:"strongest_symbol,omitempty"`
+	StrongestPlatforms int     `json:"strongest_platform_count,omitempty"`
+	StrongestBestRank  int     `json:"strongest_best_rank,omitempty"`
+	OppositeCampLabel  string  `json:"opposite_camp_label,omitempty"`
 }
 
 // DivergenceDeps mirrors the Top30Deps style so the engine can wire
@@ -151,8 +199,40 @@ func BuildDivergencePushEvents(rows []Top30RowForPush, cfg config.Top30Divergenc
 	if topN <= 0 {
 		topN = 10
 	}
+	cexSet := platformMembershipSet(cfg.CEXPlatforms)
+	dexSet := platformMembershipSet(cfg.DEXPlatforms)
+
 	inputs := make([]divergence.InputRow, 0, len(rows))
 	knownByCanonical := map[string]*bool{}
+
+	// platformBreakdown captures (canonical, side, platform) → best
+	// (lowest) native rank + volume so the renderer can fan out a
+	// per-platform sub-row beneath each canonical bucket. We
+	// recompute the resolver fold locally instead of leaning on
+	// aggregateClass so the schema stays additive to the listing
+	// layer — domain types and V1 collector wire format are
+	// untouched.
+	platformBreakdown := map[string]map[string]map[string]*platformAggInternal{}
+	storePlatform := func(canonical, side, platform string, rank int, vol float64) {
+		if _, ok := platformBreakdown[canonical]; !ok {
+			platformBreakdown[canonical] = map[string]map[string]*platformAggInternal{}
+		}
+		if _, ok := platformBreakdown[canonical][side]; !ok {
+			platformBreakdown[canonical][side] = map[string]*platformAggInternal{}
+		}
+		entry, ok := platformBreakdown[canonical][side][platform]
+		if !ok {
+			platformBreakdown[canonical][side][platform] = &platformAggInternal{rank: rank, volume: vol}
+			return
+		}
+		if rank > 0 && (entry.rank == 0 || rank < entry.rank) {
+			entry.rank = rank
+		}
+		if vol > entry.volume {
+			entry.volume = vol
+		}
+	}
+
 	for _, row := range rows {
 		canonical := divergence.CanonicaliseSymbol(row.Symbol)
 		if canonical == "" {
@@ -172,6 +252,11 @@ func BuildDivergencePushEvents(rows []Top30RowForPush, cfg config.Top30Divergenc
 			SnapshotTS:   row.SnapshotTS,
 			EdgexListed:  row.EdgexListed,
 		})
+		if _, ok := cexSet[row.Platform]; ok {
+			storePlatform(canonical, "cex", row.Platform, row.Rank, row.Volume24HUSD)
+		} else if _, ok := dexSet[row.Platform]; ok {
+			storePlatform(canonical, "dex", row.Platform, row.Rank, row.Volume24HUSD)
+		}
 		// Last-write-wins is fine here: if multiple platforms surface
 		// the same canonical (e.g. BTC on binance + okx + edgeX), the
 		// three-state question collapses to "is there any platform
@@ -200,19 +285,26 @@ func BuildDivergencePushEvents(rows []Top30RowForPush, cfg config.Top30Divergenc
 			return
 		}
 		sort.SliceStable(picked, func(i, j int) bool { return sorter(picked[i], picked[j]) })
+		card := computeDivergenceCardKPI(category, picked)
 		if len(picked) > topN {
 			picked = picked[:topN]
 		}
 		meta := divergenceCategories[category]
 		rowsOut := make([]DivergencePushRow, 0, len(picked))
 		for _, row := range picked {
-			rowsOut = append(rowsOut, makeDivergencePushRow(row))
+			r := makeDivergencePushRow(row)
+			if sides, ok := platformBreakdown[row.Symbol]; ok {
+				r.CEXPlatformDetails = sortedPlatforms(sides["cex"])
+				r.DEXPlatformDetails = sortedPlatforms(sides["dex"])
+			}
+			rowsOut = append(rowsOut, r)
 		}
 		out = append(out, DivergencePushEvent{
 			Category:      category,
 			CategoryLabel: meta.Label,
 			Rows:          rowsOut,
 			KPI:           snapshot.KPI,
+			CardKPI:       card,
 			SnapshotTS:    snapshot.SnapshotTS,
 			SnapshotDate:  dayKey,
 			DedupeKey:     fmt.Sprintf("top30_divergence|%s|%s", category, dayKey),
@@ -234,11 +326,27 @@ func BuildDivergencePushEvents(rows []Top30RowForPush, cfg config.Top30Divergenc
 		}
 	}
 
+	// cex_only / dex_only get a tie-break on PlatformCount DESC so a
+	// (rank #15, 5 platforms) candidate outranks a (rank #15, 1
+	// platform) one — the user-facing visual benefit of "硬信号优先"
+	// without changing the primary rank-ASC mental model.
 	emit(DivergenceCategoryCEXOnly, cexOnly, func(a, b domain.Top30DivergenceRow) bool {
-		return derefInt(a.CEXRank) < derefInt(b.CEXRank)
+		if ra, rb := derefInt(a.CEXRank), derefInt(b.CEXRank); ra != rb {
+			return ra < rb
+		}
+		if a.CEXPlatformCount != b.CEXPlatformCount {
+			return a.CEXPlatformCount > b.CEXPlatformCount
+		}
+		return a.Symbol < b.Symbol
 	})
 	emit(DivergenceCategoryDEXOnly, dexOnly, func(a, b domain.Top30DivergenceRow) bool {
-		return derefInt(a.DEXRank) < derefInt(b.DEXRank)
+		if ra, rb := derefInt(a.DEXRank), derefInt(b.DEXRank); ra != rb {
+			return ra < rb
+		}
+		if a.DEXPlatformCount != b.DEXPlatformCount {
+			return a.DEXPlatformCount > b.DEXPlatformCount
+		}
+		return a.Symbol < b.Symbol
 	})
 	emit(DivergenceCategoryHeavyGap, heavy, func(a, b domain.Top30DivergenceRow) bool {
 		return derefInt(a.RankDelta) > derefInt(b.RankDelta)
@@ -248,6 +356,119 @@ func BuildDivergencePushEvents(rows []Top30RowForPush, cfg config.Top30Divergenc
 	})
 
 	return out
+}
+
+// platformMembershipSet builds a lookup set for "is platform X in
+// camp Y?" checks. Platform names are case-sensitive on the wire
+// (config + collector agree on the casing) so no lowercase fold.
+func platformMembershipSet(platforms []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(platforms))
+	for _, p := range platforms {
+		out[p] = struct{}{}
+	}
+	return out
+}
+
+// sortedPlatforms turns a side bucket into a NativeRank-ASC slice.
+func sortedPlatforms(bucket map[string]*platformAggInternal) []DivergencePushPlatform {
+	if len(bucket) == 0 {
+		return nil
+	}
+	out := make([]DivergencePushPlatform, 0, len(bucket))
+	for platform, entry := range bucket {
+		if entry == nil {
+			continue
+		}
+		out = append(out, DivergencePushPlatform{
+			Platform:     platform,
+			NativeRank:   entry.rank,
+			Volume24HUSD: entry.volume,
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].NativeRank != out[j].NativeRank {
+			if out[i].NativeRank == 0 {
+				return false
+			}
+			if out[j].NativeRank == 0 {
+				return true
+			}
+			return out[i].NativeRank < out[j].NativeRank
+		}
+		return out[i].Platform < out[j].Platform
+	})
+	return out
+}
+
+// platformAggInternal is the file-scope mirror of the anonymous
+// platformAgg type used inside BuildDivergencePushEvents; declared
+// here so helper functions can reference it.
+type platformAggInternal struct {
+	rank   int
+	volume float64
+}
+
+// computeDivergenceCardKPI produces the per-card KPI strip for
+// cex_only and dex_only categories. For heavy_gap / both_hot_gap we
+// return nil so the renderer falls back to the legacy global KPI
+// strip; those cards present a cross-camp story that benefits less
+// from per-card distribution numbers.
+func computeDivergenceCardKPI(category string, eligible []domain.Top30DivergenceRow) *DivergenceCardKPI {
+	switch category {
+	case DivergenceCategoryCEXOnly, DivergenceCategoryDEXOnly:
+	default:
+		return nil
+	}
+	side := DivergenceCardKPI{TotalEligible: len(eligible)}
+	if category == DivergenceCategoryCEXOnly {
+		side.OppositeCampLabel = "DEX"
+	} else {
+		side.OppositeCampLabel = "CEX"
+	}
+	bestPlatforms, bestRank := 0, 1<<30
+	bestSymbol := ""
+	for _, row := range eligible {
+		var pc int
+		var vol *float64
+		var rank *int
+		if category == DivergenceCategoryCEXOnly {
+			pc = row.CEXPlatformCount
+			vol = row.CEXAdjustedVolUSD
+			rank = row.CEXRank
+		} else {
+			pc = row.DEXPlatformCount
+			vol = row.DEXAdjustedVolUSD
+			rank = row.DEXRank
+		}
+		switch {
+		case pc >= 5:
+			side.BroadCount++
+		case pc >= 3:
+			side.MidCount++
+		case pc >= 1:
+			side.NarrowCount++
+		}
+		if vol != nil {
+			side.SideVolUSD += *vol
+		}
+		r := 1 << 30
+		if rank != nil {
+			r = *rank
+		}
+		if pc > bestPlatforms || (pc == bestPlatforms && r < bestRank) {
+			bestPlatforms = pc
+			bestRank = r
+			bestSymbol = row.Symbol
+		}
+	}
+	if bestSymbol != "" {
+		side.StrongestSymbol = bestSymbol
+		side.StrongestPlatforms = bestPlatforms
+		if bestRank < 1<<30 {
+			side.StrongestBestRank = bestRank
+		}
+	}
+	return &side
 }
 
 // filterDivergenceRowsForAlert applies the three-state strict filter:
@@ -385,6 +606,13 @@ func buildDivergenceCard(ev DivergencePushEvent) map[string]any {
 }
 
 func buildDivergenceKPIStrip(ev DivergencePushEvent) map[string]any {
+	// cex_only / dex_only carry a per-card KPI computed at build
+	// time. heavy_gap / both_hot_gap keep the legacy four-field
+	// global strip because their natural narrative is cross-camp
+	// rather than per-camp distribution.
+	if ev.CardKPI != nil {
+		return buildDivergenceCardKPIStrip(ev)
+	}
 	kpi := ev.KPI
 	return map[string]any{
 		"tag": "div",
@@ -393,6 +621,38 @@ func buildDivergenceKPIStrip(ev DivergencePushEvent) map[string]any {
 			summaryField("DEX 独有", fmt.Sprintf("%d", kpi.DEXOnlyCount)),
 			summaryField("显著分歧", fmt.Sprintf("%d", kpi.HeavyCount)),
 			summaryField("edgeX 缺口", fmt.Sprintf("%d", kpi.EdgexGapCount)),
+		},
+	}
+}
+
+// buildDivergenceCardKPIStrip renders the per-card distribution strip
+// used by cex_only / dex_only cards. Two lines of lark_md so the
+// content stays compact while surfacing four signals at once:
+//   - total eligible canonicals + breadth distribution
+//   - opposite-camp absence tag (once, replacing per-row reminders)
+//   - in-camp 24h aggregate volume + "strongest pick" callout
+func buildDivergenceCardKPIStrip(ev DivergencePushEvent) map[string]any {
+	c := ev.CardKPI
+	sideLabel := "CEX"
+	if ev.Category == DivergenceCategoryDEXOnly {
+		sideLabel = "DEX"
+	}
+	line1 := fmt.Sprintf("**本卡 %d 项** · 5+ 平台 **%d** / 3-4 平台 **%d** / 1-2 平台 **%d** · %s 阵营 **0 家** ❌",
+		c.TotalEligible, c.BroadCount, c.MidCount, c.NarrowCount, c.OppositeCampLabel)
+	strongest := "—"
+	if c.StrongestSymbol != "" {
+		if c.StrongestBestRank > 0 {
+			strongest = fmt.Sprintf("**%s**（%d 家 · 最佳 #%d）", c.StrongestSymbol, c.StrongestPlatforms, c.StrongestBestRank)
+		} else {
+			strongest = fmt.Sprintf("**%s**（%d 家）", c.StrongestSymbol, c.StrongestPlatforms)
+		}
+	}
+	line2 := fmt.Sprintf("%s 合计 24h **$%s** · 最硬 %s", sideLabel, humanUSD(c.SideVolUSD), strongest)
+	return map[string]any{
+		"tag": "div",
+		"text": map[string]any{
+			"tag":     "lark_md",
+			"content": line1 + "\n" + line2,
 		},
 	}
 }
@@ -430,11 +690,19 @@ func buildDivergenceTable(ev DivergencePushEvent) map[string]any {
 func formatDivergenceRow(category string, row DivergencePushRow) string {
 	switch category {
 	case DivergenceCategoryCEXOnly:
-		return fmt.Sprintf("● **%s** · CEX rank **#%d** · 24h $%s · %d 家平台",
-			row.Symbol, derefInt(row.CEXRank), humanUSDPtr(row.CEXVolUSD), row.CEXPlatforms)
+		main := fmt.Sprintf("● **%s** · CEX 合计 24h **$%s** · %d 家平台",
+			row.Symbol, humanUSDPtr(row.CEXVolUSD), row.CEXPlatforms)
+		if sub := formatPlatformBreakdown(row.CEXPlatformDetails); sub != "" {
+			return main + "\n　 " + sub
+		}
+		return main
 	case DivergenceCategoryDEXOnly:
-		return fmt.Sprintf("● **%s** · DEX rank **#%d** · 24h $%s · %d 家平台",
-			row.Symbol, derefInt(row.DEXRank), humanUSDPtr(row.DEXVolUSD), row.DEXPlatforms)
+		main := fmt.Sprintf("● **%s** · DEX 合计 24h **$%s** · %d 家平台",
+			row.Symbol, humanUSDPtr(row.DEXVolUSD), row.DEXPlatforms)
+		if sub := formatPlatformBreakdown(row.DEXPlatformDetails); sub != "" {
+			return main + "\n　 " + sub
+		}
+		return main
 	case DivergenceCategoryHeavyGap:
 		return fmt.Sprintf("● **%s** · CEX #%d / DEX #%d · Δ **%d**",
 			row.Symbol, derefInt(row.CEXRank), derefInt(row.DEXRank), derefInt(row.RankDelta))
@@ -444,6 +712,30 @@ func formatDivergenceRow(category string, row DivergencePushRow) string {
 	default:
 		return fmt.Sprintf("● **%s**", row.Symbol)
 	}
+}
+
+// formatPlatformBreakdown renders the per-platform sub-row used by
+// cex_only / dex_only cards. Empty / nil-rank platforms are skipped
+// so a missing native rank does not surface a confusing "#0" badge.
+// Format: "binance #15 · okx #18 · bybit #21" (no bullet, no quote
+// suffix, no per-row 24h figures — the main row already carries the
+// camp-level total).
+func formatPlatformBreakdown(details []DivergencePushPlatform) string {
+	if len(details) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(details))
+	for _, d := range details {
+		if d.NativeRank > 0 {
+			parts = append(parts, fmt.Sprintf("%s #%d", d.Platform, d.NativeRank))
+		} else {
+			parts = append(parts, d.Platform)
+		}
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, " · ")
 }
 
 func minRankOfRow(row DivergencePushRow) int {
