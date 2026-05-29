@@ -9,13 +9,18 @@
 package e2e
 
 import (
+	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strconv"
 	"testing"
 	"time"
 
@@ -622,6 +627,244 @@ func TestListingAgentE2E_EvidenceKindMatrix(t *testing.T) {
 		}
 		if got.Recommendation == listing.RecommendationPrepareListing {
 			t.Errorf("recommendation = prepare_listing, but announcement_pending_api MUST NOT auto-advance to prepare_listing")
+		}
+	})
+}
+
+// TestListingAgentE2E_DecisionCallbackFlow exercises the full
+// Phase 2 button-callback round trip end-to-end against MySQL:
+//
+//  1. Seed an announcement_listing + instrument_diff pair so fusion
+//     produces a prepare_listing candidate.
+//  2. Run the engine with DecisionCard.Enabled=true and assert one
+//     decision card outbox row landed.
+//  3. POST a signed callback (prepare_listing) and assert the
+//     t_listing_decision + t_listing_action_dispatch rows are
+//     written; a notification outbox row appears on the
+//     lark_listing_ops channel.
+//  4. POST the same signature twice → 200 already_recorded, no
+//     duplicate rows.
+//  5. POST an ignore callback after truncate-and-reseed → run the
+//     engine again → assert ProduceDecisionCards skipped the
+//     candidate (SkippedCooldown=1) so an ignore really does
+//     suppress the next push.
+func TestListingAgentE2E_DecisionCallbackFlow(t *testing.T) {
+	db := openDB(t)
+	defer db.Close()
+	if err := collector.ApplyMigrations(db); err != nil {
+		t.Fatalf("apply migrations: %v", err)
+	}
+	truncateListingTables(t, db)
+
+	repo := listing.NewRepository(db)
+	now := time.Now().UTC().Truncate(time.Second)
+	seedSignals(t, repo, now)
+
+	cfg := config.Config{}
+	cfg.Runtime.ListingAgent = config.ListingAgentConfig{
+		Enabled:   true,
+		Worker:    config.ListingWorkerConfig{MaxAttempts: 5},
+		Top30Push: config.ListingTop30PushConfig{Enabled: true, StaleAfter: time.Hour},
+		Delivery:  config.ListingDeliveryConfig{Enabled: true},
+		DecisionCard: config.ListingDecisionCardConfig{
+			Enabled:        true,
+			IgnoreCooldown: 24 * time.Hour,
+			MaxPerTick:     10,
+		},
+	}
+	engine := listing.NewEngine(cfg, repo, listing.EngineDeps{
+		Now:          func() time.Time { return now },
+		LoadUniverse: loadE2EUniverse,
+	})
+	summary, err := engine.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	if summary.DecisionCard.OutboxRows != 1 || summary.DecisionCard.RiskPlans != 1 {
+		t.Fatalf("DecisionCard = %+v, want OutboxRows=1 RiskPlans=1", summary.DecisionCard)
+	}
+
+	// Find the candidate id so we can address it from the callback.
+	candidates, err := repo.ListCandidates(context.Background(), listing.CandidateFilter{Limit: 1})
+	if err != nil || len(candidates) != 1 {
+		t.Fatalf("ListCandidates: %v / len=%d", err, len(candidates))
+	}
+	candidateID := candidates[0].ID
+
+	// Verify the decision card outbox row exists.
+	var outboxCount int
+	if err := db.QueryRow(
+		`SELECT COUNT(*) FROM t_listing_delivery_outbox WHERE event_type = ?`,
+		listing.DeliveryEventListingDecisionCandidate,
+	).Scan(&outboxCount); err != nil {
+		t.Fatalf("count decision outbox: %v", err)
+	}
+	if outboxCount != 1 {
+		t.Fatalf("decision outbox rows = %d, want 1", outboxCount)
+	}
+
+	// Stand up the API with the callback wired.
+	dispatcher := listing.NewRepoDispatcher(repo, func() time.Time { return now })
+	server := api.NewServer(cfg, fakeStoreReader{},
+		api.WithListingReader(repo),
+		api.WithListingDecisionWriter(repo),
+		api.WithListingDispatch(dispatcher),
+		api.WithListingCallback(api.ListingCallbackConfig{
+			Secret:        "e2e-secret",
+			MaxClockSkew:  300 * time.Second,
+			OperatorAllow: []string{"ou_e2e"},
+			Now:           func() time.Time { return now },
+		}),
+	)
+	ts := httptest.NewServer(server.Routes())
+	defer ts.Close()
+
+	post := func(t *testing.T, body []byte) *http.Response {
+		t.Helper()
+		tsStr := strconv.FormatInt(now.Unix(), 10)
+		mac := hmac.New(sha256.New, []byte("e2e-secret"))
+		mac.Write([]byte(tsStr))
+		mac.Write([]byte("e2e-secret"))
+		sig := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+		req, err := http.NewRequest("POST", ts.URL+"/api/listing/callback", bytes.NewReader(body))
+		if err != nil {
+			t.Fatalf("new req: %v", err)
+		}
+		req.Header.Set("X-Lark-Request-Timestamp", tsStr)
+		req.Header.Set("X-Lark-Signature", sig)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST callback: %v", err)
+		}
+		return resp
+	}
+
+	body := []byte(fmt.Sprintf(
+		`{"action":{"value":{"candidate_id":%d,"action":"prepare_listing","risk_plan_id":1,"dedupe_key":"listing_decision|%d|%s"}},"operator":{"open_id":"ou_e2e"},"open_message_id":"om_e2e","open_card_id":"card_e2e"}`,
+		candidateID, candidateID, now.Format("2006-01-02"),
+	))
+
+	t.Run("first prepare_listing click writes decision + dispatch + notify outbox", func(t *testing.T) {
+		resp := post(t, body)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			b, _ := readBody(&http.Request{Body: resp.Body})
+			t.Fatalf("status = %d, body=%s", resp.StatusCode, string(b))
+		}
+		var out map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		if out["status"] != "recorded" {
+			t.Errorf("status = %v, want recorded", out["status"])
+		}
+		// Decision row landed.
+		var decisions int
+		if err := db.QueryRow(`SELECT COUNT(*) FROM t_listing_decision WHERE candidate_id = ?`, candidateID).Scan(&decisions); err != nil {
+			t.Fatalf("count decisions: %v", err)
+		}
+		if decisions != 1 {
+			t.Errorf("decisions = %d, want 1", decisions)
+		}
+		// Action dispatch row landed with dispatch_type=listing_ops.
+		var dispatchType string
+		if err := db.QueryRow(`SELECT dispatch_type FROM t_listing_action_dispatch WHERE candidate_id = ? LIMIT 1`, candidateID).Scan(&dispatchType); err != nil {
+			t.Fatalf("select dispatch_type: %v", err)
+		}
+		if dispatchType != listing.DispatchTypeListingOps {
+			t.Errorf("dispatch_type = %q, want %q", dispatchType, listing.DispatchTypeListingOps)
+		}
+		// Notify outbox row landed on lark_listing_ops channel.
+		var notifyCount int
+		if err := db.QueryRow(
+			`SELECT COUNT(*) FROM t_listing_delivery_outbox WHERE event_type = ? AND target_channel = ?`,
+			listing.DeliveryEventListingActionListingOps, listing.DispatchChannelLarkListingOps,
+		).Scan(&notifyCount); err != nil {
+			t.Fatalf("count notify outbox: %v", err)
+		}
+		if notifyCount != 1 {
+			t.Errorf("notify outbox = %d, want 1", notifyCount)
+		}
+	})
+
+	t.Run("second identical click is idempotent", func(t *testing.T) {
+		resp := post(t, body)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("status = %d", resp.StatusCode)
+		}
+		var out map[string]any
+		_ = json.NewDecoder(resp.Body).Decode(&out)
+		if out["status"] != "already_recorded" {
+			t.Errorf("status = %v, want already_recorded", out["status"])
+		}
+		var decisions int
+		_ = db.QueryRow(`SELECT COUNT(*) FROM t_listing_decision WHERE candidate_id = ?`, candidateID).Scan(&decisions)
+		if decisions != 1 {
+			t.Errorf("decisions = %d after second click, want 1", decisions)
+		}
+	})
+
+	t.Run("ignore click suppresses next decision card via cooldown", func(t *testing.T) {
+		truncateListingTables(t, db)
+		nowB := time.Now().UTC().Truncate(time.Second)
+		seedSignals(t, repo, nowB)
+		engineB := listing.NewEngine(cfg, repo, listing.EngineDeps{
+			Now:          func() time.Time { return nowB },
+			LoadUniverse: loadE2EUniverse,
+		})
+		if _, err := engineB.RunOnce(context.Background()); err != nil {
+			t.Fatalf("RunOnce B: %v", err)
+		}
+		newCands, err := repo.ListCandidates(context.Background(), listing.CandidateFilter{Limit: 1})
+		if err != nil || len(newCands) != 1 {
+			t.Fatalf("ListCandidates B: %v / %d", err, len(newCands))
+		}
+		newID := newCands[0].ID
+
+		serverB := api.NewServer(cfg, fakeStoreReader{},
+			api.WithListingReader(repo),
+			api.WithListingDecisionWriter(repo),
+			api.WithListingDispatch(listing.NewRepoDispatcher(repo, func() time.Time { return nowB })),
+			api.WithListingCallback(api.ListingCallbackConfig{
+				Secret:        "e2e-secret",
+				MaxClockSkew:  300 * time.Second,
+				OperatorAllow: []string{"ou_e2e"},
+				Now:           func() time.Time { return nowB },
+			}),
+		)
+		tsB := httptest.NewServer(serverB.Routes())
+		defer tsB.Close()
+
+		ignoreBody := []byte(fmt.Sprintf(
+			`{"action":{"value":{"candidate_id":%d,"action":"ignore","reason":"low_liquidity"}},"operator":{"open_id":"ou_e2e"}}`,
+			newID,
+		))
+		tsStr := strconv.FormatInt(nowB.Unix(), 10)
+		mac := hmac.New(sha256.New, []byte("e2e-secret"))
+		mac.Write([]byte(tsStr))
+		mac.Write([]byte("e2e-secret"))
+		sig := base64.StdEncoding.EncodeToString(mac.Sum(nil))
+		req, _ := http.NewRequest("POST", tsB.URL+"/api/listing/callback", bytes.NewReader(ignoreBody))
+		req.Header.Set("X-Lark-Request-Timestamp", tsStr)
+		req.Header.Set("X-Lark-Signature", sig)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatalf("POST ignore: %v", err)
+		}
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("ignore status = %d", resp.StatusCode)
+		}
+
+		// Subsequent engine tick should observe the ignore and skip.
+		summaryC, err := engineB.RunOnce(context.Background())
+		if err != nil {
+			t.Fatalf("RunOnce C: %v", err)
+		}
+		if summaryC.DecisionCard.SkippedCooldown != 1 {
+			t.Errorf("SkippedCooldown = %d, want 1 after ignore", summaryC.DecisionCard.SkippedCooldown)
+		}
+		if summaryC.DecisionCard.OutboxRows != 0 {
+			t.Errorf("OutboxRows = %d, want 0 during cooldown", summaryC.DecisionCard.OutboxRows)
 		}
 	})
 }
