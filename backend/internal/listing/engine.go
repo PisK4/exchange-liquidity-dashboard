@@ -54,6 +54,7 @@ type RunSummary struct {
 	Top30Push          Top30PushResult
 	DivergencePush     DivergencePushResult
 	LiquidityAlert     LiquidityAlertResult
+	DecisionCard       DecisionCardResult
 	Delivery           DeliveryResult
 	Started            time.Time
 	Finished           time.Time
@@ -229,6 +230,23 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	summary.LiquidityAlert = liquidityAlert
 	if laErr != nil {
 		e.deps.Logger.Printf("listing engine: liquidity alert push error: %v", laErr)
+	}
+
+	// Step 2d: produce decision card outbox rows (#8). Runs AFTER
+	// fusion so brand-new candidates land their first card in the
+	// same tick; the cooldown gate inside ProduceDecisionCards
+	// honours ignore decisions recorded by the callback API so the
+	// engine doesn't re-emit a suppressed card.
+	if e.cfg.Runtime.ListingAgent.DecisionCard.Enabled {
+		decisionRes, decisionErr := ProduceDecisionCards(ctx, e.repo, DecisionCardDeps{
+			Now:            e.deps.Now,
+			IgnoreCooldown: e.cfg.Runtime.ListingAgent.DecisionCard.IgnoreCooldown,
+			MaxPerTick:     e.cfg.Runtime.ListingAgent.DecisionCard.MaxPerTick,
+		})
+		summary.DecisionCard = decisionRes
+		if decisionErr != nil {
+			e.deps.Logger.Printf("listing engine: decision card error: %v", decisionErr)
+		}
 	}
 
 	// Step 3: drain due outbox. Empty webhook URL marks rows as disabled

@@ -194,6 +194,88 @@ func TestEngineRunOnceProducesDivergencePushWhenEnabled(t *testing.T) {
 	}
 }
 
+// TestEngineRunOnceProducesDecisionCardsWhenEnabled locks the
+// Phase 2.5 wiring contract: when DecisionCard.Enabled is true and
+// the candidate list returns at least one actionable row, the
+// engine runs the ProduceDecisionCards step (risk plan + outbox
+// write) AFTER fusion and surfaces the per-tick result on
+// summary.DecisionCard.
+func TestEngineRunOnceProducesDecisionCardsWhenEnabled(t *testing.T) {
+	now := time.Date(2026, 5, 30, 14, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	// Fusion: no unfused signals.
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "signal_type", "signal_subtype", "source_platform", "market_type", "api_symbol", "api_market_id",
+			"canonical_symbol", "display_symbol", "base_asset", "quote_asset", "settle_asset",
+			"market_surface", "instrument_kind", "status_raw", "status_normalized", "confidence",
+			"observed_at", "source_snapshot_ts", "published_at", "listing_time_ts",
+			"source_endpoint", "source_url", "fingerprint", "payload_json", "raw_payload_json", "raw_payload_hash",
+		}))
+	// Top30: empty snapshot.
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT MAX(snapshot_ts) FROM t_top30_snapshot")).
+		WillReturnRows(sqlmock.NewRows([]string{"max"}).AddRow(nil))
+	// Decision card step: ListCandidates returns one fresh actionable
+	// candidate; latest decision lookup is empty (no cooldown); both
+	// the risk plan row and the outbox row land.
+	score := 80.0
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "canonical_symbol", "display_symbol", "market_surface", "instrument_kind",
+			"lifecycle_status", "lifecycle_status_label", "evidence_kind", "confidence_level",
+			"business_score", "business_score_version", "recommendation", "recommendation_label",
+			"source_platforms_json", "top30_enrichment_json", "first_observed_at", "last_observed_at",
+		}).AddRow(
+			int64(7), "ABC", "ABC-USDT (perp)", "perp", "canonical",
+			LifecycleConfirmedListingCandidate, "已确认候选", EvidenceAnnouncementAndAPI, ConfidenceHigh,
+			score, "v1", RecommendationPrepareListing, "准备上架",
+			[]byte(`["binance"]`), nil, now.Add(-2*time.Hour), now.Add(-1*time.Hour),
+		))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT action, callback_ts FROM t_listing_decision")).
+		WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"action", "callback_ts"}))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_risk_plan")).
+		WillReturnResult(sqlmock.NewResult(201, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_delivery_outbox")).
+		WillReturnResult(sqlmock.NewResult(301, 1))
+	// Delivery drain: no due rows.
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_delivery_outbox WHERE status IN`).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "event_type", "dedupe_key", "target_channel", "status", "attempt_count", "max_attempts",
+			"next_attempt_at", "payload_json", "last_error", "sent_at", "created_at", "updated_at",
+		}))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	cfg := config.Config{}
+	cfg.Runtime.ListingAgent = config.ListingAgentConfig{
+		Enabled:   true,
+		Worker:    config.ListingWorkerConfig{MaxAttempts: 5},
+		Top30Push: config.ListingTop30PushConfig{Enabled: true, StaleAfter: time.Hour},
+		Delivery:  config.ListingDeliveryConfig{Enabled: true},
+		DecisionCard: config.ListingDecisionCardConfig{
+			Enabled:        true,
+			IgnoreCooldown: 24 * time.Hour,
+			MaxPerTick:     10,
+		},
+	}
+	engine := NewEngine(cfg, repo, EngineDeps{
+		Now:          func() time.Time { return now },
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+	})
+	summary, err := engine.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce err = %v", err)
+	}
+	if summary.DecisionCard.OutboxRows != 1 || summary.DecisionCard.RiskPlans != 1 {
+		t.Errorf("DecisionCard = %+v, want OutboxRows=1 RiskPlans=1", summary.DecisionCard)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 // TestEngineRunOnceDrivesInstrumentAndAnnouncementSourcesBeforeFusion
 // locks the Phase 1.5 wiring contract: every configured instrument /
 // announcement source must be invoked once per tick, wrapped in the

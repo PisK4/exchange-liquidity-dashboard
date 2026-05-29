@@ -69,6 +69,38 @@ type ListingAgentConfig struct {
 	Top30DivergencePush Top30DivergencePushConfig `json:"top30_divergence_push"`
 	LiquidityAlert      LiquidityAlertConfig      `json:"liquidity_alert"`
 	Candidate           ListingCandidateConfig    `json:"candidate"`
+	DecisionCard        ListingDecisionCardConfig `json:"decision_card"`
+}
+
+// ListingDecisionCardConfig is the runtime block for the Phase 2
+// Lark decision card producer + callback. Enabled defaults to false
+// so existing deployments do not start emitting decision cards
+// without an explicit opt-in. IgnoreCooldown is the §5 24h window
+// used by ProduceDecisionCards to suppress a card after the operator
+// clicked 忽略. MaxPerTick caps the number of cards produced per
+// engine tick to keep a fresh deploy from bursting the Lark channel.
+//
+// Callback.Secret / Callback.OperatorAllow / Callback.MaxClockSkew
+// flow into the api.NewServer options via cmd/dashboard wiring; the
+// secret is never persisted and never logged.
+type ListingDecisionCardConfig struct {
+	Enabled        bool                          `json:"enabled"`
+	IgnoreCooldown time.Duration                 `json:"ignore_cooldown"`
+	MaxPerTick     int                           `json:"max_per_tick"`
+	Callback       ListingDecisionCallbackConfig `json:"callback"`
+}
+
+// ListingDecisionCallbackConfig configures the Lark button callback
+// HTTP route security rails. Secret defaults to blank — the route
+// stays 503 in environments that have not configured the shared
+// secret. SecretEnv resolves at startup the same way as
+// Delivery.Top30WebhookURLEnv so secrets can be injected through
+// the environment without writing them to YAML.
+type ListingDecisionCallbackConfig struct {
+	Secret        string        `json:"-"`
+	SecretEnv     string        `json:"secret_env,omitempty"`
+	MaxClockSkew  time.Duration `json:"max_clock_skew"`
+	OperatorAllow []string      `json:"operator_allow"`
 }
 
 // LiquidityAlertConfig is the Dashboard liquidity-lag (#10) /
@@ -650,6 +682,15 @@ func defaultListingAgentConfig() ListingAgentConfig {
 		LiquidityAlert: defaultLiquidityAlertConfig(),
 		Candidate: ListingCandidateConfig{
 			MergeWindow: 14 * 24 * time.Hour,
+		},
+		DecisionCard: ListingDecisionCardConfig{
+			Enabled:        false,
+			IgnoreCooldown: 24 * time.Hour,
+			MaxPerTick:     20,
+			Callback: ListingDecisionCallbackConfig{
+				MaxClockSkew:  300 * time.Second,
+				OperatorAllow: nil,
+			},
 		},
 	}
 }
