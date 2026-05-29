@@ -828,6 +828,107 @@ func (r *Repository) HasAnnouncementForExternalID(ctx context.Context, platform,
 	return present == 1, nil
 }
 
+// UpsertRiskPlan writes a new t_listing_risk_plan audit row. The
+// table is intentionally INSERT-only (every generation writes a new
+// row) so historical decision cards keep the exact plan that was
+// rendered, even after the production table is retuned.
+//
+// The returned id is the auto-increment primary key so the producer
+// can attach it to the decision card payload.
+func (r *Repository) UpsertRiskPlan(ctx context.Context, plan RiskPlan) (int64, error) {
+	if r.db == nil {
+		return 0, errors.New("listing repository: no db attached")
+	}
+	const query = `INSERT INTO t_listing_risk_plan (
+	  candidate_id, risk_plan_version, template_name, max_leverage, max_position_usd,
+	  leverage_tiers_json, funding_initial_mode, mm_quote_required, risk_notes_json,
+	  source_evidence_json, generated_at, approved_at)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+	mmQuote := 0
+	if plan.MMQuoteRequired {
+		mmQuote = 1
+	}
+	res, err := r.db.ExecContext(ctx, query,
+		plan.CandidateID,
+		plan.RiskPlanVersion,
+		plan.TemplateName,
+		nullFloat(plan.MaxLeverage),
+		nullFloat(plan.MaxPositionUSD),
+		[]byte(plan.LeverageTiersJSON),
+		nullString(plan.FundingInitialMode),
+		mmQuote,
+		nullRawJSON(plan.RiskNotesJSON),
+		[]byte(plan.SourceEvidenceJSON),
+		plan.GeneratedAt,
+		nullTimePtr(plan.ApprovedAt),
+	)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
+}
+
+// LatestRiskPlanByCandidate returns the most recently generated risk
+// plan row for the candidate, or nil if no row exists yet. The
+// decision card producer uses this to avoid recomputing the plan
+// when the candidate is re-presented in subsequent ticks within the
+// same UTC day.
+func (r *Repository) LatestRiskPlanByCandidate(ctx context.Context, candidateID int64) (*RiskPlan, error) {
+	if r.db == nil {
+		return nil, errors.New("listing repository: no db attached")
+	}
+	const query = `SELECT id, candidate_id, risk_plan_version, template_name, max_leverage, max_position_usd,
+	         leverage_tiers_json, funding_initial_mode, mm_quote_required, risk_notes_json,
+	         source_evidence_json, generated_at, approved_at, created_at
+	    FROM t_listing_risk_plan
+	   WHERE candidate_id = ?
+	   ORDER BY generated_at DESC, id DESC
+	   LIMIT 1`
+	rows, err := r.db.QueryContext(ctx, query, candidateID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return nil, nil
+	}
+	var p RiskPlan
+	var maxLev, maxPos sql.NullFloat64
+	var leverageTiers, riskNotes, sourceEvidence []byte
+	var fundingMode sql.NullString
+	var mmQuote int
+	var approvedAt sql.NullTime
+	if err := rows.Scan(&p.ID, &p.CandidateID, &p.RiskPlanVersion, &p.TemplateName,
+		&maxLev, &maxPos, &leverageTiers, &fundingMode, &mmQuote, &riskNotes,
+		&sourceEvidence, &p.GeneratedAt, &approvedAt, &p.CreatedAt); err != nil {
+		return nil, err
+	}
+	if maxLev.Valid {
+		v := maxLev.Float64
+		p.MaxLeverage = &v
+	}
+	if maxPos.Valid {
+		v := maxPos.Float64
+		p.MaxPositionUSD = &v
+	}
+	p.FundingInitialMode = fundingMode.String
+	p.MMQuoteRequired = mmQuote == 1
+	if len(leverageTiers) > 0 {
+		p.LeverageTiersJSON = append(json.RawMessage(nil), leverageTiers...)
+	}
+	if len(riskNotes) > 0 {
+		p.RiskNotesJSON = append(json.RawMessage(nil), riskNotes...)
+	}
+	if len(sourceEvidence) > 0 {
+		p.SourceEvidenceJSON = append(json.RawMessage(nil), sourceEvidence...)
+	}
+	if approvedAt.Valid {
+		t := approvedAt.Time
+		p.ApprovedAt = &t
+	}
+	return &p, rows.Err()
+}
+
 // ListDeliveries returns outbox rows that match the given filter. A
 // recent attempt summary is attached when available; callers should
 // surface this on the read-only /api/listing/deliveries endpoint.
@@ -1023,4 +1124,11 @@ func nullTimePtr(p *time.Time) any {
 		return nil
 	}
 	return *p
+}
+
+func nullRawJSON(raw json.RawMessage) any {
+	if len(raw) == 0 {
+		return nil
+	}
+	return []byte(raw)
 }
