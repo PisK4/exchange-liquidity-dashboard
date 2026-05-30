@@ -92,3 +92,64 @@ func TestFuseSignalsPromotesAnnouncementAndAPIToConfirmedCandidate(t *testing.T)
 		t.Fatalf("expectations: %v", err)
 	}
 }
+
+// TestFuseSignalsSkipsTop30AggregatorSignals locks the §Phase 1.2
+// fusion contract: only the candidate-bearing signal types
+// (instrument_diff + announcement_listing) should produce candidates.
+// Top30 hot-gap and divergence signals are aggregator markers and
+// MUST be marked fused_at without ever appearing in a candidate
+// row. A regression here surfaces as bogus mojibake candidates
+// (e.g. canonical_symbol = "CEX_ONLY") flowing through to
+// ProduceDecisionCards and the Lark group.
+func TestFuseSignalsSkipsTop30AggregatorSignals(t *testing.T) {
+	now := time.Date(2026, 5, 30, 3, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "signal_type", "signal_subtype", "source_platform", "market_type", "api_symbol", "api_market_id",
+		"canonical_symbol", "display_symbol", "base_asset", "quote_asset", "settle_asset",
+		"market_surface", "instrument_kind", "status_raw", "status_normalized", "confidence",
+		"observed_at", "source_snapshot_ts", "published_at", "listing_time_ts",
+		"source_endpoint", "source_url", "fingerprint", "payload_json", "raw_payload_json", "raw_payload_hash",
+	}).AddRow(
+		int64(1702), SignalTop30Divergence, "cex_only", "top30", nil, nil, nil,
+		"CEX_ONLY", "CEX 独有热门 · edgeX 未上线", nil, nil, nil,
+		"perp", "canonical", nil, nil, nil,
+		now, nil, nil, nil,
+		nil, nil, "top30_divergence|cex_only|2026-05-30", []byte(`{}`), nil, nil,
+	).AddRow(
+		int64(1703), SignalTop30HotGap, "评估上架", "top30", nil, nil, nil,
+		"BEAT", "BEAT-USDT (perp)", nil, nil, nil,
+		"perp", "canonical", nil, nil, nil,
+		now, nil, nil, nil,
+		nil, nil, "top30_hot_gap|BEAT-USDT (perp)|评估上架|2026-05-30", []byte(`{}`), nil, nil,
+	)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).
+		WillReturnRows(rows)
+	// Both rows are aggregator markers — the producer must still
+	// mark them fused so the next tick does not re-process them,
+	// but it must NOT INSERT into t_listing_candidate.
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(1702)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(1703)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	result, err := FuseSignals(context.Background(), repo, FusionDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("FuseSignals err = %v", err)
+	}
+	if result.Candidates != 0 {
+		t.Fatalf("Candidates = %d, want 0 (aggregator signals must not produce candidates)", result.Candidates)
+	}
+	if result.SkippedAggregator != 2 {
+		t.Fatalf("SkippedAggregator = %d, want 2", result.SkippedAggregator)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}

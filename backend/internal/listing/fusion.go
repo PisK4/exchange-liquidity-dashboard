@@ -32,7 +32,27 @@ type FusionDeps struct {
 type FusionResult struct {
 	Signals    int
 	Candidates int
-	FailClosed string
+	// SkippedAggregator counts signals whose signal_type is an
+	// aggregator marker (top30_hot_gap / top30_divergence) rather
+	// than a candidate-bearing source (instrument_diff /
+	// announcement_listing). Such signals are marked fused so the
+	// next tick ignores them, but they NEVER produce a candidate.
+	SkippedAggregator int
+	FailClosed        string
+}
+
+// isCandidateBearingSignal reports whether a signal type carries
+// real market-existence evidence that should fuse into a candidate.
+// Top30 signals are aggregator markers used for delivery dedupe and
+// MUST NOT generate candidates — they would surface as mojibake
+// "CEX_ONLY" / "DEX_ONLY" rows that pollute t_listing_candidate
+// and ultimately the Lark decision-card group.
+func isCandidateBearingSignal(signalType string) bool {
+	switch signalType {
+	case SignalInstrumentDiff, SignalAnnouncementListing:
+		return true
+	}
+	return false
 }
 
 // FuseSignals reads the next batch of unfused signals and groups them
@@ -86,7 +106,12 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 	}
 	groups := make(map[groupKey]*group)
 	order := make([]groupKey, 0)
+	aggregatorIDs := make([]int64, 0)
 	for _, s := range signals {
+		if !isCandidateBearingSignal(s.SignalType) {
+			aggregatorIDs = append(aggregatorIDs, s.ID)
+			continue
+		}
 		key := groupKey{strings.ToUpper(s.CanonicalSymbol), s.MarketSurface, s.InstrumentKind}
 		g, ok := groups[key]
 		if !ok {
@@ -174,6 +199,15 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 		}
 		out.Candidates++
 		out.Signals += len(g.signals)
+	}
+	// Drain aggregator signals: they must NOT remain in fused_at IS
+	// NULL state or the next tick re-reads + re-skips them forever,
+	// growing the unfused queue and slowing the listing engine.
+	for _, id := range aggregatorIDs {
+		if err := repo.MarkSignalFused(ctx, id, now); err != nil {
+			return out, fmt.Errorf("mark aggregator signal fused %d: %w", id, err)
+		}
+		out.SkippedAggregator++
 	}
 	return out, nil
 }
