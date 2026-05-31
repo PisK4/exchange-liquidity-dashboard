@@ -1,0 +1,113 @@
+package fetcher
+
+import (
+	"net/http"
+	"testing"
+	"time"
+
+	"edgex-dashboard/backend/internal/config"
+)
+
+func TestBuildListingSourcesAssemblesFullDefaultRoster(t *testing.T) {
+	cfg := defaultListingAgentCfg()
+	deps := HTTPDeps{Client: &http.Client{Timeout: time.Second}}
+	got, err := BuildListingSources(cfg.Sources, deps)
+	if err != nil {
+		t.Fatalf("build err = %v", err)
+	}
+	if len(got.Instrument) != 6 {
+		t.Fatalf("want 6 instrument sources, got %d", len(got.Instrument))
+	}
+	if len(got.Announcement) != 3 {
+		t.Fatalf("want 3 announcement sources, got %d", len(got.Announcement))
+	}
+	wantInstr := map[string]string{
+		"binance":     "usdm_futures",
+		"bybit":       "linear",
+		"okx":         "swap",
+		"bitget":      "usdt_futures",
+		"mexc":        "contract",
+		"hyperliquid": "perp",
+	}
+	for _, src := range got.Instrument {
+		if wantMT, ok := wantInstr[src.Platform]; !ok || wantMT != src.MarketType {
+			t.Fatalf("unexpected instrument source %s/%s", src.Platform, src.MarketType)
+		}
+		if src.Fetch == nil {
+			t.Fatalf("%s/%s missing Fetch closure", src.Platform, src.MarketType)
+		}
+		if src.SourceKey == "" || src.SourceURL == "" {
+			t.Fatalf("%s/%s missing source key/url", src.Platform, src.MarketType)
+		}
+	}
+	wantAnn := map[string]bool{"bybit": true, "bitget": true, "binance": true}
+	for _, src := range got.Announcement {
+		if !wantAnn[src.Platform] {
+			t.Fatalf("unexpected announcement source %s", src.Platform)
+		}
+		if src.Fetch == nil || src.Parse == nil {
+			t.Fatalf("%s announcement source missing Fetch/Parse", src.Platform)
+		}
+	}
+}
+
+func TestBuildListingSourcesSkipsDisabledSubsystems(t *testing.T) {
+	cfg := defaultListingAgentCfg()
+	cfg.Sources.InstrumentDiff.Enabled = false
+	got, err := BuildListingSources(cfg.Sources, HTTPDeps{})
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if len(got.Instrument) != 0 {
+		t.Fatalf("instrument subsystem disabled but got %d sources", len(got.Instrument))
+	}
+	if len(got.Announcement) != 3 {
+		t.Fatalf("announcement subsystem must still be enabled, got %d", len(got.Announcement))
+	}
+}
+
+func TestBuildListingSourcesSkipsDisabledPolls(t *testing.T) {
+	cfg := defaultListingAgentCfg()
+	cfg.Sources.InstrumentDiff.Polls[0].Enabled = false
+	cfg.Sources.Announcement.Polls[1].Enabled = false
+	got, err := BuildListingSources(cfg.Sources, HTTPDeps{})
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if len(got.Instrument) != 5 {
+		t.Fatalf("want 5 instrument sources after disable, got %d", len(got.Instrument))
+	}
+	if len(got.Announcement) != 2 {
+		t.Fatalf("want 2 announcement sources after disable, got %d", len(got.Announcement))
+	}
+}
+
+func TestBuildListingSourcesRejectsUnknownPlatformMarketTypeCombo(t *testing.T) {
+	cfg := config.ListingSourcesConfig{
+		InstrumentDiff: config.ListingInstrumentDiffConfig{
+			Enabled: true,
+			Polls:   []config.ListingSourcePollConfig{{Platform: "foobar", MarketType: "swap", Enabled: true}},
+		},
+	}
+	if _, err := BuildListingSources(cfg, HTTPDeps{}); err == nil {
+		t.Fatalf("expected error on unknown platform/market_type combo")
+	}
+}
+
+func TestBuildListingSourcesRejectsUnknownAnnouncementPlatform(t *testing.T) {
+	cfg := config.ListingSourcesConfig{
+		Announcement: config.ListingAnnouncementConfig{
+			Enabled: true,
+			Polls:   []config.ListingSourcePollConfig{{Platform: "kraken", Enabled: true}},
+		},
+	}
+	if _, err := BuildListingSources(cfg, HTTPDeps{}); err == nil {
+		t.Fatalf("expected error on unknown announcement platform")
+	}
+}
+
+// defaultListingAgentCfg returns a copy of the production default
+// roster so each test starts from a clean, known state.
+func defaultListingAgentCfg() config.ListingAgentConfig {
+	return config.Default().Runtime.ListingAgent
+}
