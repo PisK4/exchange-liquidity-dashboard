@@ -60,6 +60,31 @@ func TestParseBinanceCMSSchemaDrift(t *testing.T) {
 	}
 }
 
+func TestParseBinanceCMSAcceptsNumericID(t *testing.T) {
+	// Binance bapi sometimes returns id as a JSON number rather
+	// than a string. The parser must accept both forms to survive
+	// schema drift across catalogs / dashboard generations.
+	raw := []byte(`{"id":167890,"title":"ABCDEF USDT Perpetual","releaseDate":1893456000000}`)
+	got, err := ParseBinanceCMSAnnouncement(raw)
+	if err != nil {
+		t.Fatalf("Parse err = %v", err)
+	}
+	if got.AnnouncementID != "167890" {
+		t.Fatalf("announcement_id = %q, want 167890", got.AnnouncementID)
+	}
+}
+
+func TestParseBinanceCMSAcceptsStringID(t *testing.T) {
+	raw := []byte(`{"id":"abc-123","title":"ABCDEF USDT Perpetual","releaseDate":1893456000000}`)
+	got, err := ParseBinanceCMSAnnouncement(raw)
+	if err != nil {
+		t.Fatalf("Parse err = %v", err)
+	}
+	if got.AnnouncementID != "abc-123" {
+		t.Fatalf("announcement_id = %q, want abc-123", got.AnnouncementID)
+	}
+}
+
 func TestParseSpotAnnouncementIsRejected(t *testing.T) {
 	raw := []byte(`{"id":"s1","title":"ABC Will Be Listed on Spot Trading"}`)
 	got, err := ParseBybitAnnouncement(raw)

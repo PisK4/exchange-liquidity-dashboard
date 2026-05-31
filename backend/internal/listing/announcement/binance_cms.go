@@ -6,15 +6,21 @@ import (
 )
 
 type binanceCMSAnnouncementRaw struct {
-	ID           string      `json:"id"`
-	Code         string      `json:"code"`
-	Title        string      `json:"title"`
-	Body         string      `json:"body"`
-	URL          string      `json:"url"`
-	CategoryName string      `json:"catalogName"`
-	ReleaseDate  json.Number `json:"releaseDate"`
-	UpdateTime   json.Number `json:"updateTime"`
-	Language     string      `json:"language"`
+	// Binance's bapi CMS surface has historically returned `id`
+	// either as a JSON string ("123") or as a bare number (123)
+	// depending on which catalog (and which generation of the
+	// dashboard frontend) the article belongs to. Accept both by
+	// declaring the field as json.RawMessage and normalising the
+	// string form below.
+	ID           json.RawMessage `json:"id"`
+	Code         string          `json:"code"`
+	Title        string          `json:"title"`
+	Body         string          `json:"body"`
+	URL          string          `json:"url"`
+	CategoryName string          `json:"catalogName"`
+	ReleaseDate  json.Number     `json:"releaseDate"`
+	UpdateTime   json.Number     `json:"updateTime"`
+	Language     string          `json:"language"`
 }
 
 func ParseBinanceCMSAnnouncement(raw json.RawMessage) (ParsedAnnouncement, error) {
@@ -22,7 +28,7 @@ func ParseBinanceCMSAnnouncement(raw json.RawMessage) (ParsedAnnouncement, error
 	if err := json.Unmarshal(raw, &p); err != nil {
 		return ParsedAnnouncement{}, &SchemaDriftError{Platform: "binance", Message: "decode cms announcement: " + err.Error()}
 	}
-	id := strings.TrimSpace(p.ID)
+	id := strings.Trim(strings.TrimSpace(string(p.ID)), `"`)
 	if id == "" {
 		id = strings.TrimSpace(p.Code)
 	}

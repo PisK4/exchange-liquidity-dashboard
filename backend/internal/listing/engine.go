@@ -294,7 +294,9 @@ func (e *Engine) Run(ctx context.Context) error {
 		if err != nil {
 			e.deps.Logger.Printf("listing engine: tick error: %v", err)
 		}
-		e.deps.Logger.Printf("listing engine tick: fusion=%+v top30=%+v divergence=%+v liquidity=%+v delivery=%+v",
+		e.deps.Logger.Printf("listing engine tick: instrument=%s announcement=%s fusion=%+v top30=%+v divergence=%+v liquidity=%+v delivery=%+v",
+			formatInstrumentPollSummaries(summary.InstrumentPolls),
+			formatAnnouncementPollSummaries(summary.AnnouncementPolls),
 			summary.Fusion, summary.Top30Push, summary.DivergencePush, summary.LiquidityAlert, summary.Delivery)
 		select {
 		case <-ctx.Done():
@@ -302,6 +304,35 @@ func (e *Engine) Run(ctx context.Context) error {
 		case <-ticker.C:
 		}
 	}
+}
+
+// formatInstrumentPollSummaries renders the per-source instrument
+// poll results into a single line so the engine tick log makes the
+// cold-start baseline pass observable at a glance.
+func formatInstrumentPollSummaries(polls []InstrumentPollResult) string {
+	if len(polls) == 0 {
+		return "[]"
+	}
+	parts := make([]string, 0, len(polls))
+	for _, p := range polls {
+		parts = append(parts, fmt.Sprintf("%s/%s{baseline=%t fetched=%d snapshots=%d signals=%d}",
+			p.Platform, p.MarketType, p.Baseline, p.Fetched, p.SnapshotsUpserted, p.SignalsEmitted))
+	}
+	return "[" + strings.Join(parts, " ") + "]"
+}
+
+// formatAnnouncementPollSummaries renders the per-source announcement
+// poll results into a single line.
+func formatAnnouncementPollSummaries(polls []AnnouncementPollResult) string {
+	if len(polls) == 0 {
+		return "[]"
+	}
+	parts := make([]string, 0, len(polls))
+	for _, p := range polls {
+		parts = append(parts, fmt.Sprintf("%s{baseline=%t fetched=%d announcements=%d signals=%d skips=%d}",
+			p.Platform, p.Baseline, p.Fetched, p.Announcements, p.SignalsEmitted, p.ParseSkips))
+	}
+	return "[" + strings.Join(parts, " ") + "]"
 }
 
 // resolveListingWebhookURL picks the webhook for listing-announcement
