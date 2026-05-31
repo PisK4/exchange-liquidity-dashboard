@@ -14,6 +14,7 @@ import (
 	"edgex-dashboard/backend/internal/collector"
 	"edgex-dashboard/backend/internal/config"
 	"edgex-dashboard/backend/internal/listing"
+	"edgex-dashboard/backend/internal/listing/fetcher"
 	"edgex-dashboard/backend/internal/marketdata/coingecko"
 )
 
@@ -155,8 +156,25 @@ func main() {
 	}
 	resolveListingCallbackSecret(&cfg)
 	if roleStartsListing(*role) && cfg.Runtime.ListingAgent.Enabled && listingRepo != nil {
+		listingHTTPClient, err := fetcher.NewHTTPClient(fetcher.DefaultRequestTimeout, cfg.Runtime.ExchangeProxy)
+		if err != nil {
+			log.Fatalf("listing fetcher http client: %v", err)
+		}
+		listingHTTPDeps := fetcher.HTTPDeps{Client: listingHTTPClient}
+		listingSources, err := fetcher.BuildListingSources(cfg.Runtime.ListingAgent.Sources, listingHTTPDeps)
+		if err != nil {
+			log.Fatalf("listing build sources: %v", err)
+		}
+		for _, src := range listingSources.Instrument {
+			log.Printf("listing instrument source armed: platform=%s market_type=%s url=%s", src.Platform, src.MarketType, src.SourceURL)
+		}
+		for _, src := range listingSources.Announcement {
+			log.Printf("listing announcement source armed: platform=%s url=%s", src.Platform, src.SourceURL)
+		}
 		engine := listing.NewEngine(cfg, listingRepo, listing.EngineDeps{
-			LoadUniverse: listingUniverseLoader,
+			LoadUniverse:        listingUniverseLoader,
+			InstrumentSources:   listingSources.Instrument,
+			AnnouncementSources: listingSources.Announcement,
 		})
 		if *runOnce && *role == "listing" {
 			summary, err := engine.RunOnce(ctx)
