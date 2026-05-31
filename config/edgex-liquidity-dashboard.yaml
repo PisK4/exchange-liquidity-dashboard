@@ -292,3 +292,38 @@ Runtime:
       send_spacing: 30s
     candidate:
       merge_window: 14d
+    # Phase 2 — Lark decision card + button callback.
+    # See docs/feat/listing-agent-decision-card-callback.md for the
+    # button matrix, cooldown contract and callback security model.
+    decision_card:
+      # Master switch for the per-tick ProduceDecisionCards step in
+      # listing.Engine.RunOnce. The producer writes one
+      # t_listing_risk_plan + one t_listing_delivery_outbox row per
+      # actionable candidate (lifecycle ∈ confirmed_listing_candidate
+      # / announced_pending_api / api_detected_no_announcement /
+      # pre_assessment_observed) and dedupe-keys by UTC day so a
+      # restart inside the same day cannot re-emit.
+      enabled: true
+      # Suppression window after the operator clicks 忽略. Default is
+      # the 24h §5 contract; bump it for symbols that should stay
+      # quiet longer (e.g. low-tier observed but no longer growing).
+      ignore_cooldown: 24h
+      # Per-tick cap on new decision cards. Phase 3 smoke uses 5 so
+      # all current real candidates (INJ / LAB / ALLO / BSB / BEAT)
+      # receive a card on the same tick. Going below the candidate
+      # count starves the cooldown gate: ListCandidates ORDER BY
+      # last_observed_at DESC + LIMIT N would return the same top-N
+      # each tick and the tail never gets evaluated. Tune down once
+      # the producer learns to page through the candidate table or
+      # the inflow rate stabilises.
+      max_per_tick: 5
+      callback:
+        # Leaving secret + secret_env both blank keeps
+        # /api/listing/callback returning 503: the cards land in
+        # Lark but the buttons do not yet POST back. Provision the
+        # operator open_id whitelist + secret only once we have a
+        # sandbox Lark group set up for click-through validation.
+        secret: ""
+        secret_env: LARK_LISTING_CALLBACK_SECRET
+        max_clock_skew: 300s
+        operator_allow: []
