@@ -135,7 +135,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 		if key.SourceKey == "" {
 			key.SourceKey = fmt.Sprintf("listing/instrument/%s/%s", src.Platform, src.MarketType)
 		}
-		var pollRes InstrumentPollResult
+		pollRes := InstrumentPollResult{Platform: src.Platform, MarketType: src.MarketType}
 		outcome, err := PollWithSourceHealth(ctx, e.repo, key, pollHealthCfg, func(ctx context.Context) error {
 			var pollErr error
 			pollRes, pollErr = RunInstrumentPoll(ctx, e.repo, src, InstrumentPollDeps{Now: e.deps.Now})
@@ -156,7 +156,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 		if key.SourceKey == "" {
 			key.SourceKey = fmt.Sprintf("listing/announcement/%s", src.Platform)
 		}
-		var pollRes AnnouncementPollResult
+		pollRes := AnnouncementPollResult{Platform: src.Platform}
 		outcome, err := PollWithSourceHealth(ctx, e.repo, key, pollHealthCfg, func(ctx context.Context) error {
 			var pollErr error
 			pollRes, pollErr = RunAnnouncementPoll(ctx, e.repo, src, AnnouncementPollDeps{Now: e.deps.Now})
