@@ -158,6 +158,16 @@ func (r *Repository) UpsertCandidate(ctx context.Context, c CandidateUpsert) (in
 	return id, nil
 }
 
+// ErrSignalSilentFail is returned by InsertSignal when MySQL reported
+// RowsAffected=0 (the duplicate-key path) but the subsequent
+// fingerprint lookup found no matching row. This means the INSERT
+// IGNORE silently dropped the row for a reason other than the unique
+// key — e.g. a column-length truncation under strict sql_mode, a
+// constraint violation, or a server-side warning that MySQL chose to
+// demote. The error message points to SHOW WARNINGS so operators can
+// see the actual cause.
+var ErrSignalSilentFail = errors.New("insert signal: affected=0 and fingerprint lookup missed (silent INSERT IGNORE drop — check SHOW WARNINGS for truncation / constraint demotion)")
+
 // InsertSignal writes a SignalObservation with INSERT IGNORE keyed by
 // fingerprint. Returns (id, inserted, err). When inserted=false the
 // fingerprint already existed and the returned id resolves to the
@@ -212,10 +222,20 @@ func (r *Repository) InsertSignal(ctx context.Context, s SignalObservation) (int
 	}
 	var existing int64
 	row := r.db.QueryRowContext(ctx, `SELECT id FROM t_listing_signal_observation WHERE fingerprint = ?`, s.Fingerprint)
-	if err := row.Scan(&existing); err != nil {
+	switch err := row.Scan(&existing); {
+	case err == nil:
+		return existing, false, nil
+	case errors.Is(err, sql.ErrNoRows):
+		// Neither inserted nor previously stored — the row was dropped
+		// silently. Surface this as a typed, diagnostic error so the
+		// poll loop can downgrade it to a warning AND on-call can pin
+		// the actual cause via SHOW WARNINGS instead of chasing a
+		// misleading sql.ErrNoRows.
+		return 0, false, fmt.Errorf("%w (signal_type=%s subtype=%s platform=%s symbol=%s fingerprint_len=%d)",
+			ErrSignalSilentFail, s.SignalType, s.SignalSubtype, s.SourcePlatform, s.CanonicalSymbol, len(s.Fingerprint))
+	default:
 		return 0, false, fmt.Errorf("resolve signal id for fingerprint: %w", err)
 	}
-	return existing, false, nil
 }
 
 // LinkCandidateSignal records a candidate→signal relationship in
@@ -308,8 +328,7 @@ func (r *Repository) InsertAnnouncementSymbolAndSignal(
 		sym.MarketSurface, sym.InstrumentKind, sym.SignalSubtype, nullTimePtr(sym.ListingTimeTS)); err != nil {
 		return 0, false, err
 	}
-	fingerprint := fmt.Sprintf("announcement_listing|%s|%s|%s|%s|%s",
-		platform, announcementExternalID, sym.CanonicalSymbol, sym.MarketSurface, sym.InstrumentKind)
+	fingerprint := announcementListingFingerprint(platform, announcementExternalID, sym.CanonicalSymbol, sym.MarketSurface, sym.InstrumentKind)
 	rawPayloadHash := ""
 	if len(rawPayload) > 0 {
 		sum := sha256.Sum256(rawPayload)
@@ -331,6 +350,17 @@ func (r *Repository) InsertAnnouncementSymbolAndSignal(
 		RawPayloadHash:  rawPayloadHash,
 	}
 	return r.InsertSignal(ctx, signal)
+}
+
+// announcementListingFingerprint returns the deterministic per-symbol
+// fingerprint for the announcement_listing signal family. Mirrors
+// instrumentDiffFingerprint: sha256-prefixed so the result is always
+// 84 chars regardless of the (often UUID-length) announcement
+// external id, and never collides with the legacy plaintext format.
+func announcementListingFingerprint(platform, announcementExternalID, canonical, surface, kind string) string {
+	payload := strings.Join([]string{platform, announcementExternalID, canonical, surface, kind}, "|")
+	sum := sha256.Sum256([]byte(payload))
+	return "announcement_listing:" + hex.EncodeToString(sum[:])
 }
 
 func buildAnnouncementPayload(announcementID int64, externalID string, sym annSymbol) json.RawMessage {

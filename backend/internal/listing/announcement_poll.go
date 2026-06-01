@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"edgex-dashboard/backend/internal/listing/announcement"
@@ -41,8 +42,14 @@ type AnnouncementPollResult struct {
 // AnnouncementPollDeps wires the clock; the production poller passes
 // a UTC time.Now wrapper, tests inject a fixed clock so observed_at
 // and the audit timestamps are deterministic.
+//
+// Logger is consulted on per-announcement / per-symbol best-effort
+// failures so a single bad fingerprint or transient write error does
+// NOT abort the rest of the tick — see the parallel comment on
+// InstrumentPollDeps for the failure mode this guards against.
 type AnnouncementPollDeps struct {
-	Now func() time.Time
+	Now    func() time.Time
+	Logger *log.Logger
 }
 
 // RunAnnouncementPoll executes one pass over the announcement source.
@@ -73,6 +80,9 @@ func RunAnnouncementPoll(ctx context.Context, repo *Repository, src Announcement
 	if deps.Now == nil {
 		deps.Now = func() time.Time { return time.Now().UTC() }
 	}
+	if deps.Logger == nil {
+		deps.Logger = log.Default()
+	}
 	if src.Platform == "" {
 		return AnnouncementPollResult{}, errors.New("announcement poll: source missing platform")
 	}
@@ -95,10 +105,20 @@ func RunAnnouncementPoll(ctx context.Context, repo *Repository, src Announcement
 	res.Fetched = len(raws)
 	now := deps.Now()
 
+	// Per-announcement processing is best-effort for transient /
+	// per-item failures, but schema-drift errors must still bubble up
+	// so the source-health wrapper can flip the source to
+	// schema_drift status (the dashboard signal that the parser
+	// itself is broken).
 	for _, raw := range raws {
-		parsed, err := src.Parse(raw)
-		if err != nil {
-			return res, fmt.Errorf("parse %s: %w", src.Platform, err)
+		parsed, parseErr := src.Parse(raw)
+		if parseErr != nil {
+			var drift *announcement.SchemaDriftError
+			if errors.As(parseErr, &drift) {
+				return res, fmt.Errorf("parse %s: %w", src.Platform, parseErr)
+			}
+			deps.Logger.Printf("listing announcement poll: parse %s: %v (skipping item)", src.Platform, parseErr)
+			continue
 		}
 
 		// On warm path decide whether the parent is new BEFORE the
@@ -106,15 +126,20 @@ func RunAnnouncementPoll(ctx context.Context, repo *Repository, src Announcement
 		// whether to fan out to the child symbols + signal rows.
 		alreadySeen := false
 		if hasBaseline {
-			alreadySeen, err = repo.HasAnnouncementForExternalID(ctx, src.Platform, parsed.AnnouncementID)
-			if err != nil {
-				return res, fmt.Errorf("has announcement external id %s/%s: %w", src.Platform, parsed.AnnouncementID, err)
+			seen, seenErr := repo.HasAnnouncementForExternalID(ctx, src.Platform, parsed.AnnouncementID)
+			if seenErr != nil {
+				deps.Logger.Printf("listing announcement poll: has announcement external id %s/%s: %v (skipping item)",
+					src.Platform, parsed.AnnouncementID, seenErr)
+				continue
 			}
+			alreadySeen = seen
 		}
 
-		announcementID, err := repo.UpsertAnnouncement(ctx, parsed)
-		if err != nil {
-			return res, fmt.Errorf("upsert announcement %s/%s: %w", src.Platform, parsed.AnnouncementID, err)
+		announcementID, upErr := repo.UpsertAnnouncement(ctx, parsed)
+		if upErr != nil {
+			deps.Logger.Printf("listing announcement poll: upsert announcement %s/%s: %v (skipping item)",
+				src.Platform, parsed.AnnouncementID, upErr)
+			continue
 		}
 		res.Announcements++
 
@@ -131,9 +156,10 @@ func RunAnnouncementPoll(ctx context.Context, repo *Repository, src Announcement
 
 		rawPayload := append([]byte(nil), parsed.RawPayloadJSON...)
 		for _, sym := range parsed.Symbols {
-			_, _, err := repo.InsertAnnouncementSymbolAndSignal(ctx, announcementID, src.Platform, parsed.AnnouncementID, sym, rawPayload, now)
-			if err != nil {
-				return res, fmt.Errorf("insert announcement signal %s/%s/%s: %w", src.Platform, parsed.AnnouncementID, sym.CanonicalSymbol, err)
+			if _, _, sigErr := repo.InsertAnnouncementSymbolAndSignal(ctx, announcementID, src.Platform, parsed.AnnouncementID, sym, rawPayload, now); sigErr != nil {
+				deps.Logger.Printf("listing announcement poll: insert announcement signal %s/%s/%s: %v (continuing tick)",
+					src.Platform, parsed.AnnouncementID, sym.CanonicalSymbol, sigErr)
+				continue
 			}
 			res.SignalsEmitted++
 		}

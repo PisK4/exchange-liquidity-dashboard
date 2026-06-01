@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -104,6 +105,51 @@ func TestRepositoryInsertSignalRespectsFingerprintIdempotency(t *testing.T) {
 	}
 	if inserted2 || id2 != 42 {
 		t.Fatalf("second insert: inserted=%v id=%d, want inserted=false id=42", inserted2, id2)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+// TestRepositoryInsertSignalSurfacesSilentFail locks down the
+// regression behaviour introduced after the 2026-06-01 root-cause:
+// when INSERT IGNORE reports affected=0 because MySQL silently
+// dropped the row (e.g. fingerprint column overflow under strict
+// sql_mode), the fallback SELECT must distinguish "duplicate key
+// already there" (returns id) from "row never landed" (returns
+// ErrSignalSilentFail) so callers can downgrade the failure to a
+// warning and operators can see the actual constraint via SHOW
+// WARNINGS instead of chasing a misleading sql.ErrNoRows.
+func TestRepositoryInsertSignalSurfacesSilentFail(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+	signal := SignalObservation{
+		SignalType:      SignalInstrumentDiff,
+		SignalSubtype:   "metadata_changed",
+		SourcePlatform:  "binance",
+		CanonicalSymbol: "BTC",
+		MarketSurface:   "perp",
+		InstrumentKind:  "canonical",
+		ObservedAt:      now,
+		Fingerprint:     "instrument_diff:" + strings.Repeat("a", 64),
+		PayloadJSON:     json.RawMessage(`{"diff_subtype":"metadata_changed"}`),
+	}
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_signal_observation")).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id FROM t_listing_signal_observation WHERE fingerprint")).
+		WithArgs(signal.Fingerprint).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+
+	_, inserted, err := repo.InsertSignal(context.Background(), signal)
+	if err == nil {
+		t.Fatalf("InsertSignal err = nil, want ErrSignalSilentFail")
+	}
+	if !errors.Is(err, ErrSignalSilentFail) {
+		t.Fatalf("InsertSignal err = %v, want errors.Is(err, ErrSignalSilentFail)", err)
+	}
+	if inserted {
+		t.Fatalf("InsertSignal inserted = true on silent-fail path")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)

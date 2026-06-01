@@ -303,6 +303,87 @@ func TestRunInstrumentPollFullMatchesLegacyBehaviour(t *testing.T) {
 	}
 }
 
+// TestRunInstrumentPollContinuesAfterSignalInsertFailure locks down
+// the best-effort guarantee added after the 2026-06-01 root-cause:
+// when InsertSignal fails for one instrument (e.g. fingerprint
+// column overflow returns ErrSignalSilentFail), the loop must log
+// and KEEP GOING so the remaining instruments still upsert. Before
+// this fix a single poisoned signal aborted the entire tick and
+// stalled t_listing_instrument_snapshot.last_seen_at for the whole
+// platform, which silently emptied the dashboard runtime
+// listed_universe via the freshness window.
+func TestRunInstrumentPollContinuesAfterSignalInsertFailure(t *testing.T) {
+	now := time.Date(2026, 6, 1, 17, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM t_listing_instrument_snapshot")).
+		WithArgs("binance", "usdm_futures").
+		WillReturnRows(sqlmock.NewRows([]string{"present"}).AddRow(int64(1)))
+
+	// BTC: prev exists with different hash → diff fires → InsertSignal
+	// returns affected=0 AND the fallback SELECT misses (simulates the
+	// fingerprint-overflow silent-drop seen in production).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, platform, market_type, api_symbol")).
+		WithArgs("binance", "usdm_futures", "BTCUSDT").
+		WillReturnRows(sqlmock.NewRows(instSnapshotCols).AddRow(
+			int64(11), "binance", "usdm_futures", "BTCUSDT", nil, "BTCUSDT",
+			"BTC", "BTC", "USDT", "USDT", "perp",
+			"canonical", "PERPETUAL", "TRADING", "active",
+			"status", nil, nil, false,
+			now.Add(-24*time.Hour), nil, now.Add(-1*time.Hour),
+			[]byte(`{"symbol":"BTCUSDT"}`), "hash-prev-btc", "v1",
+		))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_signal_observation")).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id FROM t_listing_signal_observation WHERE fingerprint")).
+		WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	// CRITICAL: snapshot upsert MUST still happen for BTC despite the
+	// signal failure — otherwise last_seen_at goes stale.
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
+		WillReturnResult(sqlmock.NewResult(11, 2))
+
+	// ETH: prev exists, same hash, no signal — proves the loop kept
+	// going past BTC's signal failure.
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, platform, market_type, api_symbol")).
+		WithArgs("binance", "usdm_futures", "ETHUSDT").
+		WillReturnRows(sqlmock.NewRows(instSnapshotCols).AddRow(
+			int64(12), "binance", "usdm_futures", "ETHUSDT", nil, "ETHUSDT",
+			"ETH", "ETH", "USDT", "USDT", "perp",
+			"canonical", "PERPETUAL", "TRADING", "active",
+			"status", nil, nil, false,
+			now.Add(-24*time.Hour), nil, now.Add(-1*time.Hour),
+			[]byte(`{"symbol":"ETHUSDT"}`), "hasheth", "v1",
+		))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
+		WillReturnResult(sqlmock.NewResult(12, 2))
+
+	btc := newBTCNormalized()
+	btc.RawJSONHash = "hash-new-btc"
+	src := InstrumentSource{
+		Platform:   "binance",
+		MarketType: "usdm_futures",
+		Fetch: func(ctx context.Context) ([]instrument.NormalizedInstrument, error) {
+			return []instrument.NormalizedInstrument{btc, newETHNormalized()}, nil
+		},
+	}
+	res, err := RunInstrumentPoll(context.Background(), repo, src, InstrumentPollDeps{
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("RunInstrumentPoll err = %v, want nil (best-effort path)", err)
+	}
+	if res.SignalsEmitted != 0 {
+		t.Errorf("SignalsEmitted = %d, want 0 (the only diff event failed)", res.SignalsEmitted)
+	}
+	if res.SnapshotsUpserted != 2 {
+		t.Errorf("SnapshotsUpserted = %d, want 2 (best-effort must roll BOTH last_seen_at despite BTC's signal failure)", res.SnapshotsUpserted)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 // TestRunInstrumentPollDiffSubtypePropagatesToSignal makes sure a
 // status transition seen on a known instrument propagates as a
 // dedicated signal subtype (e.g. delisted), not the generic

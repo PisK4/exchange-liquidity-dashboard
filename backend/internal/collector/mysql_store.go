@@ -27,7 +27,7 @@ CREATE TABLE IF NOT EXISTS t_collection_status (id BIGINT AUTO_INCREMENT PRIMARY
 CREATE TABLE IF NOT EXISTS t_listing_instrument_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, market_type VARCHAR(32) NOT NULL, api_symbol VARCHAR(96) NOT NULL, api_market_id VARCHAR(96) NULL, display_symbol VARCHAR(128) NULL, canonical_symbol VARCHAR(64) NULL, base_asset VARCHAR(64) NULL, quote_asset VARCHAR(64) NULL, settle_asset VARCHAR(64) NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, contract_type VARCHAR(64) NULL, status_raw VARCHAR(64) NULL, status_normalized VARCHAR(32) NOT NULL, status_field_name VARCHAR(64) NULL, listing_time_ts TIMESTAMP NULL, listing_time_field_name VARCHAR(64) NULL, delist_flag TINYINT(1) NOT NULL DEFAULT 0, first_seen_at TIMESTAMP NOT NULL, previous_seen_at TIMESTAMP NULL, last_seen_at TIMESTAMP NOT NULL, raw_json JSON NOT NULL, raw_json_hash VARCHAR(64) NOT NULL, normalizer_version VARCHAR(32) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_instrument (platform, market_type, api_symbol), KEY idx_listing_instrument_symbol (canonical_symbol, market_surface, instrument_kind), KEY idx_listing_instrument_status (platform, market_type, status_normalized, last_seen_at), KEY idx_listing_instrument_listing_time (listing_time_ts));
 CREATE TABLE IF NOT EXISTS t_listing_announcement (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, announcement_id VARCHAR(191) NOT NULL, announcement_url VARCHAR(512) NULL, title TEXT NOT NULL, description TEXT NULL, category VARCHAR(128) NULL, tags_json JSON NULL, language VARCHAR(32) NULL, published_at TIMESTAMP NULL, source_updated_at TIMESTAMP NULL, parsed_market_type VARCHAR(32) NULL, effective_listing_time TIMESTAMP NULL, parse_confidence VARCHAR(16) NOT NULL, raw_payload_json JSON NOT NULL, raw_payload_hash VARCHAR(64) NOT NULL, parser_version VARCHAR(32) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_announcement (platform, announcement_id), KEY idx_listing_announcement_published (platform, published_at), KEY idx_listing_announcement_hash (raw_payload_hash));
 CREATE TABLE IF NOT EXISTS t_listing_announcement_symbol (id BIGINT AUTO_INCREMENT PRIMARY KEY, announcement_id BIGINT NOT NULL, canonical_symbol VARCHAR(64) NOT NULL, display_symbol VARCHAR(128) NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, signal_subtype VARCHAR(64) NOT NULL, listing_time_ts TIMESTAMP NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_announcement_symbol (announcement_id, canonical_symbol, market_surface, instrument_kind), KEY idx_listing_announcement_symbol_symbol (canonical_symbol, market_surface, instrument_kind));
-CREATE TABLE IF NOT EXISTS t_listing_signal_observation (id BIGINT AUTO_INCREMENT PRIMARY KEY, signal_type VARCHAR(32) NOT NULL, signal_subtype VARCHAR(64) NULL, source_platform VARCHAR(32) NOT NULL, market_type VARCHAR(32) NULL, api_symbol VARCHAR(96) NULL, api_market_id VARCHAR(96) NULL, canonical_symbol VARCHAR(64) NOT NULL, display_symbol VARCHAR(128) NULL, base_asset VARCHAR(64) NULL, quote_asset VARCHAR(64) NULL, settle_asset VARCHAR(64) NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, status_raw VARCHAR(64) NULL, status_normalized VARCHAR(32) NULL, confidence VARCHAR(16) NULL, observed_at TIMESTAMP NOT NULL, source_snapshot_ts TIMESTAMP NULL, published_at TIMESTAMP NULL, listing_time_ts TIMESTAMP NULL, source_endpoint VARCHAR(255) NULL, source_url VARCHAR(512) NULL, fingerprint VARCHAR(96) NOT NULL, payload_json JSON NOT NULL, raw_payload_json JSON NULL, raw_payload_hash VARCHAR(64) NULL, fused_at TIMESTAMP NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_signal_fingerprint (fingerprint), KEY idx_listing_signal_type_time (signal_type, observed_at), KEY idx_listing_signal_identity (canonical_symbol, market_surface, instrument_kind, observed_at), KEY idx_listing_signal_unfused (fused_at, observed_at));
+CREATE TABLE IF NOT EXISTS t_listing_signal_observation (id BIGINT AUTO_INCREMENT PRIMARY KEY, signal_type VARCHAR(32) NOT NULL, signal_subtype VARCHAR(64) NULL, source_platform VARCHAR(32) NOT NULL, market_type VARCHAR(32) NULL, api_symbol VARCHAR(96) NULL, api_market_id VARCHAR(96) NULL, canonical_symbol VARCHAR(64) NOT NULL, display_symbol VARCHAR(128) NULL, base_asset VARCHAR(64) NULL, quote_asset VARCHAR(64) NULL, settle_asset VARCHAR(64) NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, status_raw VARCHAR(64) NULL, status_normalized VARCHAR(32) NULL, confidence VARCHAR(16) NULL, observed_at TIMESTAMP NOT NULL, source_snapshot_ts TIMESTAMP NULL, published_at TIMESTAMP NULL, listing_time_ts TIMESTAMP NULL, source_endpoint VARCHAR(255) NULL, source_url VARCHAR(512) NULL, fingerprint VARCHAR(160) NOT NULL, payload_json JSON NOT NULL, raw_payload_json JSON NULL, raw_payload_hash VARCHAR(64) NULL, fused_at TIMESTAMP NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_signal_fingerprint (fingerprint), KEY idx_listing_signal_type_time (signal_type, observed_at), KEY idx_listing_signal_identity (canonical_symbol, market_surface, instrument_kind, observed_at), KEY idx_listing_signal_unfused (fused_at, observed_at));
 CREATE TABLE IF NOT EXISTS t_listing_candidate (id BIGINT AUTO_INCREMENT PRIMARY KEY, canonical_symbol VARCHAR(64) NOT NULL, display_symbol VARCHAR(128) NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, lifecycle_status VARCHAR(64) NOT NULL, lifecycle_status_label VARCHAR(128) NULL, evidence_kind VARCHAR(64) NOT NULL, confidence_level VARCHAR(32) NOT NULL, business_score DECIMAL(10,4) NULL, business_score_version VARCHAR(32) NULL, recommendation VARCHAR(64) NULL, recommendation_label VARCHAR(128) NULL, source_platforms_json JSON NOT NULL, top30_enrichment_json JSON NULL, first_observed_at TIMESTAMP NOT NULL, last_observed_at TIMESTAMP NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_candidate_identity (canonical_symbol, market_surface, instrument_kind), KEY idx_listing_candidate_status (lifecycle_status, last_observed_at), KEY idx_listing_candidate_score (business_score, last_observed_at));
 CREATE TABLE IF NOT EXISTS t_listing_candidate_signal (id BIGINT AUTO_INCREMENT PRIMARY KEY, candidate_id BIGINT NOT NULL, signal_id BIGINT NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_candidate_signal (candidate_id, signal_id), KEY idx_listing_candidate_signal_signal (signal_id));
 CREATE TABLE IF NOT EXISTS t_listing_source_state (id BIGINT AUTO_INCREMENT PRIMARY KEY, source_key VARCHAR(96) NOT NULL, source_type VARCHAR(32) NOT NULL, platform VARCHAR(32) NOT NULL, status VARCHAR(32) NOT NULL, last_success_at TIMESTAMP NULL, last_error_at TIMESTAMP NULL, consecutive_error_count INT NOT NULL DEFAULT 0, schema_drift_count INT NOT NULL DEFAULT 0, disabled_until TIMESTAMP NULL, last_error TEXT NULL, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_source_state (source_key), KEY idx_listing_source_state_status (status, disabled_until));
@@ -67,6 +67,57 @@ func ApplyMigrations(db *sql.DB) error {
 		if _, err := db.Exec(stmt); err != nil {
 			return fmt.Errorf("migration failed at %q: %w", firstLine(stmt), err)
 		}
+	}
+	return applyListingSchemaPostInit(db)
+}
+
+// applyListingSchemaPostInit runs in-place ALTER TABLE migrations that
+// `CREATE TABLE IF NOT EXISTS` can't pick up on existing prod databases.
+// Each step checks INFORMATION_SCHEMA first so the function stays
+// effectively no-op on every subsequent boot.
+//
+// Currently the only step here widens t_listing_signal_observation
+// fingerprint from VARCHAR(96) to VARCHAR(160) — the original
+// migration sized it for short identifier fingerprints, but the
+// instrument_diff / announcement_listing producers generate up to
+// ~191-char plaintext fingerprints (two 64-char sha256 hashes + prefix
+// metadata) which overflow the column. Under strict sql_mode `INSERT
+// IGNORE` silently demotes the data-too-long error to a warning and
+// drops the row, then the resolve-by-fingerprint SELECT returns no
+// rows and the listing poll loop aborts (see 2026-06-01 root cause).
+// Code-side the producers have switched to sha256-prefixed (~80 char)
+// fingerprints that fit inside the original 96, but we keep the
+// widened column as a defence-in-depth guard against future drift.
+func applyListingSchemaPostInit(db *sql.DB) error {
+	const (
+		listingSignalTable      = "t_listing_signal_observation"
+		fingerprintColumn       = "fingerprint"
+		fingerprintTargetLength = 160
+	)
+	var currentLen sql.NullInt64
+	err := db.QueryRow(`SELECT CHARACTER_MAXIMUM_LENGTH
+		   FROM INFORMATION_SCHEMA.COLUMNS
+		  WHERE TABLE_SCHEMA = DATABASE()
+		    AND TABLE_NAME   = ?
+		    AND COLUMN_NAME  = ?`, listingSignalTable, fingerprintColumn).Scan(&currentLen)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			// Table not present yet (e.g. fresh DB before its CREATE
+			// TABLE in this same ApplyMigrations call had a chance to
+			// run, or running against a DB without the listing schema
+			// at all). Nothing to widen.
+			return nil
+		}
+		return fmt.Errorf("inspect %s.%s width: %w", listingSignalTable, fingerprintColumn, err)
+	}
+	if currentLen.Valid && currentLen.Int64 >= fingerprintTargetLength {
+		return nil
+	}
+	if _, err := db.Exec(fmt.Sprintf(
+		`ALTER TABLE %s MODIFY %s VARCHAR(%d) NOT NULL`,
+		listingSignalTable, fingerprintColumn, fingerprintTargetLength)); err != nil {
+		return fmt.Errorf("widen %s.%s to VARCHAR(%d): %w",
+			listingSignalTable, fingerprintColumn, fingerprintTargetLength, err)
 	}
 	return nil
 }

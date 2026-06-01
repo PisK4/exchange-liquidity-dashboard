@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
+	"strings"
 	"time"
 
 	"edgex-dashboard/backend/internal/listing/instrument"
@@ -61,8 +63,18 @@ type InstrumentPollResult struct {
 // InstrumentPollDeps wires the moving parts the driver needs. The
 // only required field is Now; tests pass a fixed clock so the
 // signal observed_at and the snapshot last_seen_at are deterministic.
+//
+// Logger is consulted when a per-instrument best-effort failure
+// happens (InsertSignal / UpsertInstrumentSnapshot). The driver must
+// not abort the whole tick because of a single bad row — a stale
+// last_seen_at on the remaining 755 binance contracts is how a single
+// poisonous symbol crashes the dashboard runtime listed_universe (see
+// the 2026-06-01 root-cause: fingerprint VARCHAR(96) overflow caused
+// InsertSignal to silently miss → return error → cascading abort of
+// every snapshot upsert in the same tick).
 type InstrumentPollDeps struct {
-	Now func() time.Time
+	Now    func() time.Time
+	Logger *log.Logger
 }
 
 // RunInstrumentPoll executes one full pass over the given source.
@@ -90,6 +102,9 @@ func RunInstrumentPoll(ctx context.Context, repo *Repository, src InstrumentSour
 	if deps.Now == nil {
 		deps.Now = func() time.Time { return time.Now().UTC() }
 	}
+	if deps.Logger == nil {
+		deps.Logger = log.Default()
+	}
 	if src.Platform == "" || src.MarketType == "" {
 		return InstrumentPollResult{}, errors.New("instrument poll: source missing platform/market_type")
 	}
@@ -113,13 +128,22 @@ func RunInstrumentPoll(ctx context.Context, repo *Repository, src InstrumentSour
 	res.Fetched = len(instruments)
 	now := deps.Now()
 
+	// Per-instrument processing is best-effort: a single poisoned row
+	// (signal-insert silent fail, transient deadlock, malformed prev
+	// row) must NOT abort the whole tick — otherwise the remaining
+	// instruments lose their snapshot last_seen_at bump and fall out
+	// of QueryActiveListedBases' freshness window, draining the
+	// dashboard runtime listed_universe to an empty platform.
 	for _, curr := range instruments {
 		var prevSnap *InstrumentSnapshot
 		if hasBaseline {
-			prevSnap, err = repo.LatestInstrumentSnapshotByKey(ctx, src.Platform, src.MarketType, curr.APISymbol)
-			if err != nil {
-				return res, fmt.Errorf("load prev %s/%s/%s: %w", src.Platform, src.MarketType, curr.APISymbol, err)
+			ps, loadErr := repo.LatestInstrumentSnapshotByKey(ctx, src.Platform, src.MarketType, curr.APISymbol)
+			if loadErr != nil {
+				deps.Logger.Printf("listing instrument poll: load prev %s/%s/%s: %v (continuing tick)",
+					src.Platform, src.MarketType, curr.APISymbol, loadErr)
+				continue
 			}
+			prevSnap = ps
 			var prev *instrument.NormalizedInstrument
 			if prevSnap != nil {
 				tmp := snapshotToNormalized(*prevSnap)
@@ -129,8 +153,13 @@ func RunInstrumentPoll(ctx context.Context, repo *Repository, src InstrumentSour
 				events := instrument.Diff(prev, curr, true)
 				for _, ev := range events {
 					signal := buildInstrumentDiffSignal(src, curr, ev, now)
-					if _, _, err := repo.InsertSignal(ctx, signal); err != nil {
-						return res, fmt.Errorf("insert signal %s/%s: %w", curr.APISymbol, ev.Subtype, err)
+					if _, _, sigErr := repo.InsertSignal(ctx, signal); sigErr != nil {
+						// Soft-fail: log and keep going so the snapshot
+						// upsert below still happens. Without this guard
+						// one bad fingerprint poisoned the entire poll.
+						deps.Logger.Printf("listing instrument poll: insert signal %s/%s/%s: %v (continuing tick)",
+							src.Platform, curr.APISymbol, ev.Subtype, sigErr)
+						continue
 					}
 					res.SignalsEmitted++
 					res.DiffSubtypes[ev.Subtype]++
@@ -142,8 +171,10 @@ func RunInstrumentPoll(ctx context.Context, repo *Repository, src InstrumentSour
 		if prevSnap != nil {
 			snap.FirstSeenAt = prevSnap.FirstSeenAt
 		}
-		if err := repo.UpsertInstrumentSnapshot(ctx, snap); err != nil {
-			return res, fmt.Errorf("upsert snapshot %s/%s: %w", src.Platform, curr.APISymbol, err)
+		if upErr := repo.UpsertInstrumentSnapshot(ctx, snap); upErr != nil {
+			deps.Logger.Printf("listing instrument poll: upsert snapshot %s/%s: %v (continuing tick)",
+				src.Platform, curr.APISymbol, upErr)
+			continue
 		}
 		res.SnapshotsUpserted++
 	}
@@ -247,7 +278,27 @@ func buildInstrumentDiffSignal(src InstrumentSource, curr instrument.NormalizedI
 	}
 }
 
+// instrumentDiffFingerprint returns the deterministic per-event row
+// key used to deduplicate t_listing_signal_observation inserts.
+//
+// We sha256-hash the full component tuple instead of concatenating it
+// verbatim because two of the components are themselves 64-char sha256
+// hex digests (RawJSONHashFrom / RawJSONHashTo): the plaintext form
+// blew the column's VARCHAR(96) ceiling and caused INSERT IGNORE to
+// silently drop / truncate, which the resolve-by-fingerprint SELECT
+// then turned into "no rows in result set" and propagated up the call
+// stack as a permanent poll failure (see 2026-06-01 root-cause). The
+// sha256 form is 80 chars total ("instrument_diff:" + 64 hex) so it
+// always fits and is future-proof against further metadata growth.
 func instrumentDiffFingerprint(platform, marketType, apiSymbol string, ev instrument.DiffEvent) string {
-	return fmt.Sprintf("instrument_diff|%s|%s|%s|%s|%s|%s",
-		platform, marketType, apiSymbol, ev.Subtype, ev.RawJSONHashFrom, ev.RawJSONHashTo)
+	payload := strings.Join([]string{
+		platform,
+		marketType,
+		apiSymbol,
+		ev.Subtype,
+		ev.RawJSONHashFrom,
+		ev.RawJSONHashTo,
+	}, "|")
+	sum := sha256.Sum256([]byte(payload))
+	return "instrument_diff:" + hex.EncodeToString(sum[:])
 }
