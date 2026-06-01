@@ -42,7 +42,7 @@ func newBTCNormalized() instrument.NormalizedInstrument {
 		StatusNormalized: "active",
 		StatusFieldName:  "status",
 		RawJSON:          json.RawMessage(`{"symbol":"BTCUSDT"}`),
-		RawJSONHash:      "hashbtc",
+		StableHash:       "hashbtc",
 	}
 }
 
@@ -63,7 +63,7 @@ func newETHNormalized() instrument.NormalizedInstrument {
 		StatusNormalized: "active",
 		StatusFieldName:  "status",
 		RawJSON:          json.RawMessage(`{"symbol":"ETHUSDT"}`),
-		RawJSONHash:      "hasheth",
+		StableHash:       "hasheth",
 	}
 }
 
@@ -136,7 +136,7 @@ func TestRunInstrumentPollWarmEmitsNewSymbolForFreshInstrument(t *testing.T) {
 			"canonical", "PERPETUAL", "TRADING", "active",
 			"status", nil, nil, false,
 			now.Add(-24*time.Hour), nil, now.Add(-1*time.Hour),
-			[]byte(`{"symbol":"BTCUSDT"}`), "hashbtc", "v1",
+			[]byte(`{"symbol":"BTCUSDT"}`), "hashbtc", instrument.NormalizerVersion,
 		))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
 		WillReturnResult(sqlmock.NewResult(11, 2)) // ON DUPLICATE KEY UPDATE => 2 rows affected
@@ -245,7 +245,7 @@ func TestRunInstrumentPollSnapshotOnlySkipsSignalInsert(t *testing.T) {
 				MarketSurface: "perp", InstrumentKind: "canonical",
 				StatusNormalized: "active",
 				RawJSON:          json.RawMessage(`{"contractName":"BTCUSD"}`),
-				RawJSONHash:      "h-btc-edgex",
+				StableHash:       "h-btc-edgex",
 			}}, nil
 		},
 	}
@@ -332,7 +332,7 @@ func TestRunInstrumentPollContinuesAfterSignalInsertFailure(t *testing.T) {
 			"canonical", "PERPETUAL", "TRADING", "active",
 			"status", nil, nil, false,
 			now.Add(-24*time.Hour), nil, now.Add(-1*time.Hour),
-			[]byte(`{"symbol":"BTCUSDT"}`), "hash-prev-btc", "v1",
+			[]byte(`{"symbol":"BTCUSDT"}`), "hash-prev-btc", instrument.NormalizerVersion,
 		))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_signal_observation")).
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -353,13 +353,13 @@ func TestRunInstrumentPollContinuesAfterSignalInsertFailure(t *testing.T) {
 			"canonical", "PERPETUAL", "TRADING", "active",
 			"status", nil, nil, false,
 			now.Add(-24*time.Hour), nil, now.Add(-1*time.Hour),
-			[]byte(`{"symbol":"ETHUSDT"}`), "hasheth", "v1",
+			[]byte(`{"symbol":"ETHUSDT"}`), "hasheth", instrument.NormalizerVersion,
 		))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
 		WillReturnResult(sqlmock.NewResult(12, 2))
 
 	btc := newBTCNormalized()
-	btc.RawJSONHash = "hash-new-btc"
+	btc.StableHash = "hash-new-btc"
 	src := InstrumentSource{
 		Platform:   "binance",
 		MarketType: "usdm_futures",
@@ -407,7 +407,7 @@ func TestRunInstrumentPollDiffSubtypePropagatesToSignal(t *testing.T) {
 			"canonical", "PERPETUAL", "TRADING", "active",
 			"status", nil, nil, false,
 			now.Add(-24*time.Hour), nil, now.Add(-1*time.Hour),
-			[]byte(`{"symbol":"BTCUSDT"}`), "hashbtc", "v1",
+			[]byte(`{"symbol":"BTCUSDT"}`), "hashbtc", instrument.NormalizerVersion,
 		))
 
 	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_signal_observation")).
@@ -431,7 +431,7 @@ func TestRunInstrumentPollDiffSubtypePropagatesToSignal(t *testing.T) {
 	btcDelisted.StatusRaw = "DELISTED"
 	btcDelisted.StatusNormalized = "delisted"
 	btcDelisted.DelistFlag = true
-	btcDelisted.RawJSONHash = "hashdelisted"
+	btcDelisted.StableHash = "hashdelisted"
 
 	src := InstrumentSource{
 		Platform:   "binance",
@@ -449,6 +449,67 @@ func TestRunInstrumentPollDiffSubtypePropagatesToSignal(t *testing.T) {
 	}
 	if res.SignalsEmitted != 1 {
 		t.Errorf("SignalsEmitted = %d, want 1", res.SignalsEmitted)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+// TestRunInstrumentPollNormalizerVersionRolloverSkipsDiffButUpsertsSnapshot
+// pins the 2026-06-01 hash-recipe cutover contract: when prev
+// snapshot's NormalizerVersion differs from the current binary's
+// version, the StableHash values are not directly comparable, so the
+// driver MUST skip instrument.Diff for this tick. The snapshot upsert
+// still happens so the row carries the new recipe forward; subsequent
+// ticks then compare like-for-like. Without this guard, the v1->v2
+// cutover would surface as a one-shot metadata_changed firehose
+// across every (platform, market_type, api_symbol) tuple.
+func TestRunInstrumentPollNormalizerVersionRolloverSkipsDiffButUpsertsSnapshot(t *testing.T) {
+	now := time.Date(2026, 6, 2, 14, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM t_listing_instrument_snapshot")).
+		WithArgs("binance", "usdm_futures").
+		WillReturnRows(sqlmock.NewRows([]string{"present"}).AddRow(int64(1)))
+
+	// Prev row uses the OLD normalizer version "v1" and an old-recipe
+	// hash; current binary uses "v2" + the new projection hash. Diff
+	// MUST NOT be invoked even though the hashes differ.
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, platform, market_type, api_symbol")).
+		WithArgs("binance", "usdm_futures", "BTCUSDT").
+		WillReturnRows(sqlmock.NewRows(instSnapshotCols).AddRow(
+			int64(11), "binance", "usdm_futures", "BTCUSDT", nil, "BTCUSDT",
+			"BTC", "BTC", "USDT", "USDT", "perp",
+			"canonical", "PERPETUAL", "TRADING", "active",
+			"status", nil, nil, false,
+			now.Add(-24*time.Hour), nil, now.Add(-1*time.Hour),
+			[]byte(`{"symbol":"BTCUSDT"}`), "old_recipe_hash_value", "v1",
+		))
+	// NO ExpectExec for INSERT IGNORE INTO t_listing_signal_observation.
+	// Only the snapshot upsert is expected.
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
+		WillReturnResult(sqlmock.NewResult(11, 2))
+
+	src := InstrumentSource{
+		Platform:   "binance",
+		MarketType: "usdm_futures",
+		SourceURL:  "https://fapi.binance.com/fapi/v1/exchangeInfo",
+		Fetch: func(ctx context.Context) ([]instrument.NormalizedInstrument, error) {
+			return []instrument.NormalizedInstrument{newBTCNormalized()}, nil
+		},
+	}
+	res, err := RunInstrumentPoll(context.Background(), repo, src, InstrumentPollDeps{
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("RunInstrumentPoll err = %v", err)
+	}
+	if res.SignalsEmitted != 0 {
+		t.Errorf("SignalsEmitted = %d, want 0 under normalizer rollover", res.SignalsEmitted)
+	}
+	if res.SnapshotsUpserted != 1 {
+		t.Errorf("SnapshotsUpserted = %d, want 1", res.SnapshotsUpserted)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)

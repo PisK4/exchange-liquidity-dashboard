@@ -18,8 +18,8 @@ type DiffEvent struct {
 	StatusTo        string
 	ListingTimeFrom *time.Time
 	ListingTimeTo   *time.Time
-	RawJSONHashFrom string
-	RawJSONHashTo   string
+	StableHashFrom  string
+	StableHashTo    string
 }
 
 // Diff compares the previous snapshot (nil for first sighting) with
@@ -43,7 +43,7 @@ func Diff(prev *NormalizedInstrument, curr NormalizedInstrument, baselineReady b
 			InstrumentKind:  curr.InstrumentKind,
 			StatusTo:        curr.StatusNormalized,
 			ListingTimeTo:   curr.ListingTimeTS,
-			RawJSONHashTo:   curr.RawJSONHash,
+			StableHashTo:    curr.StableHash,
 		}}
 	}
 	var events []DiffEvent
@@ -59,7 +59,7 @@ func Diff(prev *NormalizedInstrument, curr NormalizedInstrument, baselineReady b
 	if !timesEqual(prev.ListingTimeTS, curr.ListingTimeTS) && curr.ListingTimeTS != nil {
 		events = append(events, baseEvent("listing_time_changed", prev, curr))
 	}
-	if len(events) == 0 && prev.RawJSONHash != curr.RawJSONHash {
+	if len(events) == 0 && prev.StableHash != curr.StableHash {
 		events = append(events, baseEvent("metadata_changed", prev, curr))
 	}
 	return events
@@ -77,8 +77,8 @@ func baseEvent(subtype string, prev *NormalizedInstrument, curr NormalizedInstru
 		StatusTo:        curr.StatusNormalized,
 		ListingTimeFrom: prev.ListingTimeTS,
 		ListingTimeTo:   curr.ListingTimeTS,
-		RawJSONHashFrom: prev.RawJSONHash,
-		RawJSONHashTo:   curr.RawJSONHash,
+		StableHashFrom:  prev.StableHash,
+		StableHashTo:    curr.StableHash,
 	}
 }
 

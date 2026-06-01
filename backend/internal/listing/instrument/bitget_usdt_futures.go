@@ -44,7 +44,7 @@ func NormalizeBitgetUSDTFutures(raw json.RawMessage) (NormalizedInstrument, erro
 			openMillis = v
 		}
 	}
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:             "bitget",
 		MarketType:           "usdt_futures",
 		APISymbol:            p.Symbol,
@@ -61,6 +61,7 @@ func NormalizeBitgetUSDTFutures(raw json.RawMessage) (NormalizedInstrument, erro
 		ListingTimeFieldName: "openTime",
 		DelistFlag:           status == "delisted",
 		RawJSON:              append(json.RawMessage(nil), raw...),
-		RawJSONHash:          computeHash(raw),
-	}, nil
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }

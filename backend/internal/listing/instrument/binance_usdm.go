@@ -40,7 +40,7 @@ func NormalizeBinanceUSDM(raw json.RawMessage) (NormalizedInstrument, error) {
 	if strings.EqualFold(p.ContractType, "PERPETUAL") {
 		kind = "canonical"
 	}
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:             "binance",
 		MarketType:           "usdm_futures",
 		APISymbol:            p.Symbol,
@@ -58,8 +58,9 @@ func NormalizeBinanceUSDM(raw json.RawMessage) (NormalizedInstrument, error) {
 		ListingTimeFieldName: "onboardDate",
 		DelistFlag:           status == "delisted",
 		RawJSON:              append(json.RawMessage(nil), raw...),
-		RawJSONHash:          computeHash(raw),
-	}, nil
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }
 
 func firstNonEmpty(a, b string) string {

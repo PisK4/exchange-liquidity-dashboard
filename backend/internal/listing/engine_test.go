@@ -367,7 +367,7 @@ func TestEngineRunOnceDrivesInstrumentAndAnnouncementSourcesBeforeFusion(t *test
 					Platform: "binance", MarketType: "usdm_futures", APISymbol: "BTCUSDT",
 					CanonicalSymbol: "BTC", MarketSurface: "perp", InstrumentKind: "canonical",
 					StatusNormalized: "active", RawJSON: json.RawMessage(`{"symbol":"BTCUSDT"}`),
-					RawJSONHash: "engine-test-btc",
+					StableHash: "engine-test-btc",
 				}}, nil
 			},
 		}},

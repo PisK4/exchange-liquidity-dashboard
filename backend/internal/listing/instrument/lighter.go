@@ -51,7 +51,7 @@ func NormalizeLighterOrderBookDetail(raw json.RawMessage, surface string) (Norma
 	}
 	base := strings.ToUpper(strings.TrimSpace(p.Symbol))
 	status := mapLighterStatus(p.Status)
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:         "lighter",
 		MarketType:       surface,
 		APISymbol:        base,
@@ -67,8 +67,14 @@ func NormalizeLighterOrderBookDetail(raw json.RawMessage, surface string) (Norma
 		StatusFieldName:  "status",
 		DelistFlag:       status == "delisted",
 		RawJSON:          append(json.RawMessage(nil), raw...),
-		RawJSONHash:      computeHash(raw),
-	}, nil
+		// Lighter raw rows contain heavy time-varying fields
+		// (daily_*, last_trade_price, open_interest, daily_chart)
+		// but lighterDetailRaw only decodes Symbol/MarketID/MarketType/
+		// Status which are all already in NormalizedInstrument neutral
+		// fields. So no per-platform extras are required.
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }
 
 // FilterLighterPayloadBySurface decodes the full orderBookDetails

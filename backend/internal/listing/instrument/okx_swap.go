@@ -57,7 +57,7 @@ func NormalizeOKXSwap(raw json.RawMessage) (NormalizedInstrument, error) {
 			listMillis = v
 		}
 	}
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:             "okx",
 		MarketType:           "swap",
 		APISymbol:            p.InstID,
@@ -75,6 +75,7 @@ func NormalizeOKXSwap(raw json.RawMessage) (NormalizedInstrument, error) {
 		ListingTimeFieldName: "listTime",
 		DelistFlag:           status == "delisted",
 		RawJSON:              append(json.RawMessage(nil), raw...),
-		RawJSONHash:          computeHash(raw),
-	}, nil
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }

@@ -54,7 +54,7 @@ func NormalizeMEXCContract(raw json.RawMessage) (NormalizedInstrument, error) {
 			stateRaw = "unknown"
 		}
 	}
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:             "mexc",
 		MarketType:           "contract",
 		APISymbol:            p.Symbol,
@@ -71,8 +71,9 @@ func NormalizeMEXCContract(raw json.RawMessage) (NormalizedInstrument, error) {
 		ListingTimeFieldName: "openingTime",
 		DelistFlag:           status == "delisted",
 		RawJSON:              append(json.RawMessage(nil), raw...),
-		RawJSONHash:          computeHash(raw),
-	}, nil
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }
 
 var stateNames = map[int]string{

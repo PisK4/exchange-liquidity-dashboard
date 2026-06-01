@@ -31,8 +31,8 @@ type edgeXCoinRaw struct {
 
 type edgeXMetaEnvelope struct {
 	Data struct {
-		CoinList     []edgeXCoinRaw     `json:"coinList"`
-		ContractList []json.RawMessage  `json:"contractList"`
+		CoinList     []edgeXCoinRaw    `json:"coinList"`
+		ContractList []json.RawMessage `json:"contractList"`
 	} `json:"data"`
 }
 
@@ -93,7 +93,7 @@ func NormalizeEdgeXContract(raw json.RawMessage, marketType, baseAsset string) (
 		canonical = strings.ToUpper(p.ContractName)
 	}
 
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:         "edgeX",
 		MarketType:       marketType,
 		APISymbol:        p.ContractName,
@@ -106,8 +106,22 @@ func NormalizeEdgeXContract(raw json.RawMessage, marketType, baseAsset string) (
 		StatusFieldName:  "enableTrade",
 		DelistFlag:       delist,
 		RawJSON:          append(json.RawMessage(nil), raw...),
-		RawJSONHash:      computeHash(raw),
-	}, nil
+		// EdgeX CatalogResolver DB-first reads contractId / tickSize /
+		// stepSize from raw_json (see decodeEdgeXSnapshot). Surfacing
+		// the same six spec fields into StableHashExtras lets us flip
+		// the hash on legitimate contractId rotations while ignoring
+		// any other transient field upstream might add later.
+		StableHashExtras: map[string]string{
+			"contractId":   strings.TrimSpace(p.ContractID),
+			"baseCoinId":   strings.TrimSpace(p.BaseCoinID),
+			"quoteCoinId":  strings.TrimSpace(p.QuoteCoinID),
+			"settleCoinId": strings.TrimSpace(p.SettleCoinID),
+			"tickSize":     strings.TrimSpace(p.TickSize),
+			"stepSize":     strings.TrimSpace(p.StepSize),
+		},
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }
 
 func edgeXStatusRaw(enableTrade, enableDisplay bool) string {

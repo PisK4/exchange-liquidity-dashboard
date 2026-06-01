@@ -149,7 +149,22 @@ func RunInstrumentPoll(ctx context.Context, repo *Repository, src InstrumentSour
 				tmp := snapshotToNormalized(*prevSnap)
 				prev = &tmp
 			}
-			if src.SignalingMode != SignalingModeSnapshotOnly {
+			// Normalizer-version rollover guard: when prev snapshot
+			// was written by an older normalizer version (different
+			// hash recipe), the StableHash values are not directly
+			// comparable. Skipping Diff for one tick lets the
+			// snapshot upsert below replace the row with the new
+			// recipe; subsequent ticks then compare like for like.
+			// Without this guard, the v1→v2 cutover would produce a
+			// one-shot metadata_changed firehose across every
+			// instrument on every platform.
+			versionRollover := prevSnap != nil && prevSnap.NormalizerVersion != instrument.NormalizerVersion
+			if versionRollover {
+				deps.Logger.Printf("listing instrument poll: normalizer rolled %s->%s for %s/%s/%s (diff skipped this tick)",
+					prevSnap.NormalizerVersion, instrument.NormalizerVersion,
+					src.Platform, src.MarketType, curr.APISymbol)
+			}
+			if src.SignalingMode != SignalingModeSnapshotOnly && !versionRollover {
 				events := instrument.Diff(prev, curr, true)
 				for _, ev := range events {
 					signal := buildInstrumentDiffSignal(src, curr, ev, now)
@@ -204,7 +219,7 @@ func normalizedToSnapshot(n instrument.NormalizedInstrument, now time.Time) Inst
 		FirstSeenAt:          now,
 		LastSeenAt:           now,
 		RawJSON:              json.RawMessage(append([]byte(nil), n.RawJSON...)),
-		RawJSONHash:          n.RawJSONHash,
+		StableHash:           n.StableHash,
 		NormalizerVersion:    instrument.NormalizerVersion,
 	}
 }
@@ -230,7 +245,7 @@ func snapshotToNormalized(s InstrumentSnapshot) instrument.NormalizedInstrument 
 		ListingTimeFieldName: s.ListingTimeFieldName,
 		DelistFlag:           s.DelistFlag,
 		RawJSON:              json.RawMessage(append([]byte(nil), s.RawJSON...)),
-		RawJSONHash:          s.RawJSONHash,
+		StableHash:           s.StableHash,
 	}
 }
 
@@ -246,8 +261,8 @@ func buildInstrumentDiffSignal(src InstrumentSource, curr instrument.NormalizedI
 		"status_to":          ev.StatusTo,
 		"listing_time_from":  ev.ListingTimeFrom,
 		"listing_time_to":    ev.ListingTimeTo,
-		"raw_json_hash_from": ev.RawJSONHashFrom,
-		"raw_json_hash_to":   ev.RawJSONHashTo,
+		"stable_hash_from":   ev.StableHashFrom,
+		"stable_hash_to":     ev.StableHashTo,
 		"normalizer_version": instrument.NormalizerVersion,
 	})
 	return SignalObservation{
@@ -283,7 +298,7 @@ func buildInstrumentDiffSignal(src InstrumentSource, curr instrument.NormalizedI
 //
 // We sha256-hash the full component tuple instead of concatenating it
 // verbatim because two of the components are themselves 64-char sha256
-// hex digests (RawJSONHashFrom / RawJSONHashTo): the plaintext form
+// hex digests (StableHashFrom / StableHashTo): the plaintext form
 // blew the column's VARCHAR(96) ceiling and caused INSERT IGNORE to
 // silently drop / truncate, which the resolve-by-fingerprint SELECT
 // then turned into "no rows in result set" and propagated up the call
@@ -296,8 +311,8 @@ func instrumentDiffFingerprint(platform, marketType, apiSymbol string, ev instru
 		marketType,
 		apiSymbol,
 		ev.Subtype,
-		ev.RawJSONHashFrom,
-		ev.RawJSONHashTo,
+		ev.StableHashFrom,
+		ev.StableHashTo,
 	}, "|")
 	sum := sha256.Sum256([]byte(payload))
 	return "instrument_diff:" + hex.EncodeToString(sum[:])

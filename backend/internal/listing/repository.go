@@ -699,7 +699,7 @@ func (r *Repository) UpsertInstrumentSnapshot(ctx context.Context, s InstrumentS
 		s.MarketSurface, s.InstrumentKind, nullString(s.ContractType),
 		nullString(s.StatusRaw), s.StatusNormalized, nullString(s.StatusFieldName),
 		nullTimePtr(s.ListingTimeTS), nullString(s.ListingTimeFieldName),
-		s.DelistFlag, s.FirstSeenAt, s.LastSeenAt, []byte(s.RawJSON), s.RawJSONHash, s.NormalizerVersion,
+		s.DelistFlag, s.FirstSeenAt, s.LastSeenAt, []byte(s.RawJSON), s.StableHash, s.NormalizerVersion,
 	)
 	return err
 }
@@ -749,7 +749,7 @@ func (r *Repository) LatestInstrumentSnapshotByKey(ctx context.Context, platform
 		&canonicalSymbol, &baseAsset, &quoteAsset, &settleAsset, &out.MarketSurface,
 		&out.InstrumentKind, &contractType, &statusRaw, &out.StatusNormalized,
 		&statusFieldName, &listingTimeTS, &listingTimeFieldNm, &out.DelistFlag,
-		&out.FirstSeenAt, &previousSeenAt, &out.LastSeenAt, &rawJSON, &out.RawJSONHash,
+		&out.FirstSeenAt, &previousSeenAt, &out.LastSeenAt, &rawJSON, &out.StableHash,
 		&out.NormalizerVersion,
 	); err != nil {
 		return nil, err
@@ -1483,7 +1483,7 @@ func scanInstrumentSnapshot(rows *sql.Rows) (InstrumentSnapshot, error) {
 		&canonicalSymbol, &baseAsset, &quoteAsset, &settleAsset, &out.MarketSurface,
 		&out.InstrumentKind, &contractType, &statusRaw, &out.StatusNormalized,
 		&statusFieldName, &listingTimeTS, &listingTimeFieldNm, &out.DelistFlag,
-		&out.FirstSeenAt, &previousSeenAt, &out.LastSeenAt, &rawJSON, &out.RawJSONHash,
+		&out.FirstSeenAt, &previousSeenAt, &out.LastSeenAt, &rawJSON, &out.StableHash,
 		&out.NormalizerVersion,
 	); err != nil {
 		return InstrumentSnapshot{}, err

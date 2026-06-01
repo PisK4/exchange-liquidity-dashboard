@@ -45,7 +45,7 @@ func NormalizeBybitLinear(raw json.RawMessage) (NormalizedInstrument, error) {
 			launchMillis = v
 		}
 	}
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:             "bybit",
 		MarketType:           "linear_futures",
 		APISymbol:            p.Symbol,
@@ -63,6 +63,7 @@ func NormalizeBybitLinear(raw json.RawMessage) (NormalizedInstrument, error) {
 		ListingTimeFieldName: "launchTime",
 		DelistFlag:           status == "delisted",
 		RawJSON:              append(json.RawMessage(nil), raw...),
-		RawJSONHash:          computeHash(raw),
-	}, nil
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }

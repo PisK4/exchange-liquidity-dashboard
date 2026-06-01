@@ -3,6 +3,7 @@ package instrument
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -24,12 +25,24 @@ type bingxSpotRaw struct {
 //
 // "asset" is the base; "quoteAsset" is the settle/quote. Status is also
 // integer (1=trading; 5=pre-launch; 25=settling; 0/2/3/4/5=other states).
+//
+// pricePrecision, quantityPrecision, size and tradeMinQuantity are
+// schema-stable spec fields surfaced into StableHashExtras so a
+// legitimate contract rotation still flips the hash. feeRate /
+// makerFeeRate / takerFeeRate / triggerFeeRate are intentionally
+// excluded — fee schedules can be re-quoted by the exchange without
+// it being a listing event.
 type bingxSwapRaw struct {
-	Symbol     string `json:"symbol"`
-	Status     int    `json:"status"`
-	Asset      string `json:"asset"`
-	QuoteAsset string `json:"quoteAsset"`
-	LaunchTime int64  `json:"launchTime"`
+	Symbol            string  `json:"symbol"`
+	Status            int     `json:"status"`
+	Asset             string  `json:"asset"`
+	QuoteAsset        string  `json:"quoteAsset"`
+	LaunchTime        int64   `json:"launchTime"`
+	ContractID        string  `json:"contractId"`
+	PricePrecision    int     `json:"pricePrecision"`
+	QuantityPrecision int     `json:"quantityPrecision"`
+	Size              string  `json:"size"`
+	TradeMinQuantity  float64 `json:"tradeMinQuantity"`
 }
 
 // NormalizeBingXSpotSymbol turns one /openApi/spot/v1/common/symbols
@@ -63,7 +76,7 @@ func NormalizeBingXSpotSymbol(raw json.RawMessage) (NormalizedInstrument, error)
 		}
 	}
 	kind := bingxInstrumentKind(base)
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:         "bingx",
 		MarketType:       "spot",
 		APISymbol:        p.Symbol,
@@ -78,8 +91,9 @@ func NormalizeBingXSpotSymbol(raw json.RawMessage) (NormalizedInstrument, error)
 		StatusFieldName:  "status",
 		DelistFlag:       status == "delisted",
 		RawJSON:          append(json.RawMessage(nil), raw...),
-		RawJSONHash:      computeHash(raw),
-	}, nil
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }
 
 // NormalizeBingXSwapSymbol turns one /openApi/swap/v2/quote/contracts
@@ -108,7 +122,7 @@ func NormalizeBingXSwapSymbol(raw json.RawMessage) (NormalizedInstrument, error)
 		}
 	}
 	kind := bingxInstrumentKind(base)
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:             "bingx",
 		MarketType:           "swap",
 		APISymbol:            p.Symbol,
@@ -125,8 +139,16 @@ func NormalizeBingXSwapSymbol(raw json.RawMessage) (NormalizedInstrument, error)
 		ListingTimeFieldName: "launchTime",
 		DelistFlag:           status == "delisted",
 		RawJSON:              append(json.RawMessage(nil), raw...),
-		RawJSONHash:          computeHash(raw),
-	}, nil
+		StableHashExtras: map[string]string{
+			"contractId":        strings.TrimSpace(p.ContractID),
+			"pricePrecision":    strconv.Itoa(p.PricePrecision),
+			"quantityPrecision": strconv.Itoa(p.QuantityPrecision),
+			"size":              strings.TrimSpace(p.Size),
+			"tradeMinQuantity":  strconv.FormatFloat(p.TradeMinQuantity, 'f', -1, 64),
+		},
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }
 
 // bingxInstrumentKind classifies the base asset. Per spec F7, BingX

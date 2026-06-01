@@ -50,7 +50,7 @@ func NormalizeGateSpotPair(raw json.RawMessage) (NormalizedInstrument, error) {
 	case "delisted":
 		status = "delisted"
 	}
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:         "gate",
 		MarketType:       "spot",
 		APISymbol:        p.ID,
@@ -65,8 +65,9 @@ func NormalizeGateSpotPair(raw json.RawMessage) (NormalizedInstrument, error) {
 		StatusFieldName:  "trade_status",
 		DelistFlag:       status == "delisted",
 		RawJSON:          append(json.RawMessage(nil), raw...),
-		RawJSONHash:      computeHash(raw),
-	}, nil
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }
 
 // NormalizeGateFuturesContract turns one
@@ -92,7 +93,7 @@ func NormalizeGateFuturesContract(raw json.RawMessage) (NormalizedInstrument, er
 	if p.InDelisting {
 		status = "delisted"
 	}
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:         "gate",
 		MarketType:       "usdt_futures",
 		APISymbol:        p.Name,
@@ -107,8 +108,18 @@ func NormalizeGateFuturesContract(raw json.RawMessage) (NormalizedInstrument, er
 		StatusFieldName:  "in_delisting",
 		DelistFlag:       p.InDelisting,
 		RawJSON:          append(json.RawMessage(nil), raw...),
-		RawJSONHash:      computeHash(raw),
-	}, nil
+		// quanto_multiplier is the only spec field CatalogResolver
+		// DB-first decodes for Gate futures (see
+		// catalog_resolver.go::decodeGateSnapshot); promoting it into
+		// the stable hash lets us notice a legitimate spec rotation
+		// while still ignoring last_price / mark_price / funding_rate
+		// jitter that lives elsewhere in the raw row.
+		StableHashExtras: map[string]string{
+			"quanto_multiplier": strings.TrimSpace(p.QuantoMultiplier),
+		},
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }
 
 func gateFuturesStatusRaw(inDelisting bool) string {

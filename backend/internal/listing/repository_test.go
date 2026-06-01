@@ -323,7 +323,7 @@ func TestRepositoryUpsertInstrumentSnapshotInserts(t *testing.T) {
 		ListingTimeTS:     &now,
 		LastSeenAt:        now,
 		RawJSON:           json.RawMessage(`{"symbol":"BTCUSDT"}`),
-		RawJSONHash:       "deadbeef",
+		StableHash:        "deadbeef",
 		NormalizerVersion: "v1",
 	}
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
@@ -369,7 +369,7 @@ func TestRepositoryLatestInstrumentSnapshotByKeyReturnsRowOrNil(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load existing err = %v", err)
 	}
-	if got == nil || got.RawJSONHash != "deadbeef" {
+	if got == nil || got.StableHash != "deadbeef" {
 		t.Fatalf("got = %+v, want snapshot with hash=deadbeef", got)
 	}
 

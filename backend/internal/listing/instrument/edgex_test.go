@@ -56,7 +56,7 @@ func TestNormalizeEdgeXContractActivePerpV1(t *testing.T) {
 	if got, ok := checkRaw["contractId"].(string); !ok || got != "10000001" {
 		t.Fatalf("raw_json.contractId = %v; want 10000001", checkRaw["contractId"])
 	}
-	if got.RawJSONHash == "" {
+	if got.StableHash == "" {
 		t.Fatalf("raw_json_hash must be populated")
 	}
 }

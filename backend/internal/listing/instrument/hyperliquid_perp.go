@@ -25,7 +25,7 @@ func NormalizeHyperliquidPerp(raw json.RawMessage) (NormalizedInstrument, error)
 	if p.IsDelisted {
 		status = "delisted"
 	}
-	return NormalizedInstrument{
+	n := NormalizedInstrument{
 		Platform:         "hyperliquid",
 		MarketType:       "perp",
 		APISymbol:        p.Name,
@@ -40,8 +40,12 @@ func NormalizeHyperliquidPerp(raw json.RawMessage) (NormalizedInstrument, error)
 		StatusFieldName:  "isDelisted",
 		DelistFlag:       p.IsDelisted,
 		RawJSON:          append(json.RawMessage(nil), raw...),
-		RawJSONHash:      computeHash(raw),
-	}, nil
+		StableHashExtras: map[string]string{
+			"maxLeverage": strings.TrimSpace(p.MaxLeverage.String()),
+		},
+	}
+	n.StableHash = n.ComputeStableHash()
+	return n, nil
 }
 
 func statusOrDelisted(isDelisted bool) string {

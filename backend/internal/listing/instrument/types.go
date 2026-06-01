@@ -8,17 +8,34 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"sort"
+	"strconv"
+	"strings"
 	"time"
 )
 
 // NormalizerVersion is stamped into t_listing_instrument_snapshot rows
 // and onto signal payloads so future re-parsing can be selectively
 // triggered when a parser ships a fix.
-const NormalizerVersion = "v1"
+//
+// v1 → v2 (2026-06-02): hash recipe changed from sha256(RawJSON) to a
+// projection-based StableHash (see ComputeStableHash) so that
+// time-varying market data fields inside raw rows (mark_price,
+// funding_rate, daily_*, last_trade_price, open_interest, fee schedule
+// re-quotes) no longer flip the hash on every 5-min poll. The
+// instrument poll driver guards against the rollover so the cutover
+// does not produce a one-shot metadata_changed firehose.
+const NormalizerVersion = "v2"
 
 // NormalizedInstrument is the platform-neutral view of a single
-// exchange instrument. The raw JSON is preserved verbatim for the
-// audit trail; RawJSONHash is the SHA-256 hex digest of that JSON.
+// exchange instrument. The raw JSON is preserved verbatim for audit
+// (t_listing_signal_observation.raw_payload_hash on each diff signal
+// continues to be sha256(RawJSON) and is unaffected by this rename).
+//
+// StableHash replaces the previous RawJSONHash semantics: it is the
+// sha256 hex of a deterministic projection of schema-stable fields
+// plus per-platform StableHashExtras. The DB column name remains
+// `raw_json_hash` for schema compatibility.
 type NormalizedInstrument struct {
 	Platform             string          `json:"platform"`
 	MarketType           string          `json:"market_type"`
@@ -39,11 +56,65 @@ type NormalizedInstrument struct {
 	ListingTimeFieldName string          `json:"listing_time_field_name,omitempty"`
 	DelistFlag           bool            `json:"delist_flag,omitempty"`
 	RawJSON              json.RawMessage `json:"-"`
-	RawJSONHash          string          `json:"raw_json_hash"`
+	// StableHash is sha256(projection); StableHashExtras lets each
+	// normalizer surface a handful of schema-stable platform-specific
+	// fields (Gate quanto_multiplier, EdgeX tickSize/stepSize/contractId,
+	// Hyperliquid maxLeverage, ...) so genuine contract-spec rotations
+	// still flip the hash while market jitter inside RawJSON does not.
+	StableHashExtras map[string]string `json:"-"`
+	StableHash       string            `json:"stable_hash"`
 }
 
-// computeHash returns the sha256 hex digest used as RawJSONHash.
-func computeHash(raw []byte) string {
+// ComputeStableHash returns the deterministic sha256 hex projection
+// used for instrument_diff comparisons. The projection deliberately
+// excludes RawJSON so volatile market fields embedded in upstream
+// rows (last_price, mark_price, funding_rate, daily_*, open_interest,
+// fee schedule re-quotes) do not produce false metadata_changed
+// signals.
+//
+// Callers must populate StableHashExtras before invoking this method.
+// Each normalizer owns the white-list of schema-stable platform
+// fields that go into Extras (see per-platform comments).
+func (n NormalizedInstrument) ComputeStableHash() string {
+	var listingMs int64
+	if n.ListingTimeTS != nil {
+		listingMs = n.ListingTimeTS.UnixMilli()
+	}
+	extraKeys := make([]string, 0, len(n.StableHashExtras))
+	for k := range n.StableHashExtras {
+		extraKeys = append(extraKeys, k)
+	}
+	sort.Strings(extraKeys)
+	parts := []string{
+		n.Platform,
+		n.MarketType,
+		n.APISymbol,
+		n.APIMarketID,
+		n.CanonicalSymbol,
+		n.BaseAsset,
+		n.QuoteAsset,
+		n.SettleAsset,
+		n.MarketSurface,
+		n.InstrumentKind,
+		n.ContractType,
+		n.StatusRaw,
+		n.StatusNormalized,
+		n.StatusFieldName,
+		strconv.FormatBool(n.DelistFlag),
+		strconv.FormatInt(listingMs, 10),
+		n.ListingTimeFieldName,
+	}
+	for _, k := range extraKeys {
+		parts = append(parts, k+"="+n.StableHashExtras[k])
+	}
+	sum := sha256.Sum256([]byte(strings.Join(parts, "|")))
+	return hex.EncodeToString(sum[:])
+}
+
+// computeRawHash returns sha256(raw). Retained for any caller that
+// still needs the raw-payload digest (e.g. signal_observation audit
+// columns). NOT used for snapshot hash comparison anymore.
+func computeRawHash(raw []byte) string {
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])
 }

@@ -431,6 +431,10 @@ type InstrumentSnapshot struct {
 	PreviousSeenAt       *time.Time
 	LastSeenAt           time.Time
 	RawJSON              json.RawMessage
-	RawJSONHash          string
-	NormalizerVersion    string
+	// StableHash is the projection-based hash stored in DB column
+	// raw_json_hash. The DB column name is unchanged for schema
+	// compatibility; only the Go field name reflects the new
+	// projection semantics (see instrument.NormalizedInstrument).
+	StableHash        string
+	NormalizerVersion string
 }

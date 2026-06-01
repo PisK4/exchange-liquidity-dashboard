@@ -22,7 +22,7 @@ func TestBinanceUSDMNormalizerActiveBTC(t *testing.T) {
 	if got.ListingTimeTS == nil {
 		t.Fatalf("listing_time_ts should be set from onboardDate")
 	}
-	if got.RawJSONHash == "" {
+	if got.StableHash == "" {
 		t.Fatalf("raw_json_hash must be populated")
 	}
 }
@@ -135,8 +135,8 @@ func TestDiffEmitsNewSymbolWhenBaselineReady(t *testing.T) {
 }
 
 func TestDiffEmitsStatusChangedOnTransitionToActive(t *testing.T) {
-	prev := NormalizedInstrument{StatusNormalized: "pre_listing", RawJSONHash: "h1"}
-	curr := NormalizedInstrument{Platform: "binance", APISymbol: "ABCUSDT", CanonicalSymbol: "ABC", StatusNormalized: "active", RawJSONHash: "h2"}
+	prev := NormalizedInstrument{StatusNormalized: "pre_listing", StableHash: "h1"}
+	curr := NormalizedInstrument{Platform: "binance", APISymbol: "ABCUSDT", CanonicalSymbol: "ABC", StatusNormalized: "active", StableHash: "h2"}
 	got := Diff(&prev, curr, true)
 	want := false
 	for _, e := range got {
@@ -150,8 +150,8 @@ func TestDiffEmitsStatusChangedOnTransitionToActive(t *testing.T) {
 }
 
 func TestDiffEmitsRelistedFromDelistedToActive(t *testing.T) {
-	prev := NormalizedInstrument{StatusNormalized: "delisted", RawJSONHash: "h1"}
-	curr := NormalizedInstrument{Platform: "binance", APISymbol: "ABCUSDT", CanonicalSymbol: "ABC", StatusNormalized: "active", RawJSONHash: "h2"}
+	prev := NormalizedInstrument{StatusNormalized: "delisted", StableHash: "h1"}
+	curr := NormalizedInstrument{Platform: "binance", APISymbol: "ABCUSDT", CanonicalSymbol: "ABC", StatusNormalized: "active", StableHash: "h2"}
 	got := Diff(&prev, curr, true)
 	want := false
 	for _, e := range got {
@@ -165,8 +165,8 @@ func TestDiffEmitsRelistedFromDelistedToActive(t *testing.T) {
 }
 
 func TestDiffEmitsMetadataChangedWhenOnlyHashDiffers(t *testing.T) {
-	prev := NormalizedInstrument{StatusNormalized: "active", RawJSONHash: "h1"}
-	curr := NormalizedInstrument{Platform: "binance", APISymbol: "ABCUSDT", CanonicalSymbol: "ABC", StatusNormalized: "active", RawJSONHash: "h2"}
+	prev := NormalizedInstrument{StatusNormalized: "active", StableHash: "h1"}
+	curr := NormalizedInstrument{Platform: "binance", APISymbol: "ABCUSDT", CanonicalSymbol: "ABC", StatusNormalized: "active", StableHash: "h2"}
 	got := Diff(&prev, curr, true)
 	if len(got) != 1 || got[0].Subtype != "metadata_changed" {
 		t.Fatalf("want only metadata_changed, got %+v", got)
