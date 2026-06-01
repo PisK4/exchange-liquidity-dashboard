@@ -12,7 +12,7 @@ import (
 
 // TestBuildDecisionCardEventPrepareListingShowsAllButtons asserts the
 // happy-path button matrix from spec §Phase 2: a high-confidence
-// `prepare_listing` candidate gets all four buttons (准备上架 /
+// `prepare_listing` candidate gets all four buttons (准备上线 /
 // 进入观察 / 联系MM / 忽略) plus the risk_plan_id pinned to the
 // payload so the callback can reconcile the dispatch.
 func TestBuildDecisionCardEventPrepareListingShowsAllButtons(t *testing.T) {
@@ -56,11 +56,13 @@ func TestBuildDecisionCardEventPrepareListingShowsAllButtons(t *testing.T) {
 	}
 }
 
-// TestBuildDecisionCardEventAnnouncementPendingAPIHidesPrepareListing
-// locks the safety rail from §5 (公告误报 risk): announcement-only
-// candidates must not surface a "准备上架" primary button — only
-// 进入观察 / 联系MM / 忽略 are eligible.
-func TestBuildDecisionCardEventAnnouncementPendingAPIHidesPrepareListing(t *testing.T) {
+// TestBuildDecisionCardEventAnnouncementPendingAPIShowsAllButtons
+// locks PRD §6: every evidence_kind surfaces the full 4-button
+// matrix. The earlier 3-button safety rail for announcement-only
+// candidates has been removed because the cooldown gate +
+// risk-plan template already encode the "公告待 API 确认" caution
+// (recommendation=pre_assessment + risk_template=pre_assessment).
+func TestBuildDecisionCardEventAnnouncementPendingAPIShowsAllButtons(t *testing.T) {
 	score := 55.0
 	c := Candidate{
 		ID:              8,
@@ -76,13 +78,19 @@ func TestBuildDecisionCardEventAnnouncementPendingAPIHidesPrepareListing(t *test
 	}
 	plan := RiskPlan{ID: 102, CandidateID: 8, TemplateName: RiskTemplatePreAssessment}
 	ev := BuildDecisionCardEvent(c, plan, time.Date(2026, 5, 30, 10, 0, 0, 0, time.UTC))
-	for _, a := range ev.Actions {
-		if a.Action == DecisionActionPrepareListing {
-			t.Fatalf("announcement_pending_api card must not expose prepare_listing button; actions = %+v", ev.Actions)
-		}
+	want := map[string]bool{
+		DecisionActionPrepareListing: true,
+		DecisionActionEnterWatchlist: true,
+		DecisionActionContactMM:      true,
+		DecisionActionIgnore:         true,
 	}
-	if len(ev.Actions) != 3 {
-		t.Errorf("len(Actions) = %d, want 3 (watch / mm / ignore)", len(ev.Actions))
+	if len(ev.Actions) != len(want) {
+		t.Errorf("len(Actions) = %d, want %d", len(ev.Actions), len(want))
+	}
+	for _, a := range ev.Actions {
+		if !want[a.Action] {
+			t.Errorf("unexpected action %q on announcement_pending_api card", a.Action)
+		}
 	}
 }
 
@@ -100,7 +108,7 @@ func TestRenderDecisionCardPostMessageReturnsInteractiveCard(t *testing.T) {
 		BusinessScore:   80,
 		DedupeKey:       "listing_decision|7|2026-05-30",
 		Actions: []DecisionCardAction{
-			{Action: DecisionActionPrepareListing, Label: "准备上架"},
+			{Action: DecisionActionPrepareListing, Label: "准备上线"},
 			{Action: DecisionActionIgnore, Label: "忽略"},
 		},
 		TriggerTime: time.Date(2026, 5, 30, 10, 0, 0, 0, time.UTC),
@@ -141,7 +149,7 @@ func TestProduceDecisionCardsSkipsCandidatesInIgnoreCooldown(t *testing.T) {
 	}).AddRow(
 		int64(7), "ABC", "ABC-USDT (perp)", "perp", "canonical",
 		LifecycleConfirmedListingCandidate, "已确认候选", EvidenceAnnouncementAndAPI, ConfidenceHigh,
-		score, "v1", RecommendationPrepareListing, "准备上架",
+		score, "v1", RecommendationPrepareListing, "准备上线",
 		[]byte(`["binance"]`), nil, now.Add(-2*time.Hour), now.Add(-1*time.Hour),
 	)
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).
@@ -192,7 +200,7 @@ func TestProduceDecisionCardsWritesRiskPlanAndOutboxForFreshCandidate(t *testing
 	}).AddRow(
 		int64(7), "ABC", "ABC-USDT (perp)", "perp", "canonical",
 		LifecycleConfirmedListingCandidate, "已确认候选", EvidenceAnnouncementAndAPI, ConfidenceHigh,
-		score, "v1", RecommendationPrepareListing, "准备上架",
+		score, "v1", RecommendationPrepareListing, "准备上线",
 		[]byte(`["binance"]`), nil, now.Add(-2*time.Hour), now.Add(-1*time.Hour),
 	)
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).

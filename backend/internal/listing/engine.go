@@ -42,6 +42,12 @@ type EngineDeps struct {
 	// that have not wired the pollers (existing engine tests).
 	InstrumentSources   []InstrumentSource
 	AnnouncementSources []AnnouncementSource
+	// DecisionCardEnrich is the per-candidate enrichment bundle
+	// (edgeX listed lookup, market status loader, CoinGecko fetcher,
+	// depth fetcher) injected into ProduceDecisionCards. Optional;
+	// when all fields are nil the renderer degrades gracefully and
+	// surfaces empty placeholders. Wiring done in cmd/dashboard.
+	DecisionCardEnrich DecisionCardEnrichDeps
 }
 
 // RunSummary aggregates per-stage results from a single RunOnce tick.
@@ -242,6 +248,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 			Now:            e.deps.Now,
 			IgnoreCooldown: e.cfg.Runtime.ListingAgent.DecisionCard.IgnoreCooldown,
 			MaxPerTick:     e.cfg.Runtime.ListingAgent.DecisionCard.MaxPerTick,
+			Enrich:         e.deps.DecisionCardEnrich,
 		})
 		summary.DecisionCard = decisionRes
 		if decisionErr != nil {

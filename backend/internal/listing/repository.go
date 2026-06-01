@@ -758,6 +758,121 @@ func (r *Repository) LatestInstrumentSnapshotByKey(ctx context.Context, platform
 	return &out, rows.Err()
 }
 
+// MarketStatusRow is the read projection that LoadMarketStatusByCanonical
+// emits per source. It is intentionally narrower than InstrumentSnapshot:
+// the decision card only needs the per-platform timeline, not the full
+// raw payload / hash / normalizer version columns.
+type MarketStatusRow struct {
+	Platform         string
+	MarketType       string
+	StatusNormalized string
+	StatusRaw        string
+	ListingTimeTS    *time.Time
+	LastSeenAt       time.Time
+	PublishedAt      *time.Time
+	SourceKind       string // "api" or "announcement"
+}
+
+// LoadMarketStatusByCanonical aggregates instrument snapshots and
+// announcement rows for a canonical symbol into a flat per-source
+// view. The decision card enrichment layer then folds these rows
+// into per-platform timeline entries.
+//
+// The query is intentionally two SELECTs (one per table) followed by
+// a Go-side merge: MySQL UNION ALL would force us to align column
+// counts and types across two very different schemas, and the candidate
+// counts are small (≤ 6 platforms × 2 sources = 12 rows worst case)
+// so the extra round-trip is irrelevant.
+func (r *Repository) LoadMarketStatusByCanonical(ctx context.Context, canonical string) ([]MarketStatusRow, error) {
+	if r.db == nil {
+		return nil, errors.New("listing repository: no db attached")
+	}
+	out := make([]MarketStatusRow, 0, 8)
+
+	instrQuery := `SELECT platform, market_type, status_normalized, COALESCE(status_raw,''),
+	  listing_time_ts, last_seen_at
+	  FROM t_listing_instrument_snapshot
+	  WHERE canonical_symbol = ?
+	  ORDER BY last_seen_at DESC`
+	rows, err := r.db.QueryContext(ctx, instrQuery, canonical)
+	if err != nil {
+		return nil, fmt.Errorf("load instrument snapshots: %w", err)
+	}
+	for rows.Next() {
+		var (
+			row           MarketStatusRow
+			listingTimeTS sql.NullTime
+		)
+		if err := rows.Scan(&row.Platform, &row.MarketType, &row.StatusNormalized,
+			&row.StatusRaw, &listingTimeTS, &row.LastSeenAt); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan instrument snapshot row: %w", err)
+		}
+		if listingTimeTS.Valid {
+			t := listingTimeTS.Time
+			row.ListingTimeTS = &t
+		}
+		row.SourceKind = "api"
+		out = append(out, row)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return nil, fmt.Errorf("iterate instrument snapshot rows: %w", err)
+	}
+	rows.Close()
+
+	// Most recent announcement per platform for this canonical. We
+	// pick the latest published_at row so the card reflects the
+	// freshest signal and ignore stale stub announcements that may
+	// share the same canonical.
+	annQuery := `SELECT a.platform, COALESCE(a.published_at, a.source_updated_at, a.created_at) AS effective_ts,
+	  COALESCE(a.parsed_market_type, ''), a.category
+	  FROM t_listing_announcement_symbol s
+	  JOIN t_listing_announcement a ON a.id = s.announcement_id
+	  WHERE s.canonical_symbol = ?
+	  ORDER BY a.platform, COALESCE(a.published_at, a.source_updated_at, a.created_at) DESC`
+	annRows, err := r.db.QueryContext(ctx, annQuery, canonical)
+	if err != nil {
+		return nil, fmt.Errorf("load announcements: %w", err)
+	}
+	seen := make(map[string]struct{}, 6)
+	for annRows.Next() {
+		var (
+			platform   string
+			occurredAt sql.NullTime
+			marketType string
+			category   sql.NullString
+		)
+		if err := annRows.Scan(&platform, &occurredAt, &marketType, &category); err != nil {
+			annRows.Close()
+			return nil, fmt.Errorf("scan announcement row: %w", err)
+		}
+		// Per platform we only keep the freshest announcement.
+		if _, ok := seen[platform]; ok {
+			continue
+		}
+		seen[platform] = struct{}{}
+		row := MarketStatusRow{
+			Platform:         platform,
+			MarketType:       marketType,
+			StatusNormalized: StatusPreListing,
+			SourceKind:       "announcement",
+		}
+		if occurredAt.Valid {
+			t := occurredAt.Time
+			row.PublishedAt = &t
+			row.LastSeenAt = t
+		}
+		out = append(out, row)
+	}
+	if err := annRows.Err(); err != nil {
+		annRows.Close()
+		return nil, fmt.Errorf("iterate announcement rows: %w", err)
+	}
+	annRows.Close()
+	return out, nil
+}
+
 // HasInstrumentBaseline returns true when t_listing_instrument_snapshot
 // already contains at least one row for the (platform, market_type)
 // pair. The instrument poller uses this to gate cold-start: a brand-

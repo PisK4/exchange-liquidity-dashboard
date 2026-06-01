@@ -99,7 +99,7 @@ func TestBuildRiskPlanFromCandidateWatchUsesConservativeTemplate(t *testing.T) {
 // covers the announcement_pending_api branch: there is no instrument
 // to size yet, so the plan is intentionally a placeholder template
 // with nil leverage / no MM quote — the decision card will surface
-// "进入预评估" rather than "准备上架" and the plan only exists to
+// "进入预评估" rather than "准备上线" and the plan only exists to
 // keep the audit log complete.
 func TestBuildRiskPlanFromCandidatePreAssessmentUsesPlaceholderTemplate(t *testing.T) {
 	now := time.Date(2026, 5, 30, 8, 0, 0, 0, time.UTC)

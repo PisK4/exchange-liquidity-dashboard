@@ -171,10 +171,12 @@ func main() {
 		for _, src := range listingSources.Announcement {
 			log.Printf("listing announcement source armed: platform=%s url=%s", src.Platform, src.SourceURL)
 		}
+		listingEnrichDeps := buildListingEnrichDeps(cfg, listingRepo, listingUniverseLoader)
 		engine := listing.NewEngine(cfg, listingRepo, listing.EngineDeps{
 			LoadUniverse:        listingUniverseLoader,
 			InstrumentSources:   listingSources.Instrument,
 			AnnouncementSources: listingSources.Announcement,
+			DecisionCardEnrich:  listingEnrichDeps,
 		})
 		if *runOnce && *role == "listing" {
 			summary, err := engine.RunOnce(ctx)
@@ -301,6 +303,54 @@ func resolveListingCallbackSecret(cfg *config.Config) {
 		return
 	}
 	cb.Secret = os.Getenv(cb.SecretEnv)
+}
+
+// buildListingEnrichDeps wires the per-candidate enrichment bundle
+// the decision-card renderer consumes (PRD §5 — Market Status,
+// Metrics, edgeX 状态). Each sub-fetcher is best-effort: any nil
+// hook causes the renderer to degrade that block gracefully
+// (placeholder text instead of empty values), which matches the
+// PRD's "do-not-fail-the-card-on-enrichment-failure" contract.
+//
+// Depth: operator decision is to use a single platform (Binance) as
+// the depth reference rather than fanning out across competitors —
+// the value of a second source is low next to the cost of a wider
+// latency tail. buildBinanceDepthFetcher synthesises {CANONICAL}USDT
+// API symbols and hits Binance's spot + USDM-perp depth endpoints
+// directly; the aggregator runs the spot and perp calls in parallel
+// with a per-call deadline.
+func buildListingEnrichDeps(cfg config.Config, repo *listing.Repository, universeLoader func() (*config.ListedUniverse, error)) listing.DecisionCardEnrichDeps {
+	deps := listing.DecisionCardEnrichDeps{
+		Now: func() time.Time { return time.Now().UTC() },
+	}
+	if universeLoader != nil {
+		if u, err := universeLoader(); err == nil && u != nil {
+			deps.EdgexListedLookup = listing.BuildEdgexListedLookup(u)
+		} else if err != nil {
+			log.Printf("listing enrich: listed_universe load failed: %v (edgeX-listed column will fall back to 'unknown')", err)
+		}
+	}
+	if repo != nil {
+		deps.MarketStatusLoader = listing.BuildMarketStatusLoader(repo)
+	}
+	cgCfg := cfg.Runtime.CoinGecko
+	apiKey := ""
+	if cgCfg.APIKeyEnv != "" {
+		apiKey = os.Getenv(cgCfg.APIKeyEnv)
+	}
+	if cgClient, err := coingecko.New(coingecko.Config{
+		BaseURL:        cgCfg.BaseURL,
+		APIKey:         apiKey,
+		Proxy:          cgCfg.Proxy,
+		RequestTimeout: 4 * time.Second,
+	}); err == nil {
+		deps.CoinGeckoFetcher = listing.BuildCoinGeckoFetcher(cgClient)
+	} else {
+		log.Printf("listing enrich: coingecko client init failed: %v (market-cap/24h-vol will render n/a)", err)
+	}
+	depthFetcher := buildBinanceDepthFetcher(cfg.Runtime.ExchangeProxy, 1500*time.Millisecond)
+	deps.DepthFetcher = listing.BuildDepthFetcher(depthFetcher, 3*time.Second, 1500*time.Millisecond)
+	return deps
 }
 
 // listingDecisionOptions wires the Phase 2 callback / dispatch

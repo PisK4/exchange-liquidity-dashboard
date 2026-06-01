@@ -77,7 +77,7 @@ func TestRepositoryUpsertWatchlistMakesEntryIdempotentByCandidate(t *testing.T) 
 }
 
 // TestDispatchDecisionActionPrepareListingWritesAuditAndNotifies
-// covers the §Phase 2 happy path: 准备上架 button click produces
+// covers the §Phase 2 happy path: 准备上线 button click produces
 // (1) a t_listing_action_dispatch audit row, (2) a delivery outbox
 // row notifying the listing-ops group, but does NOT create a
 // watchlist entry (prepare ≠ watch).

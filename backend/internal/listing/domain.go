@@ -101,7 +101,7 @@ const (
 // rendered in the read-only API.
 var RecommendationLabels = map[string]string{
 	RecommendationPreAssessment:  "进入预评估",
-	RecommendationPrepareListing: "准备上架",
+	RecommendationPrepareListing: "准备上线",
 	RecommendationWatch:          "进入观察",
 	RecommendationRecordOnly:     "仅记录",
 	RecommendationNoAction:       "无需动作",

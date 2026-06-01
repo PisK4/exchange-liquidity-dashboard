@@ -230,7 +230,7 @@ func TestEngineRunOnceProducesDecisionCardsWhenEnabled(t *testing.T) {
 		}).AddRow(
 			int64(7), "ABC", "ABC-USDT (perp)", "perp", "canonical",
 			LifecycleConfirmedListingCandidate, "已确认候选", EvidenceAnnouncementAndAPI, ConfidenceHigh,
-			score, "v1", RecommendationPrepareListing, "准备上架",
+			score, "v1", RecommendationPrepareListing, "准备上线",
 			[]byte(`["binance"]`), nil, now.Add(-2*time.Hour), now.Add(-1*time.Hour),
 		))
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT action, callback_ts FROM t_listing_decision")).

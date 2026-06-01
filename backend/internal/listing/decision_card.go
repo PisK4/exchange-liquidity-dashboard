@@ -6,8 +6,35 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
+
+// sgtZone is the Singapore Time fixed zone the PRD calls out for
+// every timestamp on the card. Stored as a package-level singleton
+// so the renderer does not allocate one per card; UTC+8 has no DST
+// so a fixed offset is correct year-round.
+var sgtZone = time.FixedZone("SGT", 8*3600)
+
+// formatSGT renders t in Singapore Time matching the PRD sample
+// (e.g. "2026-05-02 14:30 SGT"). Returns "—" for the zero time so
+// the renderer never produces "0001-01-01 ..." gibberish.
+func formatSGT(t time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	return t.In(sgtZone).Format("2006-01-02 15:04 SGT")
+}
+
+// formatSGTShort is the shortened variant used inside the per-platform
+// Market Status bullet rows: "05-30 10:00 SGT". Drops the year so the
+// bullet list stays compact on narrow Lark mobile cards.
+func formatSGTShort(t time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	return t.In(sgtZone).Format("01-02 15:04 SGT")
+}
 
 // Decision actions exposed in the Lark card. Stable enums (not
 // labels) so the Lark callback can decode the button value back to
@@ -20,9 +47,10 @@ const (
 )
 
 // DecisionActionLabels maps stable enums to the operator-facing
-// Chinese labels rendered on the card buttons.
+// Chinese labels rendered on the card buttons. Labels follow PRD §6
+// 执行链路 verbatim ("准备上线", not "准备上架").
 var DecisionActionLabels = map[string]string{
-	DecisionActionPrepareListing: "准备上架",
+	DecisionActionPrepareListing: "准备上线",
 	DecisionActionEnterWatchlist: "进入观察",
 	DecisionActionContactMM:      "联系MM",
 	DecisionActionIgnore:         "忽略",
@@ -59,20 +87,26 @@ type DecisionCardEvent struct {
 	Actions         []DecisionCardAction `json:"actions"`
 	DedupeKey       string               `json:"dedupe_key"`
 	TriggerTime     time.Time            `json:"trigger_time"`
+
+	// Enrichment is the bundle of data the renderer surfaces in the
+	// Market Status / Metrics / 自动参数预案 blocks. Optional; when
+	// zero-value the renderer degrades each block gracefully (e.g.
+	// shows "无平台状态记录" instead of an empty bullet list).
+	Enrichment DecisionCardEnrichment `json:"-"`
+
+	// RiskPlan carries the leverage / MM-quote knobs surfaced in the
+	// "自动参数预案" block. The renderer reads MaxLeverage +
+	// LeverageTiersJSON + MMQuoteRequired only; FundingInitialMode
+	// and MaxPositionUSD stay TBD per spec C7 and the renderer
+	// surfaces a static "Funding / Max Position 待对齐" note.
+	RiskPlan RiskPlan `json:"-"`
 }
 
 // BuildDecisionCardEvent assembles the per-candidate decision card
-// payload. The function is pure: no DB access. It owns the
-// evidence_kind gated button matrix:
-//
-//   - announcement_and_api or instrument_diff_only with high
-//     confidence → all four buttons (准备上架 / 进入观察 / 联系MM /
-//     忽略).
-//   - announcement_pending_api → no 准备上架 (per §5 公告误报 risk
-//     control); only 进入观察 / 联系MM / 忽略.
-//   - everything else (already_listed candidates filtered earlier
-//     by the producer) → empty Actions; the caller must skip such
-//     cards before they reach the outbox.
+// payload. The function is pure: no DB access. Per PRD §6 every
+// decision card surfaces the full 4-button matrix (准备上线 /
+// 进入观察 / 联系MM / 忽略) regardless of evidence_kind. Already-
+// listed candidates are filtered upstream by the producer.
 func BuildDecisionCardEvent(c Candidate, plan RiskPlan, triggerTime time.Time) DecisionCardEvent {
 	ev := DecisionCardEvent{
 		CandidateID:     c.ID,
@@ -89,73 +123,36 @@ func BuildDecisionCardEvent(c Candidate, plan RiskPlan, triggerTime time.Time) D
 	if c.BusinessScore != nil {
 		ev.BusinessScore = *c.BusinessScore
 	}
-	ev.Actions = buttonMatrixFor(c.EvidenceKind)
+	ev.RiskPlan = plan
+	ev.Actions = standardButtonMatrix()
 	return ev
 }
 
-func buttonMatrixFor(evidence string) []DecisionCardAction {
-	base := []DecisionCardAction{
+// standardButtonMatrix returns the 4-button set defined in PRD §6.
+// We keep it as a function (rather than a package-level var) so the
+// returned slice is freshly allocated per call — callers may mutate
+// it without leaking state across cards.
+func standardButtonMatrix() []DecisionCardAction {
+	return []DecisionCardAction{
 		{Action: DecisionActionPrepareListing, Label: DecisionActionLabels[DecisionActionPrepareListing]},
 		{Action: DecisionActionEnterWatchlist, Label: DecisionActionLabels[DecisionActionEnterWatchlist]},
 		{Action: DecisionActionContactMM, Label: DecisionActionLabels[DecisionActionContactMM]},
 		{Action: DecisionActionIgnore, Label: DecisionActionLabels[DecisionActionIgnore]},
 	}
-	if evidence == EvidenceAnnouncementPendingAPI {
-		out := make([]DecisionCardAction, 0, len(base)-1)
-		for _, a := range base {
-			if a.Action == DecisionActionPrepareListing {
-				continue
-			}
-			out = append(out, a)
-		}
-		return out
-	}
-	return base
 }
 
 // RenderDecisionCardPostMessage builds the Lark interactive card
-// envelope. Keeping the structure minimal: header + summary fields +
-// buttons. Renderer changes are intentionally cheap because the
-// callback contract lives in the button `value` payload, not the
-// visual layout.
+// envelope. The layout follows PRD §5.2 (基础信息 / Market Status /
+// Metrics / 自动参数预案 / Score+Recommendation / Actions) using
+// the Top30 card's visual idiom: action-coloured header, 2x2 fields,
+// `<hr>` separators between blocks, coloured-bullet platform list,
+// note footer.
+//
+// Callback contract is unchanged: every button still posts back
+// {candidate_id, risk_plan_id, action, dedupe_key}, so the existing
+// callback handler does not need to change.
 func RenderDecisionCardPostMessage(ev DecisionCardEvent) ([]byte, error) {
-	header := map[string]any{
-		"title":    map[string]any{"tag": "plain_text", "content": fmt.Sprintf("[%s] %s 决策候选", ev.EvidenceKind, ev.DisplaySymbol)},
-		"template": "blue",
-	}
-	fields := []map[string]any{
-		{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**Symbol**\n%s", ev.CanonicalSymbol)}},
-		{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**Recommendation**\n%s", ev.Recommendation)}},
-		{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**Confidence**\n%s", ev.ConfidenceLevel)}},
-		{"is_short": true, "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**Score**\n%.0f", ev.BusinessScore)}},
-	}
-	actions := make([]map[string]any, 0, len(ev.Actions))
-	for _, a := range ev.Actions {
-		btn := map[string]any{
-			"tag":  "button",
-			"text": map[string]any{"tag": "plain_text", "content": a.Label},
-			"type": "primary",
-			"value": map[string]any{
-				"candidate_id": ev.CandidateID,
-				"risk_plan_id": ev.RiskPlanID,
-				"action":       a.Action,
-				"dedupe_key":   ev.DedupeKey,
-			},
-		}
-		if a.Action == DecisionActionIgnore {
-			btn["type"] = "default"
-		}
-		actions = append(actions, btn)
-	}
-	card := map[string]any{
-		"header": header,
-		"elements": []map[string]any{
-			{"tag": "div", "fields": fields},
-			{"tag": "div", "text": map[string]any{"tag": "lark_md", "content": fmt.Sprintf("**Source platforms**: %v", ev.SourcePlatforms)}},
-			{"tag": "action", "actions": actions},
-			{"tag": "note", "elements": []map[string]any{{"tag": "plain_text", "content": fmt.Sprintf("dedupe_key=%s trigger=%s", ev.DedupeKey, ev.TriggerTime.UTC().Format(time.RFC3339))}}},
-		},
-	}
+	card := buildDecisionCard(ev)
 	envelope := map[string]any{"msg_type": "interactive", "card": card}
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -170,16 +167,438 @@ func RenderDecisionCardPostMessage(ev DecisionCardEvent) ([]byte, error) {
 	return out, nil
 }
 
+func buildDecisionCard(ev DecisionCardEvent) map[string]any {
+	elements := []any{
+		buildDecisionHeadline(ev),
+		buildDecisionBasicInfoFields(ev),
+		map[string]any{"tag": "hr"},
+		buildDecisionMarketStatusBlock(ev),
+		map[string]any{"tag": "hr"},
+		buildDecisionMetricsFields(ev),
+		map[string]any{"tag": "hr"},
+		buildDecisionRiskPlanBlock(ev),
+		map[string]any{"tag": "hr"},
+		buildDecisionScoreFields(ev),
+	}
+	if action := buildDecisionActionRow(ev); action != nil {
+		elements = append(elements, map[string]any{"tag": "hr"}, action)
+	}
+	elements = append(elements, buildDecisionFooterNote(ev))
+	return map[string]any{
+		"config": map[string]any{"wide_screen_mode": true},
+		"header": map[string]any{
+			"template": decisionHeaderTemplate(ev.Recommendation),
+			"title": map[string]any{
+				"tag":     "plain_text",
+				"content": decisionHeaderText(ev),
+			},
+		},
+		"elements": elements,
+	}
+}
+
+// decisionHeaderTemplate returns the Lark header colour for the
+// decision card. Operator chose to unify the header across all
+// recommendation tiers — every new perp listing detection deserves
+// the same visual prominence in the Listing group, and the per-card
+// recommendation tier still surfaces in the body's Score /
+// Recommendation row. We pick red because it has the strongest
+// "look at this now" signal in a busy chat list, matching the
+// "🚨 New Perp Listing Detected" banner emoji.
+func decisionHeaderTemplate(rec string) string {
+	return "red"
+}
+
+// decisionHeaderText combines the unified banner with the canonical
+// symbol so the title bar is informative even when many cards sit
+// next to each other in the same Lark group. The banner is the same
+// for every recommendation tier (see decisionHeaderTemplate); the
+// recommendation label lives in the body.
+func decisionHeaderText(ev DecisionCardEvent) string {
+	prefix := "🚨 New Perp Listing Detected"
+	sym := strings.TrimSpace(ev.CanonicalSymbol)
+	if sym == "" {
+		sym = strings.TrimSpace(ev.DisplaySymbol)
+	}
+	if sym == "" {
+		return prefix
+	}
+	return prefix + " · " + sym
+}
+
+// buildDecisionHeadline is the body's first row: H1 symbol + a
+// muted subtitle showing the evidence kind (Chinese label) so the
+// operator immediately knows whether this is a strong (双源确认)
+// or a weak (API only / 公告 only) candidate without parsing the
+// score.
+func buildDecisionHeadline(ev DecisionCardEvent) map[string]any {
+	sym := strings.TrimSpace(ev.CanonicalSymbol)
+	if sym == "" {
+		sym = "—"
+	}
+	parts := []string{"# " + sym}
+	if label := evidenceKindLabel(ev.EvidenceKind); label != "" {
+		parts = append(parts, "<font color='grey'>"+label+"</font>")
+	}
+	return map[string]any{
+		"tag": "div",
+		"text": map[string]any{
+			"tag":     "lark_md",
+			"content": strings.Join(parts, "\n"),
+		},
+	}
+}
+
+// evidenceKindLabel maps the EvidenceKind enum to a short Chinese
+// label the operator-facing subtitle renders. Kept inline rather
+// than in domain.go because the locale string only lives on the
+// card; the read-only API still surfaces the enum verbatim.
+func evidenceKindLabel(kind string) string {
+	switch kind {
+	case EvidenceAnnouncementAndAPI:
+		return "公告 + API 双源确认"
+	case EvidenceInstrumentDiffOnly:
+		return "API 已发现 · 待公告确认"
+	case EvidenceAnnouncementPendingAPI:
+		return "公告已发布 · 待 API 上架"
+	case EvidenceTop30Only:
+		return "Top30 热门缺口"
+	case EvidenceManualSeed:
+		return "手动加入"
+	default:
+		return kind
+	}
+}
+
+// buildDecisionBasicInfoFields renders the Token / Source / Time /
+// edgeX status row as a 2x2 grid.
+func buildDecisionBasicInfoFields(ev DecisionCardEvent) map[string]any {
+	source := primarySourceLabel(ev.SourcePlatforms)
+	edgex := edgexListedLabel(ev.Enrichment)
+	return map[string]any{
+		"tag": "div",
+		"fields": []any{
+			summaryField("Token", canonicalOrDash(ev.CanonicalSymbol)),
+			summaryField("edgeX 状态", edgex),
+			summaryField("Source", source),
+			summaryField("Time", formatSGT(ev.TriggerTime)),
+		},
+	}
+}
+
+// primarySourceLabel renders the "Source: Binance Futures (+N more)"
+// summary. PRD §5.2 uses a singular Source field even though
+// candidates may have multiple platforms; we pick the highest-
+// priority platform and disclose the rest as "+N more" to keep the
+// row compact.
+func primarySourceLabel(sources []string) string {
+	if len(sources) == 0 {
+		return "—"
+	}
+	ordered := append([]string(nil), sources...)
+	// Sort by platformPriority then alphabetically.
+	for i := 1; i < len(ordered); i++ {
+		j := i
+		for j > 0 {
+			pi := priorityForPlatform(ordered[j])
+			pj := priorityForPlatform(ordered[j-1])
+			if pi < pj || (pi == pj && ordered[j] < ordered[j-1]) {
+				ordered[j], ordered[j-1] = ordered[j-1], ordered[j]
+				j--
+				continue
+			}
+			break
+		}
+	}
+	primary := displayNameForPlatform(ordered[0])
+	if len(ordered) == 1 {
+		return primary
+	}
+	return fmt.Sprintf("%s (+%d more)", primary, len(ordered)-1)
+}
+
+// edgexListedLabel returns the locale-friendly edgeX status string
+// honouring the three-state EdgexListedKnown contract.
+func edgexListedLabel(e DecisionCardEnrichment) string {
+	if !e.EdgexListedKnown {
+		return "未知"
+	}
+	if e.EdgexListed {
+		return "已上线"
+	}
+	return "未上线"
+}
+
+func canonicalOrDash(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "—"
+	}
+	return s
+}
+
+// buildDecisionMarketStatusBlock renders the per-platform status
+// timeline. Empty enrichment falls back to a single grey bullet so
+// the operator knows the agent looked but found nothing.
+func buildDecisionMarketStatusBlock(ev DecisionCardEvent) map[string]any {
+	lines := []string{"**Market Status**"}
+	if !ev.Enrichment.HasMarketStatus() {
+		lines = append(lines, "<font color='grey'>● 无平台状态记录</font>")
+	} else {
+		for _, ms := range ev.Enrichment.MarketStatuses {
+			lines = append(lines, formatMarketStatusLine(ms))
+		}
+	}
+	return map[string]any{
+		"tag": "div",
+		"text": map[string]any{
+			"tag":     "lark_md",
+			"content": strings.Join(lines, "\n"),
+		},
+	}
+}
+
+func formatMarketStatusLine(ms PlatformMarketStatus) string {
+	bullet := marketStatusBullet(ms.Status)
+	when := formatSGTShort(ms.OccurredAt)
+	source := marketStatusSourceLabel(ms.SourceKind)
+	name := strings.TrimSpace(ms.DisplayName)
+	if name == "" {
+		name = ms.Platform
+	}
+	label := ms.StatusLabel
+	if label == "" {
+		label = statusLabelByEnum(ms.Status, ms.SourceKind)
+	}
+	return fmt.Sprintf("%s **%s** · %s · %s · %s", bullet, name, label, when, source)
+}
+
+// marketStatusBullet picks the bullet colour matching the status
+// (green = active, orange = pre-listing / announcement, grey = other).
+func marketStatusBullet(status string) string {
+	switch status {
+	case StatusActive:
+		return "<font color='green'>●</font>"
+	case StatusPreListing:
+		return "<font color='orange'>●</font>"
+	case StatusPaused, StatusDelisted:
+		return "<font color='red'>●</font>"
+	default:
+		return "<font color='grey'>●</font>"
+	}
+}
+
+func marketStatusSourceLabel(kind string) string {
+	switch kind {
+	case "api":
+		return "API"
+	case "announcement":
+		return "公告"
+	case "both":
+		return "API + 公告"
+	default:
+		return "—"
+	}
+}
+
+// buildDecisionMetricsFields renders the Market Cap / Spot 24h Vol /
+// 现货深度 / 合约深度 grid.
+func buildDecisionMetricsFields(ev DecisionCardEvent) map[string]any {
+	mc := nullableUSDLabel(ev.Enrichment.MarketCapUSD)
+	vol := nullableUSDLabel(ev.Enrichment.Spot24hVolumeUSD)
+	spot := depthEvidenceLabel(ev.Enrichment.SpotDepth)
+	perp := depthEvidenceLabel(ev.Enrichment.PerpDepth)
+	return map[string]any{
+		"tag": "div",
+		"fields": []any{
+			summaryField("Market Cap", mc),
+			summaryField("Spot 24h Vol", vol),
+			summaryField("现货深度", spot),
+			summaryField("合约深度", perp),
+		},
+	}
+}
+
+func nullableUSDLabel(v *float64) string {
+	if v == nil {
+		return "n/a"
+	}
+	return "$" + humanUSD(*v)
+}
+
+func depthEvidenceLabel(d *DepthEvidence) string {
+	if d == nil {
+		return "不可用"
+	}
+	if d.Tier == "" {
+		return fmt.Sprintf("$%s (%s)", humanUSD(d.USDValue), d.Platform)
+	}
+	return fmt.Sprintf("$%s (%s · %s)", humanUSD(d.USDValue), d.Platform, d.Tier)
+}
+
+// buildDecisionRiskPlanBlock renders the "自动参数预案" section.
+// Funding 初始参数 and Max Position USD are explicitly TBD per
+// spec C7 — the renderer surfaces a static note instead of empty
+// values so the operator understands the agent generated the
+// leverage tiers but is awaiting human alignment for the rest.
+func buildDecisionRiskPlanBlock(ev DecisionCardEvent) map[string]any {
+	lines := []string{"**自动参数预案**"}
+	plan := ev.RiskPlan
+	if plan.MaxLeverage != nil && *plan.MaxLeverage > 0 {
+		lines = append(lines, fmt.Sprintf("杠杆: **%s×** (max)", formatLeverage(*plan.MaxLeverage)))
+	}
+	if tiers := formatLeverageTiers(plan.LeverageTiersJSON); tiers != "" {
+		lines = append(lines, "杠杆档位: "+tiers)
+	}
+	if plan.MMQuoteRequired {
+		lines = append(lines, "MM 报价: <font color='red'>**必需**</font>")
+	} else if plan.TemplateName != "" {
+		lines = append(lines, "MM 报价: 可选")
+	}
+	lines = append(lines,
+		"<font color='grey'>Funding 初始参数 / Max Position 待对齐</font>",
+	)
+	return map[string]any{
+		"tag": "div",
+		"text": map[string]any{
+			"tag":     "lark_md",
+			"content": strings.Join(lines, "\n"),
+		},
+	}
+}
+
+// formatLeverage strips trailing zeros from a float64 so 50.0
+// renders as "50" rather than "50.0".
+func formatLeverage(v float64) string {
+	if v == float64(int64(v)) {
+		return fmt.Sprintf("%d", int64(v))
+	}
+	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", v), "0"), ".")
+}
+
+// formatLeverageTiers parses the json tiers array on RiskPlan and
+// renders it as a compact "$50k→50×, $250k→20×, $1M→5×" line.
+// Returns empty string on parse error or empty array so the renderer
+// silently skips the line.
+func formatLeverageTiers(raw json.RawMessage) string {
+	if len(raw) == 0 {
+		return ""
+	}
+	var tiers []struct {
+		PositionUSDMax float64 `json:"position_usd_max"`
+		MaxLeverage    float64 `json:"max_leverage"`
+	}
+	if err := json.Unmarshal(raw, &tiers); err != nil || len(tiers) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(tiers))
+	for _, t := range tiers {
+		parts = append(parts, fmt.Sprintf("$%s→%s×", humanUSD(t.PositionUSDMax), formatLeverage(t.MaxLeverage)))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// buildDecisionScoreFields renders the Score and Recommendation
+// summary as a 2-cell row right above the action buttons.
+func buildDecisionScoreFields(ev DecisionCardEvent) map[string]any {
+	scoreLabel := "—"
+	if ev.BusinessScore > 0 {
+		scoreLabel = fmt.Sprintf("%.0f / 100", ev.BusinessScore)
+	}
+	rec := RecommendationLabels[ev.Recommendation]
+	if rec == "" {
+		rec = ev.Recommendation
+	}
+	return map[string]any{
+		"tag": "div",
+		"fields": []any{
+			summaryField("Score", scoreLabel),
+			summaryField("Recommendation", rec),
+		},
+	}
+}
+
+// buildDecisionActionRow renders the four callback buttons. Colour
+// hierarchy: 准备上线 = primary red-ish (Lark renders primary in
+// the header's template colour automatically); the rest stay default
+// so the most important button visually stands out.
+func buildDecisionActionRow(ev DecisionCardEvent) map[string]any {
+	if len(ev.Actions) == 0 {
+		return nil
+	}
+	actions := make([]any, 0, len(ev.Actions))
+	for _, a := range ev.Actions {
+		btn := map[string]any{
+			"tag":  "button",
+			"text": map[string]any{"tag": "plain_text", "content": a.Label},
+			"type": decisionButtonType(a.Action),
+			"value": map[string]any{
+				"candidate_id": ev.CandidateID,
+				"risk_plan_id": ev.RiskPlanID,
+				"action":       a.Action,
+				"dedupe_key":   ev.DedupeKey,
+			},
+		}
+		actions = append(actions, btn)
+	}
+	return map[string]any{"tag": "action", "actions": actions}
+}
+
+func decisionButtonType(action string) string {
+	switch action {
+	case DecisionActionPrepareListing:
+		return "primary"
+	case DecisionActionIgnore:
+		return "default"
+	default:
+		return "default"
+	}
+}
+
+// buildDecisionFooterNote renders the muted footer with dedupe key,
+// trigger timestamp, evidence-kind label, confidence and any
+// best-effort enrichment errors so the operator can audit the
+// pipeline without leaving Lark.
+func buildDecisionFooterNote(ev DecisionCardEvent) map[string]any {
+	parts := []string{
+		"trigger=" + formatSGT(ev.TriggerTime),
+		"evidence=" + evidenceKindLabel(ev.EvidenceKind),
+	}
+	if ev.ConfidenceLevel != "" {
+		parts = append(parts, "confidence="+ev.ConfidenceLevel)
+	}
+	// CoinGecko ID intentionally omitted from the footer per ops
+	// feedback: the card should not surface external data-source
+	// names. CoinGeckoID is still kept on DecisionCardEnrichment
+	// for log-side audit, just not displayed.
+	if errs := ev.Enrichment.EnrichErrors; len(errs) > 0 {
+		parts = append(parts, fmt.Sprintf("enrich_errors=%d", len(errs)))
+	}
+	parts = append(parts, "dedupe="+ev.DedupeKey)
+	return map[string]any{
+		"tag": "note",
+		"elements": []any{
+			map[string]any{"tag": "plain_text", "content": strings.Join(parts, " · ")},
+		},
+	}
+}
+
 // DecisionCardDeps wires the producer's runtime knobs. IgnoreCooldown
 // is the §5 default-24h抑制 window — operators can configure it via
 // listing_agent.decision_card.ignore_cooldown. MaxPerTick caps the
 // number of decision cards produced per engine tick so a fresh
 // deploy with hundreds of unfused candidates does not burst the Lark
 // channel.
+//
+// Enrich is the per-candidate enrichment bundle the renderer
+// consumes. Leave it zero-value to keep the legacy "no-enrichment"
+// behaviour — the renderer degrades each block gracefully so this
+// is safe in test setups that have not wired all data sources.
 type DecisionCardDeps struct {
 	Now            func() time.Time
 	IgnoreCooldown time.Duration
 	MaxPerTick     int
+	Enrich         DecisionCardEnrichDeps
 }
 
 // DecisionCardResult is the per-tick summary written onto RunSummary.
@@ -243,6 +662,7 @@ func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCa
 		res.RiskPlans++
 
 		ev := BuildDecisionCardEvent(c, plan, now)
+		ev.Enrichment = EnrichCandidateForDecisionCard(ctx, deps.Enrich, c)
 		payload, err := RenderDecisionCardPostMessage(ev)
 		if err != nil {
 			return res, fmt.Errorf("render decision card %d: %w", c.ID, err)

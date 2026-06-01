@@ -245,6 +245,84 @@ func parseChartArray(raw [][]json.Number) ([]chartSample, error) {
 	return out, nil
 }
 
+// CoinSearchResult is one row from the /search?query=X response,
+// narrowed to the fields the Listing Agent decision card enrichment
+// uses. The full search response also carries exchanges/categories
+// but we only consume `coins`.
+type CoinSearchResult struct {
+	ID            string `json:"id"`
+	Name          string `json:"name"`
+	Symbol        string `json:"symbol"`
+	MarketCapRank int    `json:"market_cap_rank"`
+}
+
+// CoinMarketSnapshot mirrors one row of /coins/markets?vs_currency=usd&ids=X
+// narrowed to the two fields the decision card enrichment uses.
+type CoinMarketSnapshot struct {
+	ID           string  `json:"id"`
+	Symbol       string  `json:"symbol"`
+	Name         string  `json:"name"`
+	MarketCapUSD float64 `json:"market_cap"`
+	Volume24HUSD float64 `json:"total_volume"`
+}
+
+// SearchCoinsBySymbol issues GET /search?query=X and returns the
+// `coins` portion of the response. CoinGecko orders the array by
+// market_cap_rank ascending (most-valued coin first), with no-rank
+// rows trailing. Callers are expected to filter by exact symbol
+// match because /search is a fuzzy text search that returns
+// near-misses.
+func (c *Client) SearchCoinsBySymbol(ctx context.Context, query string) ([]CoinSearchResult, string, error) {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return nil, "", errors.New("coingecko: search query required")
+	}
+	q := url.Values{}
+	q.Set("query", query)
+	endpoint := c.cfg.BaseURL + "/search?" + q.Encode()
+	body, err := c.getJSONBytes(ctx, endpoint)
+	if err != nil {
+		return nil, endpoint, err
+	}
+	var payload struct {
+		Coins []CoinSearchResult `json:"coins"`
+	}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, endpoint, fmt.Errorf("coingecko search decode: %w", err)
+	}
+	return payload.Coins, endpoint, nil
+}
+
+// FetchCoinMarketSnapshot fetches /coins/markets?vs_currency=usd&ids=X
+// for a single coin id and returns the parsed snapshot. CoinGecko
+// returns a list even for one id, so we extract the first element.
+// An empty array means the id does not exist; we return (nil, ...)
+// rather than an error so callers can downgrade gracefully.
+func (c *Client) FetchCoinMarketSnapshot(ctx context.Context, coinID string) (*CoinMarketSnapshot, string, error) {
+	coinID = strings.TrimSpace(coinID)
+	if coinID == "" {
+		return nil, "", errors.New("coingecko: coin id required")
+	}
+	q := url.Values{}
+	q.Set("vs_currency", "usd")
+	q.Set("ids", coinID)
+	q.Set("sparkline", "false")
+	endpoint := c.cfg.BaseURL + "/coins/markets?" + q.Encode()
+	body, err := c.getJSONBytes(ctx, endpoint)
+	if err != nil {
+		return nil, endpoint, err
+	}
+	var payload []CoinMarketSnapshot
+	if err := json.Unmarshal(body, &payload); err != nil {
+		return nil, endpoint, fmt.Errorf("coingecko coins/markets decode: %w", err)
+	}
+	if len(payload) == 0 {
+		return nil, endpoint, nil
+	}
+	snap := payload[0]
+	return &snap, endpoint, nil
+}
+
 func (c *Client) getJSONArray(ctx context.Context, endpoint string) ([][]json.Number, error) {
 	body, err := c.getJSONBytes(ctx, endpoint)
 	if err != nil {

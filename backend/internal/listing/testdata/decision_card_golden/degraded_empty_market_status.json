@@ -1,0 +1,208 @@
+{
+  "card": {
+    "config": {
+      "wide_screen_mode": true
+    },
+    "elements": [
+      {
+        "tag": "div",
+        "text": {
+          "content": "# WIF\n\u003cfont color='grey'\u003eAPI 已发现 · 待公告确认\u003c/font\u003e",
+          "tag": "lark_md"
+        }
+      },
+      {
+        "fields": [
+          {
+            "is_short": true,
+            "text": {
+              "content": "**Token**\nWIF",
+              "tag": "lark_md"
+            }
+          },
+          {
+            "is_short": true,
+            "text": {
+              "content": "**edgeX 状态**\n未上线",
+              "tag": "lark_md"
+            }
+          },
+          {
+            "is_short": true,
+            "text": {
+              "content": "**Source**\nOKX SWAP",
+              "tag": "lark_md"
+            }
+          },
+          {
+            "is_short": true,
+            "text": {
+              "content": "**Time**\n2026-05-31 16:00 SGT",
+              "tag": "lark_md"
+            }
+          }
+        ],
+        "tag": "div"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "div",
+        "text": {
+          "content": "**Market Status**\n\u003cfont color='grey'\u003e● 无平台状态记录\u003c/font\u003e",
+          "tag": "lark_md"
+        }
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "fields": [
+          {
+            "is_short": true,
+            "text": {
+              "content": "**Market Cap**\n$220.00M",
+              "tag": "lark_md"
+            }
+          },
+          {
+            "is_short": true,
+            "text": {
+              "content": "**Spot 24h Vol**\n$48.00M",
+              "tag": "lark_md"
+            }
+          },
+          {
+            "is_short": true,
+            "text": {
+              "content": "**现货深度**\n$310.00K (okx · 2pct)",
+              "tag": "lark_md"
+            }
+          },
+          {
+            "is_short": true,
+            "text": {
+              "content": "**合约深度**\n$760.00K (okx · 2pct)",
+              "tag": "lark_md"
+            }
+          }
+        ],
+        "tag": "div"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "tag": "div",
+        "text": {
+          "content": "**自动参数预案**\n杠杆: **50×** (max)\n杠杆档位: $50.00K→50×, $250.00K→20×, $1.00M→5×\nMM 报价: \u003cfont color='red'\u003e**必需**\u003c/font\u003e\n\u003cfont color='grey'\u003eFunding 初始参数 / Max Position 待对齐\u003c/font\u003e",
+          "tag": "lark_md"
+        }
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "fields": [
+          {
+            "is_short": true,
+            "text": {
+              "content": "**Score**\n58 / 100",
+              "tag": "lark_md"
+            }
+          },
+          {
+            "is_short": true,
+            "text": {
+              "content": "**Recommendation**\n进入观察",
+              "tag": "lark_md"
+            }
+          }
+        ],
+        "tag": "div"
+      },
+      {
+        "tag": "hr"
+      },
+      {
+        "actions": [
+          {
+            "tag": "button",
+            "text": {
+              "content": "准备上线",
+              "tag": "plain_text"
+            },
+            "type": "primary",
+            "value": {
+              "action": "prepare_listing",
+              "candidate_id": 302,
+              "dedupe_key": "listing_decision|302|2026-05-31",
+              "risk_plan_id": 912
+            }
+          },
+          {
+            "tag": "button",
+            "text": {
+              "content": "进入观察",
+              "tag": "plain_text"
+            },
+            "type": "default",
+            "value": {
+              "action": "enter_watchlist",
+              "candidate_id": 302,
+              "dedupe_key": "listing_decision|302|2026-05-31",
+              "risk_plan_id": 912
+            }
+          },
+          {
+            "tag": "button",
+            "text": {
+              "content": "联系MM",
+              "tag": "plain_text"
+            },
+            "type": "default",
+            "value": {
+              "action": "contact_mm",
+              "candidate_id": 302,
+              "dedupe_key": "listing_decision|302|2026-05-31",
+              "risk_plan_id": 912
+            }
+          },
+          {
+            "tag": "button",
+            "text": {
+              "content": "忽略",
+              "tag": "plain_text"
+            },
+            "type": "default",
+            "value": {
+              "action": "ignore",
+              "candidate_id": 302,
+              "dedupe_key": "listing_decision|302|2026-05-31",
+              "risk_plan_id": 912
+            }
+          }
+        ],
+        "tag": "action"
+      },
+      {
+        "elements": [
+          {
+            "content": "trigger=2026-05-31 16:00 SGT · evidence=API 已发现 · 待公告确认 · confidence=medium · enrich_errors=1 · dedupe=listing_decision|302|2026-05-31",
+            "tag": "plain_text"
+          }
+        ],
+        "tag": "note"
+      }
+    ],
+    "header": {
+      "template": "red",
+      "title": {
+        "content": "🚨 New Perp Listing Detected · WIF",
+        "tag": "plain_text"
+      }
+    }
+  },
+  "msg_type": "interactive"
+}
