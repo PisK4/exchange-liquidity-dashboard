@@ -24,3 +24,5 @@ docs
 # Production .env (operator-supplied secrets); the .template companion
 # stays tracked so new deployments have a starting point.
 deploy/.env
+dashboard
+decision-card-preview
