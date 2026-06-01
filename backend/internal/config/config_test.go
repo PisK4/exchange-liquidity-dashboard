@@ -743,6 +743,10 @@ Runtime:
           - platform: binance
             market_type: usdm_futures
             poll_interval: 3m
+          - platform: edgeX
+            market_type: perp_v1
+            poll_interval: 5m
+            signaling_mode: snapshot_only
       announcement:
         enabled: true
         polls:
@@ -845,12 +849,16 @@ Runtime:
 	if got := dc.Callback.OperatorAllow; len(got) != 2 || got[0] != "ou_ops_alice" || got[1] != "ou_ops_bob" {
 		t.Fatalf("decision_card.callback.operator_allow = %v", got)
 	}
-	// instrument source roster overrides defaults: only binance is configured here.
-	if len(cfg.Runtime.ListingAgent.Sources.InstrumentDiff.Polls) != 1 {
-		t.Fatalf("instrument polls len = %d", len(cfg.Runtime.ListingAgent.Sources.InstrumentDiff.Polls))
+	// instrument source roster overrides defaults: binance + edgeX
+	// (the latter with signaling_mode: snapshot_only) is configured.
+	if got := len(cfg.Runtime.ListingAgent.Sources.InstrumentDiff.Polls); got != 2 {
+		t.Fatalf("instrument polls len = %d, want 2", got)
 	}
-	if got := cfg.Runtime.ListingAgent.Sources.InstrumentDiff.Polls[0]; got.Platform != "binance" || got.MarketType != "usdm_futures" || got.PollInterval != 3*time.Minute || !got.Enabled {
+	if got := cfg.Runtime.ListingAgent.Sources.InstrumentDiff.Polls[0]; got.Platform != "binance" || got.MarketType != "usdm_futures" || got.PollInterval != 3*time.Minute || !got.Enabled || got.SignalingMode != "" {
 		t.Fatalf("instrument poll[0] = %+v", got)
+	}
+	if got := cfg.Runtime.ListingAgent.Sources.InstrumentDiff.Polls[1]; got.Platform != "edgeX" || got.MarketType != "perp_v1" || got.SignalingMode != "snapshot_only" {
+		t.Fatalf("instrument poll[1] = %+v, want signaling_mode=snapshot_only", got)
 	}
 	if len(cfg.Runtime.ListingAgent.Sources.Announcement.Polls) != 1 {
 		t.Fatalf("announcement polls len = %d", len(cfg.Runtime.ListingAgent.Sources.Announcement.Polls))

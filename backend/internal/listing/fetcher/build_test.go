@@ -15,22 +15,37 @@ func TestBuildListingSourcesAssemblesFullDefaultRoster(t *testing.T) {
 	if err != nil {
 		t.Fatalf("build err = %v", err)
 	}
-	if len(got.Instrument) != 6 {
-		t.Fatalf("want 6 instrument sources, got %d", len(got.Instrument))
+	if len(got.Instrument) != 15 {
+		t.Fatalf("want 15 instrument sources, got %d", len(got.Instrument))
 	}
 	if len(got.Announcement) != 3 {
 		t.Fatalf("want 3 announcement sources, got %d", len(got.Announcement))
 	}
-	wantInstr := map[string]string{
-		"binance":     "usdm_futures",
-		"bybit":       "linear",
-		"okx":         "swap",
-		"bitget":      "usdt_futures",
-		"mexc":        "contract",
-		"hyperliquid": "perp",
+	wantInstr := map[string][]string{
+		"binance":     {"usdm_futures"},
+		"bybit":       {"linear"},
+		"okx":         {"swap"},
+		"bitget":      {"usdt_futures"},
+		"mexc":        {"contract"},
+		"hyperliquid": {"perp"},
+		"edgeX":       {"perp_v1", "perp_v2", "spot"},
+		"bingx":       {"spot", "swap"},
+		"gate":        {"spot", "usdt_futures"},
+		"lighter":     {"perp", "spot"},
 	}
 	for _, src := range got.Instrument {
-		if wantMT, ok := wantInstr[src.Platform]; !ok || wantMT != src.MarketType {
+		mts, ok := wantInstr[src.Platform]
+		if !ok {
+			t.Fatalf("unexpected instrument platform %s", src.Platform)
+		}
+		var match bool
+		for _, mt := range mts {
+			if mt == src.MarketType {
+				match = true
+				break
+			}
+		}
+		if !match {
 			t.Fatalf("unexpected instrument source %s/%s", src.Platform, src.MarketType)
 		}
 		if src.Fetch == nil {
@@ -74,8 +89,8 @@ func TestBuildListingSourcesSkipsDisabledPolls(t *testing.T) {
 	if err != nil {
 		t.Fatalf("err = %v", err)
 	}
-	if len(got.Instrument) != 5 {
-		t.Fatalf("want 5 instrument sources after disable, got %d", len(got.Instrument))
+	if len(got.Instrument) != 14 {
+		t.Fatalf("want 14 instrument sources after disabling one, got %d", len(got.Instrument))
 	}
 	if len(got.Announcement) != 2 {
 		t.Fatalf("want 2 announcement sources after disable, got %d", len(got.Announcement))

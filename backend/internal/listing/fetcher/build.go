@@ -92,9 +92,37 @@ func buildInstrumentSource(poll config.ListingSourcePollConfig, deps HTTPDeps) (
 	case "hyperliquid/perp":
 		src.SourceURL = HyperliquidInfoURL
 		src.Fetch = FetchHyperliquidPerp(deps, HyperliquidInfoURL)
+	case "edgeX/perp_v1":
+		src.SourceURL = EdgeXPerpV1MetaURL
+		src.Fetch = FetchEdgeXPerpV1(deps, EdgeXPerpV1MetaURL)
+	case "edgeX/perp_v2":
+		src.SourceURL = EdgeXPerpV2MetaURL
+		src.Fetch = FetchEdgeXPerpV2(deps, EdgeXPerpV2MetaURL)
+	case "edgeX/spot":
+		src.SourceURL = EdgeXSpotMetaURL
+		src.Fetch = FetchEdgeXSpot(deps, EdgeXSpotMetaURL)
+	case "bingx/spot":
+		src.SourceURL = BingXSpotSymbolsURL
+		src.Fetch = FetchBingXSpot(deps, BingXSpotSymbolsURL)
+	case "bingx/swap":
+		src.SourceURL = BingXSwapContractsURL
+		src.Fetch = FetchBingXSwap(deps, BingXSwapContractsURL)
+	case "gate/spot":
+		src.SourceURL = GateSpotCurrencyPairsURL
+		src.Fetch = FetchGateSpot(deps, GateSpotCurrencyPairsURL)
+	case "gate/usdt_futures":
+		src.SourceURL = GateUSDTFuturesContractsURL
+		src.Fetch = FetchGateUSDTFutures(deps, GateUSDTFuturesContractsURL)
+	case "lighter/perp":
+		src.SourceURL = LighterOrderBookDetailsURL
+		src.Fetch = FetchLighterPerp(deps, LighterOrderBookDetailsURL)
+	case "lighter/spot":
+		src.SourceURL = LighterOrderBookDetailsURL
+		src.Fetch = FetchLighterSpot(deps, LighterOrderBookDetailsURL)
 	default:
 		return listing.InstrumentSource{}, fmt.Errorf("listing: no instrument fetcher registered for platform=%q market_type=%q", poll.Platform, poll.MarketType)
 	}
+	src.SignalingMode = listing.SignalingMode(poll.SignalingMode)
 	return src, nil
 }
 

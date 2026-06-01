@@ -12,16 +12,37 @@ import (
 	"edgex-dashboard/backend/internal/listing/instrument"
 )
 
+// SignalingMode controls whether the instrument poll driver emits
+// fusion-relevant signals on top of the snapshot write. The default
+// (empty string == SignalingModeFull) preserves Phase 4 semantics
+// for the six head CEX pollers. SignalingModeSnapshotOnly is the
+// dynamic-discovery default for surfaces whose presence in the
+// snapshot table is interesting (CatalogResolver DB-first,
+// listed_universe refresh) but whose own diff events MUST NOT feed
+// the listing decision loop (e.g. edgeX's own 3 surfaces, spec F5).
+type SignalingMode string
+
+const (
+	SignalingModeFull         SignalingMode = "full"
+	SignalingModeSnapshotOnly SignalingMode = "snapshot_only"
+)
+
 // InstrumentSource describes one (platform, market_type) endpoint
 // pair the listing agent polls. The Fetch closure isolates the HTTP
 // + normalisation work so tests can inject fixture instruments and
 // the engine can compose real adapters at wiring time.
+//
+// SignalingMode is consulted by RunInstrumentPoll to decide whether
+// to InsertSignal on a diff event; the snapshot upsert path is
+// unconditional so CatalogResolver and the universe refresh job
+// always see the latest data regardless of signaling mode.
 type InstrumentSource struct {
-	Platform   string
-	MarketType string
-	SourceURL  string
-	SourceKey  string
-	Fetch      func(ctx context.Context) ([]instrument.NormalizedInstrument, error)
+	Platform      string
+	MarketType    string
+	SourceURL     string
+	SourceKey     string
+	SignalingMode SignalingMode
+	Fetch         func(ctx context.Context) ([]instrument.NormalizedInstrument, error)
 }
 
 // InstrumentPollResult is a per-source summary the engine attaches to
@@ -104,14 +125,16 @@ func RunInstrumentPoll(ctx context.Context, repo *Repository, src InstrumentSour
 				tmp := snapshotToNormalized(*prevSnap)
 				prev = &tmp
 			}
-			events := instrument.Diff(prev, curr, true)
-			for _, ev := range events {
-				signal := buildInstrumentDiffSignal(src, curr, ev, now)
-				if _, _, err := repo.InsertSignal(ctx, signal); err != nil {
-					return res, fmt.Errorf("insert signal %s/%s: %w", curr.APISymbol, ev.Subtype, err)
+			if src.SignalingMode != SignalingModeSnapshotOnly {
+				events := instrument.Diff(prev, curr, true)
+				for _, ev := range events {
+					signal := buildInstrumentDiffSignal(src, curr, ev, now)
+					if _, _, err := repo.InsertSignal(ctx, signal); err != nil {
+						return res, fmt.Errorf("insert signal %s/%s: %w", curr.APISymbol, ev.Subtype, err)
+					}
+					res.SignalsEmitted++
+					res.DiffSubtypes[ev.Subtype]++
 				}
-				res.SignalsEmitted++
-				res.DiffSubtypes[ev.Subtype]++
 			}
 		}
 

@@ -210,6 +210,99 @@ func TestRunInstrumentPollSurfacesFetchError(t *testing.T) {
 	}
 }
 
+// TestRunInstrumentPollSnapshotOnlySkipsSignalInsert verifies the
+// SignalingMode contract (spec Part A'): when an InstrumentSource is
+// configured with SignalingMode=snapshot_only the poll MUST upsert
+// the snapshot but MUST NOT InsertSignal. This is the default for
+// edgeX 3-surface sources to avoid the self-listing decision loop
+// (spec F5).
+func TestRunInstrumentPollSnapshotOnlySkipsSignalInsert(t *testing.T) {
+	now := time.Date(2026, 5, 29, 17, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM t_listing_instrument_snapshot")).
+		WithArgs("edgeX", "perp_v1").
+		WillReturnRows(sqlmock.NewRows([]string{"present"}).AddRow(int64(1)))
+
+	// New instrument observed; would normally fire a new_symbol signal,
+	// but snapshot_only suppresses signal emission.
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, platform, market_type, api_symbol")).
+		WithArgs("edgeX", "perp_v1", "BTCUSD").
+		WillReturnRows(sqlmock.NewRows(instSnapshotCols))
+	// No InsertSignal expected — only the snapshot upsert.
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	src := InstrumentSource{
+		Platform:      "edgeX",
+		MarketType:    "perp_v1",
+		SignalingMode: SignalingModeSnapshotOnly,
+		Fetch: func(ctx context.Context) ([]instrument.NormalizedInstrument, error) {
+			return []instrument.NormalizedInstrument{{
+				Platform: "edgeX", MarketType: "perp_v1", APISymbol: "BTCUSD",
+				CanonicalSymbol: "BTC", BaseAsset: "BTC",
+				MarketSurface: "perp", InstrumentKind: "canonical",
+				StatusNormalized: "active",
+				RawJSON:          json.RawMessage(`{"contractName":"BTCUSD"}`),
+				RawJSONHash:      "h-btc-edgex",
+			}}, nil
+		},
+	}
+	res, err := RunInstrumentPoll(context.Background(), repo, src, InstrumentPollDeps{Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("RunInstrumentPoll err = %v", err)
+	}
+	if res.SignalsEmitted != 0 {
+		t.Errorf("snapshot_only must emit zero signals, got %d", res.SignalsEmitted)
+	}
+	if res.SnapshotsUpserted != 1 {
+		t.Errorf("snapshot_only must still upsert snapshots, got %d", res.SnapshotsUpserted)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+// TestRunInstrumentPollFullMatchesLegacyBehaviour pins the default
+// (SignalingMode empty/full) to the existing semantics so this
+// refactor cannot regress the Phase 4 6-source pollers.
+func TestRunInstrumentPollFullMatchesLegacyBehaviour(t *testing.T) {
+	now := time.Date(2026, 5, 29, 17, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM t_listing_instrument_snapshot")).
+		WithArgs("binance", "usdm_futures").
+		WillReturnRows(sqlmock.NewRows([]string{"present"}).AddRow(int64(1)))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, platform, market_type, api_symbol")).
+		WithArgs("binance", "usdm_futures", "BTCUSDT").
+		WillReturnRows(sqlmock.NewRows(instSnapshotCols))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_signal_observation")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	src := InstrumentSource{
+		Platform:      "binance",
+		MarketType:    "usdm_futures",
+		SignalingMode: SignalingModeFull,
+		Fetch: func(ctx context.Context) ([]instrument.NormalizedInstrument, error) {
+			return []instrument.NormalizedInstrument{newBTCNormalized()}, nil
+		},
+	}
+	res, err := RunInstrumentPoll(context.Background(), repo, src, InstrumentPollDeps{Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("RunInstrumentPoll err = %v", err)
+	}
+	if res.SignalsEmitted != 1 {
+		t.Errorf("full mode should fire signals; got %d", res.SignalsEmitted)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 // TestRunInstrumentPollDiffSubtypePropagatesToSignal makes sure a
 // status transition seen on a known instrument propagates as a
 // dedicated signal subtype (e.g. delisted), not the generic

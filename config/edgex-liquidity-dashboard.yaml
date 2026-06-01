@@ -195,6 +195,43 @@ Runtime:
           - platform: hyperliquid
             market_type: perp
             poll_interval: 3m
+          # Dynamic-discovery sources (spec 2026-06-01 §A). edgeX's own
+          # 3 surfaces use signaling_mode: snapshot_only so their diff
+          # events do NOT feed the listing decision loop (spec F5) —
+          # they exist solely to populate t_listing_instrument_snapshot
+          # for the universe-refresh job and the CatalogResolver
+          # DB-first lookup. The other 6 polls (bingx x2, gate x2,
+          # lighter x2) emit full signals.
+          - platform: edgeX
+            market_type: perp_v1
+            poll_interval: 5m
+            signaling_mode: snapshot_only
+          - platform: edgeX
+            market_type: perp_v2
+            poll_interval: 5m
+            signaling_mode: snapshot_only
+          - platform: edgeX
+            market_type: spot
+            poll_interval: 5m
+            signaling_mode: snapshot_only
+          - platform: bingx
+            market_type: spot
+            poll_interval: 5m
+          - platform: bingx
+            market_type: swap
+            poll_interval: 5m
+          - platform: gate
+            market_type: spot
+            poll_interval: 5m
+          - platform: gate
+            market_type: usdt_futures
+            poll_interval: 5m
+          - platform: lighter
+            market_type: perp
+            poll_interval: 5m
+          - platform: lighter
+            market_type: spot
+            poll_interval: 5m
       announcement:
         enabled: true
         polls:

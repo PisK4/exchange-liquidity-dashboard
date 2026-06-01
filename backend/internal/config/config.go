@@ -203,12 +203,19 @@ type ListingAnnouncementConfig struct {
 
 // ListingSourcePollConfig is the per-source poll declaration. Enabled
 // defaults to true at parse time so partial overrides do not silently
-// disable a source.
+// disable a source. SignalingMode is empty by default (treated as
+// "full") so existing CEX pollers preserve their Phase 4 behaviour;
+// new dynamic-discovery sources (notably edgeX's own 3 surfaces) set
+// it to "snapshot_only" so their diff events do not feed the listing
+// decision loop while still populating
+// t_listing_instrument_snapshot for the universe refresh job and
+// CatalogResolver DB-first lookups.
 type ListingSourcePollConfig struct {
-	Platform     string        `json:"platform"`
-	MarketType   string        `json:"market_type,omitempty"`
-	PollInterval time.Duration `json:"poll_interval"`
-	Enabled      bool          `json:"enabled"`
+	Platform      string        `json:"platform"`
+	MarketType    string        `json:"market_type,omitempty"`
+	PollInterval  time.Duration `json:"poll_interval"`
+	Enabled       bool          `json:"enabled"`
+	SignalingMode string        `json:"signaling_mode,omitempty"`
 }
 
 // ListingDeliveryConfig configures the shared delivery outbox worker.
@@ -650,6 +657,21 @@ func defaultListingAgentConfig() ListingAgentConfig {
 					{Platform: "bitget", MarketType: "usdt_futures", PollInterval: 5 * time.Minute, Enabled: true},
 					{Platform: "mexc", MarketType: "contract", PollInterval: 5 * time.Minute, Enabled: true},
 					{Platform: "hyperliquid", MarketType: "perp", PollInterval: 3 * time.Minute, Enabled: true},
+					// Dynamic-discovery sources (spec 2026-06-01 §A).
+					// edgeX's own 3 surfaces are snapshot_only so their
+					// diff events do not feed the listing decision loop
+					// (spec F5) — they exist purely to populate
+					// t_listing_instrument_snapshot for the universe
+					// refresh job and CatalogResolver DB-first lookup.
+					{Platform: "edgeX", MarketType: "perp_v1", PollInterval: 5 * time.Minute, Enabled: true, SignalingMode: "snapshot_only"},
+					{Platform: "edgeX", MarketType: "perp_v2", PollInterval: 5 * time.Minute, Enabled: true, SignalingMode: "snapshot_only"},
+					{Platform: "edgeX", MarketType: "spot", PollInterval: 5 * time.Minute, Enabled: true, SignalingMode: "snapshot_only"},
+					{Platform: "bingx", MarketType: "spot", PollInterval: 5 * time.Minute, Enabled: true},
+					{Platform: "bingx", MarketType: "swap", PollInterval: 5 * time.Minute, Enabled: true},
+					{Platform: "gate", MarketType: "spot", PollInterval: 5 * time.Minute, Enabled: true},
+					{Platform: "gate", MarketType: "usdt_futures", PollInterval: 5 * time.Minute, Enabled: true},
+					{Platform: "lighter", MarketType: "perp", PollInterval: 5 * time.Minute, Enabled: true},
+					{Platform: "lighter", MarketType: "spot", PollInterval: 5 * time.Minute, Enabled: true},
 				},
 			},
 			Announcement: ListingAnnouncementConfig{
@@ -923,10 +945,11 @@ type listingAnnouncementFile struct {
 }
 
 type listingSourcePollFile struct {
-	Platform     string `yaml:"platform"`
-	MarketType   string `yaml:"market_type"`
-	PollInterval string `yaml:"poll_interval"`
-	Enabled      *bool  `yaml:"enabled"`
+	Platform      string `yaml:"platform"`
+	MarketType    string `yaml:"market_type"`
+	PollInterval  string `yaml:"poll_interval"`
+	Enabled       *bool  `yaml:"enabled"`
+	SignalingMode string `yaml:"signaling_mode"`
 }
 
 type listingDeliveryFile struct {
@@ -1555,10 +1578,11 @@ func convertListingPollFiles(in []listingSourcePollFile, scope string) ([]Listin
 			pollInterval = d
 		}
 		out = append(out, ListingSourcePollConfig{
-			Platform:     p.Platform,
-			MarketType:   p.MarketType,
-			PollInterval: pollInterval,
-			Enabled:      enabled,
+			Platform:      p.Platform,
+			MarketType:    p.MarketType,
+			PollInterval:  pollInterval,
+			Enabled:       enabled,
+			SignalingMode: p.SignalingMode,
 		})
 	}
 	return out, nil
