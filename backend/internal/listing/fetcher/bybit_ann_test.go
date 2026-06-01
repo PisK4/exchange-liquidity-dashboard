@@ -22,7 +22,7 @@ func TestFetchBybitAnnouncementsReshapesV5Envelope(t *testing.T) {
 			"result":{
 				"list":[
 					{
-						"title":"ABC and XYZ USDT Perpetual Contracts Will Be Listed",
+						"title":"ABCUSDT and XYZUSDT Perpetual Contracts Will Be Listed",
 						"description":"Bybit launches ABC and XYZ perpetuals",
 						"type":{"title":"New Listings","key":"new_crypto"},
 						"tags":["Perpetual","Listings"],
@@ -55,8 +55,8 @@ func TestFetchBybitAnnouncementsReshapesV5Envelope(t *testing.T) {
 	if parsed.AnnouncementID == "" {
 		t.Fatalf("announcement_id must be derived from URL")
 	}
-	if !strings.Contains(parsed.AnnouncementID, "bltf662314c211a8616") {
-		t.Fatalf("announcement_id should include bltf662314c211a8616 slug, got %q", parsed.AnnouncementID)
+	if parsed.AnnouncementID != "bltf662314c211a8616" {
+		t.Fatalf("announcement_id must be the bare Contentstack slug, got %q", parsed.AnnouncementID)
 	}
 	if parsed.Title == "" || parsed.PublishedAt == nil {
 		t.Fatalf("parsed = %+v", parsed)
@@ -75,6 +75,26 @@ func TestFetchBybitAnnouncementsSurfacesRetCodeError(t *testing.T) {
 	fetch := FetchBybitAnnouncements(deps, srv.URL)
 	if _, err := fetch(context.Background()); err == nil {
 		t.Fatalf("expected error on retCode != 0")
+	}
+}
+
+// TestDeriveBybitAnnouncementIDExtractsConcatenatedSlug pins the
+// SLXUSDT regression: real Bybit URLs concatenate the Contentstack
+// slug onto the end of the human-readable URL segment rather than
+// emitting it as a standalone path component. The previous extractor
+// only recognised the latter form and silently returned the full URL
+// as announcement_id, which overflowed downstream fingerprint columns.
+func TestDeriveBybitAnnouncementIDExtractsConcatenatedSlug(t *testing.T) {
+	cases := map[string]string{
+		"https://announcements.bybit.com/en-US/article/new-listing-slxusdt-perpetual-contract-with-up-to-20x-leverage-blte2872c09549e9399":  "blte2872c09549e9399",
+		"https://announcements.bybit.com/en-US/article/new-listing-slxusdt-perpetual-contract-with-up-to-20x-leverage-blte2872c09549e9399/": "blte2872c09549e9399",
+		"https://announcements.bybit.com/en-US/article/abc-xyz-perp-listing-bltf662314c211a8616/":                                            "bltf662314c211a8616",
+		"https://announcements.bybit.com/en-US/article/some-listing-without-slug":                                                           "https://announcements.bybit.com/en-US/article/some-listing-without-slug",
+	}
+	for url, want := range cases {
+		if got := deriveBybitAnnouncementID(url); got != want {
+			t.Errorf("deriveBybitAnnouncementID(%q) = %q, want %q", url, got, want)
+		}
 	}
 }
 

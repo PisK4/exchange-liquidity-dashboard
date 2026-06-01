@@ -96,7 +96,7 @@
       {
         "tag": "div",
         "text": {
-          "content": "**自动参数预案**\nMM 报价: 可选\n\u003cfont color='grey'\u003eFunding 初始参数 / Max Position 待对齐\u003c/font\u003e",
+          "content": "**自动参数预案**\n\u003cfont color='grey'\u003e杠杆 / 杠杆档位 / MM 报价 / Funding / Max Position 待规则补齐\u003c/font\u003e",
           "tag": "lark_md"
         }
       },

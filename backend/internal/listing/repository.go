@@ -2,7 +2,9 @@ package listing
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -308,6 +310,11 @@ func (r *Repository) InsertAnnouncementSymbolAndSignal(
 	}
 	fingerprint := fmt.Sprintf("announcement_listing|%s|%s|%s|%s|%s",
 		platform, announcementExternalID, sym.CanonicalSymbol, sym.MarketSurface, sym.InstrumentKind)
+	rawPayloadHash := ""
+	if len(rawPayload) > 0 {
+		sum := sha256.Sum256(rawPayload)
+		rawPayloadHash = hex.EncodeToString(sum[:])
+	}
 	signal := SignalObservation{
 		SignalType:      SignalAnnouncementListing,
 		SignalSubtype:   sym.SignalSubtype,
@@ -321,6 +328,7 @@ func (r *Repository) InsertAnnouncementSymbolAndSignal(
 		Fingerprint:     fingerprint,
 		PayloadJSON:     buildAnnouncementPayload(announcementID, announcementExternalID, sym),
 		RawPayloadJSON:  rawPayload,
+		RawPayloadHash:  rawPayloadHash,
 	}
 	return r.InsertSignal(ctx, signal)
 }

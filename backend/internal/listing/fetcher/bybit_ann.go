@@ -5,8 +5,25 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 )
+
+// bybitContentstackSlugRE captures the 16-byte Contentstack hex slug
+// (e.g. "blte2872c09549e9399") that Bybit assigns to every published
+// article. The slug is stable across edits and is the only durable
+// per-article identifier; URL paths and titles change. The previous
+// implementation only matched the slug when it appeared as its own
+// path segment ("/.../blt...../") which is rare — Bybit usually
+// concatenates the slug onto the end of the human-readable slug
+// ("new-listing-slxusdt-perpetual-contract-with-up-to-20x-leverage-
+// blte2872c09549e9399"). When that match failed the fallback was to
+// store the full URL as announcement_id; this overflowed downstream
+// fingerprint columns (varchar(96)) and caused two distinct articles
+// with the same URL prefix to share the same truncated unique key,
+// which silently dropped INSERT IGNOREs and broke signal_observation
+// inserts.
+var bybitContentstackSlugRE = regexp.MustCompile(`blt[0-9a-f]{16}`)
 
 // BybitAnnouncementsURL is the v5 official announcements index. The
 // locale and type parameters are appended at fetch time. type
@@ -119,21 +136,8 @@ func deriveBybitAnnouncementID(url string) string {
 		return ""
 	}
 	trimmed := strings.TrimRight(url, "/")
-	idx := strings.LastIndex(trimmed, "/")
-	if idx < 0 {
-		return trimmed
-	}
-	tail := trimmed[idx+1:]
-	if strings.HasPrefix(tail, "blt") {
-		return tail
-	}
-	// Some URLs embed the slug before a trailing path segment; try
-	// to find the blt prefix anywhere in the path.
-	parts := strings.Split(trimmed, "/")
-	for i := len(parts) - 1; i >= 0; i-- {
-		if strings.HasPrefix(parts[i], "blt") {
-			return parts[i]
-		}
+	if match := bybitContentstackSlugRE.FindString(trimmed); match != "" {
+		return match
 	}
 	return trimmed
 }

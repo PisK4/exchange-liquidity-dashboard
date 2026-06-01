@@ -96,7 +96,7 @@
       {
         "tag": "div",
         "text": {
-          "content": "**自动参数预案**\n杠杆: **50×** (max)\n杠杆档位: $50.00K→50×, $250.00K→20×, $1.00M→5×\nMM 报价: \u003cfont color='red'\u003e**必需**\u003c/font\u003e\n\u003cfont color='grey'\u003eFunding 初始参数 / Max Position 待对齐\u003c/font\u003e",
+          "content": "**自动参数预案**\n\u003cfont color='grey'\u003e杠杆 / 杠杆档位 / MM 报价 / Funding / Max Position 待规则补齐\u003c/font\u003e",
           "tag": "lark_md"
         }
       },

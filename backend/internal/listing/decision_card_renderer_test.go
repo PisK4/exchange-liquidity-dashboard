@@ -212,22 +212,54 @@ func TestRenderDecisionCardMetricsRowsFallBackToPlaceholders(t *testing.T) {
 	}
 }
 
-func TestRenderDecisionCardRiskPlanBlockShowsLeverageAndTBDNote(t *testing.T) {
+func TestRenderDecisionCardRiskPlanBlockShowsOnlyTBDPlaceholder(t *testing.T) {
 	ev := baseEvent()
 	raw, _ := renderForTest(t, ev)
+	// Operator decision: the block keeps a title + a single TBD
+	// line summarising every parameter slot, with no specific
+	// values pre-filled.
 	for _, want := range []string{
 		"自动参数预案",
-		"杠杆: **50×**",
-		"杠杆档位:",
-		"$50.00K→50×",
-		"$250.00K→20×",
-		"$1.00M→5×",
-		"MM 报价",
-		"必需",
-		"Funding 初始参数 / Max Position 待对齐",
+		"待规则补齐",
 	} {
 		if !strings.Contains(raw, want) {
 			t.Errorf("risk plan missing %q in raw=%s", want, raw)
+		}
+	}
+	// Any specific numeric value derived from RiskPlan must NOT
+	// leak through — these are the strings the earlier renderer
+	// emitted and they should be gone now.
+	for _, leaked := range []string{
+		"杠杆: **",
+		"杠杆档位:",
+		"$50.00K→",
+		"MM 报价: <font",
+		"MM 报价: 可选",
+	} {
+		if strings.Contains(raw, leaked) {
+			t.Errorf("risk plan leaked pre-filled value %q in raw=%s", leaked, raw)
+		}
+	}
+}
+
+func TestRenderDecisionCardRiskPlanBlockIgnoresRiskPlanValues(t *testing.T) {
+	// Even when RiskPlan carries fully populated values, the
+	// renderer must emit the same TBD placeholder. This guards
+	// against future code paths re-introducing pre-filled numbers.
+	for _, rec := range []string{
+		RecommendationPrepareListing,
+		RecommendationWatch,
+		RecommendationPreAssessment,
+		RecommendationRecordOnly,
+	} {
+		ev := baseEvent()
+		ev.Recommendation = rec
+		raw, _ := renderForTest(t, ev)
+		if !strings.Contains(raw, "待规则补齐") {
+			t.Errorf("rec=%s: TBD placeholder missing", rec)
+		}
+		if strings.Contains(raw, "50×") {
+			t.Errorf("rec=%s: numeric leverage leaked through", rec)
 		}
 	}
 }
@@ -243,7 +275,7 @@ func TestRenderDecisionCardPreAssessmentSuppressesLeverage(t *testing.T) {
 	if strings.Contains(raw, "杠杆: **") {
 		t.Errorf("pre_assessment should not surface a leverage line, raw=%s", raw)
 	}
-	if !strings.Contains(raw, "Funding 初始参数 / Max Position 待对齐") {
+	if !strings.Contains(raw, "待规则补齐") {
 		t.Errorf("TBD note must still appear")
 	}
 }

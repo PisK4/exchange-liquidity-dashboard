@@ -437,27 +437,19 @@ func depthEvidenceLabel(d *DepthEvidence) string {
 }
 
 // buildDecisionRiskPlanBlock renders the "自动参数预案" section.
-// Funding 初始参数 and Max Position USD are explicitly TBD per
-// spec C7 — the renderer surfaces a static note instead of empty
-// values so the operator understands the agent generated the
-// leverage tiers but is awaiting human alignment for the rest.
+// Operator decision: do not pre-fill specific values (杠杆 / 杠杆档位 /
+// MM 报价 / Funding / Max Position) on the card today — every
+// parameter is left to manual alignment so the agent never appears
+// to commit to numbers operators have not yet endorsed. The block
+// is kept (rather than removed) so operators see at a glance that
+// the agent recognised the parameter slots exist; RiskPlan is still
+// persisted upstream and reachable via callback for future
+// surfacing.
 func buildDecisionRiskPlanBlock(ev DecisionCardEvent) map[string]any {
-	lines := []string{"**自动参数预案**"}
-	plan := ev.RiskPlan
-	if plan.MaxLeverage != nil && *plan.MaxLeverage > 0 {
-		lines = append(lines, fmt.Sprintf("杠杆: **%s×** (max)", formatLeverage(*plan.MaxLeverage)))
+	lines := []string{
+		"**自动参数预案**",
+		"<font color='grey'>杠杆 / 杠杆档位 / MM 报价 / Funding / Max Position 待规则补齐</font>",
 	}
-	if tiers := formatLeverageTiers(plan.LeverageTiersJSON); tiers != "" {
-		lines = append(lines, "杠杆档位: "+tiers)
-	}
-	if plan.MMQuoteRequired {
-		lines = append(lines, "MM 报价: <font color='red'>**必需**</font>")
-	} else if plan.TemplateName != "" {
-		lines = append(lines, "MM 报价: 可选")
-	}
-	lines = append(lines,
-		"<font color='grey'>Funding 初始参数 / Max Position 待对齐</font>",
-	)
 	return map[string]any{
 		"tag": "div",
 		"text": map[string]any{
@@ -466,38 +458,6 @@ func buildDecisionRiskPlanBlock(ev DecisionCardEvent) map[string]any {
 		},
 	}
 }
-
-// formatLeverage strips trailing zeros from a float64 so 50.0
-// renders as "50" rather than "50.0".
-func formatLeverage(v float64) string {
-	if v == float64(int64(v)) {
-		return fmt.Sprintf("%d", int64(v))
-	}
-	return strings.TrimRight(strings.TrimRight(fmt.Sprintf("%.2f", v), "0"), ".")
-}
-
-// formatLeverageTiers parses the json tiers array on RiskPlan and
-// renders it as a compact "$50k→50×, $250k→20×, $1M→5×" line.
-// Returns empty string on parse error or empty array so the renderer
-// silently skips the line.
-func formatLeverageTiers(raw json.RawMessage) string {
-	if len(raw) == 0 {
-		return ""
-	}
-	var tiers []struct {
-		PositionUSDMax float64 `json:"position_usd_max"`
-		MaxLeverage    float64 `json:"max_leverage"`
-	}
-	if err := json.Unmarshal(raw, &tiers); err != nil || len(tiers) == 0 {
-		return ""
-	}
-	parts := make([]string, 0, len(tiers))
-	for _, t := range tiers {
-		parts = append(parts, fmt.Sprintf("$%s→%s×", humanUSD(t.PositionUSDMax), formatLeverage(t.MaxLeverage)))
-	}
-	return strings.Join(parts, ", ")
-}
-
 // buildDecisionScoreFields renders the Score and Recommendation
 // summary as a 2-cell row right above the action buttons.
 func buildDecisionScoreFields(ev DecisionCardEvent) map[string]any {

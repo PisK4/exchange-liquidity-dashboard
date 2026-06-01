@@ -88,38 +88,50 @@ func computeHash(raw []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// extractCanonicalSymbols pulls perp listing symbols from a title.
-// The pattern allows 1000PEPE / 100ZBC style prefixes and rejects
-// suffixes like USDT / USDC; pre-market, spot, activity, maintenance
-// and other non-canonical announcements are filtered upstream.
-var canonicalTokenRE = regexp.MustCompile(`\b[0-9]{0,4}[A-Z]{2,20}\b`)
+// canonicalTokenRE matches a base symbol that is immediately followed
+// by a USDT / USDC / USD quote currency in the title. The base and the
+// quote may be glued ("SLXUSDT"), space-separated ("SLX USDT"), dash-
+// separated ("SLX-USDT", common in Bitget) or slash-separated
+// ("SLX/USDT"). Capture group 1 is the base.
+//
+// Requiring the quote suffix is what makes this regex robust against
+// noise words. Earlier iterations used a bare `\b[A-Z]{2,20}\b`
+// pattern guarded by a stopword map, which mis-fired on real-world
+// titles such as "New Listing: SLXUSDT Perpetual Contract with up to
+// 20x Leverage" — extracting "NEW" (not in stopwords) alongside the
+// real symbol "SLXUSDT" (unstripped suffix). Anchoring on the quote
+// currency eliminates that entire class of false positives without
+// needing an ever-growing stopword list.
+var canonicalTokenRE = regexp.MustCompile(`\b([0-9]{0,4}[A-Z]{2,20})[\s\-/]*(?:USDT|USDC|USD)\b`)
 
-// symbolStopwords are tokens that pass the regex but cannot be
-// canonical symbols. The list is conservative: every entry is a real
-// false-positive observed when iterating on the parser.
+// symbolStopwords is now reduced to the quote currencies themselves —
+// they still need to be rejected for cases like "USDCUSDT" where the
+// regex's capture group could otherwise match a quote currency masque-
+// rading as a base.
 var symbolStopwords = map[string]struct{}{
-	"AND": {}, "OR": {}, "THE": {}, "WILL": {}, "BE": {}, "USDT": {}, "USDC": {}, "USD": {},
-	"PERPETUAL": {}, "PERP": {}, "CONTRACT": {}, "CONTRACTS": {}, "FUTURES": {}, "FUTURE": {},
-	"LISTED": {}, "LISTING": {}, "LAUNCH": {}, "NOTICE": {}, "TRADING": {},
-	"PRE": {}, "MARKET": {}, "SPOT": {}, "ACTIVITY": {}, "AIRDROP": {},
+	"USDT": {}, "USDC": {}, "USD": {},
 }
 
 func extractCanonicalSymbols(title string) []string {
-	matches := canonicalTokenRE.FindAllString(strings.ToUpper(title), -1)
+	matches := canonicalTokenRE.FindAllStringSubmatch(strings.ToUpper(title), -1)
 	var out []string
 	seen := make(map[string]struct{}, len(matches))
 	for _, m := range matches {
-		if _, ok := symbolStopwords[m]; ok {
-			continue
-		}
 		if len(m) < 2 {
 			continue
 		}
-		if _, dup := seen[m]; dup {
+		base := m[1]
+		if _, ok := symbolStopwords[base]; ok {
 			continue
 		}
-		seen[m] = struct{}{}
-		out = append(out, m)
+		if len(base) < 2 {
+			continue
+		}
+		if _, dup := seen[base]; dup {
+			continue
+		}
+		seen[base] = struct{}{}
+		out = append(out, base)
 	}
 	return out
 }

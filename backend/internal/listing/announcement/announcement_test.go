@@ -5,7 +5,11 @@ import (
 )
 
 func TestParseBybitAnnouncementSplitsSymbols(t *testing.T) {
-	raw := []byte(`{"id":"a1","title":"ABC and 1000PEPE USDT Perpetual Contracts Will Be Listed","publishTime":1893456000000}`)
+	// Real Bybit "list multiple perps in one announcement" titles
+	// pair the base with USDT directly (concatenated form). The
+	// parser must extract both base symbols and strip the USDT
+	// suffix.
+	raw := []byte(`{"id":"a1","title":"ABCUSDT and 1000PEPEUSDT Perpetual Contracts Will Be Listed","publishTime":1893456000000}`)
 	got, err := ParseBybitAnnouncement(raw)
 	if err != nil {
 		t.Fatalf("Parse err = %v", err)
@@ -32,6 +36,26 @@ func TestParseBybitAnnouncementSplitsSymbols(t *testing.T) {
 	}
 	if got.PublishedAt == nil {
 		t.Fatalf("published_at should be parsed from publishTime")
+	}
+}
+
+// TestParseBybitAnnouncementRejectsLeadingNoiseWords pins the SLXUSDT
+// regression: the title starts with "New Listing:" which previously
+// caused the parser to extract "NEW" as a canonical symbol because
+// the broad regex matched it and the stopword list did not include
+// "NEW". The new parser anchors on the USDT/USDC/USD suffix so noise
+// words at the start of the title are silently ignored.
+func TestParseBybitAnnouncementRejectsLeadingNoiseWords(t *testing.T) {
+	raw := []byte(`{"id":"a2","title":"New Listing: SLXUSDT Perpetual Contract with up to 20x Leverage","publishTime":1893456000000}`)
+	got, err := ParseBybitAnnouncement(raw)
+	if err != nil {
+		t.Fatalf("Parse err = %v", err)
+	}
+	if len(got.Symbols) != 1 {
+		t.Fatalf("symbols len = %d, want 1 (%+v)", len(got.Symbols), got.Symbols)
+	}
+	if got.Symbols[0].CanonicalSymbol != "SLX" {
+		t.Fatalf("canonical = %q, want SLX (the base, with USDT suffix stripped)", got.Symbols[0].CanonicalSymbol)
 	}
 }
 
