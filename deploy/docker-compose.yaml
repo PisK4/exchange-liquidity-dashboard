@@ -24,6 +24,16 @@ services:
     build:
       context: ..
       dockerfile: deploy/Dockerfile.backend
+      # Forward the operator's BUILD_VERSION env var (set by
+      # deploy/Makefile from `git describe --tags --always --dirty`)
+      # to the Dockerfile's `ARG BUILD_VERSION`, which the Go build
+      # then embeds into main.version via -ldflags. Without this
+      # block compose silently drops the env var and the resulting
+      # binary keeps reporting build_version=dev on /api/health,
+      # making it impossible to tell which build is actually running
+      # in production.
+      args:
+        BUILD_VERSION: ${BUILD_VERSION:-dev}
     command: ["/app/dashboard", "--role=all", "--addr=:8080"]
     environment:
       DASHBOARD_MYSQL_DSN: ${DASHBOARD_MYSQL_DSN:-root:root@tcp(mysql:3306)/edgex_dashboard?parseTime=true}
