@@ -22,6 +22,14 @@ type Engine struct {
 	cfg  config.Config
 	repo *Repository
 	deps EngineDeps
+
+	// hasRunFirstPoll is the cold-start guard for the listed_universe
+	// refresh: refresh MUST NOT run before the first instrument poll
+	// completes, otherwise an empty snapshot table would trip the
+	// shrink-floor and rewrite runtime yaml from seed for every
+	// platform — silently masking the dynamic discovery layer.
+	hasRunFirstPoll     bool
+	lastUniverseRefresh time.Time
 }
 
 // EngineDeps wires the moving parts an Engine needs that aren't part
@@ -172,6 +180,38 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 		summary.AnnouncementPolls = append(summary.AnnouncementPolls, pollRes)
 		if err != nil {
 			e.deps.Logger.Printf("listing engine: announcement poll %s: %v", key.SourceKey, err)
+		}
+	}
+
+	// Step 0c: dynamic-discovery refresh — regenerate the runtime
+	// listed_universe.yaml from t_listing_instrument_snapshot. Gated
+	// by hasRunFirstPoll so a cold start does not snapshot an empty
+	// DB and over-write the seed via shrink-floor. Errors are logged
+	// (not returned) because a transient write failure must not
+	// stall the rest of the pipeline; the previous runtime yaml
+	// stays valid thanks to atomic rename.
+	if len(e.deps.InstrumentSources) > 0 {
+		e.hasRunFirstPoll = true
+	}
+	refreshCfg := e.cfg.Runtime.ListingAgent.ListedUniverseRefresh
+	if refreshCfg.Enabled && e.hasRunFirstPoll && refreshCfg.Interval > 0 && start.Sub(e.lastUniverseRefresh) >= refreshCfg.Interval {
+		refreshRes, refreshErr := RefreshListedUniverseFromSnapshots(ctx, e.repo, ListedUniverseRefreshArgs{
+			SeedPath:         refreshCfg.SeedPath,
+			RuntimePath:      refreshCfg.RuntimePath,
+			FreshWindow:      refreshCfg.FreshWindow,
+			ShrinkFloor:      refreshCfg.SeedShrinkFloor,
+			CoveredPlatforms: refreshCfg.CoveredPlatforms,
+			Now:              start,
+			Metrics:          NopMetrics{},
+		})
+		if refreshErr != nil {
+			e.deps.Logger.Printf("listing engine: listed_universe refresh failed: %v", refreshErr)
+		} else {
+			e.lastUniverseRefresh = start
+			e.deps.Logger.Printf("listing engine: listed_universe refresh ok db=%v seed=%v bases=%d reconciled=%d (perp:%d spot:%d)",
+				refreshRes.PlatformsFromDB, refreshRes.PlatformsFromSeed,
+				refreshRes.TotalBases, refreshRes.CandidatesReconciled,
+				refreshRes.PerpReconciled, refreshRes.SpotReconciled)
 		}
 	}
 

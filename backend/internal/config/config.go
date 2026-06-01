@@ -61,15 +61,31 @@ type Runtime struct {
 // 2026-05-27-Listing-Agent-P1-主链路方案设计.md §16 and §23 for the
 // authoritative knobs.
 type ListingAgentConfig struct {
-	Enabled             bool                      `json:"enabled"`
-	Worker              ListingWorkerConfig       `json:"worker"`
-	Sources             ListingSourcesConfig      `json:"sources"`
-	Delivery            ListingDeliveryConfig     `json:"delivery"`
-	Top30Push           ListingTop30PushConfig    `json:"top30_push"`
-	Top30DivergencePush Top30DivergencePushConfig `json:"top30_divergence_push"`
-	LiquidityAlert      LiquidityAlertConfig      `json:"liquidity_alert"`
-	Candidate           ListingCandidateConfig    `json:"candidate"`
-	DecisionCard        ListingDecisionCardConfig `json:"decision_card"`
+	Enabled              bool                         `json:"enabled"`
+	Worker               ListingWorkerConfig          `json:"worker"`
+	Sources              ListingSourcesConfig         `json:"sources"`
+	Delivery             ListingDeliveryConfig        `json:"delivery"`
+	Top30Push            ListingTop30PushConfig       `json:"top30_push"`
+	Top30DivergencePush  Top30DivergencePushConfig    `json:"top30_divergence_push"`
+	LiquidityAlert       LiquidityAlertConfig         `json:"liquidity_alert"`
+	Candidate            ListingCandidateConfig       `json:"candidate"`
+	DecisionCard         ListingDecisionCardConfig    `json:"decision_card"`
+	ListedUniverseRefresh ListedUniverseRefreshConfig `json:"listed_universe_refresh"`
+}
+
+// ListedUniverseRefreshConfig drives the dynamic-discovery refresh
+// loop (spec 2026-06-01 §B). SeedPath is read-only; RuntimePath is
+// written every Interval with the DB-derived universe. SeedShrinkFloor
+// is the safety net: when DB rows for a platform drop below
+// floor*seed_size, we fall back to seed for that platform alone.
+type ListedUniverseRefreshConfig struct {
+	Enabled          bool          `json:"enabled"`
+	Interval         time.Duration `json:"interval"`
+	SeedPath         string        `json:"seed_path"`
+	RuntimePath      string        `json:"runtime_path"`
+	FreshWindow      time.Duration `json:"fresh_window"`
+	SeedShrinkFloor  float64       `json:"seed_shrink_floor"`
+	CoveredPlatforms []string      `json:"covered_platforms"`
 }
 
 // ListingDecisionCardConfig is the runtime block for the Phase 2
@@ -714,6 +730,16 @@ func defaultListingAgentConfig() ListingAgentConfig {
 				OperatorAllow: nil,
 			},
 		},
+		ListedUniverseRefresh: ListedUniverseRefreshConfig{
+			Enabled:         true,
+			Interval:        15 * time.Minute,
+			FreshWindow:     30 * time.Minute,
+			SeedShrinkFloor: 0.5,
+			CoveredPlatforms: []string{
+				"binance", "bybit", "okx", "bitget", "mexc",
+				"hyperliquid", "edgeX", "bingx", "gate", "lighter",
+			},
+		},
 	}
 }
 
@@ -878,15 +904,26 @@ type runtimeFile struct {
 }
 
 type listingAgentFile struct {
-	Enabled             *bool                    `yaml:"enabled"`
-	Worker              *listingWorkerFile       `yaml:"worker"`
-	Sources             *listingSourcesFile      `yaml:"sources"`
-	Delivery            *listingDeliveryFile     `yaml:"delivery"`
-	Top30Push           *listingTop30PushFile    `yaml:"top30_push"`
-	Top30DivergencePush *top30DivergencePushFile `yaml:"top30_divergence_push"`
-	LiquidityAlert      *liquidityAlertFile      `yaml:"liquidity_alert"`
-	Candidate           *listingCandidateFile    `yaml:"candidate"`
-	DecisionCard        *listingDecisionCardFile `yaml:"decision_card"`
+	Enabled              *bool                         `yaml:"enabled"`
+	Worker               *listingWorkerFile            `yaml:"worker"`
+	Sources              *listingSourcesFile           `yaml:"sources"`
+	Delivery             *listingDeliveryFile          `yaml:"delivery"`
+	Top30Push            *listingTop30PushFile         `yaml:"top30_push"`
+	Top30DivergencePush  *top30DivergencePushFile      `yaml:"top30_divergence_push"`
+	LiquidityAlert       *liquidityAlertFile           `yaml:"liquidity_alert"`
+	Candidate            *listingCandidateFile         `yaml:"candidate"`
+	DecisionCard         *listingDecisionCardFile      `yaml:"decision_card"`
+	ListedUniverseRefresh *listedUniverseRefreshFile   `yaml:"listed_universe_refresh"`
+}
+
+type listedUniverseRefreshFile struct {
+	Enabled          *bool    `yaml:"enabled"`
+	Interval         string   `yaml:"interval"`
+	SeedPath         string   `yaml:"seed_path"`
+	RuntimePath      string   `yaml:"runtime_path"`
+	FreshWindow      string   `yaml:"fresh_window"`
+	SeedShrinkFloor  *float64 `yaml:"seed_shrink_floor"`
+	CoveredPlatforms []string `yaml:"covered_platforms"`
 }
 
 type listingDecisionCardFile struct {
@@ -1447,6 +1484,55 @@ func applyListingAgentFile(base ListingAgentConfig, file listingAgentFile) (List
 			return ListingAgentConfig{}, err
 		}
 		base.DecisionCard = dc
+	}
+	if file.ListedUniverseRefresh != nil {
+		r, err := applyListedUniverseRefreshFile(base.ListedUniverseRefresh, *file.ListedUniverseRefresh)
+		if err != nil {
+			return ListingAgentConfig{}, err
+		}
+		base.ListedUniverseRefresh = r
+	}
+	return base, nil
+}
+
+func applyListedUniverseRefreshFile(base ListedUniverseRefreshConfig, file listedUniverseRefreshFile) (ListedUniverseRefreshConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.Interval != "" {
+		d, err := time.ParseDuration(file.Interval)
+		if err != nil {
+			return ListedUniverseRefreshConfig{}, fmt.Errorf("listing_agent.listed_universe_refresh.interval: %w", err)
+		}
+		if d <= 0 {
+			return ListedUniverseRefreshConfig{}, fmt.Errorf("listing_agent.listed_universe_refresh.interval: must be > 0")
+		}
+		base.Interval = d
+	}
+	if file.FreshWindow != "" {
+		d, err := time.ParseDuration(file.FreshWindow)
+		if err != nil {
+			return ListedUniverseRefreshConfig{}, fmt.Errorf("listing_agent.listed_universe_refresh.fresh_window: %w", err)
+		}
+		if d <= 0 {
+			return ListedUniverseRefreshConfig{}, fmt.Errorf("listing_agent.listed_universe_refresh.fresh_window: must be > 0")
+		}
+		base.FreshWindow = d
+	}
+	if file.SeedPath != "" {
+		base.SeedPath = file.SeedPath
+	}
+	if file.RuntimePath != "" {
+		base.RuntimePath = file.RuntimePath
+	}
+	if file.SeedShrinkFloor != nil {
+		if *file.SeedShrinkFloor <= 0 || *file.SeedShrinkFloor > 1 {
+			return ListedUniverseRefreshConfig{}, fmt.Errorf("listing_agent.listed_universe_refresh.seed_shrink_floor: must be in (0,1]")
+		}
+		base.SeedShrinkFloor = *file.SeedShrinkFloor
+	}
+	if len(file.CoveredPlatforms) > 0 {
+		base.CoveredPlatforms = append([]string(nil), file.CoveredPlatforms...)
 	}
 	return base, nil
 }

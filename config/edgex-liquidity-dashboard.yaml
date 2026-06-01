@@ -241,6 +241,27 @@ Runtime:
             poll_interval: 3m
           - platform: binance
             poll_interval: 5m
+    listed_universe_refresh:
+      enabled: true
+      interval: 15m
+      # seed_path is intentionally relative to --config-dir; the
+      # runtime path lives under DASHBOARD_DATA_DIR so a restart does
+      # not lose the latest refresh.
+      seed_path: listed_universe.yaml
+      runtime_path: ${DASHBOARD_DATA_DIR}/listed_universe.runtime.yaml
+      fresh_window: 30m
+      seed_shrink_floor: 0.5
+      covered_platforms:
+        - binance
+        - bybit
+        - okx
+        - bitget
+        - mexc
+        - hyperliquid
+        - edgeX
+        - bingx
+        - gate
+        - lighter
     delivery:
       enabled: true
       # Webhook target is configured in the top-level Alert block so the

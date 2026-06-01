@@ -891,6 +891,21 @@ func TestDefaultListingAgentSeedsP1Sources(t *testing.T) {
 	if la.Delivery.Top30WebhookURLEnv != "LARK_LISTING_TOP30_WEBHOOK_URL" {
 		t.Fatalf("default delivery env name = %q", la.Delivery.Top30WebhookURLEnv)
 	}
+	if !la.ListedUniverseRefresh.Enabled {
+		t.Fatalf("default listed_universe_refresh must be enabled")
+	}
+	if la.ListedUniverseRefresh.Interval != 15*time.Minute {
+		t.Fatalf("default refresh interval = %s, want 15m", la.ListedUniverseRefresh.Interval)
+	}
+	if la.ListedUniverseRefresh.FreshWindow != 30*time.Minute {
+		t.Fatalf("default refresh fresh_window = %s, want 30m", la.ListedUniverseRefresh.FreshWindow)
+	}
+	if la.ListedUniverseRefresh.SeedShrinkFloor != 0.5 {
+		t.Fatalf("default refresh shrink floor = %v, want 0.5", la.ListedUniverseRefresh.SeedShrinkFloor)
+	}
+	if got := la.ListedUniverseRefresh.CoveredPlatforms; len(got) != 10 {
+		t.Fatalf("default covered platforms len = %d, want 10", len(got))
+	}
 	if la.Top30Push.StaleAfter != 15*time.Minute {
 		t.Fatalf("default stale_after = %s", la.Top30Push.StaleAfter)
 	}

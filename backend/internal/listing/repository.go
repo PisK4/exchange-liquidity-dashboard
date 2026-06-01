@@ -1387,3 +1387,117 @@ func nullRawJSON(raw json.RawMessage) any {
 	}
 	return []byte(raw)
 }
+
+// PlatformBaseSurface is the deduped (platform, base, surface) tuple
+// the listed-universe refresh job consumes. market_surface is part
+// of the key so the BulkMarkCandidatesAlreadyListed call can scope
+// the reconciliation by surface and avoid closing spot candidates
+// when only the perp surface listed (and vice versa).
+type PlatformBaseSurface struct {
+	Platform      string
+	BaseAsset     string
+	MarketSurface string
+}
+
+// QueryActiveListedBases returns the distinct (platform, base_asset,
+// market_surface) tuples whose snapshot is younger than freshWindow
+// and currently active. Synthetic instruments (e.g. BingX NCSK*) are
+// excluded so the runtime listed_universe never gains rows the user
+// would not recognise. The freshness cutoff is computed off the
+// repository clock so tests can pin it deterministically.
+func (r *Repository) QueryActiveListedBases(ctx context.Context, freshWindow time.Duration) ([]PlatformBaseSurface, error) {
+	if r.db == nil {
+		return nil, errors.New("listing repository: no db attached")
+	}
+	cutoff := r.now().Add(-freshWindow)
+	const query = `SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot
+	  WHERE status_normalized = 'active'
+	    AND COALESCE(instrument_kind, '') <> 'synthetic'
+	    AND COALESCE(base_asset, '') <> ''
+	    AND last_seen_at >= ?
+	  GROUP BY platform, base_asset, market_surface
+	  ORDER BY platform, base_asset, market_surface`
+	rows, err := r.db.QueryContext(ctx, query, cutoff)
+	if err != nil {
+		return nil, fmt.Errorf("query active listed bases: %w", err)
+	}
+	defer rows.Close()
+	var out []PlatformBaseSurface
+	for rows.Next() {
+		var pbs PlatformBaseSurface
+		if err := rows.Scan(&pbs.Platform, &pbs.BaseAsset, &pbs.MarketSurface); err != nil {
+			return nil, err
+		}
+		out = append(out, pbs)
+	}
+	return out, rows.Err()
+}
+
+// BulkMarkCandidatesAlreadyListed flips every candidate row whose
+// canonical_symbol is in canonicalBases and whose market_surface
+// matches `surface` to lifecycle_status='already_listed'. The update
+// is intentionally a single statement so MySQL handles the row
+// scanning rather than the application layer (the candidate table
+// is small but this keeps the operation safe under concurrent
+// fusion updates).
+//
+// The actionable lifecycle whitelist below is the projection of the
+// candidate state machine that has NOT yet been "closed" by operator
+// action — `already_listed` is skipped because the UPDATE is a no-op
+// for those rows. Future operator-controlled states (archived /
+// declined / record_only) MUST NOT be flipped automatically;
+// callers can re-issue with an explicit override if they want that
+// behaviour.
+//
+// Empty/nil canonicalBases is a no-op (returns 0, nil) — without the
+// guard MySQL rejects an `IN ()` clause as a syntax error.
+func (r *Repository) BulkMarkCandidatesAlreadyListed(ctx context.Context, canonicalBases []string, surface string, now time.Time) (int, error) {
+	if r.db == nil {
+		return 0, errors.New("listing repository: no db attached")
+	}
+	if len(canonicalBases) == 0 {
+		return 0, nil
+	}
+	if surface == "" {
+		return 0, errors.New("BulkMarkCandidatesAlreadyListed: surface is required")
+	}
+	if now.IsZero() {
+		now = r.now()
+	}
+	placeholders := make([]string, len(canonicalBases))
+	args := make([]any, 0, len(canonicalBases)+2)
+	args = append(args, now, surface)
+	for i, b := range canonicalBases {
+		placeholders[i] = "?"
+		args = append(args, b)
+	}
+	query := fmt.Sprintf(`UPDATE t_listing_candidate
+	   SET lifecycle_status = '%s',
+	       lifecycle_status_label = ?,
+	       last_observed_at = ?
+	 WHERE market_surface = ?
+	   AND canonical_symbol IN (%s)
+	   AND lifecycle_status IN (?, ?, ?, ?)`,
+		LifecycleAlreadyListed, strings.Join(placeholders, ","))
+	// Rebuild args in matching order: label, last_observed_at, surface, ...bases, whitelist
+	args = nil
+	args = append(args, LifecycleStatusLabels[LifecycleAlreadyListed], now, surface)
+	for _, b := range canonicalBases {
+		args = append(args, b)
+	}
+	args = append(args,
+		LifecycleObserved,
+		LifecycleAnnouncedPendingAPI,
+		LifecycleAPIDetectedNoAnnouncement,
+		LifecycleConfirmedListingCandidate,
+	)
+	res, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("bulk mark already listed: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(rows), nil
+}
