@@ -1388,6 +1388,120 @@ func nullRawJSON(raw json.RawMessage) any {
 	return []byte(raw)
 }
 
+// ListLatestInstrumentSnapshotsByPlatform returns every active,
+// non-synthetic snapshot row for the given platform. The
+// CatalogResolver DB-first path consumes the slice to derive
+// per-platform symbol metadata (hyperliquid universe, gate
+// quanto_multiplier, lighter market_id, edgeX contract_id) directly
+// from the live snapshot table rather than the monthly file dump.
+// Returns an empty slice (not an error) when no rows match — the
+// resolver interprets that as "fall back to file dump".
+func (r *Repository) ListLatestInstrumentSnapshotsByPlatform(ctx context.Context, platform string) ([]InstrumentSnapshot, error) {
+	if r.db == nil {
+		return nil, errors.New("listing repository: no db attached")
+	}
+	const query = `SELECT id, platform, market_type, api_symbol, api_market_id, display_symbol,
+	  canonical_symbol, base_asset, quote_asset, settle_asset, market_surface,
+	  instrument_kind, contract_type, status_raw, status_normalized,
+	  status_field_name, listing_time_ts, listing_time_field_name, delist_flag,
+	  first_seen_at, previous_seen_at, last_seen_at, raw_json, raw_json_hash,
+	  normalizer_version
+	  FROM t_listing_instrument_snapshot
+	  WHERE platform = ?
+	    AND status_normalized = 'active'
+	    AND COALESCE(instrument_kind, '') <> 'synthetic'
+	    AND COALESCE(base_asset, '') <> ''
+	  ORDER BY market_type, api_symbol`
+	rows, err := r.db.QueryContext(ctx, query, platform)
+	if err != nil {
+		return nil, fmt.Errorf("list snapshots by platform: %w", err)
+	}
+	defer rows.Close()
+	var out []InstrumentSnapshot
+	for rows.Next() {
+		snap, err := scanInstrumentSnapshot(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, snap)
+	}
+	return out, rows.Err()
+}
+
+// scanInstrumentSnapshot decodes one row from the standard column
+// projection used by LatestInstrumentSnapshotByKey /
+// ListLatestInstrumentSnapshotsByPlatform.
+func scanInstrumentSnapshot(rows *sql.Rows) (InstrumentSnapshot, error) {
+	var (
+		out                InstrumentSnapshot
+		apiMarketID        sql.NullString
+		displaySymbol      sql.NullString
+		canonicalSymbol    sql.NullString
+		baseAsset          sql.NullString
+		quoteAsset         sql.NullString
+		settleAsset        sql.NullString
+		contractType       sql.NullString
+		statusRaw          sql.NullString
+		statusFieldName    sql.NullString
+		listingTimeTS      sql.NullTime
+		listingTimeFieldNm sql.NullString
+		previousSeenAt     sql.NullTime
+		rawJSON            []byte
+	)
+	if err := rows.Scan(
+		&out.ID, &out.Platform, &out.MarketType, &out.APISymbol, &apiMarketID, &displaySymbol,
+		&canonicalSymbol, &baseAsset, &quoteAsset, &settleAsset, &out.MarketSurface,
+		&out.InstrumentKind, &contractType, &statusRaw, &out.StatusNormalized,
+		&statusFieldName, &listingTimeTS, &listingTimeFieldNm, &out.DelistFlag,
+		&out.FirstSeenAt, &previousSeenAt, &out.LastSeenAt, &rawJSON, &out.RawJSONHash,
+		&out.NormalizerVersion,
+	); err != nil {
+		return InstrumentSnapshot{}, err
+	}
+	if apiMarketID.Valid {
+		out.APIMarketID = apiMarketID.String
+	}
+	if displaySymbol.Valid {
+		out.DisplaySymbol = displaySymbol.String
+	}
+	if canonicalSymbol.Valid {
+		out.CanonicalSymbol = canonicalSymbol.String
+	}
+	if baseAsset.Valid {
+		out.BaseAsset = baseAsset.String
+	}
+	if quoteAsset.Valid {
+		out.QuoteAsset = quoteAsset.String
+	}
+	if settleAsset.Valid {
+		out.SettleAsset = settleAsset.String
+	}
+	if contractType.Valid {
+		out.ContractType = contractType.String
+	}
+	if statusRaw.Valid {
+		out.StatusRaw = statusRaw.String
+	}
+	if statusFieldName.Valid {
+		out.StatusFieldName = statusFieldName.String
+	}
+	if listingTimeTS.Valid {
+		t := listingTimeTS.Time
+		out.ListingTimeTS = &t
+	}
+	if listingTimeFieldNm.Valid {
+		out.ListingTimeFieldName = listingTimeFieldNm.String
+	}
+	if previousSeenAt.Valid {
+		t := previousSeenAt.Time
+		out.PreviousSeenAt = &t
+	}
+	if len(rawJSON) > 0 {
+		out.RawJSON = json.RawMessage(append([]byte(nil), rawJSON...))
+	}
+	return out, nil
+}
+
 // PlatformBaseSurface is the deduped (platform, base, surface) tuple
 // the listed-universe refresh job consumes. market_surface is part
 // of the key so the BulkMarkCandidatesAlreadyListed call can scope

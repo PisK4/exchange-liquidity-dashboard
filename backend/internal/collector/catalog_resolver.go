@@ -1,6 +1,7 @@
 package collector
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -8,9 +9,42 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"edgex-dashboard/backend/internal/domain"
 )
+
+// defaultCatalogResolverTTL is the per-platform refresh window for
+// the DB-first cache. 5 minutes aligns with the listing instrument
+// poll cadence so a fresh DB row becomes visible to the backfiller
+// within one poll boundary without any cross-component invalidation.
+const defaultCatalogResolverTTL = 5 * time.Minute
+
+// SnapshotRow is the minimum projection of t_listing_instrument_snapshot
+// the catalog resolver needs. Keeping it in this package (rather than
+// importing listing.InstrumentSnapshot) avoids a circular dependency:
+// the listing package owns the Repository; cmd/dashboard wires an
+// adapter that fans out the listing.Repository method into this
+// shape.
+type SnapshotRow struct {
+	Platform       string
+	MarketType     string
+	APISymbol      string
+	APIMarketID    string
+	BaseAsset      string
+	MarketSurface  string
+	InstrumentKind string
+	RawJSON        []byte
+}
+
+// SnapshotReader is the optional dependency that drives the DB-first
+// resolver path for the 4 platforms whose api_symbol cannot be
+// synthesized from convention alone (hyperliquid, gate, lighter,
+// edgeX). When nil, the resolver behaves exactly like the previous
+// file-only implementation.
+type SnapshotReader interface {
+	ListLatestInstrumentSnapshotsByPlatform(ctx context.Context, platform string) ([]SnapshotRow, error)
+}
 
 // ErrSymbolUnsupported is returned when a (platform, baseAsset) pair cannot
 // be resolved to a tradable SymbolSub for any of the following reasons:
@@ -54,10 +88,21 @@ var ErrSymbolUnsupported = errors.New("symbol unsupported on platform")
 // is populated once per platform on first access and reused for the
 // process lifetime.
 type CatalogResolver struct {
-	dumpsDir string
+	dumpsDir  string
+	snapshots SnapshotReader
+	ttl       time.Duration
+	nowFn     func() time.Time
 
-	mu    sync.RWMutex
-	cache map[string]platformLookup // platform → lookup
+	mu    sync.Mutex
+	cache map[string]platformCacheEntry // platform → entry
+}
+
+// platformCacheEntry pins a per-platform lookup with its load time so
+// the resolver can decide on each Resolve call whether the cached
+// entry is still fresh.
+type platformCacheEntry struct {
+	lookup   platformLookup
+	loadedAt time.Time
 }
 
 // platformLookup is either dump-backed (entries enumerated) or convention-
@@ -74,9 +119,29 @@ type platformLookup struct {
 // whose dump is missing degrade to ErrSymbolUnsupported (unless the
 // platform is convention-only, in which case the symbol is synthesised).
 func NewCatalogResolver(dumpsDir string) *CatalogResolver {
+	return NewCatalogResolverWithDB(dumpsDir, nil, defaultCatalogResolverTTL, nil)
+}
+
+// NewCatalogResolverWithDB constructs a resolver wired to both the
+// file dumps directory and a SnapshotReader. When snapshots is
+// non-nil the resolver tries the DB first for the 4 DB-first
+// platforms (hyperliquid / gate / lighter / edgeX) and falls back
+// to the file dump on either an error or an empty result, so the
+// monthly catalog stays a safety net. TTL bounds how long a cached
+// per-platform lookup is reused; pass 0 to default to 5 minutes.
+func NewCatalogResolverWithDB(dumpsDir string, snapshots SnapshotReader, ttl time.Duration, now func() time.Time) *CatalogResolver {
+	if ttl <= 0 {
+		ttl = defaultCatalogResolverTTL
+	}
+	if now == nil {
+		now = time.Now
+	}
 	return &CatalogResolver{
-		dumpsDir: dumpsDir,
-		cache:    map[string]platformLookup{},
+		dumpsDir:  dumpsDir,
+		snapshots: snapshots,
+		ttl:       ttl,
+		nowFn:     now,
+		cache:     map[string]platformCacheEntry{},
 	}
 }
 
@@ -97,18 +162,9 @@ func (r *CatalogResolver) Resolve(platform, baseAsset, displaySymbol string) (do
 		displaySymbol = base + "-USDT (perp)"
 	}
 
-	r.mu.RLock()
-	lookup, ok := r.cache[platform]
-	r.mu.RUnlock()
-	if !ok {
-		loaded, err := r.loadPlatform(platform)
-		if err != nil {
-			return domain.SymbolSub{}, err
-		}
-		r.mu.Lock()
-		r.cache[platform] = loaded
-		lookup = loaded
-		r.mu.Unlock()
+	lookup, err := r.lookupForPlatform(platform)
+	if err != nil {
+		return domain.SymbolSub{}, err
 	}
 
 	if lookup.conventionOnly {
@@ -130,22 +186,189 @@ func (r *CatalogResolver) Resolve(platform, baseAsset, displaySymbol string) (do
 	return sub, nil
 }
 
-// loadPlatform dispatches to per-platform loaders.
+// lookupForPlatform returns the cached entry when it is still within
+// the TTL window; otherwise it (re)loads the lookup via the DB-first
+// path with file fallback.
+func (r *CatalogResolver) lookupForPlatform(platform string) (platformLookup, error) {
+	r.mu.Lock()
+	entry, ok := r.cache[platform]
+	now := r.nowFn()
+	if ok && now.Sub(entry.loadedAt) < r.ttl {
+		r.mu.Unlock()
+		return entry.lookup, nil
+	}
+	r.mu.Unlock()
+
+	loaded, err := r.loadPlatform(platform)
+	if err != nil {
+		return platformLookup{}, err
+	}
+	r.mu.Lock()
+	r.cache[platform] = platformCacheEntry{lookup: loaded, loadedAt: now}
+	r.mu.Unlock()
+	return loaded, nil
+}
+
+// loadPlatform dispatches to per-platform loaders. For the 4 DB-first
+// platforms it consults the SnapshotReader first and falls back to
+// the file dump when (a) no reader is wired, (b) the reader returns
+// an error, or (c) the reader returns zero rows. Convention-only
+// platforms never consult the reader so the DB stays untouched for
+// the 6 platforms whose api_symbol is fully synthesizable.
 func (r *CatalogResolver) loadPlatform(platform string) (platformLookup, error) {
 	switch platform {
 	case "binance", "okx", "bybit", "bitget", "bingx", "mexc":
 		return platformLookup{conventionOnly: true}, nil
 	case "hyperliquid":
+		if lookup, ok := r.loadFromSnapshots(platform, decodeHyperliquidSnapshot); ok {
+			return lookup, nil
+		}
 		return r.loadHyperliquid()
 	case "gate":
+		if lookup, ok := r.loadFromSnapshots(platform, decodeGateSnapshot); ok {
+			return lookup, nil
+		}
 		return r.loadGate()
 	case "lighter":
+		if lookup, ok := r.loadFromSnapshots(platform, decodeLighterSnapshot); ok {
+			return lookup, nil
+		}
 		return r.loadLighter()
 	case "edgeX":
+		if lookup, ok := r.loadFromSnapshots(platform, decodeEdgeXSnapshot); ok {
+			return lookup, nil
+		}
 		return r.loadEdgeX()
 	default:
 		return platformLookup{}, fmt.Errorf("%w: unknown platform %q", ErrSymbolUnsupported, platform)
 	}
+}
+
+// loadFromSnapshots is the DB-first scaffolding used by all 4
+// DB-first platforms. The decoder is responsible for turning a row
+// into a SymbolSub; returning ok=false on any single row is fine
+// because the caller is the file fallback.
+//
+// The function returns ok=true ONLY when at least one row was
+// successfully decoded so the caller distinguishes "DB up but no
+// rows yet for this platform" (fall back to file) from "DB had data
+// (use it)".
+func (r *CatalogResolver) loadFromSnapshots(platform string, decode func(SnapshotRow) (string, domain.SymbolSub, bool)) (platformLookup, bool) {
+	if r.snapshots == nil {
+		return platformLookup{}, false
+	}
+	rows, err := r.snapshots.ListLatestInstrumentSnapshotsByPlatform(context.Background(), platform)
+	if err != nil || len(rows) == 0 {
+		return platformLookup{}, false
+	}
+	out := make(map[string]domain.SymbolSub, len(rows))
+	for _, row := range rows {
+		base, sub, ok := decode(row)
+		if !ok {
+			continue
+		}
+		out[base] = sub
+	}
+	if len(out) == 0 {
+		return platformLookup{}, false
+	}
+	return platformLookup{entries: out}, true
+}
+
+// decodeHyperliquidSnapshot turns one hyperliquid snapshot row into a
+// SymbolSub. api_symbol is preserved verbatim because the
+// candleSnapshot endpoint accepts case-sensitive coin names (kPEPE,
+// xyz:CL, ...).
+func decodeHyperliquidSnapshot(row SnapshotRow) (string, domain.SymbolSub, bool) {
+	base := strings.ToUpper(strings.TrimSpace(row.BaseAsset))
+	if base == "" {
+		return "", domain.SymbolSub{}, false
+	}
+	apiSymbol := strings.TrimSpace(row.APISymbol)
+	if apiSymbol == "" {
+		apiSymbol = row.BaseAsset
+	}
+	return base, domain.SymbolSub{
+		Platform:  "hyperliquid",
+		Canonical: base,
+		APISymbol: apiSymbol,
+	}, true
+}
+
+// decodeGateSnapshot extracts quanto_multiplier from raw_json. A
+// snapshot without quanto_multiplier is unusable for USD conversion,
+// so we skip it (the file fallback may have it).
+func decodeGateSnapshot(row SnapshotRow) (string, domain.SymbolSub, bool) {
+	base := strings.ToUpper(strings.TrimSpace(row.BaseAsset))
+	if base == "" {
+		return "", domain.SymbolSub{}, false
+	}
+	var raw struct {
+		QuantoMultiplier string `json:"quanto_multiplier"`
+	}
+	if len(row.RawJSON) > 0 {
+		_ = json.Unmarshal(row.RawJSON, &raw)
+	}
+	mult := parseFloatOrZero(raw.QuantoMultiplier)
+	if mult <= 0 {
+		return "", domain.SymbolSub{}, false
+	}
+	return base, domain.SymbolSub{
+		Platform:         "gate",
+		Canonical:        base,
+		APISymbol:        strings.ToUpper(strings.TrimSpace(row.APISymbol)),
+		QuantoMultiplier: mult,
+	}, true
+}
+
+// decodeLighterSnapshot uses api_market_id (the normalizer writes the
+// market_id integer there as a string).
+func decodeLighterSnapshot(row SnapshotRow) (string, domain.SymbolSub, bool) {
+	base := strings.ToUpper(strings.TrimSpace(row.BaseAsset))
+	if base == "" {
+		return "", domain.SymbolSub{}, false
+	}
+	if strings.TrimSpace(row.APIMarketID) == "" {
+		return "", domain.SymbolSub{}, false
+	}
+	var mid int
+	if _, err := fmt.Sscanf(strings.TrimSpace(row.APIMarketID), "%d", &mid); err != nil {
+		return "", domain.SymbolSub{}, false
+	}
+	return base, domain.SymbolSub{
+		Platform:  "lighter",
+		Canonical: base,
+		APISymbol: strings.ToUpper(strings.TrimSpace(row.BaseAsset)),
+		MarketID:  &mid,
+	}, true
+}
+
+// decodeEdgeXSnapshot extracts contractId from raw_json.
+func decodeEdgeXSnapshot(row SnapshotRow) (string, domain.SymbolSub, bool) {
+	base := strings.ToUpper(strings.TrimSpace(row.BaseAsset))
+	if base == "" {
+		return "", domain.SymbolSub{}, false
+	}
+	var raw struct {
+		ContractID   string `json:"contractId"`
+		ContractName string `json:"contractName"`
+	}
+	if len(row.RawJSON) > 0 {
+		_ = json.Unmarshal(row.RawJSON, &raw)
+	}
+	if strings.TrimSpace(raw.ContractID) == "" {
+		return "", domain.SymbolSub{}, false
+	}
+	apiSymbol := strings.TrimSpace(raw.ContractName)
+	if apiSymbol == "" {
+		apiSymbol = strings.TrimSpace(row.APISymbol)
+	}
+	return base, domain.SymbolSub{
+		Platform:   "edgeX",
+		Canonical:  base,
+		APISymbol:  apiSymbol,
+		ContractID: raw.ContractID,
+	}, true
 }
 
 // synthesizeConvention builds a SymbolSub for convention-only platforms.
