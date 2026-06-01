@@ -2,6 +2,7 @@ package listing
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -38,7 +39,18 @@ type FusionResult struct {
 	// announcement_listing). Such signals are marked fused so the
 	// next tick ignores them, but they NEVER produce a candidate.
 	SkippedAggregator int
-	FailClosed        string
+	// SkippedObservationOnly counts instrument_diff signals whose
+	// signal_subtype is observation-only (metadata_changed,
+	// delisted, status_changed→{paused,inactive,delisted}). They are
+	// still marked fused so the unfused queue drains, but they do
+	// NOT upsert into t_listing_candidate. See
+	// isCandidatePromotingInstrumentDiff and the 2026-06-01 incident
+	// where Gate/BingX/Lighter raw_json contained time-varying
+	// market data fields that flipped metadata_changed every tick
+	// and surfaced as bogus "New Perp Listing Detected" Lark cards
+	// for already-listed tokens like GLM.
+	SkippedObservationOnly int
+	FailClosed             string
 }
 
 // isCandidateBearingSignal reports whether a signal type carries
@@ -50,6 +62,54 @@ type FusionResult struct {
 func isCandidateBearingSignal(signalType string) bool {
 	switch signalType {
 	case SignalInstrumentDiff, SignalAnnouncementListing:
+		return true
+	}
+	return false
+}
+
+// isCandidatePromotingInstrumentDiff reports whether an
+// instrument_diff signal's subtype should elevate to a
+// t_listing_candidate row (and thereby a Lark decision card).
+//
+// Only events that semantically describe "a new perpetual / spot
+// listing has appeared on this venue" qualify:
+//   - new_symbol            (instrument first observed)
+//   - relisted              (delisted → listed flip)
+//   - listing_time_changed  (scheduled listing time moved)
+//   - status_changed where status_to ∈ {active, pre_listing}
+//
+// All other subtypes (metadata_changed, delisted, status_changed →
+// paused/inactive/delisted) are observation-only: they may be useful
+// for forensic analysis and DB-first CatalogResolver reads, but they
+// are NOT "新上市候选" decisions and must not surface in the Lark
+// listing group. See the 2026-06-01 hash-noise incident root-cause
+// for why this gate exists.
+func isCandidatePromotingInstrumentDiff(s SignalObservation) bool {
+	switch s.SignalSubtype {
+	case DiffNewSymbol, DiffRelisted, DiffListingTimeChanged:
+		return true
+	case DiffStatusChanged:
+		return statusChangedPromotes(s.PayloadJSON)
+	}
+	return false
+}
+
+// statusChangedPromotes inspects the diff payload's status_to field.
+// Only transitions INTO an active / pre-listing state qualify as a
+// listing decision; transitions OUT (active → paused / delisted) are
+// the opposite of a listing event.
+func statusChangedPromotes(payload json.RawMessage) bool {
+	if len(payload) == 0 {
+		return false
+	}
+	var p struct {
+		StatusTo string `json:"status_to"`
+	}
+	if err := json.Unmarshal(payload, &p); err != nil {
+		return false
+	}
+	switch p.StatusTo {
+	case "active", "pre_listing":
 		return true
 	}
 	return false
@@ -107,9 +167,18 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 	groups := make(map[groupKey]*group)
 	order := make([]groupKey, 0)
 	aggregatorIDs := make([]int64, 0)
+	observationOnlyIDs := make([]int64, 0)
 	for _, s := range signals {
 		if !isCandidateBearingSignal(s.SignalType) {
 			aggregatorIDs = append(aggregatorIDs, s.ID)
+			continue
+		}
+		// Subtype gate: instrument_diff signals whose subtype does
+		// not semantically describe "new listing" are observation-
+		// only. We still mark them fused so the unfused queue drains
+		// but they do NOT upsert into t_listing_candidate.
+		if s.SignalType == SignalInstrumentDiff && !isCandidatePromotingInstrumentDiff(s) {
+			observationOnlyIDs = append(observationOnlyIDs, s.ID)
 			continue
 		}
 		key := groupKey{strings.ToUpper(s.CanonicalSymbol), s.MarketSurface, s.InstrumentKind}
@@ -208,6 +277,17 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 			return out, fmt.Errorf("mark aggregator signal fused %d: %w", id, err)
 		}
 		out.SkippedAggregator++
+	}
+	// Drain observation-only instrument_diff signals (metadata_changed,
+	// delisted, status_changed→paused, etc.). Same reasoning as
+	// aggregator drain: mark fused or the unfused queue grows
+	// unboundedly. These signals are valuable for forensic SQL but
+	// must not surface as Lark decision cards.
+	for _, id := range observationOnlyIDs {
+		if err := repo.MarkSignalFused(ctx, id, now); err != nil {
+			return out, fmt.Errorf("mark observation-only signal fused %d: %w", id, err)
+		}
+		out.SkippedObservationOnly++
 	}
 	return out, nil
 }
