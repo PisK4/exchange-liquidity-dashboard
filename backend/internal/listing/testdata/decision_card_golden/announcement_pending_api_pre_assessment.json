@@ -37,7 +37,7 @@
           {
             "is_short": true,
             "text": {
-              "content": "**Time**\n2026-05-31 18:15 SGT",
+              "content": "**Time**\n2026-05-31 18:15 UTC+8",
               "tag": "lark_md"
             }
           }
@@ -50,7 +50,7 @@
       {
         "tag": "div",
         "text": {
-          "content": "**Market Status**\n\u003cfont color='orange'\u003e●\u003c/font\u003e **Bybit Linear** · 公告刚发布 · 05-31 18:00 SGT · 公告",
+          "content": "**Market Status**\n\u003cfont color='orange'\u003e●\u003c/font\u003e **Bybit Linear** · 公告刚发布 · 05-31 18:00 UTC+8 · 公告",
           "tag": "lark_md"
         }
       },
@@ -189,7 +189,7 @@
       {
         "elements": [
           {
-            "content": "trigger=2026-05-31 18:15 SGT · evidence=公告已发布 · 待 API 上架 · confidence=medium_high · dedupe=listing_decision|203|2026-05-31",
+            "content": "trigger=2026-05-31 18:15 UTC+8 · evidence=公告已发布 · 待 API 上架 · confidence=medium_high · dedupe=listing_decision|203|2026-05-31",
             "tag": "plain_text"
           }
         ],

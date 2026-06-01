@@ -124,7 +124,7 @@ func TestRenderDecisionCardBasicInfoFieldsCarryAllPRDValues(t *testing.T) {
 		"edgeX 状态", "未上线",
 		"Source", "Binance Futures",
 		"Time", "2026-05-31",
-		"SGT",
+		"UTC+8",
 	}
 	for _, s := range mustContain {
 		if !strings.Contains(raw, s) {
@@ -374,12 +374,12 @@ func TestRenderDecisionCardFooterCarriesAuditInfo(t *testing.T) {
 	}
 }
 
-func TestRenderDecisionCardTimeFormattedAsSGT(t *testing.T) {
+func TestRenderDecisionCardTimeFormattedAsUTC8(t *testing.T) {
 	ev := baseEvent()
-	// 2026-05-31 06:30 UTC == 2026-05-31 14:30 SGT
+	// 2026-05-31 06:30 UTC == 2026-05-31 14:30 UTC+8
 	raw, _ := renderForTest(t, ev)
-	if !strings.Contains(raw, "2026-05-31 14:30 SGT") {
-		t.Errorf("time must render as SGT 14:30, raw=%s", raw)
+	if !strings.Contains(raw, "2026-05-31 14:30 UTC+8") {
+		t.Errorf("time must render as UTC+8 14:30, raw=%s", raw)
 	}
 }
 

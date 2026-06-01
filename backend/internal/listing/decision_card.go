@@ -10,30 +10,34 @@ import (
 	"time"
 )
 
-// sgtZone is the Singapore Time fixed zone the PRD calls out for
-// every timestamp on the card. Stored as a package-level singleton
-// so the renderer does not allocate one per card; UTC+8 has no DST
-// so a fixed offset is correct year-round.
-var sgtZone = time.FixedZone("SGT", 8*3600)
+// utc8Zone is the +08:00 fixed offset zone used for every timestamp
+// on the decision card. Stored as a package-level singleton so the
+// renderer does not allocate one per card; UTC+8 has no DST so a
+// fixed offset is correct year-round.
+//
+// The label was renamed from "SGT" to "UTC+8" on 2026-06-02 to make
+// timestamps directly readable by the China-team operators on the
+// Lark group. The instant is unchanged (same +08:00 offset).
+var utc8Zone = time.FixedZone("UTC+8", 8*3600)
 
-// formatSGT renders t in Singapore Time matching the PRD sample
-// (e.g. "2026-05-02 14:30 SGT"). Returns "—" for the zero time so
+// formatUTC8 renders t in +08:00 matching the operator sample
+// (e.g. "2026-05-02 14:30 UTC+8"). Returns "—" for the zero time so
 // the renderer never produces "0001-01-01 ..." gibberish.
-func formatSGT(t time.Time) string {
+func formatUTC8(t time.Time) string {
 	if t.IsZero() {
 		return "—"
 	}
-	return t.In(sgtZone).Format("2006-01-02 15:04 SGT")
+	return t.In(utc8Zone).Format("2006-01-02 15:04 UTC+8")
 }
 
-// formatSGTShort is the shortened variant used inside the per-platform
-// Market Status bullet rows: "05-30 10:00 SGT". Drops the year so the
-// bullet list stays compact on narrow Lark mobile cards.
-func formatSGTShort(t time.Time) string {
+// formatUTC8Short is the shortened variant used inside the per-platform
+// Market Status bullet rows: "05-30 10:00 UTC+8". Drops the year so
+// the bullet list stays compact on narrow Lark mobile cards.
+func formatUTC8Short(t time.Time) string {
 	if t.IsZero() {
 		return "—"
 	}
-	return t.In(sgtZone).Format("01-02 15:04 SGT")
+	return t.In(utc8Zone).Format("01-02 15:04 UTC+8")
 }
 
 // Decision actions exposed in the Lark card. Stable enums (not
@@ -281,7 +285,7 @@ func buildDecisionBasicInfoFields(ev DecisionCardEvent) map[string]any {
 			summaryField("Token", canonicalOrDash(ev.CanonicalSymbol)),
 			summaryField("edgeX 状态", edgex),
 			summaryField("Source", source),
-			summaryField("Time", formatSGT(ev.TriggerTime)),
+			summaryField("Time", formatUTC8(ev.TriggerTime)),
 		},
 	}
 }
@@ -360,7 +364,7 @@ func buildDecisionMarketStatusBlock(ev DecisionCardEvent) map[string]any {
 
 func formatMarketStatusLine(ms PlatformMarketStatus) string {
 	bullet := marketStatusBullet(ms.Status)
-	when := formatSGTShort(ms.OccurredAt)
+	when := formatUTC8Short(ms.OccurredAt)
 	source := marketStatusSourceLabel(ms.SourceKind)
 	name := strings.TrimSpace(ms.DisplayName)
 	if name == "" {
@@ -521,7 +525,7 @@ func decisionButtonType(action string) string {
 // pipeline without leaving Lark.
 func buildDecisionFooterNote(ev DecisionCardEvent) map[string]any {
 	parts := []string{
-		"trigger=" + formatSGT(ev.TriggerTime),
+		"trigger=" + formatUTC8(ev.TriggerTime),
 		"evidence=" + evidenceKindLabel(ev.EvidenceKind),
 	}
 	if ev.ConfidenceLevel != "" {

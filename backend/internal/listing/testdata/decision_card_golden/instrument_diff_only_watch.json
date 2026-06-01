@@ -37,7 +37,7 @@
           {
             "is_short": true,
             "text": {
-              "content": "**Time**\n2026-05-31 16:00 SGT",
+              "content": "**Time**\n2026-05-31 16:00 UTC+8",
               "tag": "lark_md"
             }
           }
@@ -50,7 +50,7 @@
       {
         "tag": "div",
         "text": {
-          "content": "**Market Status**\n\u003cfont color='green'\u003e●\u003c/font\u003e **OKX Perp** · Perp LIVE · 05-31 15:45 SGT · API",
+          "content": "**Market Status**\n\u003cfont color='green'\u003e●\u003c/font\u003e **OKX Perp** · Perp LIVE · 05-31 15:45 UTC+8 · API",
           "tag": "lark_md"
         }
       },
@@ -189,7 +189,7 @@
       {
         "elements": [
           {
-            "content": "trigger=2026-05-31 16:00 SGT · evidence=API 已发现 · 待公告确认 · confidence=medium · dedupe=listing_decision|202|2026-05-31",
+            "content": "trigger=2026-05-31 16:00 UTC+8 · evidence=API 已发现 · 待公告确认 · confidence=medium · dedupe=listing_decision|202|2026-05-31",
             "tag": "plain_text"
           }
         ],

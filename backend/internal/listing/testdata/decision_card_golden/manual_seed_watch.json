@@ -37,7 +37,7 @@
           {
             "is_short": true,
             "text": {
-              "content": "**Time**\n2026-05-31 22:30 SGT",
+              "content": "**Time**\n2026-05-31 22:30 UTC+8",
               "tag": "lark_md"
             }
           }
@@ -189,7 +189,7 @@
       {
         "elements": [
           {
-            "content": "trigger=2026-05-31 22:30 SGT · evidence=手动加入 · confidence=medium · dedupe=listing_decision|205|2026-05-31",
+            "content": "trigger=2026-05-31 22:30 UTC+8 · evidence=手动加入 · confidence=medium · dedupe=listing_decision|205|2026-05-31",
             "tag": "plain_text"
           }
         ],

@@ -37,7 +37,7 @@
           {
             "is_short": true,
             "text": {
-              "content": "**Time**\n2026-05-31 14:30 SGT",
+              "content": "**Time**\n2026-05-31 14:30 UTC+8",
               "tag": "lark_md"
             }
           }
@@ -50,7 +50,7 @@
       {
         "tag": "div",
         "text": {
-          "content": "**Market Status**\n\u003cfont color='green'\u003e●\u003c/font\u003e **Binance Futures** · Perp LIVE · 05-30 10:00 SGT · API\n\u003cfont color='orange'\u003e●\u003c/font\u003e **Bybit Linear** · 公告已发 · 05-31 08:15 SGT · 公告",
+          "content": "**Market Status**\n\u003cfont color='green'\u003e●\u003c/font\u003e **Binance Futures** · Perp LIVE · 05-30 10:00 UTC+8 · API\n\u003cfont color='orange'\u003e●\u003c/font\u003e **Bybit Linear** · 公告已发 · 05-31 08:15 UTC+8 · 公告",
           "tag": "lark_md"
         }
       },
@@ -189,7 +189,7 @@
       {
         "elements": [
           {
-            "content": "trigger=2026-05-31 14:30 SGT · evidence=公告 + API 双源确认 · confidence=high · enrich_errors=1 · dedupe=listing_decision|301|2026-05-31",
+            "content": "trigger=2026-05-31 14:30 UTC+8 · evidence=公告 + API 双源确认 · confidence=high · enrich_errors=1 · dedupe=listing_decision|301|2026-05-31",
             "tag": "plain_text"
           }
         ],
