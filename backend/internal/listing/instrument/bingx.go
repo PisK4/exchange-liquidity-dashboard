@@ -26,23 +26,26 @@ type bingxSpotRaw struct {
 // "asset" is the base; "quoteAsset" is the settle/quote. Status is also
 // integer (1=trading; 5=pre-launch; 25=settling; 0/2/3/4/5=other states).
 //
-// pricePrecision, quantityPrecision, size and tradeMinQuantity are
-// schema-stable spec fields surfaced into StableHashExtras so a
-// legitimate contract rotation still flips the hash. feeRate /
-// makerFeeRate / takerFeeRate / triggerFeeRate are intentionally
-// excluded — fee schedules can be re-quoted by the exchange without
-// it being a listing event.
+// pricePrecision, quantityPrecision and size are schema-stable spec
+// fields surfaced into StableHashExtras so a legitimate contract
+// rotation still flips the hash. feeRate / makerFeeRate /
+// takerFeeRate / triggerFeeRate are intentionally excluded — fee
+// schedules can be re-quoted by the exchange without it being a
+// listing event. tradeMinQuantity is ALSO excluded because BingX
+// recomputes it from the current mark price ($2 USDT minimum /
+// price), so it flips between polls without any spec change —
+// observed 365899 -> 365765 for SHIB at 5min intervals on
+// 2026-06-01.
 type bingxSwapRaw struct {
-	Symbol            string  `json:"symbol"`
-	Status            int     `json:"status"`
-	Asset             string  `json:"asset"`
-	QuoteAsset        string  `json:"quoteAsset"`
-	LaunchTime        int64   `json:"launchTime"`
-	ContractID        string  `json:"contractId"`
-	PricePrecision    int     `json:"pricePrecision"`
-	QuantityPrecision int     `json:"quantityPrecision"`
-	Size              string  `json:"size"`
-	TradeMinQuantity  float64 `json:"tradeMinQuantity"`
+	Symbol            string `json:"symbol"`
+	Status            int    `json:"status"`
+	Asset             string `json:"asset"`
+	QuoteAsset        string `json:"quoteAsset"`
+	LaunchTime        int64  `json:"launchTime"`
+	ContractID        string `json:"contractId"`
+	PricePrecision    int    `json:"pricePrecision"`
+	QuantityPrecision int    `json:"quantityPrecision"`
+	Size              string `json:"size"`
 }
 
 // NormalizeBingXSpotSymbol turns one /openApi/spot/v1/common/symbols
@@ -144,7 +147,6 @@ func NormalizeBingXSwapSymbol(raw json.RawMessage) (NormalizedInstrument, error)
 			"pricePrecision":    strconv.Itoa(p.PricePrecision),
 			"quantityPrecision": strconv.Itoa(p.QuantityPrecision),
 			"size":              strings.TrimSpace(p.Size),
-			"tradeMinQuantity":  strconv.FormatFloat(p.TradeMinQuantity, 'f', -1, 64),
 		},
 	}
 	n.StableHash = n.ComputeStableHash()

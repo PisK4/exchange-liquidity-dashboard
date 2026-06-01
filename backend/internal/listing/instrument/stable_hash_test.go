@@ -108,6 +108,15 @@ func TestNormalizeBingXSwapHashStableUnderFeeJitter(t *testing.T) {
 	stableHashTwice(t, "bingx.swap", NormalizeBingXSwapSymbol, a, b)
 }
 
+// 2026-06-01 incident residual: BingX recomputes tradeMinQuantity
+// from current mark price each poll (e.g. SHIB 365899 -> 365765 in
+// 5min). The field must NOT participate in StableHash.
+func TestNormalizeBingXSwapHashStableUnderTradeMinQuantityJitter(t *testing.T) {
+	a := []byte(`{"symbol":"SHIB-USDT","status":1,"asset":"SHIB","quoteAsset":"USDT","launchTime":1635350400000,"contractId":"100019","pricePrecision":9,"quantityPrecision":0,"size":"1000","tradeMinQuantity":365899}`)
+	b := []byte(`{"symbol":"SHIB-USDT","status":1,"asset":"SHIB","quoteAsset":"USDT","launchTime":1635350400000,"contractId":"100019","pricePrecision":9,"quantityPrecision":0,"size":"1000","tradeMinQuantity":365765}`)
+	stableHashTwice(t, "bingx.swap.tradeMinQuantity", NormalizeBingXSwapSymbol, a, b)
+}
+
 func TestNormalizeBingXSwapHashFlipsOnContractID(t *testing.T) {
 	a := []byte(`{"symbol":"BTC-USDT","status":1,"asset":"BTC","quoteAsset":"USDT","launchTime":1586275200000,"contractId":"100","pricePrecision":1,"quantityPrecision":4,"size":"0.0001","tradeMinQuantity":0.0001}`)
 	b := []byte(`{"symbol":"BTC-USDT","status":1,"asset":"BTC","quoteAsset":"USDT","launchTime":1586275200000,"contractId":"999","pricePrecision":1,"quantityPrecision":4,"size":"0.0001","tradeMinQuantity":0.0001}`)
@@ -237,6 +246,48 @@ func TestNormalizeHyperliquidPerpHashFlipsOnDelisted(t *testing.T) {
 	a := []byte(`{"name":"BTC","maxLeverage":50,"isDelisted":false}`)
 	b := []byte(`{"name":"BTC","maxLeverage":50,"isDelisted":true}`)
 	stableHashFlips(t, "hyperliquid.perp.isDelisted", NormalizeHyperliquidPerp, a, b)
+}
+
+// 2026-06-01 incident residual: t_listing_instrument_snapshot
+// .listing_time_ts is a TIMESTAMP with no fractional precision.
+// MySQL rounds inserts half-away-from-zero, so a parsed value of
+// 2021-11-25T09:50:25.870Z gets stored as 09:50:26 and the next
+// poll's fresh re-parse no longer matches the loaded value, firing
+// a spurious listing_time_changed signal every tick. nowFromUnixMillis
+// must round to the nearest whole second so prev and curr always
+// agree across DB round-trip.
+func TestNowFromUnixMillisRoundsToSecondsForMySQLCompat(t *testing.T) {
+	// 2021-11-25T09:50:25.870Z -- half-away-from-zero rounds UP to :26.
+	got := nowFromUnixMillis(1637833825870)
+	if got == nil {
+		t.Fatalf("nowFromUnixMillis returned nil for valid millis")
+	}
+	if got.Nanosecond() != 0 {
+		t.Fatalf("Nanosecond = %d, want 0 (must round to seconds for MySQL compat)", got.Nanosecond())
+	}
+	wantSec := int64(1637833826) // .870 rounds up to :26
+	if got.Unix() != wantSec {
+		t.Fatalf("Unix() = %d, want %d", got.Unix(), wantSec)
+	}
+	// .49 rounds DOWN.
+	got2 := nowFromUnixMillis(1637833825490)
+	if got2.Unix() != int64(1637833825) {
+		t.Fatalf("rounding .490 down: Unix() = %d, want 1637833825", got2.Unix())
+	}
+}
+
+func TestNormalizeOKXSwapListingTimeIsSecondPrecision(t *testing.T) {
+	raw := []byte(`{"instId":"BTC-USDT-SWAP","state":"live","baseCcy":"BTC","quoteCcy":"USDT","settleCcy":"USDT","ctType":"linear","listTime":"1637833825870"}`)
+	got, err := NormalizeOKXSwap(raw)
+	if err != nil {
+		t.Fatalf("normalize err = %v", err)
+	}
+	if got.ListingTimeTS == nil {
+		t.Fatalf("ListingTimeTS must be set")
+	}
+	if got.ListingTimeTS.Nanosecond() != 0 {
+		t.Fatalf("ListingTimeTS still has sub-second precision: %v", got.ListingTimeTS)
+	}
 }
 
 // Smoke test: ensure the stable hash is the hex of sha256 (64 chars).

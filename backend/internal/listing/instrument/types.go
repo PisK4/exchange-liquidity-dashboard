@@ -25,7 +25,7 @@ import (
 // re-quotes) no longer flip the hash on every 5-min poll. The
 // instrument poll driver guards against the rollover so the cutover
 // does not produce a one-shot metadata_changed firehose.
-const NormalizerVersion = "v2"
+const NormalizerVersion = "v3"
 
 // NormalizedInstrument is the platform-neutral view of a single
 // exchange instrument. The raw JSON is preserved verbatim for audit
@@ -120,12 +120,19 @@ func computeRawHash(raw []byte) string {
 }
 
 // nowFromUnixMillis returns a *time.Time parsed from a millisecond
-// epoch. Returns nil when ms is zero or negative.
+// epoch. Returns nil when ms is zero or negative. The result is
+// rounded to the nearest whole second so that diff comparisons stay
+// stable across DB round-trip: t_listing_instrument_snapshot
+// .listing_time_ts is a TIMESTAMP without fractional-second precision
+// and MySQL rounds half-away-from-zero on insert, so a raw value of
+// 2021-11-25T09:50:25.870Z would store as 09:50:26 and the next
+// poll's freshly-parsed .870 would no longer equal the loaded :26,
+// firing a spurious listing_time_changed signal every tick.
 func nowFromUnixMillis(ms int64) *time.Time {
 	if ms <= 0 {
 		return nil
 	}
-	t := time.UnixMilli(ms).UTC()
+	t := time.UnixMilli(ms).UTC().Round(time.Second)
 	return &t
 }
 
