@@ -32,6 +32,7 @@ func main() {
 	configDir := flag.String("config-dir", "../config", "directory containing dashboard yaml configs")
 	catalogReloadInterval := flag.Duration("catalog-reload-interval", 2*time.Second, "polling interval for instrument_catalog.yaml hot reload; 0 disables the watcher")
 	rawInstrumentsDir := flag.String("raw-instruments-dir", "docs/raw-instruments", "directory containing per-platform raw instrument dumps used by Top30 backfill")
+	runtimeDataDir := flag.String("runtime-data-dir", envOr("DASHBOARD_DATA_DIR", ""), "writable directory for runtime-regenerated files (listed_universe.runtime.yaml). Overrides DASHBOARD_DATA_DIR; empty means write next to --config-dir (legacy behaviour).")
 	showVersion := flag.Bool("version", false, "print the embedded build version and exit")
 	flag.Parse()
 
@@ -112,7 +113,14 @@ func main() {
 		// own goroutine and waits for the first CG /derivatives round to
 		// land before issuing kline pulls.
 		if cfg.Runtime.Backfill.Enabled && !*runOnce {
-			resolver := collector.NewCatalogResolver(*rawInstrumentsDir)
+			var snapshots collector.SnapshotReader
+			if listingRepo != nil {
+				snapshots = newListingSnapshotReader(listingRepo)
+				log.Printf("catalog_resolver: DB-first path armed (hyperliquid/gate/lighter/edgeX read from t_listing_instrument_snapshot)")
+			} else {
+				log.Printf("catalog_resolver: file-only path (no MySQL DSN; api_symbol resolved from %s)", *rawInstrumentsDir)
+			}
+			resolver := collector.NewCatalogResolverWithDB(*rawInstrumentsDir, snapshots, 0, nil)
 			top30bf = collector.NewTop30Backfiller(cfg, store, lighterProvider, resolver)
 			top30bf.Run(ctx)
 			log.Printf("top30 backfill scheduled (cold_start=%dd, daily=%02d:%02d UTC, concurrency=%d, rate=%d/s)",
@@ -125,17 +133,10 @@ func main() {
 			if cgCollector, err := buildCoinGeckoCollector(cfg, store); err != nil {
 				log.Printf("coingecko collector disabled: %v", err)
 			} else {
-				universePath := filepath.Join(*configDir, "listed_universe.yaml")
-				universe, uErr := config.LoadListedUniverse(universePath)
-				if uErr != nil {
-					log.Printf("listed_universe load failed (%s): %v; Top30 'edgeX 已上线?' column will fall back to false", universePath, uErr)
-				} else if !universe.Loaded() {
-					log.Printf("listed_universe.yaml not found at %s; Top30 'edgeX 已上线?' column will fall back to false until `make catalog`", universePath)
-				} else {
-					log.Printf("listed_universe.yaml loaded (%d platforms, edgeX bases=%d)",
-						len(universe.Platforms), len(universe.BaseAssets("edgeX")))
-				}
-				cgCollector.SetListedUniverse(universe)
+				seedUniversePath := filepath.Join(*configDir, "listed_universe.yaml")
+				runtimeUniversePath := resolveRuntimeUniversePath(*runtimeDataDir, *configDir)
+				log.Printf("listed_universe loader: seed=%s runtime=%s (hot-reloaded every CollectOnce tick)", seedUniversePath, runtimeUniversePath)
+				cgCollector.SetListedUniverseLoader(buildUniverseLoader(runtimeUniversePath, seedUniversePath))
 				if top30bf != nil {
 					cgCollector.SetTop30BackfillScheduler(top30bf)
 				}
@@ -150,9 +151,20 @@ func main() {
 		}
 	}
 
-	universePath := filepath.Join(*configDir, "listed_universe.yaml")
+	seedUniversePath := filepath.Join(*configDir, "listed_universe.yaml")
+	runtimeUniversePath := resolveRuntimeUniversePath(*runtimeDataDir, *configDir)
+	universeClosure := buildUniverseLoader(runtimeUniversePath, seedUniversePath)
 	listingUniverseLoader := func() (*config.ListedUniverse, error) {
-		return config.LoadListedUniverse(universePath)
+		return universeClosure(), nil
+	}
+	// Bind the refresh job to the runtime path resolved above so a
+	// running listing engine always writes where the consumer
+	// closures expect to read.
+	if cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath == "" {
+		cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath = runtimeUniversePath
+	}
+	if cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath == "" {
+		cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath = seedUniversePath
 	}
 	resolveListingCallbackSecret(&cfg)
 	if roleStartsListing(*role) && cfg.Runtime.ListingAgent.Enabled && listingRepo != nil {
@@ -171,7 +183,7 @@ func main() {
 		for _, src := range listingSources.Announcement {
 			log.Printf("listing announcement source armed: platform=%s url=%s", src.Platform, src.SourceURL)
 		}
-		listingEnrichDeps := buildListingEnrichDeps(cfg, listingRepo, listingUniverseLoader)
+		listingEnrichDeps := buildListingEnrichDeps(cfg, listingRepo, universeClosure)
 		engine := listing.NewEngine(cfg, listingRepo, listing.EngineDeps{
 			LoadUniverse:        listingUniverseLoader,
 			InstrumentSources:   listingSources.Instrument,
@@ -211,6 +223,58 @@ func main() {
 	if err := http.ListenAndServe(*addr, server.Routes()); err != nil {
 		log.Fatal(err)
 	}
+}
+
+// buildUniverseLoader returns a closure that resolves the listed
+// universe on every call. The closure prefers the runtime yaml
+// (regenerated every 15 min by listing.RefreshListedUniverseFromSnapshots)
+// when present and non-empty; otherwise it falls back to the seed
+// yaml produced by `make catalog`.
+//
+// The closure NEVER returns an error: a missing or malformed file
+// degrades to nil so downstream code (CG collector, decision-card
+// enricher) keeps rendering its legacy "unknown" state instead of
+// failing the tick. Errors are logged on the calling goroutine so
+// boot-time misconfiguration still surfaces in operator logs.
+func buildUniverseLoader(runtimePath, seedPath string) func() *config.ListedUniverse {
+	return func() *config.ListedUniverse {
+		if runtimePath != "" {
+			if u, err := config.LoadListedUniverse(runtimePath); err == nil && u != nil && u.Loaded() {
+				return u
+			} else if err != nil {
+				log.Printf("listed_universe runtime load failed (%s): %v; trying seed", runtimePath, err)
+			}
+		}
+		u, err := config.LoadListedUniverse(seedPath)
+		if err != nil {
+			log.Printf("listed_universe seed load failed (%s): %v; edgeX-listed will fall back to 'unknown'", seedPath, err)
+			return nil
+		}
+		return u
+	}
+}
+
+// envOr returns os.Getenv(key) when non-empty, otherwise fallback. Used
+// to mirror env vars onto flag defaults without panicking when the env
+// var is absent.
+func envOr(key, fallback string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return fallback
+}
+
+// resolveRuntimeUniversePath picks the writable path for the
+// refresh job's runtime listed_universe.yaml. Priority:
+//   1. --runtime-data-dir flag (or DASHBOARD_DATA_DIR env)
+//   2. configDir (legacy / single-binary deployments)
+// In every case the file lives next to a "listed_universe.runtime.yaml"
+// name so the seed (listed_universe.yaml) stays untouched.
+func resolveRuntimeUniversePath(runtimeDataDir, configDir string) string {
+	if runtimeDataDir != "" {
+		return filepath.Join(runtimeDataDir, "listed_universe.runtime.yaml")
+	}
+	return filepath.Join(configDir, "listed_universe.runtime.yaml")
 }
 
 // roleStartsListing reports whether the listing engine should be
@@ -319,16 +383,16 @@ func resolveListingCallbackSecret(cfg *config.Config) {
 // API symbols and hits Binance's spot + USDM-perp depth endpoints
 // directly; the aggregator runs the spot and perp calls in parallel
 // with a per-call deadline.
-func buildListingEnrichDeps(cfg config.Config, repo *listing.Repository, universeLoader func() (*config.ListedUniverse, error)) listing.DecisionCardEnrichDeps {
+func buildListingEnrichDeps(cfg config.Config, repo *listing.Repository, universeLoader func() *config.ListedUniverse) listing.DecisionCardEnrichDeps {
 	deps := listing.DecisionCardEnrichDeps{
 		Now: func() time.Time { return time.Now().UTC() },
 	}
+	// EdgexListedLookup is installed as a *loader-backed* closure so
+	// each enrichment pass sees the latest runtime listed_universe
+	// (refreshed every 15 min by the listing engine). Without this
+	// indirection the lookup would freeze at startup.
 	if universeLoader != nil {
-		if u, err := universeLoader(); err == nil && u != nil {
-			deps.EdgexListedLookup = listing.BuildEdgexListedLookup(u)
-		} else if err != nil {
-			log.Printf("listing enrich: listed_universe load failed: %v (edgeX-listed column will fall back to 'unknown')", err)
-		}
+		deps.EdgexListedLookup = listing.BuildEdgexListedLookupLoader(universeLoader)
 	}
 	if repo != nil {
 		deps.MarketStatusLoader = listing.BuildMarketStatusLoader(repo)

@@ -233,6 +233,24 @@ func BuildEdgexListedLookup(universe *config.ListedUniverse) func(canonical stri
 	}
 }
 
+// BuildEdgexListedLookupLoader produces a lookup closure that resolves
+// the listed universe on every call (spec §F1). The returned closure
+// is safe to keep installed on DecisionCardEnrichDeps forever — each
+// candidate enrichment pulls a fresh universe so a refresh job that
+// just rewrote runtime yaml becomes visible at the next decision-card
+// tick without re-wiring deps.
+//
+// loader may be nil; in that case the returned closure behaves like
+// the legacy BuildEdgexListedLookup(nil) and always reports unknown.
+func BuildEdgexListedLookupLoader(loader func() *config.ListedUniverse) func(canonical string) (bool, bool) {
+	if loader == nil {
+		return func(string) (bool, bool) { return false, false }
+	}
+	return func(canonical string) (bool, bool) {
+		return BuildEdgexListedLookup(loader())(canonical)
+	}
+}
+
 // PlatformMarketStatus is one entry in the decision card's
 // "Market Status" block (PRD §5: 各平台状态/时序). It tells the
 // operator at a glance which platforms already have the perp live,

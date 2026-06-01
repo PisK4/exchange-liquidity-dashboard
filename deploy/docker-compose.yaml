@@ -27,6 +27,15 @@ services:
     command: ["/app/dashboard", "--role=all", "--addr=:8080"]
     environment:
       DASHBOARD_MYSQL_DSN: ${DASHBOARD_MYSQL_DSN:-root:root@tcp(mysql:3306)/edgex_dashboard?parseTime=true}
+      # DASHBOARD_DATA_DIR is the writable mount the listing engine
+      # uses for files it regenerates at runtime (currently the
+      # listed_universe.runtime.yaml rewritten every 15 min by
+      # RefreshListedUniverseFromSnapshots). The path MUST match the
+      # named-volume mount target below; otherwise the listing
+      # engine cannot persist the refresh job's output and the CG
+      # collector / decision-card lookup keep reading the
+      # process-baked seed forever.
+      DASHBOARD_DATA_DIR: /var/lib/edgex-dashboard
       # HTTP_PROXY / HTTPS_PROXY are intentionally empty by default in
       # production. Set them in .env when the deployment sits behind a
       # corporate egress proxy. Leaving them empty makes the backend
@@ -56,6 +65,11 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,nosuid,nodev
+    volumes:
+      # Named volume the listing engine writes runtime yaml into. The
+      # backend image runs as uid/gid 65532; the volume is created on
+      # first boot with the right ownership by Docker.
+      - dashboard-data:/var/lib/edgex-dashboard
     security_opt:
       - no-new-privileges:true
 
@@ -84,3 +98,4 @@ services:
 
 volumes:
   mysql-data:
+  dashboard-data:

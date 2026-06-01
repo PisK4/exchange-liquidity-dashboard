@@ -28,6 +28,11 @@ COPY --from=build /out/dashboard /app/dashboard
 COPY --from=build /out/coingecko-backfill /app/coingecko-backfill
 COPY config/ /config/
 COPY backend/docs/raw-instruments/ /app/docs/raw-instruments/
+# Pre-create the runtime data dir so a docker-compose deployment that
+# forgets the named volume mount still lets the listing engine write
+# its refreshed listed_universe.runtime.yaml (Dockerfile baseline)
+# instead of crashing on a read-only filesystem.
+RUN mkdir -p /var/lib/edgex-dashboard && chown -R nonroot:nonroot /var/lib/edgex-dashboard
 USER nonroot
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
