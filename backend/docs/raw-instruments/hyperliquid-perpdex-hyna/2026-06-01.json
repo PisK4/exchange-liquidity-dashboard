@@ -1,0 +1,180 @@
+{
+  "collateralToken": 235,
+  "marginTables": [
+    [
+      50,
+      {
+        "description": "",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 50
+          }
+        ]
+      }
+    ]
+  ],
+  "universe": [
+    {
+      "marginTableId": 40,
+      "maxLeverage": 40,
+      "name": "hyna:BTC",
+      "szDecimals": 5
+    },
+    {
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "hyna:ETH",
+      "szDecimals": 4
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:HYPE",
+      "szDecimals": 2
+    },
+    {
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "hyna:SOL",
+      "szDecimals": 2
+    },
+    {
+      "isDelisted": true,
+      "marginMode": "noCross",
+      "marginTableId": 3,
+      "maxLeverage": 3,
+      "name": "hyna:LIT",
+      "onlyIsolated": true,
+      "szDecimals": 4
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:ZEC",
+      "szDecimals": 2
+    },
+    {
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "hyna:XRP",
+      "szDecimals": 0
+    },
+    {
+      "marginMode": "noCross",
+      "marginTableId": 5,
+      "maxLeverage": 5,
+      "name": "hyna:LIGHTER",
+      "onlyIsolated": true,
+      "szDecimals": 0
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:BNB",
+      "szDecimals": 3
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:DOGE",
+      "szDecimals": 0
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:SUI",
+      "szDecimals": 1
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:PUMP",
+      "szDecimals": 0
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:FARTCOIN",
+      "szDecimals": 1
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:ENA",
+      "szDecimals": 0
+    },
+    {
+      "marginMode": "noCross",
+      "marginTableId": 5,
+      "maxLeverage": 5,
+      "name": "hyna:XMR",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:LTC",
+      "szDecimals": 2
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:LINK",
+      "szDecimals": 1
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:XPL",
+      "szDecimals": 0
+    },
+    {
+      "marginTableId": 3,
+      "maxLeverage": 3,
+      "name": "hyna:IP",
+      "szDecimals": 1
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:BCH",
+      "szDecimals": 3
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:ADA",
+      "szDecimals": 0
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "hyna:1000PEPE",
+      "szDecimals": 0
+    },
+    {
+      "growthMode": "enabled",
+      "isDelisted": true,
+      "lastGrowthModeChangeTime": "2026-03-13T15:39:15.803430691",
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "hyna:SILVER",
+      "szDecimals": 2
+    },
+    {
+      "isDelisted": true,
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "hyna:GOLD",
+      "szDecimals": 4
+    },
+    {
+      "marginTableId": 3,
+      "maxLeverage": 3,
+      "name": "hyna:BASED",
+      "szDecimals": 0
+    }
+  ]
+}

@@ -1,0 +1,161 @@
+{
+  "collateralToken": 360,
+  "marginTables": [
+    [
+      50,
+      {
+        "description": "",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 50
+          }
+        ]
+      }
+    ]
+  ],
+  "universe": [
+    {
+      "marginMode": "strictIsolated",
+      "marginTableId": 3,
+      "maxLeverage": 3,
+      "name": "vntl:SPACEX",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "marginMode": "strictIsolated",
+      "marginTableId": 3,
+      "maxLeverage": 3,
+      "name": "vntl:OPENAI",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "marginMode": "strictIsolated",
+      "marginTableId": 3,
+      "maxLeverage": 3,
+      "name": "vntl:ANTHROPIC",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-03T15:00:07.650980965",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "vntl:MAG7",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-03T15:01:01.425832988",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "vntl:SEMIS",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-03T15:01:01.425832988",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "vntl:ROBOT",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-03T15:01:01.425832988",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "vntl:INFOTECH",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-03T15:01:01.425832988",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "vntl:NUCLEAR",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-03T15:01:01.425832988",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "vntl:DEFENSE",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-03T15:01:01.425832988",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "vntl:ENERGY",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-03T15:01:01.425832988",
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "vntl:BIOTECH",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "isDelisted": true,
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "vntl:GOLDJM",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "isDelisted": true,
+      "marginMode": "noCross",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "vntl:SILVERJM",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-07T16:31:04.699042350",
+      "marginMode": "noCross",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "vntl:WHEAT",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-20T15:52:30.684474042",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "vntl:SOY",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    }
+  ]
+}

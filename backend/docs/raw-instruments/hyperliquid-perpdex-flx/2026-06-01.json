@@ -1,0 +1,244 @@
+{
+  "collateralToken": 360,
+  "marginTables": [
+    [
+      50,
+      {
+        "description": "",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 50
+          }
+        ]
+      }
+    ],
+    [
+      51,
+      {
+        "description": "5x leverage for small positions, 3x for large positions (\u003e$1M)",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 5
+          },
+          {
+            "lowerBound": "1000000.0",
+            "maxLeverage": 3
+          }
+        ]
+      }
+    ],
+    [
+      52,
+      {
+        "description": "3x leverage for small positions, 2x for large positions (\u003e$1M)",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 3
+          },
+          {
+            "lowerBound": "1000000.0",
+            "maxLeverage": 2
+          }
+        ]
+      }
+    ],
+    [
+      53,
+      {
+        "description": "10x/5x/3x leverage tiers based on position size",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 10
+          },
+          {
+            "lowerBound": "500000.0",
+            "maxLeverage": 5
+          },
+          {
+            "lowerBound": "2000000.0",
+            "maxLeverage": 3
+          }
+        ]
+      }
+    ],
+    [
+      54,
+      {
+        "description": "20x/15x/10x leverage tiers based on position size",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 20
+          },
+          {
+            "lowerBound": "1000000.0",
+            "maxLeverage": 15
+          },
+          {
+            "lowerBound": "2000000.0",
+            "maxLeverage": 10
+          }
+        ]
+      }
+    ],
+    [
+      55,
+      {
+        "description": "20x/10x leverage tiers based on position size",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 20
+          },
+          {
+            "lowerBound": "5000000.0",
+            "maxLeverage": 10
+          }
+        ]
+      }
+    ]
+  ],
+  "universe": [
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-24T21:19:25.980742012",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "flx:TSLA",
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-08T03:42:24.011287219",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "flx:NVDA",
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-24T21:19:25.980742012",
+      "marginMode": "strictIsolated",
+      "marginTableId": 5,
+      "maxLeverage": 5,
+      "name": "flx:CRCL",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2025-11-24T21:19:25.980742012",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "flx:COIN",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "flx:XMR",
+      "szDecimals": 2
+    },
+    {
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "flx:GOLD",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-29T17:27:22.852183500",
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "flx:SILVER",
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-29T17:27:22.852183500",
+      "marginMode": "strictIsolated",
+      "marginTableId": 15,
+      "maxLeverage": 15,
+      "name": "flx:OIL",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-31T13:16:15.244487482",
+      "marginMode": "strictIsolated",
+      "marginTableId": 5,
+      "maxLeverage": 5,
+      "name": "flx:GAS",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "isDelisted": true,
+      "marginMode": "strictIsolated",
+      "marginTableId": 1,
+      "maxLeverage": 1,
+      "name": "flx:BTC",
+      "onlyIsolated": true,
+      "szDecimals": 5
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-29T17:27:22.852183500",
+      "marginMode": "strictIsolated",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "flx:COPPER",
+      "onlyIsolated": true,
+      "szDecimals": 2
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-29T17:27:22.852183500",
+      "marginMode": "strictIsolated",
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "flx:PALLADIUM",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-29T17:27:22.852183500",
+      "marginMode": "strictIsolated",
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "flx:PLATINUM",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "flx:USDE",
+      "szDecimals": 1
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-10T12:08:20.303477191",
+      "marginTableId": 30,
+      "maxLeverage": 30,
+      "name": "flx:USA500",
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-30T13:04:08.914953781",
+      "marginTableId": 30,
+      "maxLeverage": 30,
+      "name": "flx:USA100",
+      "szDecimals": 5
+    }
+  ]
+}

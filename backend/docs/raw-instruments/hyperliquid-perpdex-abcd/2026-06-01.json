@@ -1,0 +1,28 @@
+{
+  "collateralToken": 0,
+  "marginTables": [
+    [
+      50,
+      {
+        "description": "",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 50
+          }
+        ]
+      }
+    ]
+  ],
+  "universe": [
+    {
+      "isDelisted": true,
+      "marginMode": "strictIsolated",
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "abcd:USA500",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    }
+  ]
+}

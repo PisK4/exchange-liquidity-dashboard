@@ -1,0 +1,239 @@
+{
+  "collateralToken": 360,
+  "marginTables": [
+    [
+      50,
+      {
+        "description": "",
+        "marginTiers": [
+          {
+            "lowerBound": "0.0",
+            "maxLeverage": 50
+          }
+        ]
+      }
+    ]
+  ],
+  "universe": [
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-07T14:08:58.174529333",
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "km:US500",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-15T10:39:50.000152098",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "km:BABA",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-23T12:09:04.697161186",
+      "marginMode": "strictIsolated",
+      "marginTableId": 50,
+      "maxLeverage": 50,
+      "name": "km:EUR",
+      "onlyIsolated": true,
+      "szDecimals": 1
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-21T11:32:39.402272041",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "km:USBOND",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-07T14:09:17.348525241",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "km:SMALL2000",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-07T14:09:09.168663326",
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "km:USTECH",
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-04T11:29:14.348781496",
+      "marginMode": "strictIsolated",
+      "marginTableId": 15,
+      "maxLeverage": 15,
+      "name": "km:USENERGY",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-22T11:37:51.048804683",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "km:USOIL",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-16T12:00:15.761293737",
+      "marginMode": "strictIsolated",
+      "marginTableId": 12,
+      "maxLeverage": 12,
+      "name": "km:TSLA",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-28T11:15:38.923107324",
+      "marginMode": "strictIsolated",
+      "marginTableId": 20,
+      "maxLeverage": 20,
+      "name": "km:SILVER",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "marginMode": "strictIsolated",
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "km:GOLD",
+      "onlyIsolated": true,
+      "szDecimals": 4
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-29T11:52:23.725975771",
+      "marginMode": "strictIsolated",
+      "marginTableId": 15,
+      "maxLeverage": 15,
+      "name": "km:AAPL",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-01-29T11:52:23.725975771",
+      "marginMode": "strictIsolated",
+      "marginTableId": 15,
+      "maxLeverage": 15,
+      "name": "km:GOOGL",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-25T11:27:57.618199901",
+      "marginMode": "strictIsolated",
+      "marginTableId": 15,
+      "maxLeverage": 15,
+      "name": "km:SEMI",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-25T11:27:57.618199901",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "km:GLDMINE",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-11T11:38:30.250385488",
+      "marginMode": "strictIsolated",
+      "marginTableId": 12,
+      "maxLeverage": 12,
+      "name": "km:NVDA",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-09T06:32:23.195694882",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "km:TENCENT",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "isDelisted": true,
+      "marginMode": "strictIsolated",
+      "marginTableId": 25,
+      "maxLeverage": 25,
+      "name": "km:JPN225",
+      "onlyIsolated": true,
+      "szDecimals": 5
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-24T11:45:23.717036306",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "km:MU",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-02-24T11:40:57.901642233",
+      "marginMode": "strictIsolated",
+      "marginTableId": 12,
+      "maxLeverage": 12,
+      "name": "km:PLTR",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-04-09T06:32:23.195694882",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "km:XIAOMI",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "lastGrowthModeChangeTime": "2026-04-11T11:44:45.538528137",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "km:BMNR",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    },
+    {
+      "growthMode": "enabled",
+      "lastGrowthModeChangeTime": "2026-03-10T11:44:09.847532666",
+      "marginMode": "strictIsolated",
+      "marginTableId": 10,
+      "maxLeverage": 10,
+      "name": "km:RTX",
+      "onlyIsolated": true,
+      "szDecimals": 3
+    }
+  ]
+}
