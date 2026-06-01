@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"edgex-dashboard/backend/internal/adapter"
@@ -159,13 +160,16 @@ func main() {
 	}
 	// Bind the refresh job to the runtime path resolved above so a
 	// running listing engine always writes where the consumer
-	// closures expect to read.
-	if cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath == "" {
-		cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath = runtimeUniversePath
-	}
-	if cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath == "" {
-		cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath = seedUniversePath
-	}
+	// closures expect to read. The YAML form may contain
+	// "${DASHBOARD_DATA_DIR}" or other env placeholders (operator
+	// convenience); we run os.ExpandEnv first so unresolved
+	// placeholders never reach the engine. After expansion we also
+	// fall back to the resolved default if the field ended up empty
+	// or still contains a literal "${" (env var unset).
+	cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath = resolveConfigPath(
+		cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath, runtimeUniversePath)
+	cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath = resolveConfigPath(
+		cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath, seedUniversePath)
 	resolveListingCallbackSecret(&cfg)
 	if roleStartsListing(*role) && cfg.Runtime.ListingAgent.Enabled && listingRepo != nil {
 		listingHTTPClient, err := fetcher.NewHTTPClient(fetcher.DefaultRequestTimeout, cfg.Runtime.ExchangeProxy)
@@ -252,6 +256,21 @@ func buildUniverseLoader(runtimePath, seedPath string) func() *config.ListedUniv
 		}
 		return u
 	}
+}
+
+// resolveConfigPath expands $ENV placeholders inside a YAML-supplied
+// path and falls back to the supplied default when (a) the field is
+// empty or (b) expansion left behind an unresolved "${...}" segment
+// (i.e. the env var was unset). Returning the default in case (b) is
+// what lets a docker-compose YAML write
+// "${DASHBOARD_DATA_DIR}/listed_universe.runtime.yaml" once and have
+// it work on dev hosts that do not set DASHBOARD_DATA_DIR.
+func resolveConfigPath(raw, fallback string) string {
+	expanded := os.ExpandEnv(strings.TrimSpace(raw))
+	if expanded == "" || strings.Contains(expanded, "${") {
+		return fallback
+	}
+	return expanded
 }
 
 // envOr returns os.Getenv(key) when non-empty, otherwise fallback. Used
