@@ -123,7 +123,7 @@ func TestRenderDecisionCardBasicInfoFieldsCarryAllPRDValues(t *testing.T) {
 		"Token", "ABC",
 		"edgeX 状态", "未上线",
 		"Source", "Binance Futures",
-		"Listing Time", "2026-05-31",
+		"Detected Time", "2026-05-31",
 		"UTC+8",
 	}
 	for _, s := range mustContain {
@@ -438,5 +438,33 @@ func TestRenderDecisionCardMarketStatusSameYearKeepsShortDate(t *testing.T) {
 	}
 	if strings.Contains(raw, "2026-06-02 15:00 UTC+8") {
 		t.Fatalf("same-year market status date should not include year, raw=%s", raw)
+	}
+}
+
+func TestRenderDecisionCardBasicInfoUsesPrimaryListingTimeWhenPresent(t *testing.T) {
+	ev := baseEvent()
+	listingTime := time.Date(2026, 5, 7, 9, 0, 0, 0, time.UTC)
+	ev.PrimaryListingTime = &listingTime
+	raw, _ := renderForTest(t, ev)
+	if !strings.Contains(raw, "Listing Time") || !strings.Contains(raw, "2026-05-07 17:00 UTC+8") {
+		t.Fatalf("primary listing time missing, raw=%s", raw)
+	}
+	if strings.Contains(raw, "Detected Time") {
+		t.Fatalf("primary listing time should not render Detected Time label, raw=%s", raw)
+	}
+	if !strings.Contains(raw, "trigger=2026-05-31 14:30 UTC+8") {
+		t.Fatalf("footer trigger audit time should remain, raw=%s", raw)
+	}
+}
+
+func TestRenderDecisionCardBasicInfoFallsBackToDetectedTime(t *testing.T) {
+	ev := baseEvent()
+	ev.PrimaryListingTime = nil
+	raw, _ := renderForTest(t, ev)
+	if !strings.Contains(raw, "Detected Time") || !strings.Contains(raw, "2026-05-31 14:30 UTC+8") {
+		t.Fatalf("detected time fallback missing, raw=%s", raw)
+	}
+	if strings.Contains(raw, "Listing Time") {
+		t.Fatalf("fallback should not render Listing Time label, raw=%s", raw)
 	}
 }

@@ -90,18 +90,19 @@ type DecisionCardAction struct {
 // turns into a Lark interactive card, and what the callback API
 // matches against when verifying a button click.
 type DecisionCardEvent struct {
-	CandidateID     int64                `json:"candidate_id"`
-	RiskPlanID      int64                `json:"risk_plan_id"`
-	CanonicalSymbol string               `json:"canonical_symbol"`
-	DisplaySymbol   string               `json:"display_symbol"`
-	EvidenceKind    string               `json:"evidence_kind"`
-	Recommendation  string               `json:"recommendation"`
-	ConfidenceLevel string               `json:"confidence_level"`
-	BusinessScore   float64              `json:"business_score,omitempty"`
-	SourcePlatforms []string             `json:"source_platforms"`
-	Actions         []DecisionCardAction `json:"actions"`
-	DedupeKey       string               `json:"dedupe_key"`
-	TriggerTime     time.Time            `json:"trigger_time"`
+	CandidateID        int64                `json:"candidate_id"`
+	RiskPlanID         int64                `json:"risk_plan_id"`
+	CanonicalSymbol    string               `json:"canonical_symbol"`
+	DisplaySymbol      string               `json:"display_symbol"`
+	EvidenceKind       string               `json:"evidence_kind"`
+	Recommendation     string               `json:"recommendation"`
+	ConfidenceLevel    string               `json:"confidence_level"`
+	BusinessScore      float64              `json:"business_score,omitempty"`
+	SourcePlatforms    []string             `json:"source_platforms"`
+	Actions            []DecisionCardAction `json:"actions"`
+	DedupeKey          string               `json:"dedupe_key"`
+	TriggerTime        time.Time            `json:"trigger_time"`
+	PrimaryListingTime *time.Time           `json:"primary_listing_time,omitempty"`
 
 	// Enrichment is the bundle of data the renderer surfaces in the
 	// Market Status / Metrics / 自动参数预案 blocks. Optional; when
@@ -296,9 +297,47 @@ func buildDecisionBasicInfoFields(ev DecisionCardEvent) map[string]any {
 			summaryField("Token", canonicalOrDash(ev.CanonicalSymbol)),
 			summaryField("edgeX 状态", edgex),
 			summaryField("Source", source),
-			summaryField("Listing Time", formatUTC8(ev.TriggerTime)),
+			decisionTimeSummaryField(ev),
 		},
 	}
+}
+
+func decisionTimeSummaryField(ev DecisionCardEvent) map[string]any {
+	if ev.PrimaryListingTime != nil && !ev.PrimaryListingTime.IsZero() {
+		return summaryField("Listing Time", formatUTC8(*ev.PrimaryListingTime))
+	}
+	return summaryField("Detected Time", formatUTC8(ev.TriggerTime))
+}
+
+func selectPrimaryListingTime(sourcePlatforms []string, signals []SignalObservation) *time.Time {
+	if len(signals) == 0 {
+		return nil
+	}
+	priority := make(map[string]int, len(sourcePlatforms))
+	for i, platform := range sourcePlatforms {
+		priority[strings.ToLower(platform)] = i
+	}
+	var best *SignalObservation
+	bestPriority := len(priority) + 1
+	for i := range signals {
+		s := &signals[i]
+		if s.ListingTimeTS == nil || s.ListingTimeTS.IsZero() {
+			continue
+		}
+		p, ok := priority[strings.ToLower(s.SourcePlatform)]
+		if !ok {
+			p = len(priority)
+		}
+		if best == nil || p < bestPriority || (p == bestPriority && s.ObservedAt.After(best.ObservedAt)) {
+			best = s
+			bestPriority = p
+		}
+	}
+	if best == nil {
+		return nil
+	}
+	t := *best.ListingTimeTS
+	return &t
 }
 
 // primarySourceLabel renders the "Source: Binance Futures (+N more)"
@@ -645,6 +684,11 @@ func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCa
 		res.RiskPlans++
 
 		ev := BuildDecisionCardEvent(c, plan, now)
+		signals, err := repo.ListCandidateSignals(ctx, c.ID, false)
+		if err != nil {
+			return res, fmt.Errorf("list candidate signals %d: %w", c.ID, err)
+		}
+		ev.PrimaryListingTime = selectPrimaryListingTime(c.SourcePlatforms, signals)
 		ev.Enrichment = EnrichCandidateForDecisionCard(ctx, deps.Enrich, c)
 		payload, err := RenderDecisionCardPostMessage(ev)
 		if err != nil {

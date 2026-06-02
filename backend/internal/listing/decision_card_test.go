@@ -2,8 +2,10 @@ package listing
 
 import (
 	"context"
+	"database/sql/driver"
 	"encoding/json"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -212,6 +214,9 @@ func TestProduceDecisionCardsWritesRiskPlanAndOutboxForFreshCandidate(t *testing
 
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_risk_plan")).
 		WillReturnResult(sqlmock.NewResult(201, 1))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT s.id, s.signal_type, s.signal_subtype")).
+		WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows(fusionSignalColumns()))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_delivery_outbox")).
 		WillReturnResult(sqlmock.NewResult(301, 1))
 
@@ -280,4 +285,139 @@ func TestProduceDecisionCardsSkipsAlreadyListedCandidates(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)
 	}
+}
+
+func TestProduceDecisionCardsSkipsNoActionRecommendationEvenWhenLifecycleActionable(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	candidateRows := sqlmock.NewRows([]string{
+		"id", "canonical_symbol", "display_symbol", "market_surface", "instrument_kind",
+		"lifecycle_status", "lifecycle_status_label", "evidence_kind", "confidence_level",
+		"business_score", "business_score_version", "recommendation", "recommendation_label",
+		"source_platforms_json", "top30_enrichment_json", "first_observed_at", "last_observed_at",
+	}).AddRow(
+		int64(10), "HIST", "HIST-USDT (perp)", "perp", "canonical",
+		LifecycleAPIDetectedNoAnnouncement, LifecycleStatusLabels[LifecycleAPIDetectedNoAnnouncement], EvidenceInstrumentDiffOnly, ConfidenceLow,
+		nil, BusinessScoreVersion, RecommendationNoAction, RecommendationLabels[RecommendationNoAction],
+		[]byte(`["okx"]`), nil, now.Add(-30*24*time.Hour), now,
+	)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).WillReturnRows(candidateRows)
+
+	res, err := ProduceDecisionCards(context.Background(), repo, DecisionCardDeps{Now: func() time.Time { return now }, MaxPerTick: 10})
+	if err != nil {
+		t.Fatalf("ProduceDecisionCards err = %v", err)
+	}
+	if res.SkippedNoAction != 1 || res.RiskPlans != 0 || res.OutboxRows != 0 {
+		t.Fatalf("res = %+v, want no_action gate skip", res)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestProduceDecisionCardsSkipsAlreadyListedLifecycleEvenWhenRecommendationActionable(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	candidateRows := sqlmock.NewRows([]string{
+		"id", "canonical_symbol", "display_symbol", "market_surface", "instrument_kind",
+		"lifecycle_status", "lifecycle_status_label", "evidence_kind", "confidence_level",
+		"business_score", "business_score_version", "recommendation", "recommendation_label",
+		"source_platforms_json", "top30_enrichment_json", "first_observed_at", "last_observed_at",
+	}).AddRow(
+		int64(11), "HIST2", "HIST2-USDT (perp)", "perp", "canonical",
+		LifecycleAlreadyListed, LifecycleStatusLabels[LifecycleAlreadyListed], EvidenceInstrumentDiffOnly, ConfidenceLow,
+		nil, BusinessScoreVersion, RecommendationPrepareListing, RecommendationLabels[RecommendationPrepareListing],
+		[]byte(`["okx"]`), nil, now.Add(-30*24*time.Hour), now,
+	)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).WillReturnRows(candidateRows)
+
+	res, err := ProduceDecisionCards(context.Background(), repo, DecisionCardDeps{Now: func() time.Time { return now }, MaxPerTick: 10})
+	if err != nil {
+		t.Fatalf("ProduceDecisionCards err = %v", err)
+	}
+	if res.SkippedNoAction != 1 || res.RiskPlans != 0 || res.OutboxRows != 0 {
+		t.Fatalf("res = %+v, want already_listed gate skip", res)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestProduceDecisionCardsUsesLinkedSignalListingTimeInPayload(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	listingTime := time.Date(2026, 5, 7, 9, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	score := 80.0
+	candidateRows := sqlmock.NewRows([]string{
+		"id", "canonical_symbol", "display_symbol", "market_surface", "instrument_kind",
+		"lifecycle_status", "lifecycle_status_label", "evidence_kind", "confidence_level",
+		"business_score", "business_score_version", "recommendation", "recommendation_label",
+		"source_platforms_json", "top30_enrichment_json", "first_observed_at", "last_observed_at",
+	}).AddRow(
+		int64(12), "CARD", "CARD-USDT (perp)", "perp", "canonical",
+		LifecycleConfirmedListingCandidate, LifecycleStatusLabels[LifecycleConfirmedListingCandidate], EvidenceAnnouncementAndAPI, ConfidenceHigh,
+		score, BusinessScoreVersion, RecommendationPrepareListing, RecommendationLabels[RecommendationPrepareListing],
+		[]byte(`["okx"]`), nil, now.Add(-2*time.Hour), now.Add(-1*time.Hour),
+	)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).WillReturnRows(candidateRows)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT action, callback_ts FROM t_listing_decision")).WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"action", "callback_ts"}))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_risk_plan")).WillReturnResult(sqlmock.NewResult(202, 1))
+	signalRows := sqlmock.NewRows(fusionSignalColumns())
+	addFusionInstrumentSignal(signalRows, 9700, "okx", DiffNewSymbol, "CARD", StatusActive, now, &listingTime)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT s.id, s.signal_type, s.signal_subtype")).WithArgs(int64(12)).WillReturnRows(signalRows)
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_delivery_outbox")).WithArgs(
+		DeliveryEventListingDecisionCandidate,
+		"listing_decision|12|2026-06-02",
+		DeliveryChannelLarkTop30,
+		OutboxStatusPending,
+		0,
+		5,
+		now,
+		payloadContainsAll("Listing Time", "2026-05-07 17:00 UTC+8", "trigger=2026-06-02 15:45 UTC+8"),
+		nil,
+		nil,
+		now,
+		now,
+	).WillReturnResult(sqlmock.NewResult(302, 1))
+
+	res, err := ProduceDecisionCards(context.Background(), repo, DecisionCardDeps{Now: func() time.Time { return now }, MaxPerTick: 10})
+	if err != nil {
+		t.Fatalf("ProduceDecisionCards err = %v", err)
+	}
+	if res.OutboxRows != 1 {
+		t.Fatalf("OutboxRows = %d, want 1", res.OutboxRows)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+type payloadContains string
+
+func (p payloadContains) Match(v driver.Value) bool {
+	var s string
+	switch x := v.(type) {
+	case []byte:
+		s = string(x)
+	case string:
+		s = x
+	default:
+		return false
+	}
+	for _, needle := range strings.Split(string(p), "\x00") {
+		if needle != "" && !strings.Contains(s, needle) {
+			return false
+		}
+	}
+	return true
+}
+
+func payloadContainsAll(needles ...string) payloadContains {
+	return payloadContains(strings.Join(needles, "\x00"))
 }
