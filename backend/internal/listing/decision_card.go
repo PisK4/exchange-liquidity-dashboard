@@ -40,6 +40,17 @@ func formatUTC8Short(t time.Time) string {
 	return t.In(utc8Zone).Format("01-02 15:04 UTC+8")
 }
 
+func formatUTC8MarketStatusTime(t, reference time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	local := t.In(utc8Zone)
+	if !reference.IsZero() && local.Year() != reference.In(utc8Zone).Year() {
+		return local.Format("2006-01-02 15:04 UTC+8")
+	}
+	return local.Format("01-02 15:04 UTC+8")
+}
+
 // Decision actions exposed in the Lark card. Stable enums (not
 // labels) so the Lark callback can decode the button value back to
 // the action without any locale-specific string matching.
@@ -285,7 +296,7 @@ func buildDecisionBasicInfoFields(ev DecisionCardEvent) map[string]any {
 			summaryField("Token", canonicalOrDash(ev.CanonicalSymbol)),
 			summaryField("edgeX 状态", edgex),
 			summaryField("Source", source),
-			summaryField("Time", formatUTC8(ev.TriggerTime)),
+			summaryField("Listing Time", formatUTC8(ev.TriggerTime)),
 		},
 	}
 }
@@ -350,7 +361,7 @@ func buildDecisionMarketStatusBlock(ev DecisionCardEvent) map[string]any {
 		lines = append(lines, "<font color='grey'>● 无平台状态记录</font>")
 	} else {
 		for _, ms := range ev.Enrichment.MarketStatuses {
-			lines = append(lines, formatMarketStatusLine(ms))
+			lines = append(lines, formatMarketStatusLine(ms, ev.TriggerTime))
 		}
 	}
 	return map[string]any{
@@ -362,9 +373,9 @@ func buildDecisionMarketStatusBlock(ev DecisionCardEvent) map[string]any {
 	}
 }
 
-func formatMarketStatusLine(ms PlatformMarketStatus) string {
+func formatMarketStatusLine(ms PlatformMarketStatus, reference time.Time) string {
 	bullet := marketStatusBullet(ms.Status)
-	when := formatUTC8Short(ms.OccurredAt)
+	when := formatUTC8MarketStatusTime(ms.OccurredAt, reference)
 	source := marketStatusSourceLabel(ms.SourceKind)
 	name := strings.TrimSpace(ms.DisplayName)
 	if name == "" {
@@ -372,7 +383,14 @@ func formatMarketStatusLine(ms PlatformMarketStatus) string {
 	}
 	label := ms.StatusLabel
 	if label == "" {
-		label = statusLabelByEnum(ms.Status, ms.SourceKind)
+		label = marketStatusLabel(ms)
+	} else if (ms.Status == StatusPaused || ms.Status == StatusDelisted) && !strings.Contains(label, "当前状态") {
+		raw := strings.TrimSpace(ms.StatusRaw)
+		if raw == "" {
+			label += "（当前状态）"
+		} else {
+			label += "（当前状态 · API: " + raw + "）"
+		}
 	}
 	return fmt.Sprintf("%s **%s** · %s · %s · %s", bullet, name, label, when, source)
 }
@@ -462,6 +480,7 @@ func buildDecisionRiskPlanBlock(ev DecisionCardEvent) map[string]any {
 		},
 	}
 }
+
 // buildDecisionScoreFields renders the Score and Recommendation
 // summary as a 2-cell row right above the action buttons.
 func buildDecisionScoreFields(ev DecisionCardEvent) map[string]any {

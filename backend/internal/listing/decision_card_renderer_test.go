@@ -123,7 +123,7 @@ func TestRenderDecisionCardBasicInfoFieldsCarryAllPRDValues(t *testing.T) {
 		"Token", "ABC",
 		"edgeX 状态", "未上线",
 		"Source", "Binance Futures",
-		"Time", "2026-05-31",
+		"Listing Time", "2026-05-31",
 		"UTC+8",
 	}
 	for _, s := range mustContain {
@@ -388,11 +388,55 @@ func TestRenderDecisionCardOmitsUTCAndDebugStrings(t *testing.T) {
 	raw, _ := renderForTest(t, ev)
 	for _, bad := range []string{
 		"announcement_pending_api 决策候选", // old debug-style title
-		"Source platforms: [",            // old array dump
-		"[announcement_and_api]",         // old enum-in-title
+		"Source platforms: [",           // old array dump
+		"[announcement_and_api]",        // old enum-in-title
 	} {
 		if strings.Contains(raw, bad) {
 			t.Errorf("legacy debug fragment %q still in card; raw=%s", bad, raw)
 		}
+	}
+}
+
+func TestRenderDecisionCardMarketStatusContextForPausedAndDelisted(t *testing.T) {
+	ev := baseEvent()
+	ev.Enrichment.MarketStatuses = []PlatformMarketStatus{
+		{Platform: "binance", DisplayName: "Binance Futures", Status: StatusPaused, StatusRaw: "PENDING_TRADING", SourceKind: "api", OccurredAt: time.Date(2026, 6, 2, 3, 20, 0, 0, time.UTC)},
+		{Platform: "lighter", DisplayName: "Lighter", Status: StatusDelisted, StatusRaw: "inactive", SourceKind: "api", OccurredAt: time.Date(2026, 6, 2, 2, 58, 0, 0, time.UTC)},
+	}
+	raw, _ := renderForTest(t, ev)
+	for _, want := range []string{
+		"暂停交易（当前状态 · API: PENDING_TRADING）",
+		"已下架（当前状态 · API: inactive）",
+	} {
+		if !strings.Contains(raw, want) {
+			t.Fatalf("market status context missing %q in raw=%s", want, raw)
+		}
+	}
+}
+
+func TestRenderDecisionCardMarketStatusHistoricalDateIncludesYear(t *testing.T) {
+	ev := baseEvent()
+	ev.TriggerTime = time.Date(2026, 6, 2, 2, 18, 0, 0, time.UTC)
+	ev.Enrichment.MarketStatuses = []PlatformMarketStatus{
+		{Platform: "bingx", DisplayName: "BingX Futures", Status: StatusActive, StatusLabel: "Perp LIVE", SourceKind: "api", OccurredAt: time.Date(2025, 11, 14, 7, 0, 0, 0, time.UTC)},
+	}
+	raw, _ := renderForTest(t, ev)
+	if !strings.Contains(raw, "2025-11-14 15:00 UTC+8") {
+		t.Fatalf("historical market status date must include year, raw=%s", raw)
+	}
+}
+
+func TestRenderDecisionCardMarketStatusSameYearKeepsShortDate(t *testing.T) {
+	ev := baseEvent()
+	ev.TriggerTime = time.Date(2026, 6, 2, 2, 18, 0, 0, time.UTC)
+	ev.Enrichment.MarketStatuses = []PlatformMarketStatus{
+		{Platform: "bingx", DisplayName: "BingX Futures", Status: StatusPreListing, StatusLabel: "pre-listing", SourceKind: "api", OccurredAt: time.Date(2026, 6, 2, 7, 0, 0, 0, time.UTC)},
+	}
+	raw, _ := renderForTest(t, ev)
+	if !strings.Contains(raw, "06-02 15:00 UTC+8") {
+		t.Fatalf("same-year market status date should stay short, raw=%s", raw)
+	}
+	if strings.Contains(raw, "2026-06-02 15:00 UTC+8") {
+		t.Fatalf("same-year market status date should not include year, raw=%s", raw)
 	}
 }

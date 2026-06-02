@@ -2,6 +2,7 @@ package listing
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"edgex-dashboard/backend/internal/config"
@@ -72,6 +73,18 @@ func statusLabelByEnum(status, sourceKind string) string {
 	}
 }
 
+func marketStatusLabel(ms PlatformMarketStatus) string {
+	label := statusLabelByEnum(ms.Status, ms.SourceKind)
+	if ms.Status != StatusPaused && ms.Status != StatusDelisted {
+		return label
+	}
+	raw := strings.TrimSpace(ms.StatusRaw)
+	if raw == "" {
+		return label + "（当前状态）"
+	}
+	return label + "（当前状态 · API: " + raw + "）"
+}
+
 // BuildMarketStatusLoader adapts a *Repository into the
 // MarketStatusLoader contract. The returned function fans the raw
 // repository rows into per-platform PlatformMarketStatus entries:
@@ -121,16 +134,21 @@ func foldMarketStatusRows(raw []MarketStatusRow) []PlatformMarketStatus {
 		switch r.SourceKind {
 		case "api":
 			acc.hasAPI = true
+			effectiveStatus := r.StatusNormalized
 			// Prefer the listing_time_ts when present (true exchange-
 			// declared listing moment), otherwise fall back to
 			// last_seen_at which is when we last polled the row.
 			if r.ListingTimeTS != nil {
 				occurredAt = *r.ListingTimeTS
+				if r.StatusNormalized == StatusActive && r.ListingTimeTS.After(r.LastSeenAt) {
+					effectiveStatus = StatusPreListing
+				}
 			} else {
 				occurredAt = r.LastSeenAt
 			}
 			if occurredAt.After(acc.status.OccurredAt) || acc.status.OccurredAt.IsZero() {
-				acc.status.Status = r.StatusNormalized
+				acc.status.Status = effectiveStatus
+				acc.status.StatusRaw = r.StatusRaw
 				acc.status.OccurredAt = occurredAt
 			}
 		case "announcement":
@@ -162,7 +180,7 @@ func foldMarketStatusRows(raw []MarketStatusRow) []PlatformMarketStatus {
 		case acc.hasAnn:
 			acc.status.SourceKind = "announcement"
 		}
-		acc.status.StatusLabel = statusLabelByEnum(acc.status.Status, acc.status.SourceKind)
+		acc.status.StatusLabel = marketStatusLabel(acc.status)
 		out = append(out, acc.status)
 	}
 	sortMarketStatuses(out)
@@ -271,6 +289,9 @@ type PlatformMarketStatus struct {
 	// enrichment layer derives it from Status + SourceKind so the
 	// renderer never has to touch the locale map.
 	StatusLabel string
+	// StatusRaw preserves the exchange-native status value for
+	// paused/delisted context labels on operator cards.
+	StatusRaw string
 	// SourceKind explains where the status came from:
 	//   - "api"          → t_listing_instrument_snapshot row
 	//   - "announcement" → t_listing_announcement row

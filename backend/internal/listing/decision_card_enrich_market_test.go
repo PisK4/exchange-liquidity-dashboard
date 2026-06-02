@@ -115,3 +115,55 @@ func TestBuildMarketStatusLoaderNilRepoReturnsEmpty(t *testing.T) {
 		t.Errorf("got = %v, want empty", got)
 	}
 }
+
+func TestFoldMarketStatusRowsFutureActiveRendersPreListing(t *testing.T) {
+	now := time.Date(2026, 6, 2, 3, 48, 0, 0, time.UTC)
+	listingTime := time.Date(2026, 6, 2, 7, 0, 0, 0, time.UTC)
+	raw := []MarketStatusRow{
+		{
+			Platform:         "bingx",
+			MarketType:       "swap",
+			StatusNormalized: StatusActive,
+			StatusRaw:        "1",
+			ListingTimeTS:    &listingTime,
+			LastSeenAt:       now,
+			SourceKind:       "api",
+		},
+	}
+	got := foldMarketStatusRows(raw)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(got))
+	}
+	if got[0].Status != StatusPreListing {
+		t.Fatalf("Status = %q, want pre_listing for active API row with future listing time", got[0].Status)
+	}
+	if got[0].StatusLabel == "Perp LIVE" {
+		t.Fatalf("StatusLabel must not be Perp LIVE for future listing time")
+	}
+	if !got[0].OccurredAt.Equal(listingTime) {
+		t.Fatalf("OccurredAt = %v, want future listing time %v", got[0].OccurredAt, listingTime)
+	}
+}
+
+func TestFoldMarketStatusRowsPastActiveRendersLive(t *testing.T) {
+	now := time.Date(2026, 6, 2, 8, 0, 0, 0, time.UTC)
+	listingTime := time.Date(2026, 6, 2, 7, 0, 0, 0, time.UTC)
+	raw := []MarketStatusRow{
+		{
+			Platform:         "bingx",
+			MarketType:       "swap",
+			StatusNormalized: StatusActive,
+			StatusRaw:        "1",
+			ListingTimeTS:    &listingTime,
+			LastSeenAt:       now,
+			SourceKind:       "api",
+		},
+	}
+	got := foldMarketStatusRows(raw)
+	if got[0].Status != StatusActive {
+		t.Fatalf("Status = %q, want active once listing time has passed", got[0].Status)
+	}
+	if got[0].StatusLabel != "Perp LIVE" {
+		t.Fatalf("StatusLabel = %q, want Perp LIVE", got[0].StatusLabel)
+	}
+}
