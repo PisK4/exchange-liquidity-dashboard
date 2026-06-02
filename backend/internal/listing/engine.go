@@ -217,8 +217,9 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 
 	// Step 1: fuse any unfused signals into candidates.
 	fusion, fusionErr := FuseSignals(ctx, e.repo, FusionDeps{
-		LoadUniverse: e.deps.LoadUniverse,
-		Now:          e.deps.Now,
+		LoadUniverse:                 e.deps.LoadUniverse,
+		Now:                          e.deps.Now,
+		HistoricalListingGracePeriod: e.cfg.Runtime.ListingAgent.Candidate.HistoricalListingGracePeriod,
 	})
 	summary.Fusion = fusion
 	if fusionErr != nil && !errors.Is(fusionErr, ErrFusionFailClosed) {

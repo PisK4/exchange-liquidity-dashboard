@@ -61,15 +61,15 @@ type Runtime struct {
 // 2026-05-27-Listing-Agent-P1-主链路方案设计.md §16 and §23 for the
 // authoritative knobs.
 type ListingAgentConfig struct {
-	Enabled              bool                         `json:"enabled"`
-	Worker               ListingWorkerConfig          `json:"worker"`
-	Sources              ListingSourcesConfig         `json:"sources"`
-	Delivery             ListingDeliveryConfig        `json:"delivery"`
-	Top30Push            ListingTop30PushConfig       `json:"top30_push"`
-	Top30DivergencePush  Top30DivergencePushConfig    `json:"top30_divergence_push"`
-	LiquidityAlert       LiquidityAlertConfig         `json:"liquidity_alert"`
-	Candidate            ListingCandidateConfig       `json:"candidate"`
-	DecisionCard         ListingDecisionCardConfig    `json:"decision_card"`
+	Enabled               bool                        `json:"enabled"`
+	Worker                ListingWorkerConfig         `json:"worker"`
+	Sources               ListingSourcesConfig        `json:"sources"`
+	Delivery              ListingDeliveryConfig       `json:"delivery"`
+	Top30Push             ListingTop30PushConfig      `json:"top30_push"`
+	Top30DivergencePush   Top30DivergencePushConfig   `json:"top30_divergence_push"`
+	LiquidityAlert        LiquidityAlertConfig        `json:"liquidity_alert"`
+	Candidate             ListingCandidateConfig      `json:"candidate"`
+	DecisionCard          ListingDecisionCardConfig   `json:"decision_card"`
 	ListedUniverseRefresh ListedUniverseRefreshConfig `json:"listed_universe_refresh"`
 }
 
@@ -292,7 +292,8 @@ type ListingTop30PushConfig struct {
 // reach-back window used when fusing signals into an existing
 // candidate; P1 default is 14 days.
 type ListingCandidateConfig struct {
-	MergeWindow time.Duration `json:"merge_window"`
+	MergeWindow                  time.Duration `json:"merge_window"`
+	HistoricalListingGracePeriod time.Duration `json:"historical_listing_grace_period"`
 }
 
 // Top30DivergenceConfig is the runtime knob for the CEX-vs-DEX Top30
@@ -719,7 +720,8 @@ func defaultListingAgentConfig() ListingAgentConfig {
 		},
 		LiquidityAlert: defaultLiquidityAlertConfig(),
 		Candidate: ListingCandidateConfig{
-			MergeWindow: 14 * 24 * time.Hour,
+			MergeWindow:                  14 * 24 * time.Hour,
+			HistoricalListingGracePeriod: 48 * time.Hour,
 		},
 		DecisionCard: ListingDecisionCardConfig{
 			Enabled:        false,
@@ -904,16 +906,16 @@ type runtimeFile struct {
 }
 
 type listingAgentFile struct {
-	Enabled              *bool                         `yaml:"enabled"`
-	Worker               *listingWorkerFile            `yaml:"worker"`
-	Sources              *listingSourcesFile           `yaml:"sources"`
-	Delivery             *listingDeliveryFile          `yaml:"delivery"`
-	Top30Push            *listingTop30PushFile         `yaml:"top30_push"`
-	Top30DivergencePush  *top30DivergencePushFile      `yaml:"top30_divergence_push"`
-	LiquidityAlert       *liquidityAlertFile           `yaml:"liquidity_alert"`
-	Candidate            *listingCandidateFile         `yaml:"candidate"`
-	DecisionCard         *listingDecisionCardFile      `yaml:"decision_card"`
-	ListedUniverseRefresh *listedUniverseRefreshFile   `yaml:"listed_universe_refresh"`
+	Enabled               *bool                      `yaml:"enabled"`
+	Worker                *listingWorkerFile         `yaml:"worker"`
+	Sources               *listingSourcesFile        `yaml:"sources"`
+	Delivery              *listingDeliveryFile       `yaml:"delivery"`
+	Top30Push             *listingTop30PushFile      `yaml:"top30_push"`
+	Top30DivergencePush   *top30DivergencePushFile   `yaml:"top30_divergence_push"`
+	LiquidityAlert        *liquidityAlertFile        `yaml:"liquidity_alert"`
+	Candidate             *listingCandidateFile      `yaml:"candidate"`
+	DecisionCard          *listingDecisionCardFile   `yaml:"decision_card"`
+	ListedUniverseRefresh *listedUniverseRefreshFile `yaml:"listed_universe_refresh"`
 }
 
 type listedUniverseRefreshFile struct {
@@ -1008,7 +1010,8 @@ type listingTop30PushFile struct {
 }
 
 type listingCandidateFile struct {
-	MergeWindow string `yaml:"merge_window"`
+	MergeWindow                  string `yaml:"merge_window"`
+	HistoricalListingGracePeriod string `yaml:"historical_listing_grace_period"`
 }
 
 type dashboardFile struct {
@@ -1776,6 +1779,16 @@ func applyListingCandidateFile(base ListingCandidateConfig, file listingCandidat
 			return ListingCandidateConfig{}, fmt.Errorf("listing_agent.candidate.merge_window: %w", err)
 		}
 		base.MergeWindow = d
+	}
+	if file.HistoricalListingGracePeriod != "" {
+		d, err := time.ParseDuration(file.HistoricalListingGracePeriod)
+		if err != nil {
+			return ListingCandidateConfig{}, fmt.Errorf("listing_agent.candidate.historical_listing_grace_period: %w", err)
+		}
+		if d <= 0 {
+			return ListingCandidateConfig{}, fmt.Errorf("listing_agent.candidate.historical_listing_grace_period: must be > 0")
+		}
+		base.HistoricalListingGracePeriod = d
 	}
 	return base, nil
 }

@@ -378,7 +378,10 @@ func TestCommittedRuntimeAlignsCoinGeckoCadence(t *testing.T) {
 		t.Fatalf("read committed edgex-liquidity-dashboard.yaml: %v", err)
 	}
 	text := string(raw)
-	for _, needle := range []string{"collection:", "per_platform_concurrency:", "per_platform_rate_per_sec:"} {
+	if cfg.Runtime.ListingAgent.Candidate.HistoricalListingGracePeriod != 48*time.Hour {
+		t.Fatalf("committed historical_listing_grace_period = %s, want 48h", cfg.Runtime.ListingAgent.Candidate.HistoricalListingGracePeriod)
+	}
+	for _, needle := range []string{"collection:", "per_platform_concurrency:", "per_platform_rate_per_sec:", "historical_listing_grace_period:"} {
 		if !strings.Contains(text, needle) {
 			t.Fatalf("edgex-liquidity-dashboard.yaml should explicitly declare %q", needle)
 		}
@@ -769,6 +772,7 @@ Runtime:
       send_spacing: 45s
     candidate:
       merge_window: 14d
+      historical_listing_grace_period: 72h
     decision_card:
       enabled: true
       ignore_cooldown: 36h
@@ -829,6 +833,9 @@ Runtime:
 	}
 	if got := cfg.Runtime.ListingAgent.Candidate.MergeWindow; got != 14*24*time.Hour {
 		t.Fatalf("merge_window = %s", got)
+	}
+	if got := cfg.Runtime.ListingAgent.Candidate.HistoricalListingGracePeriod; got != 72*time.Hour {
+		t.Fatalf("historical_listing_grace_period = %s, want 72h", got)
 	}
 	dc := cfg.Runtime.ListingAgent.DecisionCard
 	if !dc.Enabled {
@@ -911,6 +918,9 @@ func TestDefaultListingAgentSeedsP1Sources(t *testing.T) {
 	}
 	if la.Candidate.MergeWindow != 14*24*time.Hour {
 		t.Fatalf("default merge_window = %s", la.Candidate.MergeWindow)
+	}
+	if la.Candidate.HistoricalListingGracePeriod != 48*time.Hour {
+		t.Fatalf("default historical_listing_grace_period = %s, want 48h", la.Candidate.HistoricalListingGracePeriod)
 	}
 }
 

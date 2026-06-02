@@ -350,6 +350,7 @@ Runtime:
       send_spacing: 30s
     candidate:
       merge_window: 14d
+      historical_listing_grace_period: 48h
     # Phase 2 — Lark decision card + button callback.
     # See docs/feat/listing-agent-decision-card-callback.md for the
     # button matrix, cooldown contract and callback security model.
