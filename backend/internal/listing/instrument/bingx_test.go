@@ -103,3 +103,37 @@ func TestNormalizeBingXSwapSymbolSyntheticFiltersBaseAssetPrefix(t *testing.T) {
 		t.Fatalf("synthetic detection must scope to base asset, not raw symbol")
 	}
 }
+
+func TestNormalizeBingXSwapStatusCodes(t *testing.T) {
+	cases := []struct {
+		name string
+		raw  string
+		want string
+	}{
+		{name: "active", raw: `{"symbol":"TEST-USDT","asset":"TEST","quoteAsset":"USDT","status":1}`, want: "active"},
+		{name: "pre listing", raw: `{"symbol":"TEST-USDT","asset":"TEST","quoteAsset":"USDT","status":5}`, want: "pre_listing"},
+		{name: "delisted", raw: `{"symbol":"TEST-USDT","asset":"TEST","quoteAsset":"USDT","status":25}`, want: "delisted"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := NormalizeBingXSwapSymbol([]byte(tc.raw))
+			if err != nil {
+				t.Fatalf("normalize err = %v", err)
+			}
+			if got.StatusNormalized != tc.want {
+				t.Fatalf("normalized to %q, want %q", got.StatusNormalized, tc.want)
+			}
+		})
+	}
+}
+
+func TestNormalizeBingXSpotStatusTenIsUnknown(t *testing.T) {
+	raw := []byte(`{"symbol":"TEST-USDT","baseAsset":"TEST","quoteAsset":"USDT","status":10}`)
+	got, err := NormalizeBingXSpotSymbol(raw)
+	if err != nil {
+		t.Fatalf("normalize err = %v", err)
+	}
+	if got.StatusNormalized != "unknown" {
+		t.Fatalf("spot status=10 normalized to %q, want unknown", got.StatusNormalized)
+	}
+}
