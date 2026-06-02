@@ -521,3 +521,39 @@ func indexOf(s, sub string) int {
 	}
 	return -1
 }
+
+func TestProduceTop30PushSkipsRowsAlreadyListedInCurrentUniverse(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 33, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+	listed := false
+	snapshot := now.Add(-time.Minute)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT MAX(snapshot_ts) FROM t_top30_snapshot")).
+		WillReturnRows(sqlmock.NewRows([]string{"MAX(snapshot_ts)"}).AddRow(snapshot))
+	rows := sqlmock.NewRows([]string{
+		"platform", "symbol", "rank_no", "volume_24h_usd",
+		"coverage_count", "edgex_listed", "suggested_action", "snapshot_ts",
+	}).
+		AddRow("binance", "BTC-USDT (perp)", 1, 1000.0, 7, listed, "优先上架", snapshot).
+		AddRow("okx", "BTC-USDT (perp)", 1, 800.0, 7, listed, "优先上架", snapshot)
+	mock.ExpectQuery(`SELECT platform, symbol, rank_no.+FROM t_top30_snapshot.+WHERE snapshot_ts`).
+		WithArgs(snapshot).
+		WillReturnRows(rows)
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	res, err := ProduceTop30Push(context.Background(), repo, Top30Deps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+		WebhookURL:   "https://example.test/hook",
+		StaleAfter:   time.Hour,
+	})
+	if err != nil {
+		t.Fatalf("ProduceTop30Push err = %v", err)
+	}
+	if res.Events != 1 || res.SkippedAlreadyListed != 1 || res.Signals != 0 || res.OutboxRows != 0 {
+		t.Fatalf("result = %+v, want Events=1 SkippedAlreadyListed=1 Signals=0 OutboxRows=0", res)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}

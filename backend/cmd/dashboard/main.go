@@ -167,9 +167,9 @@ func main() {
 	// fall back to the resolved default if the field ended up empty
 	// or still contains a literal "${" (env var unset).
 	cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath = resolveConfigPath(
-		cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath, runtimeUniversePath)
+		cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath, runtimeUniversePath, *configDir)
 	cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath = resolveConfigPath(
-		cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath, seedUniversePath)
+		cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath, seedUniversePath, *configDir)
 	resolveListingCallbackSecret(&cfg)
 	if roleStartsListing(*role) && cfg.Runtime.ListingAgent.Enabled && listingRepo != nil {
 		listingHTTPClient, err := fetcher.NewHTTPClient(fetcher.DefaultRequestTimeout, cfg.Runtime.ExchangeProxy)
@@ -243,10 +243,12 @@ func main() {
 func buildUniverseLoader(runtimePath, seedPath string) func() *config.ListedUniverse {
 	return func() *config.ListedUniverse {
 		if runtimePath != "" {
-			if u, err := config.LoadListedUniverse(runtimePath); err == nil && u != nil && u.Loaded() {
+			if u, err := config.LoadListedUniverse(runtimePath); err == nil && u != nil && u.Loaded() && len(u.BaseAssets("edgeX")) > 0 {
 				return u
 			} else if err != nil {
 				log.Printf("listed_universe runtime load failed (%s): %v; trying seed", runtimePath, err)
+			} else {
+				log.Printf("listed_universe runtime ignored (%s): edgeX universe empty; trying seed", runtimePath)
 			}
 		}
 		u, err := config.LoadListedUniverse(seedPath)
@@ -265,12 +267,23 @@ func buildUniverseLoader(runtimePath, seedPath string) func() *config.ListedUniv
 // what lets a docker-compose YAML write
 // "${DASHBOARD_DATA_DIR}/listed_universe.runtime.yaml" once and have
 // it work on dev hosts that do not set DASHBOARD_DATA_DIR.
-func resolveConfigPath(raw, fallback string) string {
-	expanded := os.ExpandEnv(strings.TrimSpace(raw))
-	if expanded == "" || strings.Contains(expanded, "${") {
+func resolveConfigPath(raw, fallback, configDir string) string {
+	trimmed := strings.TrimSpace(raw)
+	missingEnv := false
+	expanded := os.Expand(trimmed, func(name string) string {
+		v := os.Getenv(name)
+		if v == "" {
+			missingEnv = true
+		}
+		return v
+	})
+	if expanded == "" || missingEnv || strings.Contains(expanded, "${") {
 		return fallback
 	}
-	return expanded
+	if filepath.IsAbs(expanded) {
+		return expanded
+	}
+	return filepath.Join(configDir, expanded)
 }
 
 // envOr returns os.Getenv(key) when non-empty, otherwise fallback. Used
@@ -285,8 +298,9 @@ func envOr(key, fallback string) string {
 
 // resolveRuntimeUniversePath picks the writable path for the
 // refresh job's runtime listed_universe.yaml. Priority:
-//   1. --runtime-data-dir flag (or DASHBOARD_DATA_DIR env)
-//   2. configDir (legacy / single-binary deployments)
+//  1. --runtime-data-dir flag (or DASHBOARD_DATA_DIR env)
+//  2. configDir (legacy / single-binary deployments)
+//
 // In every case the file lives next to a "listed_universe.runtime.yaml"
 // name so the seed (listed_universe.yaml) stays untouched.
 func resolveRuntimeUniversePath(runtimeDataDir, configDir string) string {

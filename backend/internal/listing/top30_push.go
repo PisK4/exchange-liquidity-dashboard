@@ -581,11 +581,12 @@ type Top30Deps struct {
 }
 
 type Top30PushResult struct {
-	Events      int
-	Signals     int
-	OutboxRows  int
-	AutoQuieted int
-	FailClosed  string
+	Events               int
+	Signals              int
+	OutboxRows           int
+	AutoQuieted          int
+	SkippedAlreadyListed int
+	FailClosed           string
 }
 
 func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (Top30PushResult, error) {
@@ -626,6 +627,10 @@ func ProduceTop30Push(ctx context.Context, repo *Repository, deps Top30Deps) (To
 	outboxBatchIdx := 0
 	for i := range events {
 		ev := &events[i]
+		if universe.IsListed("edgeX", extractBase(ev.Symbol)) {
+			result.SkippedAlreadyListed++
+			continue
+		}
 		ev.TriggerTime = now
 		ev.DashboardURL = buildDashboardSymbolURL(deps.DashboardBase, ev.Symbol)
 		// Streak counts consecutive prior days that already emitted a

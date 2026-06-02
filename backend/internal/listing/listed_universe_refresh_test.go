@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"edgex-dashboard/backend/internal/config"
+
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
@@ -147,6 +149,53 @@ func TestRefreshListedUniverseShrinkFloorFallsBackToSeed(t *testing.T) {
 	}
 	if !seenSeed {
 		t.Fatalf("edgeX must fall back to seed on shrink, got PlatformsFromSeed=%v", res.PlatformsFromSeed)
+	}
+	if got := metrics.Value("listed_universe_shrink_fallback_total", "edgeX"); got != 1 {
+		t.Fatalf("shrink_fallback counter for edgeX = %v, want 1", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestRefreshListedUniverseFallsBackToSeedWhenDBEmpty(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}))
+	// Source-health writes for the seed fallback on each covered platform.
+	mock.ExpectExec(`INSERT INTO t_listing_source_state`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(`INSERT INTO t_listing_source_state`).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	seed := writeSeed(t)
+	runtimePath := filepath.Join(t.TempDir(), "listed_universe.runtime.yaml")
+	metrics := NewInMemoryMetrics()
+
+	res, err := RefreshListedUniverseFromSnapshots(context.Background(), repo, ListedUniverseRefreshArgs{
+		SeedPath:         seed,
+		RuntimePath:      runtimePath,
+		FreshWindow:      30 * time.Minute,
+		CoveredPlatforms: []string{"edgeX", "binance"},
+		ShrinkFloor:      0.5,
+		Now:              now,
+		Metrics:          metrics,
+	})
+	if err != nil {
+		t.Fatalf("RefreshListedUniverseFromSnapshots err = %v", err)
+	}
+	if len(res.PlatformsFromSeed) != 2 {
+		t.Fatalf("PlatformsFromSeed = %v, want edgeX and binance", res.PlatformsFromSeed)
+	}
+	loaded, err := config.LoadListedUniverse(runtimePath)
+	if err != nil {
+		t.Fatalf("load runtime universe: %v", err)
+	}
+	if !loaded.IsListed("edgeX", "BTC") {
+		t.Fatalf("runtime universe must preserve seed edgeX BTC when DB is empty")
 	}
 	if got := metrics.Value("listed_universe_shrink_fallback_total", "edgeX"); got != 1 {
 		t.Fatalf("shrink_fallback counter for edgeX = %v, want 1", got)
