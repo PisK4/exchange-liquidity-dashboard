@@ -26,6 +26,10 @@ type FusionDeps struct {
 	// SignalBatchSize bounds the number of unfused signals processed
 	// per run; defaults to 500.
 	SignalBatchSize int
+	// HistoricalListingGracePeriod is the freshness window used to
+	// distinguish exchange-side new listings from late discovery of
+	// markets that were already active long before we observed them.
+	HistoricalListingGracePeriod time.Duration
 }
 
 // FusionResult is what one fusion run produces. The engine writes
@@ -74,7 +78,6 @@ func isCandidateBearingSignal(signalType string) bool {
 // Only events that semantically describe "a new perpetual / spot
 // listing has appeared on this venue" qualify:
 //   - new_symbol            (instrument first observed)
-//   - relisted              (delisted → listed flip)
 //   - listing_time_changed  (scheduled listing time moved)
 //   - status_changed where status_to ∈ {active, pre_listing}
 //
@@ -137,6 +140,9 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 	if deps.SignalBatchSize <= 0 {
 		deps.SignalBatchSize = 500
 	}
+	if deps.HistoricalListingGracePeriod <= 0 {
+		deps.HistoricalListingGracePeriod = 48 * time.Hour
+	}
 	universe, err := deps.LoadUniverse()
 	if err != nil {
 		return FusionResult{FailClosed: "universe_load_error"}, fmt.Errorf("%w: %v", ErrFusionFailClosed, err)
@@ -155,14 +161,16 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 
 	type groupKey struct{ canonical, surface, kind string }
 	type group struct {
-		key             groupKey
-		signals         []SignalObservation
-		display         string
-		firstSeen       time.Time
-		lastSeen        time.Time
-		platforms       map[string]struct{}
-		hasInstrument   bool
-		hasAnnouncement bool
+		key                     groupKey
+		signals                 []SignalObservation
+		display                 string
+		firstSeen               time.Time
+		lastSeen                time.Time
+		platforms               map[string]struct{}
+		scoringPlatforms        map[string]struct{}
+		hasFreshInstrument      bool
+		hasHistoricalInstrument bool
+		hasAnnouncement         bool
 	}
 	groups := make(map[groupKey]*group)
 	order := make([]groupKey, 0)
@@ -184,7 +192,7 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 		key := groupKey{strings.ToUpper(s.CanonicalSymbol), s.MarketSurface, s.InstrumentKind}
 		g, ok := groups[key]
 		if !ok {
-			g = &group{key: key, platforms: make(map[string]struct{})}
+			g = &group{key: key, platforms: make(map[string]struct{}), scoringPlatforms: make(map[string]struct{})}
 			groups[key] = g
 			order = append(order, key)
 		}
@@ -198,14 +206,25 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 		if s.ObservedAt.After(g.lastSeen) {
 			g.lastSeen = s.ObservedAt
 		}
-		if s.SourcePlatform != "" {
-			g.platforms[strings.ToLower(s.SourcePlatform)] = struct{}{}
+		platform := strings.ToLower(s.SourcePlatform)
+		if platform != "" {
+			g.platforms[platform] = struct{}{}
 		}
 		switch s.SignalType {
 		case SignalInstrumentDiff:
-			g.hasInstrument = true
+			if isHistoricalActiveListing(s, deps.HistoricalListingGracePeriod) {
+				g.hasHistoricalInstrument = true
+			} else {
+				g.hasFreshInstrument = true
+				if platform != "" {
+					g.scoringPlatforms[platform] = struct{}{}
+				}
+			}
 		case SignalAnnouncementListing:
 			g.hasAnnouncement = true
+			if platform != "" {
+				g.scoringPlatforms[platform] = struct{}{}
+			}
 		}
 	}
 
@@ -213,14 +232,18 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 	out := FusionResult{}
 	for _, key := range order {
 		g := groups[key]
+		pureHistorical := g.hasHistoricalInstrument && !g.hasFreshInstrument && !g.hasAnnouncement
 		evidence := EvidenceInstrumentDiffOnly
 		switch {
-		case g.hasAnnouncement && g.hasInstrument:
+		case g.hasAnnouncement && g.hasFreshInstrument:
 			evidence = EvidenceAnnouncementAndAPI
-		case g.hasAnnouncement && !g.hasInstrument:
+		case g.hasAnnouncement && !g.hasFreshInstrument:
 			evidence = EvidenceAnnouncementPendingAPI
 		}
-		platforms := keysSorted(g.platforms)
+		platforms := keysSorted(g.scoringPlatforms)
+		if len(platforms) == 0 {
+			platforms = keysSorted(g.platforms)
+		}
 		isListed := false
 		for _, base := range universe.BaseAssets("edgeX") {
 			if strings.EqualFold(base, g.key.canonical) {
@@ -236,6 +259,36 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 			InstrumentKind: g.key.kind,
 		})
 		lifecycleStatus, lifecycleLabel := deriveLifecycle(evidence, isListed, score.LifecycleStatus, score.LifecycleStatusLabel)
+		if pureHistorical {
+			score = ScoreResult{
+				Recommendation:       RecommendationNoAction,
+				RecommendationLabel:  RecommendationLabels[RecommendationNoAction],
+				LifecycleStatus:      LifecycleAlreadyListed,
+				LifecycleStatusLabel: LifecycleStatusLabels[LifecycleAlreadyListed],
+				BusinessScoreVersion: BusinessScoreVersion,
+				ConfidenceLevel:      ConfidenceLow,
+			}
+			lifecycleStatus = LifecycleAlreadyListed
+			lifecycleLabel = LifecycleStatusLabels[LifecycleAlreadyListed]
+			existing, ok, err := repo.GetCandidateByKey(ctx, g.key.canonical, g.key.surface, g.key.kind)
+			if err != nil {
+				return out, fmt.Errorf("get candidate %s: %w", g.key.canonical, err)
+			}
+			if ok && isActionableCandidate(existing) {
+				for _, s := range g.signals {
+					if err := repo.LinkCandidateSignal(ctx, existing.ID, s.ID); err != nil {
+						return out, fmt.Errorf("link candidate %d signal %d: %w", existing.ID, s.ID, err)
+					}
+				}
+				for _, s := range g.signals {
+					if err := repo.MarkSignalFused(ctx, s.ID, now); err != nil {
+						return out, fmt.Errorf("mark signal fused %d: %w", s.ID, err)
+					}
+				}
+				out.Signals += len(g.signals)
+				continue
+			}
+		}
 		upsert := CandidateUpsert{
 			CanonicalSymbol:      g.key.canonical,
 			DisplaySymbol:        g.display,
@@ -290,6 +343,26 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 		out.SkippedObservationOnly++
 	}
 	return out, nil
+}
+
+func isHistoricalActiveListing(s SignalObservation, grace time.Duration) bool {
+	if s.SignalType != SignalInstrumentDiff || grace <= 0 {
+		return false
+	}
+	if s.ListingTimeTS == nil || s.ObservedAt.IsZero() {
+		return false
+	}
+	if s.StatusNormalized != StatusActive {
+		return false
+	}
+	if !isCandidatePromotingInstrumentDiff(s) {
+		return false
+	}
+	return !s.ListingTimeTS.After(s.ObservedAt.Add(-grace))
+}
+
+func isActionableCandidate(c Candidate) bool {
+	return c.Recommendation != RecommendationNoAction && c.LifecycleStatus != LifecycleAlreadyListed
 }
 
 // deriveLifecycle picks the lifecycle_status enum for the candidate

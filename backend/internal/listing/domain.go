@@ -115,7 +115,7 @@ var LifecycleStatusLabels = map[string]string{
 	LifecycleAnnouncedPendingAPI:       "公告待 API 确认",
 	LifecycleAPIDetectedNoAnnouncement: "API 已发现待公告确认",
 	LifecycleConfirmedListingCandidate: "已确认候选",
-	LifecycleAlreadyListed:             "edgeX 已上线",
+	LifecycleAlreadyListed:             "竞品已历史上线",
 }
 
 // Outbox lifecycle states.

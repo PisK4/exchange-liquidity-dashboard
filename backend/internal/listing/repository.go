@@ -469,6 +469,29 @@ func (r *Repository) ListCandidates(ctx context.Context, f CandidateFilter) ([]C
 	return scanCandidateRows(rows)
 }
 
+// GetCandidateByKey fetches a candidate by its unique semantic key.
+func (r *Repository) GetCandidateByKey(ctx context.Context, canonical, surface, kind string) (Candidate, bool, error) {
+	if r.db == nil {
+		return Candidate{}, false, errors.New("listing repository: no db attached")
+	}
+	row := r.db.QueryRowContext(ctx,
+		`SELECT id, canonical_symbol, display_symbol, market_surface, instrument_kind,
+		         lifecycle_status, lifecycle_status_label, evidence_kind, confidence_level,
+		         business_score, business_score_version, recommendation, recommendation_label,
+		         source_platforms_json, top30_enrichment_json, first_observed_at, last_observed_at
+		    FROM t_listing_candidate
+		   WHERE canonical_symbol = ? AND market_surface = ? AND instrument_kind = ?
+		   LIMIT 1`, canonical, surface, kind)
+	c, err := scanCandidateRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Candidate{}, false, nil
+	}
+	if err != nil {
+		return Candidate{}, false, err
+	}
+	return c, true, nil
+}
+
 // GetCandidate fetches a single candidate by id.
 func (r *Repository) GetCandidate(ctx context.Context, id int64) (Candidate, error) {
 	if r.db == nil {

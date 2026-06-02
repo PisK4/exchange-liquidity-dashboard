@@ -3,6 +3,7 @@ package listing
 import (
 	"context"
 	"errors"
+	"fmt"
 	"regexp"
 	"testing"
 	"time"
@@ -432,6 +433,260 @@ func TestFuseSignalsSkipsRelistedAsObservationOnly(t *testing.T) {
 	}
 	if result.SkippedObservationOnly != 1 {
 		t.Fatalf("SkippedObservationOnly = %d, want 1", result.SkippedObservationOnly)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func fusionSignalColumns() []string {
+	return []string{
+		"id", "signal_type", "signal_subtype", "source_platform", "market_type", "api_symbol", "api_market_id",
+		"canonical_symbol", "display_symbol", "base_asset", "quote_asset", "settle_asset",
+		"market_surface", "instrument_kind", "status_raw", "status_normalized", "confidence",
+		"observed_at", "source_snapshot_ts", "published_at", "listing_time_ts",
+		"source_endpoint", "source_url", "fingerprint", "payload_json", "raw_payload_json", "raw_payload_hash",
+	}
+}
+
+func fusionCandidateColumns() []string {
+	return []string{
+		"id", "canonical_symbol", "display_symbol", "market_surface", "instrument_kind",
+		"lifecycle_status", "lifecycle_status_label", "evidence_kind", "confidence_level",
+		"business_score", "business_score_version", "recommendation", "recommendation_label",
+		"source_platforms_json", "top30_enrichment_json", "first_observed_at", "last_observed_at",
+	}
+}
+
+func addFusionInstrumentSignal(rows *sqlmock.Rows, id int64, platform, subtype, canonical, status string, observedAt time.Time, listingTime *time.Time) *sqlmock.Rows {
+	apiSymbol := canonical + "USDT"
+	return rows.AddRow(
+		id, SignalInstrumentDiff, subtype, platform, "swap", apiSymbol, nil,
+		canonical, canonical+"-USDT (perp)", canonical, "USDT", "USDT",
+		"perp", "canonical", status, status, nil,
+		observedAt, nil, nil, nullTimePtr(listingTime),
+		nil, nil, "instrument_diff:"+platform+":"+canonical+":"+subtype+":"+idString(id), []byte(`{"diff_subtype":"`+subtype+`"}`), nil, nil,
+	)
+}
+
+func addFusionAnnouncementSignal(rows *sqlmock.Rows, id int64, platform, canonical string, observedAt time.Time) *sqlmock.Rows {
+	return rows.AddRow(
+		id, SignalAnnouncementListing, AnnouncementPerpListing, platform, nil, nil, nil,
+		canonical, canonical+"-USDT (perp)", canonical, "USDT", "USDT",
+		"perp", "canonical", nil, nil, nil,
+		observedAt, nil, nil, nil,
+		nil, nil, "announcement_listing:"+platform+":"+canonical+":"+idString(id), []byte(`{}`), nil, nil,
+	)
+}
+
+func idString(id int64) string { return fmt.Sprintf("%d", id) }
+
+func expectNoCandidateByKey(mock sqlmock.Sqlmock, canonical string) {
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).
+		WithArgs(canonical, "perp", "canonical").
+		WillReturnRows(sqlmock.NewRows(fusionCandidateColumns()))
+}
+
+func TestFuseSignalsNewSymbolWithHistoricalListingTimeMarksAlreadyListedNoAction(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	listingTime := now.Add(-30 * 24 * time.Hour)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows(fusionSignalColumns())
+	addFusionInstrumentSignal(rows, 9600, "okx", DiffNewSymbol, "SPCX", StatusActive, now, &listingTime)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).WillReturnRows(rows)
+	expectNoCandidateByKey(mock, "SPCX")
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_candidate")).WithArgs(
+		"SPCX", "SPCX-USDT (perp)", "perp", "canonical",
+		LifecycleAlreadyListed, "竞品已历史上线", EvidenceInstrumentDiffOnly, ConfidenceLow,
+		sqlmock.AnyArg(), BusinessScoreVersion, RecommendationNoAction, RecommendationLabels[RecommendationNoAction],
+		sqlmock.AnyArg(), sqlmock.AnyArg(), now, now,
+	).WillReturnResult(sqlmock.NewResult(120, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_candidate_signal")).WithArgs(int64(120), int64(9600)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9600)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	result, err := FuseSignals(context.Background(), repo, FusionDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("FuseSignals err = %v", err)
+	}
+	if result.Candidates != 1 || result.Signals != 1 {
+		t.Fatalf("counts = %+v, want 1 candidate / 1 signal", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestFuseSignalsNewSymbolWithRecentListingTimeStillPromotesCandidate(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	listingTime := now.Add(-2 * time.Hour)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows(fusionSignalColumns())
+	addFusionInstrumentSignal(rows, 9601, "okx", DiffNewSymbol, "FRESH", StatusActive, now, &listingTime)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).WillReturnRows(rows)
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_candidate")).WillReturnResult(sqlmock.NewResult(121, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_candidate_signal")).WithArgs(int64(121), int64(9601)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9601)).WillReturnResult(sqlmock.NewResult(0, 1))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	result, err := FuseSignals(context.Background(), repo, FusionDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("FuseSignals err = %v", err)
+	}
+	if result.Candidates != 1 || result.SkippedObservationOnly != 0 {
+		t.Fatalf("result = %+v, want promoted candidate", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestFuseSignalsNewSymbolWithFutureListingTimeStillPromotesCandidate(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	listingTime := now.Add(2 * time.Hour)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows(fusionSignalColumns())
+	addFusionInstrumentSignal(rows, 9602, "bingx", DiffNewSymbol, "FUTR", StatusPreListing, now, &listingTime)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).WillReturnRows(rows)
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_candidate")).WillReturnResult(sqlmock.NewResult(122, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_candidate_signal")).WithArgs(int64(122), int64(9602)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9602)).WillReturnResult(sqlmock.NewResult(0, 1))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	result, err := FuseSignals(context.Background(), repo, FusionDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("FuseSignals err = %v", err)
+	}
+	if result.Candidates != 1 {
+		t.Fatalf("Candidates = %d, want 1", result.Candidates)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestFuseSignalsHistoricalAndAnnouncementDoesNotDowngradeGroup(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	listingTime := now.Add(-10 * 24 * time.Hour)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows(fusionSignalColumns())
+	addFusionInstrumentSignal(rows, 9603, "okx", DiffNewSymbol, "MIXANN", StatusActive, now, &listingTime)
+	addFusionAnnouncementSignal(rows, 9604, "bybit", "MIXANN", now)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).WillReturnRows(rows)
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_candidate")).WithArgs(
+		"MIXANN", "MIXANN-USDT (perp)", "perp", "canonical",
+		LifecycleAnnouncedPendingAPI, LifecycleStatusLabels[LifecycleAnnouncedPendingAPI], EvidenceAnnouncementPendingAPI, ConfidenceMedium,
+		sqlmock.AnyArg(), BusinessScoreVersion, RecommendationPreAssessment, RecommendationLabels[RecommendationPreAssessment],
+		sqlmock.AnyArg(), sqlmock.AnyArg(), now, now,
+	).WillReturnResult(sqlmock.NewResult(123, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_candidate_signal")).WithArgs(int64(123), int64(9603)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_candidate_signal")).WithArgs(int64(123), int64(9604)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9603)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9604)).WillReturnResult(sqlmock.NewResult(0, 1))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	result, err := FuseSignals(context.Background(), repo, FusionDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("FuseSignals err = %v", err)
+	}
+	if result.Candidates != 1 || result.Signals != 2 {
+		t.Fatalf("counts = %+v, want 1 candidate / 2 signals", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestFuseSignalsHistoricalAndFreshInstrumentDoesNotDowngradeGroup(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	historicalTime := now.Add(-10 * 24 * time.Hour)
+	freshTime := now.Add(2 * time.Hour)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows(fusionSignalColumns())
+	addFusionInstrumentSignal(rows, 9605, "okx", DiffNewSymbol, "MIXAPI", StatusActive, now, &historicalTime)
+	addFusionInstrumentSignal(rows, 9606, "binance", DiffNewSymbol, "MIXAPI", StatusPreListing, now, &freshTime)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).WillReturnRows(rows)
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_candidate")).WithArgs(
+		"MIXAPI", "MIXAPI-USDT (perp)", "perp", "canonical",
+		LifecycleAPIDetectedNoAnnouncement, LifecycleStatusLabels[LifecycleAPIDetectedNoAnnouncement], EvidenceInstrumentDiffOnly, ConfidenceMedium,
+		sqlmock.AnyArg(), BusinessScoreVersion, RecommendationPrepareListing, RecommendationLabels[RecommendationPrepareListing],
+		sqlmock.AnyArg(), sqlmock.AnyArg(), now, now,
+	).WillReturnResult(sqlmock.NewResult(124, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_candidate_signal")).WithArgs(int64(124), int64(9605)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_candidate_signal")).WithArgs(int64(124), int64(9606)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9605)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9606)).WillReturnResult(sqlmock.NewResult(0, 1))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	result, err := FuseSignals(context.Background(), repo, FusionDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("FuseSignals err = %v", err)
+	}
+	if result.Candidates != 1 || result.Signals != 2 {
+		t.Fatalf("counts = %+v, want 1 candidate / 2 signals", result)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestFuseSignalsHistoricalDoesNotDowngradeExistingActionableCandidate(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	listingTime := now.Add(-10 * 24 * time.Hour)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows(fusionSignalColumns())
+	addFusionInstrumentSignal(rows, 9607, "okx", DiffNewSymbol, "KEEP", StatusActive, now, &listingTime)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).WillReturnRows(rows)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).
+		WithArgs("KEEP", "perp", "canonical").
+		WillReturnRows(sqlmock.NewRows(fusionCandidateColumns()).AddRow(
+			int64(130), "KEEP", "KEEP-USDT (perp)", "perp", "canonical",
+			LifecycleConfirmedListingCandidate, LifecycleStatusLabels[LifecycleConfirmedListingCandidate], EvidenceAnnouncementAndAPI, ConfidenceHigh,
+			90.0, BusinessScoreVersion, RecommendationPrepareListing, RecommendationLabels[RecommendationPrepareListing],
+			[]byte(`["binance","bybit"]`), nil, now.Add(-24*time.Hour), now.Add(-2*time.Hour),
+		))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_candidate_signal")).WithArgs(int64(130), int64(9607)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9607)).WillReturnResult(sqlmock.NewResult(0, 1))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	result, err := FuseSignals(context.Background(), repo, FusionDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("FuseSignals err = %v", err)
+	}
+	if result.Candidates != 0 || result.Signals != 1 {
+		t.Fatalf("counts = %+v, want linked signal without candidate overwrite", result)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)

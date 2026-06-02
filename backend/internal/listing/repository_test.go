@@ -454,3 +454,53 @@ func TestRepositoryInsertAnnouncementSymbolAndSignalChains(t *testing.T) {
 		t.Fatalf("expectations: %v", err)
 	}
 }
+
+func TestRepositoryGetCandidateByKeyFound(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).
+		WithArgs("ABC", "perp", "canonical").
+		WillReturnRows(sqlmock.NewRows(fusionCandidateColumns()).AddRow(
+			int64(42), "ABC", "ABC-USDT (perp)", "perp", "canonical",
+			LifecycleConfirmedListingCandidate, LifecycleStatusLabels[LifecycleConfirmedListingCandidate], EvidenceAnnouncementAndAPI, ConfidenceHigh,
+			90.0, BusinessScoreVersion, RecommendationPrepareListing, RecommendationLabels[RecommendationPrepareListing],
+			[]byte(`["binance"]`), nil, now.Add(-time.Hour), now,
+		))
+
+	got, ok, err := repo.GetCandidateByKey(context.Background(), "ABC", "perp", "canonical")
+	if err != nil {
+		t.Fatalf("GetCandidateByKey err = %v", err)
+	}
+	if !ok {
+		t.Fatalf("GetCandidateByKey ok = false, want true")
+	}
+	if got.ID != 42 || got.CanonicalSymbol != "ABC" || got.Recommendation != RecommendationPrepareListing {
+		t.Fatalf("candidate = %+v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestRepositoryGetCandidateByKeyMissing(t *testing.T) {
+	now := time.Date(2026, 6, 2, 7, 45, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).
+		WithArgs("MISSING", "perp", "canonical").
+		WillReturnRows(sqlmock.NewRows(fusionCandidateColumns()))
+
+	got, ok, err := repo.GetCandidateByKey(context.Background(), "MISSING", "perp", "canonical")
+	if err != nil {
+		t.Fatalf("GetCandidateByKey err = %v", err)
+	}
+	if ok {
+		t.Fatalf("GetCandidateByKey ok = true, want false; got %+v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
