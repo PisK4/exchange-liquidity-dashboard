@@ -248,6 +248,37 @@ func TestProduceDecisionCardsWritesRiskPlanAndOutboxForFreshCandidate(t *testing
 // (recommendation=no_action) the producer must not generate a
 // decision card; the operator does not need a button matrix for a
 // symbol that is already live.
+
+func TestProduceDecisionCardsSkipsStablecoinQuoteCollateralCandidate(t *testing.T) {
+	now := time.Date(2026, 6, 2, 10, 4, 50, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	candidateRows := sqlmock.NewRows([]string{
+		"id", "canonical_symbol", "display_symbol", "market_surface", "instrument_kind",
+		"lifecycle_status", "lifecycle_status_label", "evidence_kind", "confidence_level",
+		"business_score", "business_score_version", "recommendation", "recommendation_label",
+		"source_platforms_json", "top30_enrichment_json", "first_observed_at", "last_observed_at",
+	}).AddRow(
+		int64(13389), "USDC", "USDC_USD1", "spot", "canonical",
+		LifecycleAPIDetectedNoAnnouncement, LifecycleStatusLabels[LifecycleAPIDetectedNoAnnouncement], EvidenceInstrumentDiffOnly, ConfidenceLow,
+		nil, BusinessScoreVersion, RecommendationRecordOnly, RecommendationLabels[RecommendationRecordOnly],
+		[]byte(`["gate"]`), nil, now.Add(-12*time.Second), now.Add(-12*time.Second),
+	)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).WillReturnRows(candidateRows)
+
+	res, err := ProduceDecisionCards(context.Background(), repo, DecisionCardDeps{Now: func() time.Time { return now }, MaxPerTick: 10})
+	if err != nil {
+		t.Fatalf("ProduceDecisionCards err = %v", err)
+	}
+	if res.RiskPlans != 0 || res.OutboxRows != 0 {
+		t.Fatalf("res = %+v, want stablecoin candidate skipped before card generation", res)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestProduceDecisionCardsSkipsAlreadyListedCandidates(t *testing.T) {
 	now := time.Date(2026, 5, 30, 10, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newRepoWithMock(t, now)

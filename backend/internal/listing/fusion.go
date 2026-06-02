@@ -189,6 +189,10 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 			observationOnlyIDs = append(observationOnlyIDs, s.ID)
 			continue
 		}
+		if isNonListingTargetSignal(s) {
+			observationOnlyIDs = append(observationOnlyIDs, s.ID)
+			continue
+		}
 		key := groupKey{strings.ToUpper(s.CanonicalSymbol), s.MarketSurface, s.InstrumentKind}
 		g, ok := groups[key]
 		if !ok {

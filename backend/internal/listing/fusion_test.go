@@ -209,6 +209,42 @@ func TestFuseSignalsSkipsMetadataChangedSignal(t *testing.T) {
 // TestFuseSignalsPromotesNewSymbolSignal pins the positive path: a
 // genuine new_symbol signal still elevates to a candidate so the
 // observation-only gate cannot accidentally suppress real listings.
+
+func TestFuseSignalsSkipsStablecoinBaseNewSymbolSignal(t *testing.T) {
+	now := time.Date(2026, 6, 2, 10, 4, 38, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows(fusionSignalColumns()).AddRow(
+		int64(42265), SignalInstrumentDiff, DiffNewSymbol, "gate", "spot", "USDC_USD1", nil,
+		"USDC", "USDC_USD1", "USDC", "USD1", "USD1",
+		"spot", "canonical", "tradable", StatusActive, nil,
+		now, nil, nil, nil,
+		nil, nil, "instrument_diff:gate:spot:USDC_USD1:new_symbol:USDC", []byte(`{"diff_subtype":"new_symbol","status_to":"active"}`), nil, nil,
+	)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).WillReturnRows(rows)
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(42265)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	result, err := FuseSignals(context.Background(), repo, FusionDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("FuseSignals err = %v", err)
+	}
+	if result.Candidates != 0 {
+		t.Fatalf("Candidates = %d, want 0 (stablecoin/quote assets must not become listing targets)", result.Candidates)
+	}
+	if result.SkippedObservationOnly != 1 {
+		t.Fatalf("SkippedObservationOnly = %d, want 1", result.SkippedObservationOnly)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestFuseSignalsPromotesNewSymbolSignal(t *testing.T) {
 	now := time.Date(2026, 6, 1, 14, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newRepoWithMock(t, now)

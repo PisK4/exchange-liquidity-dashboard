@@ -660,7 +660,7 @@ func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCa
 	res := DecisionCardResult{Considered: len(candidates)}
 
 	for _, c := range candidates {
-		if c.Recommendation == RecommendationNoAction || c.LifecycleStatus == LifecycleAlreadyListed {
+		if c.Recommendation == RecommendationNoAction || c.LifecycleStatus == LifecycleAlreadyListed || isNonListingTargetAsset(c.CanonicalSymbol) {
 			res.SkippedNoAction++
 			continue
 		}
