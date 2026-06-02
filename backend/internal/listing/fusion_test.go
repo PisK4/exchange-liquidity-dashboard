@@ -394,3 +394,46 @@ func TestFuseSignalsAnnouncementUnaffectedByInstrumentSubtypeGate(t *testing.T) 
 		t.Fatalf("expectations: %v", err)
 	}
 }
+
+func TestFuseSignalsSkipsRelistedAsObservationOnly(t *testing.T) {
+	now := time.Date(2026, 6, 2, 2, 18, 0, 0, time.UTC)
+	listingTime := time.Date(2025, 11, 14, 7, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "signal_type", "signal_subtype", "source_platform", "market_type", "api_symbol", "api_market_id",
+		"canonical_symbol", "display_symbol", "base_asset", "quote_asset", "settle_asset",
+		"market_surface", "instrument_kind", "status_raw", "status_normalized", "confidence",
+		"observed_at", "source_snapshot_ts", "published_at", "listing_time_ts",
+		"source_endpoint", "source_url", "fingerprint", "payload_json", "raw_payload_json", "raw_payload_hash",
+	}).AddRow(
+		int64(9500), SignalInstrumentDiff, DiffRelisted, "bingx", "swap", "NCSKGE2USD-USDT", nil,
+		"NCSKGE2USD", "NCSKGE2USD-USDT", "NCSKGE2USD", "USDT", "USDT",
+		"perp", "synthetic", "1", "active", nil,
+		now, nil, nil, listingTime,
+		nil, nil, "instrument_diff:bingx:ncskge:relisted", []byte(`{"diff_subtype":"relisted","status_from":"delisted","status_to":"active","listing_time_to":"2025-11-14T07:00:00Z"}`), nil, nil,
+	)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).
+		WillReturnRows(rows)
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9500)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	result, err := FuseSignals(context.Background(), repo, FusionDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("FuseSignals err = %v", err)
+	}
+	if result.Candidates != 0 {
+		t.Fatalf("Candidates = %d, want 0 (relisted must not produce New Perp Listing)", result.Candidates)
+	}
+	if result.SkippedObservationOnly != 1 {
+		t.Fatalf("SkippedObservationOnly = %d, want 1", result.SkippedObservationOnly)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}

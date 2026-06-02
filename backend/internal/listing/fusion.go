@@ -86,7 +86,7 @@ func isCandidateBearingSignal(signalType string) bool {
 // for why this gate exists.
 func isCandidatePromotingInstrumentDiff(s SignalObservation) bool {
 	switch s.SignalSubtype {
-	case DiffNewSymbol, DiffRelisted, DiffListingTimeChanged:
+	case DiffNewSymbol, DiffListingTimeChanged:
 		return true
 	case DiffStatusChanged:
 		return statusChangedPromotes(s.PayloadJSON)
