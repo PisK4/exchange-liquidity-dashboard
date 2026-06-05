@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"edgex-dashboard/backend/internal/activity"
 	"edgex-dashboard/backend/internal/adapter"
 	"edgex-dashboard/backend/internal/api"
 	"edgex-dashboard/backend/internal/collector"
@@ -51,6 +52,7 @@ func main() {
 	store := collector.NewStore(cfg)
 	resolvedDSN := resolveMySQLDSN(*mysqlDSN, cfg)
 	var listingRepo *listing.Repository
+	var activityRepo *activity.Repository
 	if resolvedDSN != "" {
 		db, err := collector.OpenMySQL(resolvedDSN)
 		if err != nil {
@@ -65,6 +67,7 @@ func main() {
 			log.Printf("load latest snapshots from mysql: %v", err)
 		}
 		listingRepo = listing.NewRepository(db)
+		activityRepo = activity.NewRepository(db)
 	} else {
 		if roleRequiresMySQL(*role) {
 			log.Fatalf("role %q requires MySQL DSN (--mysql-dsn or DASHBOARD_MYSQL_DSN)", *role)
@@ -213,7 +216,24 @@ func main() {
 		return
 	}
 
-	if *role == "collector" || *role == "listing" {
+	if roleStartsActivity(*role) {
+		if !cfg.Runtime.ActivityAgent.Enabled {
+			log.Printf("activity agent disabled by runtime config")
+			if *role == "activity" {
+				os.Exit(1)
+			}
+		} else if activityRepo == nil {
+			log.Printf("activity agent disabled: no repository configured")
+			if *role == "activity" {
+				os.Exit(1)
+			}
+		} else if *runOnce && *role == "activity" {
+			log.Printf("activity run-once: repository ready (fetch/producer/delivery workers pending)")
+			return
+		}
+	}
+
+	if *role == "collector" || *role == "listing" || *role == "activity" {
 		select {}
 	}
 
@@ -221,6 +241,10 @@ func main() {
 	if listingRepo != nil {
 		opts = append(opts, api.WithListingReader(listingRepo))
 		opts = append(opts, listingDecisionOptions(cfg, listingRepo)...)
+	}
+	if activityRepo != nil {
+		opts = append(opts, api.WithActivityStore(activityRepo))
+		opts = append(opts, api.WithActivityDecisionTokenSecret(os.Getenv(cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv)))
 	}
 	server := api.NewServer(cfg, store, opts...)
 	log.Printf("EdgeX liquidity dashboard API listening on %s", *addr)
@@ -316,11 +340,15 @@ func roleStartsListing(role string) bool {
 	return role == "listing" || role == "collector" || role == "all"
 }
 
+func roleStartsActivity(role string) bool {
+	return role == "activity" || role == "all"
+}
+
 // roleRequiresMySQL reports whether the role cannot operate without a
 // MySQL DSN. The listing role is the only role that fail-stops on
 // missing DSN today; collector / all degrade gracefully.
 func roleRequiresMySQL(role string) bool {
-	return role == "listing"
+	return role == "listing" || role == "activity"
 }
 
 func roleStartsLiveProviders(role string) bool {

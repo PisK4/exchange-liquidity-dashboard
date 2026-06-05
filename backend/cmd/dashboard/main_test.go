@@ -26,6 +26,18 @@ func TestRoleStartsLiveProviders(t *testing.T) {
 	}
 }
 
+func TestActivityRoleRequiresMySQLAndStartsOnlyActivityWorker(t *testing.T) {
+	if !roleStartsActivity("activity") || !roleStartsActivity("all") {
+		t.Fatalf("activity worker should start for activity and all roles")
+	}
+	if roleStartsActivity("api") || roleStartsActivity("collector") || roleStartsActivity("listing") {
+		t.Fatalf("activity worker should not start for unrelated roles")
+	}
+	if !roleRequiresMySQL("activity") {
+		t.Fatalf("activity role must fail-fast without MySQL")
+	}
+}
+
 func TestResolveMySQLDSNUsesFlagBeforeConfig(t *testing.T) {
 	cfg := config.Config{Database: config.DatabaseConfig{DSN: "from-config"}}
 	if got := resolveMySQLDSN("from-flag", cfg); got != "from-flag" {

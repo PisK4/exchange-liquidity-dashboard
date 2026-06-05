@@ -20,9 +20,12 @@ type Server struct {
 	cfg        config.Config
 	store      StoreReader
 	listing    ListingReader
+	activity   ActivityStore
 	decisions  DecisionWriter
 	dispatcher DecisionDispatcher
 	callback   ListingCallbackConfig
+	activityDecisionSecret string
+	activityNow            func() time.Time
 }
 
 type StoreReader interface {
@@ -65,6 +68,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/collection-status", s.collectionStatus)
 	mux.HandleFunc("/api/runtime-config", s.runtimeConfig)
 	s.registerListingRoutes(mux)
+	s.registerActivityRoutes(mux)
 	return cors(mux)
 }
 

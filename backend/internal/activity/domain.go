@@ -190,6 +190,35 @@ type DecisionRecord struct {
 	Reason       string
 }
 
+type ReviewRecord struct {
+	EventID  int64
+	Action   string
+	Reviewer string
+	Reason   string
+}
+
+type SourceState struct {
+	ID                     int64
+	Platform               string
+	SourceGroup            string
+	SourceType             string
+	SourceURL              string
+	SourceKey              string
+	FetchMode              string
+	EvidenceQuality        string
+	Enabled                bool
+	AutoPushEnabled        bool
+	RequiresProxy          bool
+	RequiresBrowserContext bool
+	RequiresLogin          bool
+	Personalized           bool
+	SourceStatus           string
+	LastHTTPStatus         *int
+	LastErrorKind          string
+	DisabledUntil          *time.Time
+	UpdatedAt              time.Time
+}
+
 type DeliveryOutbox struct {
 	ID            int64
 	EventType     string
