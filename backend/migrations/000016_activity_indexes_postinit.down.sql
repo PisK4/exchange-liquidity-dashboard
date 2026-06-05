@@ -1,0 +1,3 @@
+DROP INDEX idx_activity_delivery_due ON t_activity_delivery_outbox;
+DROP INDEX idx_activity_event_review_auto ON t_activity_event;
+DROP INDEX idx_activity_event_status_updated ON t_activity_event;

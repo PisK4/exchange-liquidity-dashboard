@@ -52,6 +52,64 @@ type Runtime struct {
 	// shared delivery outbox webhook target. Listing-only fields live
 	// here so the legacy collector can continue to ignore them.
 	ListingAgent ListingAgentConfig `json:"listing_agent"`
+	// ActivityAgent owns the Operations Activity Radar pipeline. It is
+	// intentionally separate from ListingAgent so activity collection,
+	// review, delivery and webhook routing can be muted/retried/audited
+	// independently.
+	ActivityAgent ActivityAgentConfig `json:"activity_agent"`
+}
+
+type ActivityAgentConfig struct {
+	Enabled             bool                         `json:"enabled"`
+	DefaultPollInterval time.Duration                `json:"default_poll_interval"`
+	WorkerLeaseTTL      time.Duration                `json:"worker_lease_ttl"`
+	SourceProxy         string                       `json:"source_proxy,omitempty"`
+	DecisionToken       ActivityDecisionTokenConfig  `json:"decision_token"`
+	HighValueRules      ActivityHighValueRulesConfig `json:"high_value_rules"`
+	Delivery            ActivityDeliveryConfig       `json:"delivery"`
+	Sources             []ActivitySourceConfig       `json:"sources"`
+}
+
+type ActivityDecisionTokenConfig struct {
+	SecretEnv string        `json:"secret_env"`
+	TTL       time.Duration `json:"ttl"`
+}
+
+type ActivityHighValueRulesConfig struct {
+	SourceGroups                []string `json:"source_groups"`
+	ActivityTypeCandidates      []string `json:"activity_type_candidates"`
+	TitleKeywords               []string `json:"title_keywords"`
+	ConfirmedRewardThresholdUSD float64  `json:"confirmed_reward_threshold_usd"`
+}
+
+type ActivityDeliveryConfig struct {
+	Enabled                   bool          `json:"enabled"`
+	WebhookURLEnv             string        `json:"webhook_url_env"`
+	CollectOnlyWithoutWebhook bool          `json:"collect_only_without_webhook"`
+	Proxy                     string        `json:"proxy,omitempty"`
+	DashboardBaseURL          string        `json:"dashboard_base_url,omitempty"`
+	MaxPerTick                int           `json:"max_per_tick"`
+	SendSpacing               time.Duration `json:"send_spacing"`
+	SourceHealthCooldown      time.Duration `json:"source_health_cooldown"`
+	EventUpdateCooldown       time.Duration `json:"event_update_cooldown"`
+}
+
+type ActivitySourceConfig struct {
+	Platform               string        `json:"platform"`
+	SourceGroup            string        `json:"source_group"`
+	SourceType             string        `json:"source_type,omitempty"`
+	SourceURL              string        `json:"source_url,omitempty"`
+	FetchMode              string        `json:"fetch_mode"`
+	PollInterval           time.Duration `json:"poll_interval"`
+	Enabled                bool          `json:"enabled"`
+	AutoPushEnabled        bool          `json:"auto_push_enabled"`
+	RequiresProxy          bool          `json:"requires_proxy,omitempty"`
+	RequiresBrowserContext bool          `json:"requires_browser_context,omitempty"`
+	RequiresLogin          bool          `json:"requires_login,omitempty"`
+	Personalized           bool          `json:"personalized,omitempty"`
+	Locale                 string        `json:"locale,omitempty"`
+	ProxyRegion            string        `json:"proxy_region,omitempty"`
+	InterfaceName          string        `json:"interface_name,omitempty"`
 }
 
 // ListingAgentConfig is the runtime root for the Listing Agent P1
@@ -426,6 +484,7 @@ type AlertConfig struct {
 type AlertWebhooks struct {
 	Listing   string `json:"listing,omitempty"   yaml:"Listing"`
 	Liquidity string `json:"liquidity,omitempty" yaml:"Liquidity"`
+	Activity  string `json:"activity,omitempty"  yaml:"Activity"`
 }
 
 type CatalogConfig struct {
@@ -644,6 +703,53 @@ func Default() Config {
 			CooldownDuration:         5 * time.Minute,
 			Top30Divergence:          defaultTop30DivergenceConfig(),
 			ListingAgent:             defaultListingAgentConfig(),
+			ActivityAgent:            defaultActivityAgentConfig(),
+		},
+	}
+}
+
+func defaultActivityAgentConfig() ActivityAgentConfig {
+	return ActivityAgentConfig{
+		Enabled:             true,
+		DefaultPollInterval: time.Hour,
+		WorkerLeaseTTL:      2 * time.Minute,
+		DecisionToken: ActivityDecisionTokenConfig{
+			SecretEnv: "ACTIVITY_DECISION_TOKEN_SECRET",
+			TTL:       30 * 24 * time.Hour,
+		},
+		HighValueRules: ActivityHighValueRulesConfig{
+			SourceGroups: []string{
+				"launchpool_project_list", "cms_article_detail", "latest_events", "support_ongoing_section",
+			},
+			ActivityTypeCandidates: []string{
+				"launchpool", "airdrop_campaign", "listing_trading_campaign", "futures_trading_competition",
+				"seasonal_tournament", "delisting_signal", "non_cex_update_event", "incentive_rule_snapshot",
+			},
+			TitleKeywords: []string{
+				"launchpool", "hodler", "airdrop", "candydrop", "poolx", "m-day",
+				"competition", "giveaway", "prize pool", "trade to share", "new listing", "delist",
+			},
+			ConfirmedRewardThresholdUSD: 50000,
+		},
+		Delivery: ActivityDeliveryConfig{
+			Enabled:                   true,
+			WebhookURLEnv:             "ACTIVITY_LARK_WEBHOOK_URL",
+			CollectOnlyWithoutWebhook: true,
+			MaxPerTick:                10,
+			SendSpacing:               30 * time.Second,
+			SourceHealthCooldown:      time.Hour,
+			EventUpdateCooldown:       time.Hour,
+		},
+		Sources: []ActivitySourceConfig{
+			{Platform: "binance", SourceGroup: "cms_article_list", FetchMode: "http_direct", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true},
+			{Platform: "okx", SourceGroup: "help_announcement", FetchMode: "http_direct", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true},
+			{Platform: "bingx", SourceGroup: "openapi_notice", FetchMode: "http_direct_json", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true},
+			{Platform: "gate", SourceGroup: "launchpool_project_list", FetchMode: "utls_proxy_json", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
+			{Platform: "mexc", SourceGroup: "latest_events", FetchMode: "utls_proxy_html", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
+			{Platform: "bybit", SourceGroup: "announcements_ssr", FetchMode: "utls_html", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
+			{Platform: "bitget", SourceGroup: "support_ongoing_section", FetchMode: "utls_html", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
+			{Platform: "hyperliquid", SourceGroup: "cloudfront_entries", FetchMode: "http_direct_json", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true},
+			{Platform: "lighter", SourceGroup: "incentive_docs", FetchMode: "markdown_doc", PollInterval: 24 * time.Hour, Enabled: true, AutoPushEnabled: true},
 		},
 	}
 }
@@ -903,6 +1009,60 @@ type runtimeFile struct {
 	CooldownDuration         string                    `yaml:"cooldown_duration"`
 	Top30Divergence          *top30DivergenceFile      `yaml:"top30_divergence"`
 	ListingAgent             *listingAgentFile         `yaml:"listing_agent"`
+	ActivityAgent            *activityAgentFile        `yaml:"activity_agent"`
+}
+
+type activityAgentFile struct {
+	Enabled             *bool                       `yaml:"enabled"`
+	DefaultPollInterval string                      `yaml:"default_poll_interval"`
+	WorkerLeaseTTL      string                      `yaml:"worker_lease_ttl"`
+	SourceProxy         string                      `yaml:"source_proxy"`
+	DecisionToken       *activityDecisionTokenFile  `yaml:"decision_token"`
+	HighValueRules      *activityHighValueRulesFile `yaml:"high_value_rules"`
+	Delivery            *activityDeliveryFile       `yaml:"delivery"`
+	Sources             []activitySourceFile        `yaml:"sources"`
+}
+
+type activityDecisionTokenFile struct {
+	SecretEnv string `yaml:"secret_env"`
+	TTL       string `yaml:"ttl"`
+}
+
+type activityHighValueRulesFile struct {
+	SourceGroups                []string `yaml:"source_groups"`
+	ActivityTypeCandidates      []string `yaml:"activity_type_candidates"`
+	TitleKeywords               []string `yaml:"title_keywords"`
+	ConfirmedRewardThresholdUSD *float64 `yaml:"confirmed_reward_threshold_usd"`
+}
+
+type activityDeliveryFile struct {
+	Enabled                   *bool  `yaml:"enabled"`
+	WebhookURLEnv             string `yaml:"webhook_url_env"`
+	CollectOnlyWithoutWebhook *bool  `yaml:"collect_only_without_webhook"`
+	Proxy                     string `yaml:"proxy"`
+	DashboardBaseURL          string `yaml:"dashboard_base_url"`
+	MaxPerTick                *int   `yaml:"max_per_tick"`
+	SendSpacing               string `yaml:"send_spacing"`
+	SourceHealthCooldown      string `yaml:"source_health_cooldown"`
+	EventUpdateCooldown       string `yaml:"event_update_cooldown"`
+}
+
+type activitySourceFile struct {
+	Platform               string `yaml:"platform"`
+	SourceGroup            string `yaml:"source_group"`
+	SourceType             string `yaml:"source_type"`
+	SourceURL              string `yaml:"source_url"`
+	FetchMode              string `yaml:"fetch_mode"`
+	PollInterval           string `yaml:"poll_interval"`
+	Enabled                *bool  `yaml:"enabled"`
+	AutoPushEnabled        *bool  `yaml:"auto_push_enabled"`
+	RequiresProxy          *bool  `yaml:"requires_proxy"`
+	RequiresBrowserContext *bool  `yaml:"requires_browser_context"`
+	RequiresLogin          *bool  `yaml:"requires_login"`
+	Personalized           *bool  `yaml:"personalized"`
+	Locale                 string `yaml:"locale"`
+	ProxyRegion            string `yaml:"proxy_region"`
+	InterfaceName          string `yaml:"interface_name"`
 }
 
 type listingAgentFile struct {
@@ -1050,6 +1210,7 @@ type alertFile struct {
 type alertWebhooksFile struct {
 	Listing   string `yaml:"Listing"`
 	Liquidity string `yaml:"Liquidity"`
+	Activity  string `yaml:"Activity"`
 }
 
 type catalogFile struct {
@@ -1234,6 +1395,7 @@ func (f dashboardFile) LegacyRuntime() runtimeFile {
 		CooldownDuration:         f.CooldownDuration,
 		Top30Divergence:          f.Top30Divergence,
 		ListingAgent:             f.ListingAgent,
+		ActivityAgent:            f.ActivityAgent,
 	}
 }
 
@@ -1243,7 +1405,7 @@ func (f runtimeFile) hasValues() bool {
 		len(f.SlippageBucketsUSD) > 0 || len(f.VolumeDiscounts) > 0 || f.CoinGecko != nil ||
 		len(f.WSProviders) > 0 || f.Collection != nil || f.Backfill != nil || len(f.StalenessByCategory) > 0 ||
 		f.CooldownFailureThreshold != nil || f.CooldownDuration != "" || f.Top30Divergence != nil ||
-		f.ListingAgent != nil
+		f.ListingAgent != nil || f.ActivityAgent != nil
 }
 
 func (f catalogFile) withDefaults() CatalogConfig {
@@ -1296,6 +1458,7 @@ func (f alertFile) toConfig() AlertConfig {
 		hooks = AlertWebhooks{
 			Listing:   strings.TrimSpace(f.Webhooks.Listing),
 			Liquidity: strings.TrimSpace(f.Webhooks.Liquidity),
+			Activity:  strings.TrimSpace(f.Webhooks.Activity),
 		}
 	}
 	if hooks.Listing == "" && strings.TrimSpace(f.WebHookP3) != "" {
@@ -1424,7 +1587,170 @@ func applyRuntimeFile(base Runtime, file runtimeFile) (Runtime, error) {
 		}
 		base.ListingAgent = la
 	}
+	if file.ActivityAgent != nil {
+		aa, err := applyActivityAgentFile(base.ActivityAgent, *file.ActivityAgent)
+		if err != nil {
+			return Runtime{}, err
+		}
+		base.ActivityAgent = aa
+	}
 	return base, nil
+}
+
+func applyActivityAgentFile(base ActivityAgentConfig, file activityAgentFile) (ActivityAgentConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.DefaultPollInterval != "" {
+		d, err := time.ParseDuration(file.DefaultPollInterval)
+		if err != nil {
+			return ActivityAgentConfig{}, fmt.Errorf("activity_agent.default_poll_interval: %w", err)
+		}
+		base.DefaultPollInterval = d
+	}
+	if file.WorkerLeaseTTL != "" {
+		d, err := time.ParseDuration(file.WorkerLeaseTTL)
+		if err != nil {
+			return ActivityAgentConfig{}, fmt.Errorf("activity_agent.worker_lease_ttl: %w", err)
+		}
+		base.WorkerLeaseTTL = d
+	}
+	if file.SourceProxy != "" {
+		base.SourceProxy = file.SourceProxy
+	}
+	if file.DecisionToken != nil {
+		if file.DecisionToken.SecretEnv != "" {
+			base.DecisionToken.SecretEnv = file.DecisionToken.SecretEnv
+		}
+		if file.DecisionToken.TTL != "" {
+			d, err := time.ParseDuration(file.DecisionToken.TTL)
+			if err != nil {
+				return ActivityAgentConfig{}, fmt.Errorf("activity_agent.decision_token.ttl: %w", err)
+			}
+			base.DecisionToken.TTL = d
+		}
+	}
+	if file.HighValueRules != nil {
+		if len(file.HighValueRules.SourceGroups) > 0 {
+			base.HighValueRules.SourceGroups = append([]string(nil), file.HighValueRules.SourceGroups...)
+		}
+		if len(file.HighValueRules.ActivityTypeCandidates) > 0 {
+			base.HighValueRules.ActivityTypeCandidates = append([]string(nil), file.HighValueRules.ActivityTypeCandidates...)
+		}
+		if len(file.HighValueRules.TitleKeywords) > 0 {
+			base.HighValueRules.TitleKeywords = append([]string(nil), file.HighValueRules.TitleKeywords...)
+		}
+		if file.HighValueRules.ConfirmedRewardThresholdUSD != nil {
+			base.HighValueRules.ConfirmedRewardThresholdUSD = *file.HighValueRules.ConfirmedRewardThresholdUSD
+		}
+	}
+	if file.Delivery != nil {
+		delivery, err := applyActivityDeliveryFile(base.Delivery, *file.Delivery)
+		if err != nil {
+			return ActivityAgentConfig{}, err
+		}
+		base.Delivery = delivery
+	}
+	if len(file.Sources) > 0 {
+		sources, err := applyActivitySourcesFile(file.Sources, base.DefaultPollInterval)
+		if err != nil {
+			return ActivityAgentConfig{}, err
+		}
+		base.Sources = sources
+	}
+	return base, nil
+}
+
+func applyActivityDeliveryFile(base ActivityDeliveryConfig, file activityDeliveryFile) (ActivityDeliveryConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.WebhookURLEnv != "" {
+		base.WebhookURLEnv = file.WebhookURLEnv
+	}
+	if file.CollectOnlyWithoutWebhook != nil {
+		base.CollectOnlyWithoutWebhook = *file.CollectOnlyWithoutWebhook
+	}
+	if file.Proxy != "" {
+		base.Proxy = file.Proxy
+	}
+	if file.DashboardBaseURL != "" {
+		base.DashboardBaseURL = file.DashboardBaseURL
+	}
+	if file.MaxPerTick != nil {
+		base.MaxPerTick = *file.MaxPerTick
+	}
+	if file.SendSpacing != "" {
+		d, err := time.ParseDuration(file.SendSpacing)
+		if err != nil {
+			return ActivityDeliveryConfig{}, fmt.Errorf("activity_agent.delivery.send_spacing: %w", err)
+		}
+		base.SendSpacing = d
+	}
+	if file.SourceHealthCooldown != "" {
+		d, err := time.ParseDuration(file.SourceHealthCooldown)
+		if err != nil {
+			return ActivityDeliveryConfig{}, fmt.Errorf("activity_agent.delivery.source_health_cooldown: %w", err)
+		}
+		base.SourceHealthCooldown = d
+	}
+	if file.EventUpdateCooldown != "" {
+		d, err := time.ParseDuration(file.EventUpdateCooldown)
+		if err != nil {
+			return ActivityDeliveryConfig{}, fmt.Errorf("activity_agent.delivery.event_update_cooldown: %w", err)
+		}
+		base.EventUpdateCooldown = d
+	}
+	return base, nil
+}
+
+func applyActivitySourcesFile(files []activitySourceFile, fallbackInterval time.Duration) ([]ActivitySourceConfig, error) {
+	if fallbackInterval <= 0 {
+		fallbackInterval = time.Hour
+	}
+	out := make([]ActivitySourceConfig, 0, len(files))
+	for _, file := range files {
+		src := ActivitySourceConfig{
+			Platform:        file.Platform,
+			SourceGroup:     file.SourceGroup,
+			SourceType:      file.SourceType,
+			SourceURL:       file.SourceURL,
+			FetchMode:       file.FetchMode,
+			PollInterval:    fallbackInterval,
+			Enabled:         true,
+			AutoPushEnabled: true,
+			Locale:          file.Locale,
+			ProxyRegion:     file.ProxyRegion,
+			InterfaceName:   file.InterfaceName,
+		}
+		if file.PollInterval != "" {
+			d, err := time.ParseDuration(file.PollInterval)
+			if err != nil {
+				return nil, fmt.Errorf("activity_agent.sources[%s].poll_interval: %w", file.Platform, err)
+			}
+			src.PollInterval = d
+		}
+		if file.Enabled != nil {
+			src.Enabled = *file.Enabled
+		}
+		if file.AutoPushEnabled != nil {
+			src.AutoPushEnabled = *file.AutoPushEnabled
+		}
+		if file.RequiresProxy != nil {
+			src.RequiresProxy = *file.RequiresProxy
+		}
+		if file.RequiresBrowserContext != nil {
+			src.RequiresBrowserContext = *file.RequiresBrowserContext
+		}
+		if file.RequiresLogin != nil {
+			src.RequiresLogin = *file.RequiresLogin
+		}
+		if file.Personalized != nil {
+			src.Personalized = *file.Personalized
+		}
+		out = append(out, src)
+	}
+	return out, nil
 }
 
 // applyListingAgentFile overlays the YAML listing_agent block onto the

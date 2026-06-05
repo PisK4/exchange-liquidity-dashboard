@@ -37,6 +37,10 @@ Alert:
     # dedicated bot in the Liquidity group and paste its URL here
     # before flipping enabled=true.
     Liquidity: ""
+    # Activity Agent uses its own Lark bot. Keep this empty in committed
+    # config; local/dev/prod webhooks must be injected through
+    # ACTIVITY_LARK_WEBHOOK_URL or a private runtime overlay.
+    Activity: ""
 
 Catalog:
   ExchangeEndpointsFile: exchange_endpoints.yaml
@@ -386,3 +390,89 @@ Runtime:
         secret_env: LARK_LISTING_CALLBACK_SECRET
         max_clock_skew: 300s
         operator_allow: []
+
+  # Operations Activity Radar. Webhook and decision token secrets must
+  # come from env/secret injection; committed YAML intentionally keeps
+  # the Activity webhook empty.
+  activity_agent:
+    enabled: true
+    default_poll_interval: 1h
+    worker_lease_ttl: 2m
+    source_proxy: ""
+    decision_token:
+      secret_env: ACTIVITY_DECISION_TOKEN_SECRET
+      ttl: 720h
+    high_value_rules:
+      source_groups: [launchpool_project_list, cms_article_detail, latest_events, support_ongoing_section]
+      activity_type_candidates: [launchpool, airdrop_campaign, listing_trading_campaign, futures_trading_competition, seasonal_tournament, delisting_signal, non_cex_update_event, incentive_rule_snapshot]
+      title_keywords: ["launchpool", "hodler", "airdrop", "candydrop", "poolx", "m-day", "competition", "giveaway", "prize pool", "trade to share", "new listing", "delist"]
+      confirmed_reward_threshold_usd: 50000
+    delivery:
+      enabled: true
+      webhook_url_env: ACTIVITY_LARK_WEBHOOK_URL
+      collect_only_without_webhook: true
+      proxy: ""
+      dashboard_base_url: ""
+      max_per_tick: 10
+      send_spacing: 30s
+      source_health_cooldown: 1h
+      event_update_cooldown: 1h
+    sources:
+      - platform: binance
+        source_group: cms_article_list
+        fetch_mode: http_direct
+        poll_interval: 10m
+        enabled: true
+        auto_push_enabled: true
+      - platform: okx
+        source_group: help_announcement
+        fetch_mode: http_direct
+        poll_interval: 10m
+        enabled: true
+        auto_push_enabled: true
+      - platform: bingx
+        source_group: openapi_notice
+        fetch_mode: http_direct_json
+        poll_interval: 10m
+        enabled: true
+        auto_push_enabled: true
+      - platform: gate
+        source_group: launchpool_project_list
+        fetch_mode: utls_proxy_json
+        poll_interval: 10m
+        enabled: true
+        auto_push_enabled: true
+        requires_proxy: true
+      - platform: mexc
+        source_group: latest_events
+        fetch_mode: utls_proxy_html
+        poll_interval: 10m
+        enabled: true
+        auto_push_enabled: true
+        requires_proxy: true
+      - platform: bybit
+        source_group: announcements_ssr
+        fetch_mode: utls_html
+        poll_interval: 10m
+        enabled: true
+        auto_push_enabled: true
+        requires_browser_context: true
+      - platform: bitget
+        source_group: support_ongoing_section
+        fetch_mode: utls_html
+        poll_interval: 10m
+        enabled: true
+        auto_push_enabled: true
+        requires_browser_context: true
+      - platform: hyperliquid
+        source_group: cloudfront_entries
+        fetch_mode: http_direct_json
+        poll_interval: 10m
+        enabled: true
+        auto_push_enabled: true
+      - platform: lighter
+        source_group: incentive_docs
+        fetch_mode: markdown_doc
+        poll_interval: 24h
+        enabled: true
+        auto_push_enabled: true
