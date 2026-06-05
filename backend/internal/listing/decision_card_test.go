@@ -131,6 +131,63 @@ func TestRenderDecisionCardPostMessageReturnsInteractiveCard(t *testing.T) {
 	}
 }
 
+func TestDecisionEvidenceSignatureStableAcrossSignalOrder(t *testing.T) {
+	signalsA := []SignalObservation{
+		{Fingerprint: "instrument_diff:okx:CARD:new_symbol:9700"},
+		{Fingerprint: "announcement_listing:bitget:CARD:9000"},
+	}
+	signalsB := []SignalObservation{
+		{Fingerprint: "announcement_listing:bitget:CARD:9000"},
+		{Fingerprint: "instrument_diff:okx:CARD:new_symbol:9700"},
+	}
+
+	if got := decisionEvidenceSignature(signalsA); got != "b96183cc9624bc17" {
+		t.Fatalf("signature A = %q, want b96183cc9624bc17", got)
+	}
+	if got := decisionEvidenceSignature(signalsB); got != "b96183cc9624bc17" {
+		t.Fatalf("signature B = %q, want same order-independent signature", got)
+	}
+}
+
+func TestDecisionEvidenceSignatureEmptySetIsStable(t *testing.T) {
+	if got := decisionEvidenceSignature(nil); got != "e3b0c44298fc1c14" {
+		t.Fatalf("empty signature = %q, want stable sha256 empty prefix", got)
+	}
+}
+
+func TestBuildDecisionDedupeKeyIgnoresTriggerDate(t *testing.T) {
+	signals := []SignalObservation{{Fingerprint: "instrument_diff:okx:CARD:new_symbol:9700"}}
+	signature := decisionEvidenceSignature(signals)
+
+	first := buildDecisionDedupeKey(12, signature)
+	second := buildDecisionDedupeKey(12, signature)
+
+	if first != "listing_decision|12|a11c8399d2945cca" {
+		t.Fatalf("dedupe key = %q, want evidence signature key", first)
+	}
+	if second != first {
+		t.Fatalf("same evidence produced different dedupe keys: %q vs %q", first, second)
+	}
+}
+
+func TestBuildDecisionDedupeKeyChangesWhenEvidenceChanges(t *testing.T) {
+	oneSignal := []SignalObservation{{Fingerprint: "instrument_diff:okx:CARD:new_symbol:9700"}}
+	twoSignals := []SignalObservation{
+		{Fingerprint: "instrument_diff:okx:CARD:new_symbol:9700"},
+		{Fingerprint: "announcement_listing:bitget:CARD:9000"},
+	}
+
+	oldKey := buildDecisionDedupeKey(12, decisionEvidenceSignature(oneSignal))
+	newKey := buildDecisionDedupeKey(12, decisionEvidenceSignature(twoSignals))
+
+	if oldKey == newKey {
+		t.Fatalf("dedupe key did not change after evidence changed: %q", oldKey)
+	}
+	if newKey != "listing_decision|12|b96183cc9624bc17" {
+		t.Fatalf("new evidence key = %q, want listing_decision|12|b96183cc9624bc17", newKey)
+	}
+}
+
 // TestProduceDecisionCardsSkipsCandidatesInIgnoreCooldown is the
 // cornerstone of §5 风险控制: once an operator clicks 忽略 the same
 // candidate must not be re-pushed within ignore_cooldown (default
@@ -404,13 +461,13 @@ func TestProduceDecisionCardsUsesLinkedSignalListingTimeInPayload(t *testing.T) 
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT s.id, s.signal_type, s.signal_subtype")).WithArgs(int64(12)).WillReturnRows(signalRows)
 	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_delivery_outbox")).WithArgs(
 		DeliveryEventListingDecisionCandidate,
-		"listing_decision|12|2026-06-02",
+		"listing_decision|12|a11c8399d2945cca",
 		DeliveryChannelLarkTop30,
 		OutboxStatusPending,
 		0,
 		5,
 		now,
-		payloadContainsAll("Listing Time", "2026-05-07 17:00 UTC+8", "trigger=2026-06-02 15:45 UTC+8"),
+		payloadContainsAll("Listing Time", "2026-05-07 17:00 UTC+8", "trigger=2026-06-02 15:45 UTC+8", "dedupe=listing_decision|12|a11c8399d2945cca"),
 		nil,
 		nil,
 		now,

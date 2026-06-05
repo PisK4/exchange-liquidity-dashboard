@@ -3,9 +3,11 @@ package listing
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 )
@@ -142,6 +144,28 @@ func BuildDecisionCardEvent(c Candidate, plan RiskPlan, triggerTime time.Time) D
 	ev.RiskPlan = plan
 	ev.Actions = standardButtonMatrix()
 	return ev
+}
+
+func decisionEvidenceSignature(signals []SignalObservation) string {
+	fingerprints := make([]string, 0, len(signals))
+	for _, signal := range signals {
+		fingerprint := strings.TrimSpace(signal.Fingerprint)
+		if fingerprint == "" {
+			continue
+		}
+		fingerprints = append(fingerprints, fingerprint)
+	}
+	sort.Strings(fingerprints)
+	sum := sha256.Sum256([]byte(strings.Join(fingerprints, "\n")))
+	return fmt.Sprintf("%x", sum)[:16]
+}
+
+func buildDecisionDedupeKey(candidateID int64, evidenceSignature string) string {
+	signature := strings.TrimSpace(evidenceSignature)
+	if signature == "" {
+		signature = decisionEvidenceSignature(nil)
+	}
+	return fmt.Sprintf("listing_decision|%d|%s", candidateID, signature)
 }
 
 // standardButtonMatrix returns the 4-button set defined in PRD §6.
@@ -635,9 +659,9 @@ type DecisionCardResult struct {
 // ProduceDecisionCards is the producer entry point. For each
 // actionable candidate it: (1) checks the ignore cooldown against
 // the latest decision; (2) derives + persists a risk plan; (3)
-// writes the decision card outbox row keyed on
-// `listing_decision|{candidate_id}|YYYY-MM-DD` so re-runs within
-// the same UTC day are no-ops.
+// writes the decision card outbox row keyed on the candidate and its
+// linked evidence signature so re-runs without new signals are no-ops
+// even across UTC day boundaries.
 func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCardDeps) (DecisionCardResult, error) {
 	if repo == nil {
 		return DecisionCardResult{}, errors.New("decision card: repo is nil")
@@ -683,11 +707,12 @@ func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCa
 		plan.ID = planID
 		res.RiskPlans++
 
-		ev := BuildDecisionCardEvent(c, plan, now)
 		signals, err := repo.ListCandidateSignals(ctx, c.ID, false)
 		if err != nil {
 			return res, fmt.Errorf("list candidate signals %d: %w", c.ID, err)
 		}
+		ev := BuildDecisionCardEvent(c, plan, now)
+		ev.DedupeKey = buildDecisionDedupeKey(c.ID, decisionEvidenceSignature(signals))
 		ev.PrimaryListingTime = selectPrimaryListingTime(c.SourcePlatforms, signals)
 		ev.Enrichment = EnrichCandidateForDecisionCard(ctx, deps.Enrich, c)
 		payload, err := RenderDecisionCardPostMessage(ev)

@@ -844,8 +844,9 @@ func scanDateString(raw any) (string, error) {
 }
 
 // insertOutbox writes one outbox row. The unique key on dedupe_key
-// gives natural idempotency, so we use INSERT IGNORE: re-runs in the
-// same UTC day are no-ops.
+// gives natural idempotency, so callers encode their own idempotency
+// window or evidence version into the key and INSERT IGNORE turns
+// duplicate producer runs into no-ops.
 func (r *Repository) insertOutbox(ctx context.Context, o DeliveryOutbox) error {
 	if r.db == nil {
 		return errors.New("listing top30: no db attached")
