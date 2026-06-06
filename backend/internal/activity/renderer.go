@@ -31,6 +31,70 @@ type ActivityEventCard struct {
 	ReviewReasons       []string
 }
 
+type ActivityDigestCard struct {
+	DigestKey           string
+	Title               string
+	NewCount            int
+	UpdatedCount        int
+	EndingSoonCount     int
+	ReviewPendingCount  int
+	RawEventCount       int
+	RichFieldCount      int
+	AutoNotifiableCount int
+	TriggerTime         time.Time
+	DashboardBaseURL    string
+	ReviewQueueURL      string
+	BulkDecisionURL     string
+	Rows                []ActivityDigestRow
+}
+
+type ActivityDigestRow struct {
+	SeverityColor string
+	Platform      string
+	ActivityType  string
+	Title         string
+	Summary       string
+	SourceHealth  string
+	RichLine      string
+}
+
+type ActivityEventUpdateCard struct {
+	ActivityEventCard
+	ChangeSummary string
+	OldDecision   string
+	ChangeLines   []string
+}
+
+type ActivityWeeklyDigestCard struct {
+	DigestKey              string
+	Title                  string
+	RawActivityCount       int
+	RichConfirmedCount     int
+	NewPlaybookCount       int
+	PendingSuggestionCount int
+	HotActivityTypes       string
+	RewardPoolTrend        string
+	ThemeSummary           string
+	DecisionSummary        string
+	TriggerTime            time.Time
+	DashboardBaseURL       string
+	Rows                   []string
+}
+
+type ActivitySourceHealthCard struct {
+	Platform         string
+	SourceGroup      string
+	FetchMode        string
+	Status           string
+	ErrorKind        string
+	HTTPStatus       string
+	Impact           string
+	DisabledUntilUTC string
+	TriggerTime      time.Time
+	SourceHealthURL  string
+	RunnerReportURL  string
+}
+
 func RenderActivityEventAlertPostMessage(card ActivityEventCard) ([]byte, error) {
 	lines := []any{
 		div(md("# " + truncate(card.Title, 120))),
@@ -75,6 +139,110 @@ func RenderActivityReviewRequiredPostMessage(card ActivityEventCard) ([]byte, er
 	return renderPostMessage("运营活动待复核", "purple", lines)
 }
 
+func RenderActivityDailyDigestPostMessage(card ActivityDigestCard) ([]byte, error) {
+	title := card.Title
+	if title == "" {
+		title = card.DigestKey + " 竞品活动雷达"
+	}
+	lines := []any{
+		div(md("# " + truncate(title, 120))),
+		div(md(fmt.Sprintf("新增 %d · 更新 %d · 即将结束 %d · 待复核 %d", card.NewCount, card.UpdatedCount, card.EndingSoonCount, card.ReviewPendingCount))),
+		fields(
+			field("Raw events", strconv.Itoa(card.RawEventCount)),
+			field("Rich fields", strconv.Itoa(card.RichFieldCount)),
+			field("可自动通知", strconv.Itoa(card.AutoNotifiableCount)),
+			field("Review pending", strconv.Itoa(card.ReviewPendingCount)),
+		),
+	}
+	for _, row := range card.Rows {
+		color := safeColor(row.SeverityColor, "blue")
+		lines = append(lines, div(md(fmt.Sprintf("<font color='%s'>●</font> **%s** · %s · %s", color, safeDash(row.Platform), safeDash(row.ActivityType), safeDash(row.Title)))))
+		lines = append(lines, div(md(fmt.Sprintf("　 摘要：%s · source %s", safeDash(row.Summary), safeDash(row.SourceHealth)))))
+		if strings.TrimSpace(row.RichLine) != "" {
+			lines = append(lines, div(md("　 Rich: "+row.RichLine)))
+		}
+	}
+	lines = append(lines, ctaButtons([]cardCTA{
+		{Label: "查看 Activity Radar", URL: firstNonEmpty(card.DashboardBaseURL, "/activity")},
+		{Label: "查看待复核队列", URL: firstNonEmpty(card.ReviewQueueURL, "/activity?review_status=pending")},
+		{Label: "批量判断", URL: firstNonEmpty(card.BulkDecisionURL, "/activity?bulk=decision")},
+	})...)
+	lines = append(lines, div(md(footer(card.TriggerTime, "activity_daily_digest|"+safeDash(card.DigestKey)))))
+	return renderPostMessage("运营活动雷达 · 日报", "blue", lines)
+}
+
+func RenderActivityEventUpdatePostMessage(card ActivityEventUpdateCard) ([]byte, error) {
+	lines := []any{
+		div(md("# " + truncate(card.Title, 120))),
+		div(md(fmt.Sprintf("<font color='orange'>关键字段变化</font> · event_version=%d", card.EventVersion))),
+		fields(
+			field("Source", fmt.Sprintf("%s · %s · source %s", safeDash(card.SourceGroup), safeDash(card.FetchMode), safeDash(card.SourceHealth))),
+			field("变化摘要", safeDash(card.ChangeSummary)),
+			field("原文", linkOrDash(card.SourceURL, "打开原文")),
+			field("旧决策", safeDash(card.OldDecision)),
+		),
+	}
+	for _, line := range card.ChangeLines {
+		lines = append(lines, div(md("<font color='orange'>●</font> "+line)))
+	}
+	lines = append(lines, actionButtons(card.ActivityEventCard)...)
+	lines = append(lines, div(md(footer(card.TriggerTime, fmt.Sprintf("activity_event_update|%d|v%d", card.EventID, card.EventVersion)))))
+	return renderPostMessage("运营活动更新 · 需要重新判断", "orange", lines)
+}
+
+func RenderActivityWeeklyDigestPostMessage(card ActivityWeeklyDigestCard) ([]byte, error) {
+	title := card.Title
+	if title == "" {
+		title = card.DigestKey + " 竞品运营趋势"
+	}
+	lines := []any{
+		div(md("# " + truncate(title, 120))),
+		div(md(fmt.Sprintf("Raw 活动 %d · Rich-confirmed %d · 新玩法候选 %d · 待确认建议 %d", card.RawActivityCount, card.RichConfirmedCount, card.NewPlaybookCount, card.PendingSuggestionCount))),
+		fields(
+			field("最热活动类型", safeDash(card.HotActivityTypes)),
+			field("奖池变化", safeDash(card.RewardPoolTrend)),
+			field("活动主题", safeDash(card.ThemeSummary)),
+			field("人工决策", safeDash(card.DecisionSummary)),
+		),
+	}
+	for _, row := range card.Rows {
+		lines = append(lines, div(md(row)))
+	}
+	base := firstNonEmpty(card.DashboardBaseURL, "/activity")
+	lines = append(lines, ctaButtons([]cardCTA{
+		{Label: "查看周报详情", URL: strings.TrimRight(base, "/") + "/activity?digest=weekly"},
+		{Label: "查看活动列表", URL: strings.TrimRight(base, "/") + "/activity"},
+		{Label: "批量判断", URL: strings.TrimRight(base, "/") + "/activity?bulk=decision"},
+	})...)
+	lines = append(lines, div(md(footer(card.TriggerTime, "activity_weekly_digest|"+safeDash(card.DigestKey)))))
+	return renderPostMessage("运营活动雷达 · 周报草稿", "blue", lines)
+}
+
+func RenderActivitySourceHealthPostMessage(card ActivitySourceHealthCard) ([]byte, error) {
+	color := "orange"
+	if card.Status == SourceStatusBlocked {
+		color = "red"
+	} else if card.Status == SourceStatusOK {
+		color = "green"
+	}
+	lines := []any{
+		div(md("# " + safeDash(card.Platform) + " " + safeDash(card.SourceGroup))),
+		div(md(fmt.Sprintf("<font color='%s'>%s</font> · fetch_mode=%s", color, safeDash(card.ErrorKind), safeDash(card.FetchMode)))),
+		fields(
+			field("最近状态", safeDash(card.Status)),
+			field("HTTP / Error", safeDash(card.HTTPStatus)+" / "+safeDash(card.ErrorKind)),
+			field("影响", safeDash(card.Impact)),
+			field("降级", "disabled_until="+safeDash(card.DisabledUntilUTC)),
+		),
+	}
+	lines = append(lines, ctaButtons([]cardCTA{
+		{Label: "查看 source health", URL: firstNonEmpty(card.SourceHealthURL, "/activity/source-health")},
+		{Label: "打开 runner report", URL: firstNonEmpty(card.RunnerReportURL, "/activity")},
+	})...)
+	lines = append(lines, div(md(footer(card.TriggerTime, "activity_source_health|"+strings.ToLower(card.Platform)+"|"+card.SourceGroup))))
+	return renderPostMessage("Activity Source Health · "+safeDash(card.ErrorKind), color, lines)
+}
+
 func renderPostMessage(title, color string, elements []any) ([]byte, error) {
 	payload := map[string]any{
 		"msg_type": "interactive",
@@ -114,6 +282,24 @@ func actionButtons(card ActivityEventCard) []any {
 			"text": plain(action.label),
 			"type": "default",
 			"url":  decisionURL(card, action.action),
+		})
+	}
+	return []any{map[string]any{"tag": "action", "actions": buttons}}
+}
+
+type cardCTA struct {
+	Label string
+	URL   string
+}
+
+func ctaButtons(ctas []cardCTA) []any {
+	buttons := make([]any, 0, len(ctas))
+	for _, cta := range ctas {
+		buttons = append(buttons, map[string]any{
+			"tag":  "button",
+			"text": plain(cta.Label),
+			"type": "default",
+			"url":  cta.URL,
 		})
 	}
 	return []any{map[string]any{"tag": "action", "actions": buttons}}
@@ -186,4 +372,22 @@ func linkOrDash(raw, label string) string {
 		return "-"
 	}
 	return fmt.Sprintf("[%s](%s)", label, raw)
+}
+
+func safeColor(color, fallback string) string {
+	switch color {
+	case "red", "orange", "blue", "grey", "green", "purple":
+		return color
+	default:
+		return fallback
+	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
 }
