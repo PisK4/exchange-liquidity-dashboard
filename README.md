@@ -2,6 +2,8 @@
 
 This workspace object hosts **EdgeX Ops Intelligence** (EdgeX 运营决策系统).
 
+In short: **EdgeX Ops Intelligence** is the system; **Liquidity Dashboard** is the listed-market monitoring module inside it.
+
 The existing Liquidity Dashboard and Listing Agent capabilities remain active modules under this broader operations decision system:
 
 - **Liquidity Dashboard**: listed-market liquidity, depth, spread, slippage, and share monitoring.

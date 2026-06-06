@@ -1,13 +1,73 @@
 # Repository Guidelines
 
+## Naming and Scope
+
+- **EdgeX Ops Intelligence** / **EdgeX 运营决策系统** is the current product and system name.
+- `edgex-ops-intelligence` is the current repository and technical identifier.
+- **Liquidity Dashboard** / **平台流动性看板** is one module under EdgeX Ops Intelligence, focused on listed-market liquidity, depth, spread, slippage, share, Top30, and data-health monitoring.
+- **Listing Agent** and **Activity Agent** are sibling capability modules under the same Ops Intelligence system.
+- Historical names such as `edgex-dashboard`, `EdgeX Dashboard`, or `edgex_dashboard` may appear only in migration, changelog, or historical-release contexts. Do not use them as the current project or system name.
+
 ## Project Background & Reference Documents
 
 This repo (`edgex-ops-intelligence`) currently implements the first production slice of **EdgeX Ops Intelligence** (EdgeX 运营决策系统). Liquidity Dashboard remains the listed-market health monitoring module, while Listing Agent and future operations agents are capability modules under the broader Ops Intelligence system. Before changing data shape, indicator formulas, exchange adapters, or surface taxonomy, read the upstream specs — they are the contractual source of truth, not this README.
 
-- **Original product requirement (V2 PRD)**: `../../architecture/方案设计/EdgeX运营/原需求/平台核心交易对流动性对比dashboard V2.md` — business goals, 4 Tabs, 5min refresh cadence, target exchange list.
-- **Requirement breakdown directory**: `../../architecture/方案设计/EdgeX运营/需求梳理/` — full needs analysis, per-exchange API research (CoinGecko / Hyperliquid / EdgeX / Binance / OKX / Lighter / Bitget / Bybit / Gate / MEXC / BingX), 统计口径闭环, 数据源横评, 目标标的交易所覆盖矩阵.
-- **Full code design (生产目标)**: `../../architecture/方案设计/EdgeX运营/需求梳理/15-平台流动性Dashboard-代码方案设计.md` — Go + Next.js + MySQL architecture, DB schema, ExchangeAdapter contract, indicator formulas, depth_status / partial_reason taxonomy, milestones M1–M4. This is what the repo must eventually conform to.
+- **Liquidity Dashboard original product requirement (V2 PRD)**: `../../architecture/方案设计/EdgeX运营/原需求/平台核心交易对流动性对比dashboard V2.md` — business goals, 4 Tabs, 5min refresh cadence, target exchange list.
+- **Liquidity Dashboard requirement breakdown directory**: `../../architecture/方案设计/EdgeX运营/需求梳理/` — full needs analysis, per-exchange API research (CoinGecko / Hyperliquid / EdgeX / Binance / OKX / Lighter / Bitget / Bybit / Gate / MEXC / BingX), 统计口径闭环, 数据源横评, 目标标的交易所覆盖矩阵.
+- **Liquidity Dashboard full code design (生产目标)**: `../../architecture/方案设计/EdgeX运营/需求梳理/15-平台流动性Dashboard-代码方案设计.md` — Go + Next.js + MySQL architecture, DB schema, ExchangeAdapter contract, indicator formulas, depth_status / partial_reason taxonomy, milestones M1–M4. This is what the Liquidity Dashboard module must eventually conform to.
 - **V1 快速上线 spec (当前阶段)**: `/Users/pis/.factory/specs/2026-05-19-dashboard-v1.md` — the trimmed first-version plan currently being implemented; deviations from the full design (e.g. SQLite/MySQL choice, simplified collector, V1 historical fields stay `insufficient_history`) live here. When in doubt, follow this V1 spec, but never violate guarantees from doc 15 (no fabricated exchange data, MEXC ×0.4 / Gate ×0.5 only on volume/share, EdgeX V1 BTC/ETH/SOL must be real V1 data, Lighter 2% depth must come from WS local book).
+
+## Document Entry Points by Task
+
+Use this section as the fastest path from an engineering task to the right upstream and implementation documents. Upstream docs under `../../architecture/方案设计/EdgeX运营/` explain product intent and research evidence; repo-local docs under `docs/feat/` and `backend/docs/` are closer to implementation contracts and operations.
+
+### System positioning or naming questions
+
+- Start with `../../architecture/方案设计/EdgeX运营/README.md` for current naming, module boundaries, status labels, and search hygiene.
+- Read `../../architecture/方案设计/EdgeX运营/深入/运营决策系统路线图.md` for the broader Ops Intelligence system roadmap.
+- Read `../../architecture/方案设计/EdgeX运营/原需求/README.md` before interpreting any original PRD.
+- Treat `edgex-dashboard`, `EdgeX Dashboard`, and `edgex_dashboard` as historical names only; do not introduce them as current identifiers.
+
+### Liquidity Dashboard data shape, formulas, APIs, or UI
+
+- Start with `../../architecture/方案设计/EdgeX运营/需求梳理/README.md`.
+- Read `../../architecture/方案设计/EdgeX运营/原需求/平台核心交易对流动性对比dashboard V2.md` for the original business requirement.
+- Read `../../architecture/方案设计/EdgeX运营/需求梳理/13-平台流动性Dashboard-综合评审与统计口径闭环.md` before changing metric semantics or statistical口径.
+- Read `../../architecture/方案设计/EdgeX运营/需求梳理/15-平台流动性Dashboard-代码方案设计.md` before changing backend/frontend data contracts or schema.
+- Cross-check repo-local contracts in `docs/feat/platform-liquidity-dashboard-api-coverage.md`, `docs/feat/dashboard-contract-hardening.md`, `docs/feat/liquidity-24h-share-cg-fallback.md`, `docs/feat/top30-share-history-backfill.md`, and `docs/feat/liquidity-watchlist.md`.
+
+### Exchange adapter, order book depth, spread, slippage, or proxy work
+
+- Start with `../../architecture/方案设计/EdgeX运营/盘口数据精炼/README.md`.
+- Read `../../architecture/方案设计/EdgeX运营/需求梳理/14-平台流动性Dashboard-数据源横评与实现选型.md` for source selection trade-offs.
+- Read the relevant platform doc under `../../architecture/方案设计/EdgeX运营/盘口数据精炼/` before changing one exchange adapter.
+- Cross-check repo-local contracts in `docs/feat/adapter-four-tier-depth.md` and `docs/feat/native-exchange-proxy.md`.
+- Keep the hard rule: MEXC `0.4` and Gate `0.5` discounts apply only to volume/share, never to depth, spread, or slippage.
+
+### Listing Agent / Lark push / Top30 signal work
+
+- Start with `../../architecture/方案设计/EdgeX运营/Listing/README.md`.
+- For P1 hot-gap behavior, read `../../architecture/方案设计/EdgeX运营/Listing/2026-05-27-Listing-Agent-P1-主链路方案设计.md` and `docs/feat/listing-agent-top30-hot-gap-push.md`.
+- For CEX/DEX divergence, read `../../architecture/方案设计/EdgeX运营/Listing/2026-05-28-Listing-Agent-P2-CEX-DEX-divergence-#2-#5.md` and `docs/feat/listing-agent-divergence-push.md`.
+- For liquidity-lag / worst-depth alerts, read `../../architecture/方案设计/EdgeX运营/Listing/2026-05-29-Listing-Agent-Dashboard-Liquidity-Alerts-#10-#11.md` and `docs/feat/listing-agent-liquidity-alert.md`.
+- For card callback or catalog changes, read `docs/feat/listing-agent-decision-card-callback.md` and `docs/feat/listing-agent-dynamic-catalog-integration.md`.
+
+### Activity Agent / competitor campaign intelligence work
+
+- Start with `../../architecture/方案设计/EdgeX运营/活动/README.md`.
+- Read `../../architecture/方案设计/EdgeX运营/原需求/运营活动AI AGENT.md` for original product intent.
+- Read `../../architecture/方案设计/EdgeX运营/活动/运营活动-agent-通用数据模型与-source-health.md` before designing `ActivityEvent`, source health, fetch mode, parser, or auto-push gates.
+- Read `../../architecture/方案设计/EdgeX运营/活动/运营活动-agent-交易所活动源拆分总览.md` before prioritizing exchange-specific sources.
+- For one exchange, read the corresponding file under `../../architecture/方案设计/EdgeX运营/活动/交易所活动源/`.
+- Treat `../../architecture/方案设计/EdgeX运营/活动/调研/` as evidence logs; do not convert a single successful HAR/browser sample into production confidence without source-health gates.
+
+### Production operations, release, or migration work
+
+- Read `backend/docs/runbook.md` for health/readiness, catalog regeneration, release and backup/restore procedures.
+- Read `backend/docs/coverage-matrix.md` before changing supported platforms, canonicals, or unresolved symbols.
+- Read `backend/docs/ops-intelligence-db-migration.md` before changing DSNs or migrating older local/deployed databases.
+- Read `backend/docs/release-notes-v1.md` before preparing a release summary.
+- Read `backend/docs/top30-strategy.md` before changing Top30 calculation or display strategy.
 
 ## Project Structure & Module Organization
 
