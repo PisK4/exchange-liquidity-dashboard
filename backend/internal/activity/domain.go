@@ -14,6 +14,12 @@ import (
 const MaxRawPayloadBytes = 2 * 1024 * 1024
 
 const (
+	EventStatusActive   = "active"
+	EventStatusEnded    = "ended"
+	EventStatusArchived = "archived"
+)
+
+const (
 	ReviewPending  = "pending"
 	ReviewApproved = "approved"
 	ReviewRejected = "rejected"

@@ -289,6 +289,146 @@ func (r *Repository) ListActivityDeliveries(ctx context.Context, filter Delivery
 	return out, "", rows.Err()
 }
 
+func (r *Repository) ListOutboxCandidateEvents(ctx context.Context, limit int) ([]ActivityEvent, error) {
+	if r.db == nil {
+		return nil, errors.New("activity repository: no db attached")
+	}
+	limit = clampLimit(limit, 10, 200)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, platform, source_group, COALESCE(source_external_id,''), COALESCE(source_url,''), title, activity_type,
+	                 content_hash, dedupe_key, needs_human_review, auto_push_allowed, event_status,
+	                 review_status, COALESCE(ops_decision_action,''), ops_decision_stale,
+	                 event_version, parser_version, publish_time, created_at, updated_at
+	            FROM t_activity_event
+	           WHERE event_status = ?
+	             AND review_status <> ?
+	             AND (auto_push_allowed = 1 OR review_status = ? OR needs_human_review = 1)
+	           ORDER BY updated_at DESC, id DESC
+	           LIMIT ?`,
+		EventStatusActive, ReviewRejected, ReviewApproved, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []ActivityEvent{}
+	for rows.Next() {
+		ev, err := scanEventSummary(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, ev)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) InsertActivityOutbox(ctx context.Context, row DeliveryOutbox) error {
+	if r.db == nil {
+		return errors.New("activity repository: no db attached")
+	}
+	if row.TargetChannel == "" {
+		row.TargetChannel = DeliveryChannelLarkActivity
+	}
+	if row.MaxAttempts <= 0 {
+		row.MaxAttempts = 5
+	}
+	if row.CreatedAt.IsZero() {
+		row.CreatedAt = r.now()
+	}
+	if row.UpdatedAt.IsZero() {
+		row.UpdatedAt = row.CreatedAt
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO t_activity_delivery_outbox
+		   (event_type, dedupe_key, target_channel, status, attempt_count, max_attempts, next_attempt_at, payload_json, last_error, sent_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   payload_json = VALUES(payload_json),
+		   status = IF(status IN ('sent','pending','retry'), status, VALUES(status)),
+		   next_attempt_at = VALUES(next_attempt_at),
+		   updated_at = VALUES(updated_at)`,
+		row.EventType, row.DedupeKey, row.TargetChannel, row.Status, row.AttemptCount, row.MaxAttempts,
+		row.NextAttemptAt, row.PayloadJSON, nullString(row.LastError), row.SentAt, row.CreatedAt, row.UpdatedAt,
+	)
+	return err
+}
+
+func (r *Repository) LoadDueActivityOutbox(ctx context.Context, now time.Time, limit int) ([]DeliveryOutbox, error) {
+	if r.db == nil {
+		return nil, errors.New("activity repository: no db attached")
+	}
+	limit = clampLimit(limit, 50, 200)
+	rows, err := r.db.QueryContext(ctx, `SELECT id, event_type, dedupe_key, target_channel, status, attempt_count, max_attempts,
+	                 next_attempt_at, payload_json, COALESCE(last_error,''), sent_at, created_at, updated_at
+	            FROM t_activity_delivery_outbox
+	           WHERE status IN (?, ?, ?)
+	             AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
+	           ORDER BY next_attempt_at ASC, id ASC
+	           LIMIT ?`,
+		DeliveryStatusPending, DeliveryStatusRetry, DeliveryStatusRedrivePending, now, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []DeliveryOutbox{}
+	for rows.Next() {
+		row, err := scanDeliveryOutboxRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, row)
+	}
+	return out, rows.Err()
+}
+
+func (r *Repository) MarkActivityOutboxDisabledNoWebhook(ctx context.Context, id int64, now time.Time) error {
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE t_activity_delivery_outbox
+		    SET status = ?, last_error = ?, updated_at = ?
+		  WHERE id = ?`,
+		DeliveryStatusDisabledNoWebhook, "webhook url not configured", now, id,
+	)
+	return err
+}
+
+func (r *Repository) UpdateActivityOutboxAfterSend(ctx context.Context, id int64, status string, attempt int, nextAttempt time.Time, lastErr string, now time.Time, sent bool) error {
+	var sentAt sql.NullTime
+	if sent {
+		sentAt = sql.NullTime{Time: now, Valid: true}
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE t_activity_delivery_outbox
+		    SET status = ?,
+		        attempt_count = ?,
+		        next_attempt_at = ?,
+		        last_error = ?,
+		        sent_at = ?,
+		        updated_at = ?
+		  WHERE id = ?`,
+		status, attempt, nextAttempt, nullString(lastErr), sentAt, now, id,
+	)
+	return err
+}
+
+func (r *Repository) RecordActivityDeliveryAttempt(ctx context.Context, outboxID int64, attempt int, status string, httpStatus *int, errMsg, responseBody string, attemptedAt time.Time) error {
+	var statusValue any
+	if httpStatus != nil {
+		statusValue = *httpStatus
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO t_activity_delivery_attempt
+		   (outbox_id, attempt_no, status, http_status, error_message, response_body, latency_ms, attempted_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, UTC_TIMESTAMP(3), UTC_TIMESTAMP(3))
+		 ON DUPLICATE KEY UPDATE
+		   status = VALUES(status),
+		   http_status = VALUES(http_status),
+		   error_message = VALUES(error_message),
+		   response_body = VALUES(response_body),
+		   attempted_at = VALUES(attempted_at),
+		   updated_at = UTC_TIMESTAMP(3)`,
+		outboxID, attempt, status, statusValue, nullString(errMsg), nullString(responseBody), 0, attemptedAt,
+	)
+	return err
+}
+
 func (r *Repository) RedriveDelivery(ctx context.Context, id int64, reason string) (bool, error) {
 	if r.db == nil {
 		return false, errors.New("activity repository: no db attached")
@@ -358,6 +498,24 @@ func (r *Repository) loadEventSymbols(ctx context.Context, eventID int64) ([]Act
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+func scanDeliveryOutboxRow(rows *sql.Rows) (DeliveryOutbox, error) {
+	var d DeliveryOutbox
+	var next, sent sql.NullTime
+	if err := rows.Scan(&d.ID, &d.EventType, &d.DedupeKey, &d.TargetChannel, &d.Status, &d.AttemptCount, &d.MaxAttempts,
+		&next, &d.PayloadJSON, &d.LastError, &sent, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		return DeliveryOutbox{}, err
+	}
+	if next.Valid {
+		t := next.Time.UTC()
+		d.NextAttemptAt = &t
+	}
+	if sent.Valid {
+		t := sent.Time.UTC()
+		d.SentAt = &t
+	}
+	return d, nil
 }
 
 func clampLimit(value, def, max int) int {

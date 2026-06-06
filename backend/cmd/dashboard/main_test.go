@@ -38,6 +38,22 @@ func TestActivityRoleRequiresMySQLAndStartsOnlyActivityWorker(t *testing.T) {
 	}
 }
 
+func TestBuildActivityEngineConfigResolvesEnvWebhookFirst(t *testing.T) {
+	t.Setenv("ACTIVITY_WEBHOOK_TEST", "https://env.example/webhook")
+	t.Setenv("ACTIVITY_SECRET_TEST", "decision-secret")
+	cfg := config.Default()
+	cfg.Alert.Webhooks.Activity = "https://yaml.example/webhook"
+	cfg.Runtime.ActivityAgent.Delivery.WebhookURLEnv = "ACTIVITY_WEBHOOK_TEST"
+	cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv = "ACTIVITY_SECRET_TEST"
+	got := buildActivityEngineConfig(cfg)
+	if got.WebhookURL != "https://env.example/webhook" {
+		t.Fatalf("webhook=%q", got.WebhookURL)
+	}
+	if got.DecisionTokenSecret != "decision-secret" {
+		t.Fatalf("secret not resolved")
+	}
+}
+
 func TestResolveMySQLDSNUsesFlagBeforeConfig(t *testing.T) {
 	cfg := config.Config{Database: config.DatabaseConfig{DSN: "from-config"}}
 	if got := resolveMySQLDSN("from-flag", cfg); got != "from-flag" {

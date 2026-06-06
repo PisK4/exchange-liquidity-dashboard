@@ -227,9 +227,23 @@ func main() {
 			if *role == "activity" {
 				os.Exit(1)
 			}
-		} else if *runOnce && *role == "activity" {
-			log.Printf("activity run-once: repository ready (fetch/producer/delivery workers pending)")
-			return
+		} else {
+			engine := activity.NewEngine(activityRepo, buildActivityEngineConfig(cfg))
+			if *runOnce && *role == "activity" {
+				summary, err := engine.RunOnce(ctx)
+				log.Printf("activity run-once summary: %+v", summary)
+				if err != nil {
+					log.Printf("activity run-once completed with errors: %v", err)
+					os.Exit(1)
+				}
+				return
+			}
+			go func() {
+				interval := cfg.Runtime.ActivityAgent.DefaultPollInterval
+				if err := engine.Run(ctx, interval, log.Printf); err != nil {
+					log.Printf("activity engine stopped: %v", err)
+				}
+			}()
 		}
 	}
 
@@ -414,6 +428,29 @@ func resolveMySQLDSN(flagValue string, cfg config.Config) string {
 		return flagValue
 	}
 	return cfg.MySQLDSN()
+}
+
+func buildActivityEngineConfig(cfg config.Config) activity.EngineConfig {
+	aa := cfg.Runtime.ActivityAgent
+	return activity.EngineConfig{
+		Enabled:             aa.Enabled,
+		WorkerLeaseTTL:      aa.WorkerLeaseTTL,
+		WebhookURL:          resolveActivityWebhookURL(cfg),
+		DecisionTokenSecret: os.Getenv(aa.DecisionToken.SecretEnv),
+		DashboardBaseURL:    aa.Delivery.DashboardBaseURL,
+		MaxPerTick:          aa.Delivery.MaxPerTick,
+		SendSpacing:         aa.Delivery.SendSpacing,
+	}
+}
+
+func resolveActivityWebhookURL(cfg config.Config) string {
+	envName := strings.TrimSpace(cfg.Runtime.ActivityAgent.Delivery.WebhookURLEnv)
+	if envName != "" {
+		if value := strings.TrimSpace(os.Getenv(envName)); value != "" {
+			return value
+		}
+	}
+	return strings.TrimSpace(cfg.Alert.Webhooks.Activity)
 }
 
 // resolveListingCallbackSecret mirrors the Delivery.Top30WebhookURLEnv
