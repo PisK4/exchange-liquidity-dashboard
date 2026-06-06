@@ -89,8 +89,9 @@ func main() {
 	var lighterProvider *adapter.LighterWSProvider
 	if roleStartsLiveProviders(*role) {
 		lighterProvider = adapter.NewLighterWSProviderWithProxy(cfg.Runtime.LighterWSURL, cfg.Runtime.LighterStaleAfter, cfg.Runtime.ExchangeProxy)
-		go lighterProvider.Run(ctx, adapter.LighterMarketIDs())
-		waitForLighter(ctx, lighterProvider)
+		lighterMarketIDs := lighterMarketIDsFromConfig(cfg)
+		go lighterProvider.Run(ctx, lighterMarketIDs)
+		waitForLighter(ctx, lighterProvider, lighterMarketIDs)
 	}
 
 	if *role == "collector" || *role == "all" {
@@ -406,20 +407,44 @@ func buildCoinGeckoCollector(cfg config.Config, store *collector.Store) (*collec
 	return collector.NewCoinGeckoCollector(cgCfg, store, client, mapping), nil
 }
 
-func waitForLighter(ctx context.Context, provider *adapter.LighterWSProvider) {
+func lighterMarketIDsFromConfig(cfg config.Config) []int {
+	seen := map[int]struct{}{}
+	marketIDs := []int{}
+	for _, sub := range cfg.Symbols {
+		if sub.Platform != "lighter" || sub.MarketID == nil {
+			continue
+		}
+		marketID := *sub.MarketID
+		if _, ok := seen[marketID]; ok {
+			continue
+		}
+		seen[marketID] = struct{}{}
+		marketIDs = append(marketIDs, marketID)
+	}
+	if len(marketIDs) == 0 {
+		return append([]int(nil), adapter.LighterMarketIDs()...)
+	}
+	return marketIDs
+}
+
+func waitForLighter(ctx context.Context, provider *adapter.LighterWSProvider, marketIDs []int) {
+	if provider == nil || len(marketIDs) == 0 {
+		return
+	}
 	deadline := time.NewTimer(10 * time.Second)
 	defer deadline.Stop()
 	ticker := time.NewTicker(500 * time.Millisecond)
 	defer ticker.Stop()
 	for {
-		if provider.ReadyCount(adapter.LighterMarketIDs()) == len(adapter.LighterMarketIDs()) {
+		readyCount := provider.ReadyCount(marketIDs)
+		if readyCount == len(marketIDs) {
 			return
 		}
 		select {
 		case <-ctx.Done():
 			return
 		case <-deadline.C:
-			log.Printf("lighter ws not fully ready before initial collection; continuing with statusized failures")
+			log.Printf("lighter ws not fully ready before initial collection; continuing with statusized failures (ready=%d/%d)", readyCount, len(marketIDs))
 			return
 		case <-ticker.C:
 		}

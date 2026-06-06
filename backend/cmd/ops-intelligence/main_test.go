@@ -4,10 +4,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 
+	"edgex-ops-intelligence/backend/internal/adapter"
 	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 func TestRoleStartsLiveProviders(t *testing.T) {
@@ -25,6 +28,35 @@ func TestRoleStartsLiveProviders(t *testing.T) {
 		if got := roleStartsLiveProviders(tt.role); got != tt.want {
 			t.Fatalf("roleStartsLiveProviders(%q) = %v, want %v", tt.role, got, tt.want)
 		}
+	}
+}
+
+func TestLighterMarketIDsFromConfigUsesConfiguredCatalogIDs(t *testing.T) {
+	marketA := 113
+	marketB := 176
+	duplicateMarketA := 113
+	otherPlatformMarket := 999
+	cfg := config.Config{Symbols: []domain.SymbolSub{
+		{Platform: "lighter", MarketID: &marketA},
+		{Platform: "binance", MarketID: &otherPlatformMarket},
+		{Platform: "lighter", MarketID: &marketB},
+		{Platform: "lighter", MarketID: &duplicateMarketA},
+		{Platform: "lighter"},
+	}}
+
+	got := lighterMarketIDsFromConfig(cfg)
+	want := []int{113, 176}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("lighterMarketIDsFromConfig = %v, want %v", got, want)
+	}
+}
+
+func TestLighterMarketIDsFromConfigFallsBackToLegacyDefaults(t *testing.T) {
+	cfg := config.Config{Symbols: []domain.SymbolSub{{Platform: "lighter"}}}
+	got := lighterMarketIDsFromConfig(cfg)
+	want := adapter.LighterMarketIDs()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("lighterMarketIDsFromConfig fallback = %v, want %v", got, want)
 	}
 }
 

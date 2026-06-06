@@ -26,6 +26,16 @@ func jsonResponse(body string) *http.Response {
 	}
 }
 
+type fakeLighterBookProvider struct {
+	bids []domain.Level
+	asks []domain.Level
+	err  error
+}
+
+func (p fakeLighterBookProvider) Snapshot(marketID int) ([]domain.Level, []domain.Level, time.Time, error) {
+	return p.bids, p.asks, time.Now().UTC(), p.err
+}
+
 func TestFetchOrderBookEmptyAPISymbolReturnsUnsupported(t *testing.T) {
 	requestCount := 0
 	adapter := RESTAdapter{
@@ -81,6 +91,59 @@ func TestFetchTickerEmptyAPISymbolReturnsUnsupported(t *testing.T) {
 	}
 	if requestCount != 0 {
 		t.Fatalf("expected no HTTP requests, got %d", requestCount)
+	}
+}
+
+func TestFetchLighterEmptyBookReturnsUnsupported(t *testing.T) {
+	marketID := 176
+	adapter := RESTAdapter{
+		Platform: "lighter",
+		Lighter:  fakeLighterBookProvider{err: errors.New("lighter market 176 ws book empty")},
+	}
+
+	book, err := adapter.FetchOrderBook(context.Background(), domain.SymbolSub{
+		Platform:      "lighter",
+		Canonical:     "GME",
+		DisplaySymbol: "GME-USDT (perp)",
+		APISymbol:     "GME",
+		MarketID:      &marketID,
+	})
+	if err != nil {
+		t.Fatalf("empty Lighter book should be statusized instead of returned as collector error: %v", err)
+	}
+	if book.DepthStatus != domain.StatusUnsupported {
+		t.Fatalf("DepthStatus = %q, want unsupported", book.DepthStatus)
+	}
+	if !strings.Contains(book.Error, "no live liquidity") {
+		t.Fatalf("Error should preserve no-live-liquidity reason, got %q", book.Error)
+	}
+}
+
+func TestFetchLighterZeroVolumeReturnsUnsupported(t *testing.T) {
+	marketID := 176
+	adapter := RESTAdapter{
+		Platform: "lighter",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(`{"order_book_details":[{"market_id":176,"daily_quote_token_volume":0}]}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+		Platform:      "lighter",
+		Canonical:     "GME",
+		DisplaySymbol: "GME-USDT (perp)",
+		APISymbol:     "GME",
+		MarketID:      &marketID,
+	})
+	if err != nil {
+		t.Fatalf("zero Lighter volume should be statusized instead of returned as collector error: %v", err)
+	}
+	if vol.Status != domain.StatusUnsupported {
+		t.Fatalf("Status = %q, want unsupported", vol.Status)
+	}
+	if !strings.Contains(vol.Error, "no live liquidity") {
+		t.Fatalf("Error should preserve no-live-liquidity reason, got %q", vol.Error)
 	}
 }
 
@@ -499,10 +562,61 @@ func TestLighterNonceGapMarksBookUnavailable(t *testing.T) {
 		Bids:  []lighterWSLevel{{Price: "99", Size: "3"}},
 		Nonce: 10,
 	}, time.Now().UnixMilli(), 0)
-	if err := provider.applyLighterUpdate(1, lighterWSOrderBook{BeginNonce: 9, Nonce: 11}, time.Now().UnixMilli()); err == nil {
+	if err := provider.applyLighterUpdate(1, lighterWSOrderBook{BeginNonce: 12, Nonce: 13}, time.Now().UnixMilli()); err == nil {
 		t.Fatal("expected nonce gap error")
 	}
 	if _, _, _, err := provider.Snapshot(1); err == nil {
 		t.Fatal("expected snapshot to fail after nonce gap")
+	} else if !strings.Contains(err.Error(), "nonce gap") {
+		t.Fatalf("snapshot error = %q, want nonce gap detail", err.Error())
+	}
+}
+
+func TestLighterOverlappingNonceUpdateDoesNotMarkBookUnavailable(t *testing.T) {
+	provider := NewLighterWSProvider("", time.Minute)
+	provider.applyLighterSnapshot(1, lighterWSOrderBook{
+		Asks:  []lighterWSLevel{{Price: "101", Size: "2"}},
+		Bids:  []lighterWSLevel{{Price: "99", Size: "3"}},
+		Nonce: 10,
+	}, time.Now().UnixMilli(), 0)
+	if err := provider.applyLighterUpdate(1, lighterWSOrderBook{
+		Asks:       []lighterWSLevel{{Price: "102", Size: "4"}},
+		Bids:       []lighterWSLevel{{Price: "98", Size: "5"}},
+		BeginNonce: 9,
+		Nonce:      11,
+	}, time.Now().UnixMilli()); err != nil {
+		t.Fatalf("overlapping update should be accepted, got %v", err)
+	}
+	if _, _, _, err := provider.Snapshot(1); err != nil {
+		t.Fatalf("snapshot should remain available after overlapping update: %v", err)
+	}
+}
+
+func TestLighterQuietMarketUsesProviderHeartbeatForStaleCheck(t *testing.T) {
+	provider := NewLighterWSProvider("", 5*time.Second)
+	provider.applyLighterSnapshot(1, lighterWSOrderBook{
+		Asks:  []lighterWSLevel{{Price: "101", Size: "2"}},
+		Bids:  []lighterWSLevel{{Price: "99", Size: "3"}},
+		Nonce: 10,
+	}, time.Now().Add(-time.Minute).UnixMilli(), 0)
+	provider.markMessageReceived(time.Now().UTC())
+
+	if _, _, _, err := provider.Snapshot(1); err != nil {
+		t.Fatalf("quiet market should remain available while provider receives messages: %v", err)
+	}
+}
+
+func TestLighterSnapshotStalesWhenProviderHeartbeatStops(t *testing.T) {
+	provider := NewLighterWSProvider("", 5*time.Second)
+	provider.applyLighterSnapshot(1, lighterWSOrderBook{
+		Asks:  []lighterWSLevel{{Price: "101", Size: "2"}},
+		Bids:  []lighterWSLevel{{Price: "99", Size: "3"}},
+		Nonce: 10,
+	}, time.Now().Add(-time.Minute).UnixMilli(), 0)
+
+	if _, _, _, err := provider.Snapshot(1); err == nil {
+		t.Fatal("expected snapshot to stale when provider heartbeat is also stale")
+	} else if !strings.Contains(err.Error(), "stale") {
+		t.Fatalf("snapshot error = %q, want stale detail", err.Error())
 	}
 }

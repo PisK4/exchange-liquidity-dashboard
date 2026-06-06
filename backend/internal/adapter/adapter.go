@@ -33,6 +33,8 @@ type RESTAdapter struct {
 	limiter     *requestLimiter
 }
 
+var errLighterNoLiveLiquidity = errors.New("lighter market has no live liquidity")
+
 func New(platform string, timeout time.Duration) ExchangeAdapter {
 	return RESTAdapter{Platform: platform, Client: newHTTPClient(timeout, ""), MaxAttempts: 2}
 }
@@ -125,6 +127,10 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 	if err != nil {
 		book.DepthStatus = domain.StatusError
 		book.Error = err.Error()
+		if errors.Is(err, errLighterNoLiveLiquidity) {
+			book.DepthStatus = domain.StatusUnsupported
+			return book, nil
+		}
 		return book, err
 	}
 	book.Bids = bids
@@ -190,6 +196,10 @@ func (a RESTAdapter) FetchTicker(ctx context.Context, sub domain.SymbolSub) (dom
 	}
 	if err != nil {
 		vol.Error = err.Error()
+		if errors.Is(err, errLighterNoLiveLiquidity) {
+			vol.Status = domain.StatusUnsupported
+			return vol, nil
+		}
 		// Reserve StatusUnsupported for "we have no adapter / catalog
 		// entry for this platform"; transient upstream failures (HTTP
 		// 4xx/5xx, timeouts, malformed payloads) get StatusError so
@@ -594,6 +604,9 @@ func (a RESTAdapter) fetchLighter(ctx context.Context, sub domain.SymbolSub) ([]
 	}
 	bids, asks, _, err := a.Lighter.Snapshot(marketID)
 	if err != nil {
+		if strings.Contains(err.Error(), "ws book empty") {
+			return nil, nil, fmt.Errorf("lighter market %d has no live liquidity: %w", marketID, errLighterNoLiveLiquidity)
+		}
 		return nil, nil, err
 	}
 	return bids, asks, nil
@@ -795,7 +808,7 @@ func (a RESTAdapter) fetchLighterVolume(ctx context.Context, sub domain.SymbolSu
 			return detail.DailyQuoteTokenVolume, nil
 		}
 	}
-	return 0, fmt.Errorf("lighter market %d volume not found", marketID)
+	return 0, fmt.Errorf("lighter market %d has no live liquidity: volume not found: %w", marketID, errLighterNoLiveLiquidity)
 }
 
 func edgeXContractID(sub domain.SymbolSub) (string, error) {

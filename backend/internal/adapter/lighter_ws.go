@@ -30,8 +30,9 @@ type LighterWSProvider struct {
 	proxy      string
 	staleAfter time.Duration
 
-	mu    sync.RWMutex
-	books map[int]*lighterBookState
+	mu            sync.RWMutex
+	books         map[int]*lighterBookState
+	lastMessageAt time.Time
 }
 
 type lighterBookState struct {
@@ -103,7 +104,7 @@ func (p *LighterWSProvider) Run(ctx context.Context, marketIDs []int) {
 func (p *LighterWSProvider) Snapshot(marketID int) ([]domain.Level, []domain.Level, time.Time, error) {
 	p.mu.RLock()
 	state := p.books[marketID]
-	if state == nil || !state.ready {
+	if state == nil {
 		p.mu.RUnlock()
 		return nil, nil, time.Time{}, fmt.Errorf("lighter market %d ws book not ready", marketID)
 	}
@@ -112,7 +113,15 @@ func (p *LighterWSProvider) Snapshot(marketID int) ([]domain.Level, []domain.Lev
 		p.mu.RUnlock()
 		return nil, nil, state.updatedAt, errors.New(err)
 	}
-	if time.Since(state.updatedAt) > p.staleAfter {
+	if !state.ready {
+		p.mu.RUnlock()
+		return nil, nil, time.Time{}, fmt.Errorf("lighter market %d ws book not ready", marketID)
+	}
+	providerUpdatedAt := p.lastMessageAt
+	if providerUpdatedAt.IsZero() {
+		providerUpdatedAt = state.updatedAt
+	}
+	if time.Since(providerUpdatedAt) > p.staleAfter {
 		updatedAt := state.updatedAt
 		p.mu.RUnlock()
 		return nil, nil, updatedAt, fmt.Errorf("lighter market %d ws book stale since %s", marketID, updatedAt.Format(time.RFC3339))
@@ -149,6 +158,7 @@ func (p *LighterWSProvider) runOnce(ctx context.Context, marketIDs []int) error 
 		return err
 	}
 	defer conn.Close()
+	p.markMessageReceived(time.Now().UTC())
 
 	for _, id := range marketIDs {
 		if err := conn.WriteJSON(map[string]any{"type": "subscribe", "channel": fmt.Sprintf("order_book/%d", id)}); err != nil {
@@ -174,6 +184,7 @@ func (p *LighterWSProvider) runOnce(ctx context.Context, marketIDs []int) error 
 		if err != nil {
 			return err
 		}
+		p.markMessageReceived(time.Now().UTC())
 		var msg lighterWSMessage
 		if err := json.Unmarshal(data, &msg); err != nil {
 			continue
@@ -210,7 +221,10 @@ func (p *LighterWSProvider) applyLighterUpdate(marketID int, ob lighterWSOrderBo
 	if state == nil || !state.ready {
 		return nil
 	}
-	if state.lastNonce > 0 && ob.BeginNonce != state.lastNonce {
+	if state.lastNonce > 0 && ob.Nonce <= state.lastNonce {
+		return nil
+	}
+	if state.lastNonce > 0 && ob.BeginNonce > state.lastNonce {
 		state.ready = false
 		state.lastErr = fmt.Sprintf("lighter market %d nonce gap: begin=%d previous=%d", marketID, ob.BeginNonce, state.lastNonce)
 		return errors.New(state.lastErr)
@@ -236,6 +250,12 @@ func (p *LighterWSProvider) markAllError(marketIDs []int, err error) {
 		state.lastErr = err.Error()
 		state.updatedAt = time.Now().UTC()
 	}
+}
+
+func (p *LighterWSProvider) markMessageReceived(at time.Time) {
+	p.mu.Lock()
+	p.lastMessageAt = at
+	p.mu.Unlock()
 }
 
 func applyLighterLevels(book map[float64]float64, rows []lighterWSLevel) {
