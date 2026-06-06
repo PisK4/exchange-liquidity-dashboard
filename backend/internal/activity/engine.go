@@ -10,6 +10,7 @@ import (
 )
 
 type EngineStore interface {
+	IngestionStore
 	ProducerStore
 	DeliveryStore
 	AcquireActivityLease(ctx context.Context, leaseName, ownerID string, ttl time.Duration) (bool, error)
@@ -25,6 +26,9 @@ type EngineConfig struct {
 	DashboardBaseURL    string
 	MaxPerTick          int
 	SendSpacing         time.Duration
+	Sources             []SourceConfig
+	Fetch               FetchFunc
+	Parse               ParseFunc
 }
 
 type Engine struct {
@@ -46,6 +50,7 @@ func WithEngineNow(now func() time.Time) EngineOption {
 
 type RunSummary struct {
 	LeaseAcquired bool
+	Ingestion     IngestionResult
 	Producer      ProducerResult
 	Delivery      DeliveryResult
 }
@@ -89,6 +94,18 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	}
 	defer func() { _ = e.store.ReleaseActivityLease(context.Background(), "activity:run_once", e.cfg.OwnerID) }()
 
+	if len(e.cfg.Sources) > 0 {
+		ingestion, err := IngestSources(ctx, e.store, IngestionDeps{
+			Sources: e.cfg.Sources,
+			Fetch:   e.cfg.Fetch,
+			Parse:   e.cfg.Parse,
+			Now:     e.now,
+		})
+		if err != nil {
+			return summary, err
+		}
+		summary.Ingestion = ingestion
+	}
 	producer, err := ProduceOutbox(ctx, e.store, ProducerConfig{
 		WebhookURL:          e.cfg.WebhookURL,
 		DecisionTokenSecret: e.cfg.DecisionTokenSecret,

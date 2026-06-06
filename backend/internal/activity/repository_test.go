@@ -50,6 +50,88 @@ func TestRepositoryUpsertRawEvidenceTruncatesAndHashesPayload(t *testing.T) {
 	}
 }
 
+func TestRepositoryUpsertActivitySourceState(t *testing.T) {
+	now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newActivityRepoWithMock(t, now)
+	defer cleanup()
+	httpStatus := 200
+
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_activity_source_state")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	if err := repo.UpsertActivitySourceState(context.Background(), SourceState{
+		Platform:               "gate",
+		SourceGroup:            "launchpool_project_list",
+		SourceType:             "announcement_api",
+		SourceURL:              "https://gate.example/launchpool",
+		SourceKey:              "gate|launchpool_project_list|utls_proxy_json",
+		FetchMode:              "utls_proxy_json",
+		EvidenceQuality:        "api_json",
+		Enabled:                true,
+		PollIntervalSeconds:    600,
+		AutoPushEnabled:        true,
+		RequiresProxy:          true,
+		RequiresBrowserContext: false,
+		SourceStatus:           SourceStatusOK,
+		LastHTTPStatus:         &httpStatus,
+		LastContentHash:        "content-hash",
+		SampleCount:            1,
+		EventCount:             2,
+		UpdatedAt:              now,
+	}); err != nil {
+		t.Fatalf("UpsertActivitySourceState err=%v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestRepositoryUpsertActivityEventPersistsSymbols(t *testing.T) {
+	now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newActivityRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectBegin()
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_activity_event")).
+		WillReturnResult(sqlmock.NewResult(77, 1))
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM t_activity_event_symbol WHERE event_id = ?")).
+		WithArgs(int64(77)).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_activity_event_symbol")).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectCommit()
+
+	id, inserted, err := repo.UpsertActivityEvent(context.Background(), ActivityEvent{
+		RawEvidenceID:     11,
+		Platform:          "binance",
+		SourceGroup:       "cms_article_list",
+		SourceExternalID:  "abc",
+		SourceURL:         "https://binance.example/abc",
+		Title:             "Binance Launchpool ABC",
+		ActivityType:      "launchpool",
+		ContentText:       "Stake to earn ABC",
+		ContentHash:       "content-hash",
+		DedupeKey:         "binance|cms_article_list|abc",
+		ConfidenceScore:   0.9,
+		AutoPushAllowed:   true,
+		ReviewStatus:      ReviewPending,
+		EventVersion:      1,
+		ParserVersion:     "activity-parser-v1",
+		SourceContextJSON: json.RawMessage(`{"fetch_mode":"http_direct"}`),
+		TargetSymbols: []ActivityEventSymbol{{
+			CanonicalSymbol: "ABC", DisplaySymbol: "ABC-USDT", MarketSurface: "perp", Role: "target",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("UpsertActivityEvent err=%v", err)
+	}
+	if id != 77 || !inserted {
+		t.Fatalf("id=%d inserted=%v", id, inserted)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestRepositoryReviewAndDecisionTransitions(t *testing.T) {
 	now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newActivityRepoWithMock(t, now)

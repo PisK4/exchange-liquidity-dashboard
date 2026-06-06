@@ -1,9 +1,11 @@
 package main
 
 import (
+	"net/http"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"edgex-dashboard/backend/internal/config"
 )
@@ -51,6 +53,60 @@ func TestBuildActivityEngineConfigResolvesEnvWebhookFirst(t *testing.T) {
 	}
 	if got.DecisionTokenSecret != "decision-secret" {
 		t.Fatalf("secret not resolved")
+	}
+}
+
+func TestBuildActivityEngineConfigFallsBackToYAMLWebhook(t *testing.T) {
+	t.Setenv("ACTIVITY_SECRET_TEST", "decision-secret")
+	cfg := config.Default()
+	cfg.Alert.Webhooks.Activity = "https://yaml.example/webhook"
+	cfg.Runtime.ActivityAgent.Delivery.WebhookURLEnv = "ACTIVITY_WEBHOOK_TEST"
+	cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv = "ACTIVITY_SECRET_TEST"
+	got := buildActivityEngineConfig(cfg)
+	if got.WebhookURL != "https://yaml.example/webhook" {
+		t.Fatalf("webhook=%q", got.WebhookURL)
+	}
+}
+
+func TestBuildActivityEngineConfigWiresIngestionSources(t *testing.T) {
+	cfg := config.Default()
+	got := buildActivityEngineConfig(cfg)
+	if len(got.Sources) != 9 {
+		t.Fatalf("sources len=%d want 9", len(got.Sources))
+	}
+	if got.Fetch == nil || got.Parse == nil {
+		t.Fatalf("activity ingestion fetch/parse must be wired")
+	}
+	foundBinance := false
+	for _, src := range got.Sources {
+		if src.Platform == "binance" && src.SourceGroup == "cms_article_list" {
+			foundBinance = true
+			if src.SourceURL == "" {
+				t.Fatalf("binance source URL must be resolved")
+			}
+		}
+	}
+	if !foundBinance {
+		t.Fatalf("binance cms source missing: %+v", got.Sources)
+	}
+}
+
+func TestBuildHTTPClientWithProxyConfiguresTransportProxy(t *testing.T) {
+	client := buildHTTPClientWithProxy(5*time.Second, "http://127.0.0.1:7897")
+	transport, ok := client.Transport.(*http.Transport)
+	if !ok || transport.Proxy == nil {
+		t.Fatalf("proxy transport not configured: %+v", client.Transport)
+	}
+	req, err := http.NewRequest(http.MethodGet, "https://open.larksuite.com/", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proxyURL, err := transport.Proxy(req)
+	if err != nil {
+		t.Fatalf("proxy func err=%v", err)
+	}
+	if proxyURL.String() != "http://127.0.0.1:7897" {
+		t.Fatalf("proxy=%s", proxyURL)
 	}
 }
 

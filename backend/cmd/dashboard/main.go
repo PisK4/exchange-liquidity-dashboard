@@ -5,18 +5,21 @@ import (
 	"flag"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"edgex-dashboard/backend/internal/activity"
+	activityfetcher "edgex-dashboard/backend/internal/activity/fetcher"
+	activityparser "edgex-dashboard/backend/internal/activity/parser"
 	"edgex-dashboard/backend/internal/adapter"
 	"edgex-dashboard/backend/internal/api"
 	"edgex-dashboard/backend/internal/collector"
 	"edgex-dashboard/backend/internal/config"
 	"edgex-dashboard/backend/internal/listing"
-	"edgex-dashboard/backend/internal/listing/fetcher"
+	listingfetcher "edgex-dashboard/backend/internal/listing/fetcher"
 	"edgex-dashboard/backend/internal/marketdata/coingecko"
 )
 
@@ -175,12 +178,12 @@ func main() {
 		cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath, seedUniversePath, *configDir)
 	resolveListingCallbackSecret(&cfg)
 	if roleStartsListing(*role) && cfg.Runtime.ListingAgent.Enabled && listingRepo != nil {
-		listingHTTPClient, err := fetcher.NewHTTPClient(fetcher.DefaultRequestTimeout, cfg.Runtime.ExchangeProxy)
+		listingHTTPClient, err := listingfetcher.NewHTTPClient(listingfetcher.DefaultRequestTimeout, cfg.Runtime.ExchangeProxy)
 		if err != nil {
 			log.Fatalf("listing fetcher http client: %v", err)
 		}
-		listingHTTPDeps := fetcher.HTTPDeps{Client: listingHTTPClient}
-		listingSources, err := fetcher.BuildListingSources(cfg.Runtime.ListingAgent.Sources, listingHTTPDeps)
+		listingHTTPDeps := listingfetcher.HTTPDeps{Client: listingHTTPClient}
+		listingSources, err := listingfetcher.BuildListingSources(cfg.Runtime.ListingAgent.Sources, listingHTTPDeps)
 		if err != nil {
 			log.Fatalf("listing build sources: %v", err)
 		}
@@ -228,7 +231,7 @@ func main() {
 				os.Exit(1)
 			}
 		} else {
-			engine := activity.NewEngine(activityRepo, buildActivityEngineConfig(cfg))
+			engine := activity.NewEngine(activityRepo, buildActivityEngineConfig(cfg), activity.WithEngineHTTPClient(buildActivityDeliveryHTTPClient(cfg)))
 			if *runOnce && *role == "activity" {
 				summary, err := engine.RunOnce(ctx)
 				log.Printf("activity run-once summary: %+v", summary)
@@ -432,6 +435,7 @@ func resolveMySQLDSN(flagValue string, cfg config.Config) string {
 
 func buildActivityEngineConfig(cfg config.Config) activity.EngineConfig {
 	aa := cfg.Runtime.ActivityAgent
+	activityHTTPFetcher := activityfetcher.NewHTTPFetcher(buildActivityHTTPClient(cfg), cfg.Runtime.HTTPTimeout)
 	return activity.EngineConfig{
 		Enabled:             aa.Enabled,
 		WorkerLeaseTTL:      aa.WorkerLeaseTTL,
@@ -440,6 +444,154 @@ func buildActivityEngineConfig(cfg config.Config) activity.EngineConfig {
 		DashboardBaseURL:    aa.Delivery.DashboardBaseURL,
 		MaxPerTick:          aa.Delivery.MaxPerTick,
 		SendSpacing:         aa.Delivery.SendSpacing,
+		Sources:             buildActivitySources(cfg),
+		Fetch: func(ctx context.Context, req activity.FetchRequest) (activity.FetchResult, error) {
+			got, err := activityHTTPFetcher.Fetch(ctx, activityfetcher.Request{
+				URL:         req.URL,
+				Platform:    req.Platform,
+				SourceGroup: req.SourceGroup,
+				FetchMode:   req.FetchMode,
+				Headers:     req.Headers,
+			})
+			if err != nil {
+				return activity.FetchResult{}, err
+			}
+			return activity.FetchResult{
+				Platform:    got.Platform,
+				SourceGroup: got.SourceGroup,
+				SourceURL:   got.SourceURL,
+				FetchMode:   got.FetchMode,
+				Payload:     got.Payload,
+				PayloadHash: got.PayloadHash,
+				ContentHash: got.ContentHash,
+				HTTPStatus:  got.HTTPStatus,
+				ContentType: got.ContentType,
+				FetchedAt:   got.FetchedAt,
+			}, nil
+		},
+		Parse: dispatchActivityParser,
+	}
+}
+
+func buildActivityHTTPClient(cfg config.Config) *http.Client {
+	timeout := cfg.Runtime.HTTPTimeout
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	proxyURL := strings.TrimSpace(cfg.Runtime.ActivityAgent.SourceProxy)
+	if proxyURL == "" {
+		proxyURL = strings.TrimSpace(cfg.Runtime.ExchangeProxy)
+	}
+	return buildHTTPClientWithProxy(timeout, proxyURL)
+}
+
+func buildActivityDeliveryHTTPClient(cfg config.Config) *http.Client {
+	timeout := cfg.Runtime.HTTPTimeout
+	if timeout <= 0 {
+		timeout = 15 * time.Second
+	}
+	return buildHTTPClientWithProxy(timeout, strings.TrimSpace(cfg.Runtime.ActivityAgent.Delivery.Proxy))
+}
+
+func buildHTTPClientWithProxy(timeout time.Duration, proxyURL string) *http.Client {
+	transport := http.DefaultTransport.(*http.Transport).Clone()
+	if proxyURL != "" {
+		if parsed, err := url.Parse(proxyURL); err == nil {
+			transport.Proxy = http.ProxyURL(parsed)
+		} else {
+			log.Printf("http proxy ignored: %v", err)
+		}
+	}
+	return &http.Client{Timeout: timeout, Transport: transport}
+}
+
+func buildActivitySources(cfg config.Config) []activity.SourceConfig {
+	out := make([]activity.SourceConfig, 0, len(cfg.Runtime.ActivityAgent.Sources))
+	for _, src := range cfg.Runtime.ActivityAgent.Sources {
+		sourceURL := strings.TrimSpace(src.SourceURL)
+		if sourceURL == "" {
+			sourceURL = defaultActivitySourceURL(src.Platform, src.SourceGroup)
+		}
+		out = append(out, activity.SourceConfig{
+			Platform:               src.Platform,
+			SourceGroup:            src.SourceGroup,
+			SourceType:             src.SourceType,
+			SourceURL:              sourceURL,
+			FetchMode:              src.FetchMode,
+			PollInterval:           src.PollInterval,
+			Enabled:                src.Enabled,
+			AutoPushEnabled:        src.AutoPushEnabled,
+			RequiresProxy:          src.RequiresProxy,
+			RequiresBrowserContext: src.RequiresBrowserContext,
+			RequiresLogin:          src.RequiresLogin,
+			Personalized:           src.Personalized,
+			Headers:                defaultActivityHeaders(src.Platform),
+		})
+	}
+	return out
+}
+
+func defaultActivitySourceURL(platform, sourceGroup string) string {
+	key := strings.ToLower(strings.TrimSpace(platform)) + "|" + strings.TrimSpace(sourceGroup)
+	urls := map[string]string{
+		"binance|cms_article_list":       "https://www.binance.com/bapi/composite/v1/public/cms/article/catalog/list/query?catalogId=48&pageNo=1&pageSize=20",
+		"okx|help_announcement":          "https://www.okx.com/api/v5/support/announcements?category=latest-announcements&page=1&pageSize=15",
+		"bingx|openapi_notice":           "https://open-api.bingx.com/openApi/content/v1/announcement?contentType=LatestPromotions&language=en-us&page=1",
+		"gate|launchpool_project_list":   "https://www.gate.com/apiw/v2/earn/launch-pool/project-list?page=1&pageSize=10&sub_website_id=0",
+		"mexc|latest_events":             "https://www.mexc.com/announcements/latest-events/ongoing",
+		"bybit|announcements_ssr":        "https://announcements.bybit.com/en/?category=&page=1",
+		"bitget|support_ongoing_section": "https://www.bitget.com/support/sections/4413154768537",
+		"hyperliquid|cloudfront_entries": "https://dzjnlsk4rxci0.cloudfront.net/mainnet/entries.json",
+		"lighter|incentive_docs":         "https://docs.lighter.xyz/points-program.md",
+	}
+	return urls[key]
+}
+
+func defaultActivityHeaders(platform string) map[string]string {
+	headers := map[string]string{
+		"Accept":          "application/json,text/html,application/xhtml+xml,text/plain;q=0.9,*/*;q=0.8",
+		"Accept-Language": "en-US,en;q=0.9",
+	}
+	switch strings.ToLower(strings.TrimSpace(platform)) {
+	case "bingx":
+		headers["X-SOURCE-KEY"] = "openapi"
+	case "bybit", "bitget", "mexc", "gate":
+		headers["User-Agent"] = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15"
+	}
+	return headers
+}
+
+func dispatchActivityParser(ctx context.Context, doc activity.RawDocument) ([]activity.ActivityEvent, error) {
+	parserDoc := activityparser.RawDocument{
+		Platform:      doc.Platform,
+		SourceGroup:   doc.SourceGroup,
+		SourceURL:     doc.SourceURL,
+		FetchMode:     doc.FetchMode,
+		Payload:       doc.Payload,
+		RequiresLogin: doc.RequiresLogin,
+		Personalized:  doc.Personalized,
+	}
+	switch strings.ToLower(strings.TrimSpace(doc.Platform)) {
+	case "binance":
+		return activityparser.ParseBinance(ctx, parserDoc)
+	case "okx":
+		return activityparser.ParseOKX(ctx, parserDoc)
+	case "bingx":
+		return activityparser.ParseBingX(ctx, parserDoc)
+	case "gate":
+		return activityparser.ParseGate(ctx, parserDoc)
+	case "mexc":
+		return activityparser.ParseMEXC(ctx, parserDoc)
+	case "bybit":
+		return activityparser.ParseBybit(ctx, parserDoc)
+	case "bitget":
+		return activityparser.ParseBitget(ctx, parserDoc)
+	case "hyperliquid":
+		return activityparser.ParseHyperliquid(ctx, parserDoc)
+	case "lighter":
+		return activityparser.ParseLighter(ctx, parserDoc)
+	default:
+		return activityparser.ParseBinance(ctx, parserDoc)
 	}
 }
 

@@ -163,6 +163,7 @@ type ActivityEvent struct {
 	ConfidenceScore           float64
 	NeedsHumanReview          bool
 	AutoPushAllowed           bool
+	EventStatus               string
 	ReviewStatus              string
 	OpsDecisionAction         string
 	OpsDecisionStale          bool
@@ -213,6 +214,7 @@ type SourceState struct {
 	FetchMode              string
 	EvidenceQuality        string
 	Enabled                bool
+	PollIntervalSeconds    int
 	AutoPushEnabled        bool
 	RequiresProxy          bool
 	RequiresBrowserContext bool
@@ -221,6 +223,11 @@ type SourceState struct {
 	SourceStatus           string
 	LastHTTPStatus         *int
 	LastErrorKind          string
+	LastSchemaHash         string
+	LastContentHash        string
+	SampleCount            int
+	EventCount             int
+	SourceContextJSON      json.RawMessage
 	DisabledUntil          *time.Time
 	UpdatedAt              time.Time
 }

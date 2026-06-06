@@ -63,6 +63,41 @@ func TestParserRequiresReviewForLoginOrPersonalizedSource(t *testing.T) {
 	}
 }
 
+func TestParserExtractsActivityEventsFromJSONLists(t *testing.T) {
+	doc := fixtureDoc("bingx", "openapi_notice", `{
+		"code": 0,
+		"data": [
+			{"id":"promo-1","title":"BingX Futures Trading Competition","summary":"Trade futures to share rewards","url":"https://bingx.example/promo-1","activity_type":"futures_trading_competition","symbols":["BTC"]},
+			{"id":"promo-2","name":"BingX Listing Giveaway","content":"New listing giveaway","link":"https://bingx.example/promo-2","symbols":["ETH"]}
+		]
+	}`)
+	events, err := ParseBingX(context.Background(), doc)
+	if err != nil {
+		t.Fatalf("parse err=%v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("events len=%d want 2: %+v", len(events), events)
+	}
+	if events[1].ActivityType == "" || events[1].SourceURL == "" {
+		t.Fatalf("event should be normalized: %+v", events[1])
+	}
+}
+
+func TestParserExtractsActivityEventFromHTMLOrMarkdown(t *testing.T) {
+	doc := fixtureDoc("lighter", "incentive_docs", "# Lighter Points Program\n\nRetail users receive weekly points for trading and liquidity activity.")
+	doc.FetchMode = "markdown_doc"
+	events, err := ParseLighter(context.Background(), doc)
+	if err != nil {
+		t.Fatalf("parse err=%v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events len=%d want 1", len(events))
+	}
+	if events[0].Title != "Lighter Points Program" || events[0].ActivityType != "incentive_rule_snapshot" {
+		t.Fatalf("event=%+v", events[0])
+	}
+}
+
 func fixtureDoc(platform, group, body string) RawDocument {
 	return RawDocument{
 		Platform:    platform,

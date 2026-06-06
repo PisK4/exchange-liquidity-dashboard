@@ -57,6 +57,213 @@ func (r *Repository) UpsertRawEvidence(ctx context.Context, e RawEvidence) (int6
 	return id, nil
 }
 
+func (r *Repository) UpsertActivitySourceState(ctx context.Context, s SourceState) error {
+	if r.db == nil {
+		return errors.New("activity repository: no db attached")
+	}
+	if s.UpdatedAt.IsZero() {
+		s.UpdatedAt = r.now()
+	}
+	if s.SourceKey == "" {
+		s.SourceKey = BuildSourceKey(s.Platform, s.SourceGroup, s.FetchMode)
+	}
+	if s.SourceType == "" {
+		s.SourceType = "activity_source"
+	}
+	if s.EvidenceQuality == "" {
+		s.EvidenceQuality = "unknown"
+	}
+	if s.SourceStatus == "" {
+		s.SourceStatus = SourceStatusOK
+	}
+	if s.PollIntervalSeconds <= 0 {
+		s.PollIntervalSeconds = 3600
+	}
+	sourceContext := s.SourceContextJSON
+	if len(sourceContext) == 0 {
+		sourceContext = json.RawMessage(`{}`)
+	}
+	var httpStatus any
+	if s.LastHTTPStatus != nil {
+		httpStatus = *s.LastHTTPStatus
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT INTO t_activity_source_state
+		   (platform, source_group, source_type, source_url, source_key, fetch_mode,
+		    evidence_quality, enabled, poll_interval_seconds, auto_push_enabled,
+		    requires_proxy, requires_browser_context, requires_login, region_sensitive,
+		    personalized, source_context_json, last_http_status, last_error_kind,
+		    last_schema_hash, last_content_hash, sample_count, event_count,
+		    source_status, disabled_until, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   source_type = VALUES(source_type),
+		   source_url = VALUES(source_url),
+		   fetch_mode = VALUES(fetch_mode),
+		   evidence_quality = VALUES(evidence_quality),
+		   enabled = VALUES(enabled),
+		   poll_interval_seconds = VALUES(poll_interval_seconds),
+		   auto_push_enabled = VALUES(auto_push_enabled),
+		   requires_proxy = VALUES(requires_proxy),
+		   requires_browser_context = VALUES(requires_browser_context),
+		   requires_login = VALUES(requires_login),
+		   personalized = VALUES(personalized),
+		   source_context_json = VALUES(source_context_json),
+		   last_http_status = VALUES(last_http_status),
+		   last_error_kind = VALUES(last_error_kind),
+		   last_schema_hash = VALUES(last_schema_hash),
+		   last_content_hash = VALUES(last_content_hash),
+		   sample_count = sample_count + VALUES(sample_count),
+		   event_count = event_count + VALUES(event_count),
+		   source_status = VALUES(source_status),
+		   disabled_until = VALUES(disabled_until),
+		   updated_at = VALUES(updated_at)`,
+		s.Platform, s.SourceGroup, s.SourceType, nullString(s.SourceURL), s.SourceKey, s.FetchMode,
+		s.EvidenceQuality, boolInt(s.Enabled), s.PollIntervalSeconds, boolInt(s.AutoPushEnabled),
+		boolInt(s.RequiresProxy), boolInt(s.RequiresBrowserContext), boolInt(s.RequiresLogin), 0,
+		boolInt(s.Personalized), sourceContext, httpStatus, nullString(s.LastErrorKind),
+		nullString(s.LastSchemaHash), nullString(s.LastContentHash), s.SampleCount, s.EventCount,
+		s.SourceStatus, s.DisabledUntil, s.UpdatedAt, s.UpdatedAt,
+	)
+	return err
+}
+
+func (r *Repository) UpsertActivityEvent(ctx context.Context, ev ActivityEvent) (int64, bool, error) {
+	if r.db == nil {
+		return 0, false, errors.New("activity repository: no db attached")
+	}
+	if ev.CreatedAt.IsZero() {
+		ev.CreatedAt = r.now()
+	}
+	if ev.UpdatedAt.IsZero() {
+		ev.UpdatedAt = ev.CreatedAt
+	}
+	if ev.EventVersion <= 0 {
+		ev.EventVersion = 1
+	}
+	if ev.EventStatus == "" {
+		ev.EventStatus = EventStatusActive
+	}
+	if ev.ReviewStatus == "" {
+		ev.ReviewStatus = ReviewPending
+	}
+	if ev.ParserVersion == "" {
+		ev.ParserVersion = "activity-parser-v1"
+	}
+	if len(ev.SourceContextJSON) == 0 {
+		ev.SourceContextJSON = json.RawMessage(`{}`)
+	}
+	if len(ev.ParserWarningsJSON) == 0 {
+		ev.ParserWarningsJSON = json.RawMessage(`[]`)
+	}
+	if len(ev.RewardPoolsJSON) == 0 {
+		ev.RewardPoolsJSON = json.RawMessage(`[]`)
+	}
+	if len(ev.TaskConditionsJSON) == 0 {
+		ev.TaskConditionsJSON = json.RawMessage(`[]`)
+	}
+	if len(ev.EligibilityRulesJSON) == 0 {
+		ev.EligibilityRulesJSON = json.RawMessage(`[]`)
+	}
+	if len(ev.RichFieldsSummaryJSON) == 0 {
+		ev.RichFieldsSummaryJSON = json.RawMessage(`{}`)
+	}
+	targetSymbols, err := json.Marshal(ev.TargetSymbols)
+	if err != nil {
+		return 0, false, err
+	}
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, false, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	res, err := tx.ExecContext(ctx,
+		`INSERT INTO t_activity_event
+		   (raw_evidence_id, platform, source_group, source_external_id, source_url, title, activity_type,
+		    target_symbols_json, reward_pool_text, reward_pool_usd_estimate, reward_pool_primary_token,
+		    reward_pool_parse_confidence, has_reward_pool, start_time, end_time, publish_time,
+		    raw_time_text, raw_timezone_hint, time_parse_confidence, content_text, content_hash, dedupe_key,
+		    confidence_score, needs_human_review, auto_push_allowed, event_status, review_status,
+		    ops_decision_stale, event_version, parser_version, source_context_json, parser_warnings_json,
+		    reward_pools_json, task_conditions_json, eligibility_rules_json, rich_fields_summary_json,
+		    created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 ON DUPLICATE KEY UPDATE
+		   id = LAST_INSERT_ID(id),
+		   raw_evidence_id = VALUES(raw_evidence_id),
+		   source_url = VALUES(source_url),
+		   title = VALUES(title),
+		   activity_type = VALUES(activity_type),
+		   target_symbols_json = VALUES(target_symbols_json),
+		   reward_pool_text = VALUES(reward_pool_text),
+		   reward_pool_usd_estimate = VALUES(reward_pool_usd_estimate),
+		   reward_pool_primary_token = VALUES(reward_pool_primary_token),
+		   reward_pool_parse_confidence = VALUES(reward_pool_parse_confidence),
+		   has_reward_pool = VALUES(has_reward_pool),
+		   start_time = VALUES(start_time),
+		   end_time = VALUES(end_time),
+		   publish_time = VALUES(publish_time),
+		   raw_time_text = VALUES(raw_time_text),
+		   raw_timezone_hint = VALUES(raw_timezone_hint),
+		   time_parse_confidence = VALUES(time_parse_confidence),
+		   content_text = VALUES(content_text),
+		   ops_decision_stale = IF(content_hash <> VALUES(content_hash), 1, ops_decision_stale),
+		   event_version = IF(content_hash <> VALUES(content_hash), event_version + 1, event_version),
+		   content_hash = VALUES(content_hash),
+		   confidence_score = VALUES(confidence_score),
+		   needs_human_review = VALUES(needs_human_review),
+		   auto_push_allowed = VALUES(auto_push_allowed),
+		   event_status = VALUES(event_status),
+		   parser_version = VALUES(parser_version),
+		   source_context_json = VALUES(source_context_json),
+		   parser_warnings_json = VALUES(parser_warnings_json),
+		   reward_pools_json = VALUES(reward_pools_json),
+		   task_conditions_json = VALUES(task_conditions_json),
+		   eligibility_rules_json = VALUES(eligibility_rules_json),
+		   rich_fields_summary_json = VALUES(rich_fields_summary_json),
+		   updated_at = VALUES(updated_at)`,
+		nullInt64(ev.RawEvidenceID), ev.Platform, ev.SourceGroup, nullString(ev.SourceExternalID), nullString(ev.SourceURL), ev.Title, ev.ActivityType,
+		targetSymbols, nullString(ev.RewardPoolText), ev.RewardPoolUSDEstimate, nullString(ev.RewardPoolPrimaryToken),
+		nullString(ev.RewardPoolParseConfidence), boolInt(ev.HasRewardPool), ev.StartTime, ev.EndTime, ev.PublishTime,
+		nullString(ev.RawTimeText), nullString(ev.RawTimezoneHint), nullString(ev.TimeParseConfidence), nullString(ev.ContentText), ev.ContentHash, ev.DedupeKey,
+		ev.ConfidenceScore, boolInt(ev.NeedsHumanReview), boolInt(ev.AutoPushAllowed), ev.EventStatus, ev.ReviewStatus,
+		boolInt(ev.OpsDecisionStale), ev.EventVersion, ev.ParserVersion, ev.SourceContextJSON, ev.ParserWarningsJSON,
+		ev.RewardPoolsJSON, ev.TaskConditionsJSON, ev.EligibilityRulesJSON, ev.RichFieldsSummaryJSON,
+		ev.CreatedAt, ev.UpdatedAt,
+	)
+	if err != nil {
+		return 0, false, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, false, err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM t_activity_event_symbol WHERE event_id = ?`, id); err != nil {
+		return 0, false, err
+	}
+	for _, sym := range ev.TargetSymbols {
+		if strings.TrimSpace(sym.CanonicalSymbol) == "" {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx,
+			`INSERT INTO t_activity_event_symbol
+			   (event_id, canonical_symbol, display_symbol, market_surface, role, sort_order, created_at, updated_at)
+			 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+			 ON DUPLICATE KEY UPDATE
+			   display_symbol = VALUES(display_symbol),
+			   sort_order = VALUES(sort_order),
+			   updated_at = VALUES(updated_at)`,
+			id, sym.CanonicalSymbol, nullString(sym.DisplaySymbol), sym.MarketSurface, sym.Role, sym.SortOrder, ev.UpdatedAt, ev.UpdatedAt,
+		); err != nil {
+			return 0, false, err
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return 0, false, err
+	}
+	return id, true, nil
+}
+
 func (r *Repository) RecordDecision(ctx context.Context, rec DecisionRecord) error {
 	if r.db == nil {
 		return errors.New("activity repository: no db attached")
@@ -462,10 +669,11 @@ type eventScanner interface {
 func scanEventSummary(row eventScanner) (ActivityEvent, error) {
 	var ev ActivityEvent
 	var sourceExternalID, sourceURL, ops string
+	var eventStatus string
 	var needsReview, autoPush, stale int
 	var publish sql.NullTime
 	if err := row.Scan(&ev.ID, &ev.Platform, &ev.SourceGroup, &sourceExternalID, &sourceURL, &ev.Title, &ev.ActivityType,
-		&ev.ContentHash, &ev.DedupeKey, &needsReview, &autoPush, new(string),
+		&ev.ContentHash, &ev.DedupeKey, &needsReview, &autoPush, &eventStatus,
 		&ev.ReviewStatus, &ops, &stale, &ev.EventVersion, &ev.ParserVersion, &publish, &ev.CreatedAt, &ev.UpdatedAt); err != nil {
 		return ActivityEvent{}, err
 	}
@@ -473,6 +681,7 @@ func scanEventSummary(row eventScanner) (ActivityEvent, error) {
 	ev.SourceURL = sourceURL
 	ev.NeedsHumanReview = needsReview != 0
 	ev.AutoPushAllowed = autoPush != 0
+	ev.EventStatus = eventStatus
 	ev.OpsDecisionAction = ops
 	ev.OpsDecisionStale = stale != 0
 	if publish.Valid {
@@ -533,4 +742,18 @@ func nullString(s string) sql.NullString {
 		return sql.NullString{}
 	}
 	return sql.NullString{String: s, Valid: true}
+}
+
+func nullInt64(v int64) sql.NullInt64 {
+	if v == 0 {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: v, Valid: true}
+}
+
+func boolInt(v bool) int {
+	if v {
+		return 1
+	}
+	return 0
 }
