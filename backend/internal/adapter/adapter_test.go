@@ -94,6 +94,217 @@ func TestFetchTickerEmptyAPISymbolReturnsUnsupported(t *testing.T) {
 	}
 }
 
+func TestFetchEdgeXZeroTickerValueCompletes(t *testing.T) {
+	adapter := RESTAdapter{
+		Platform: "edgeX",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(`{"data":[{"value":"0"}]}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+		Platform:      "edgeX",
+		Canonical:     "AAPL",
+		DisplaySymbol: "AAPL-USDT (perp)",
+		APISymbol:     "AAPL-USDT",
+		ContractID:    "1001",
+	})
+	if err != nil {
+		t.Fatalf("zero EdgeX ticker value should be a valid no-volume snapshot, got %v", err)
+	}
+	if vol.Status != domain.StatusComplete {
+		t.Fatalf("Status = %q, want complete", vol.Status)
+	}
+	if vol.Volume24HUSD != 0 {
+		t.Fatalf("Volume24HUSD = %f, want 0", vol.Volume24HUSD)
+	}
+}
+
+func TestFetchEdgeXMissingTickerValueErrors(t *testing.T) {
+	adapter := RESTAdapter{
+		Platform: "edgeX",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(`{"data":[{}]}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+		Platform:      "edgeX",
+		Canonical:     "AAPL",
+		DisplaySymbol: "AAPL-USDT (perp)",
+		APISymbol:     "AAPL-USDT",
+		ContractID:    "1001",
+	})
+	if err == nil {
+		t.Fatalf("missing EdgeX ticker value should remain an error")
+	}
+	if vol.Status != domain.StatusError {
+		t.Fatalf("Status = %q, want error", vol.Status)
+	}
+	if !strings.Contains(vol.Error, "empty edgex ticker value") {
+		t.Fatalf("Error = %q, want empty edgex ticker value", vol.Error)
+	}
+}
+
+func TestFetchBingXZeroBaseVolumeCompletes(t *testing.T) {
+	adapter := RESTAdapter{
+		Platform: "bingx",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(`{"data":{"volume":"0","lastPrice":"100"}}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+		Platform:      "bingx",
+		Canonical:     "COPPER",
+		DisplaySymbol: "COPPER-USDT (perp)",
+		APISymbol:     "COPPER-USDT",
+	})
+	if err != nil {
+		t.Fatalf("zero BingX base volume should be a valid no-volume snapshot, got %v", err)
+	}
+	if vol.Status != domain.StatusComplete {
+		t.Fatalf("Status = %q, want complete", vol.Status)
+	}
+	if vol.Volume24HUSD != 0 {
+		t.Fatalf("Volume24HUSD = %f, want 0", vol.Volume24HUSD)
+	}
+}
+
+func TestFetchBingXMissingVolumeErrors(t *testing.T) {
+	adapter := RESTAdapter{
+		Platform: "bingx",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(`{"data":{}}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+		Platform:      "bingx",
+		Canonical:     "COPPER",
+		DisplaySymbol: "COPPER-USDT (perp)",
+		APISymbol:     "COPPER-USDT",
+	})
+	if err == nil {
+		t.Fatalf("missing BingX volume should remain an error")
+	}
+	if vol.Status != domain.StatusError {
+		t.Fatalf("Status = %q, want error", vol.Status)
+	}
+	if !strings.Contains(vol.Error, "empty bingx quote volume") {
+		t.Fatalf("Error = %q, want empty bingx quote volume", vol.Error)
+	}
+}
+
+func TestFetchBingXPausedTickerReturnsUnsupported(t *testing.T) {
+	adapter := RESTAdapter{
+		Platform: "bingx",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(`{"code":109415,"msg":"NCCOCOPPER2USD-USDT is pause currently,all validted symbols in api:/openApi/swap/v2/quote/contracts, please verify it","data":{}}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+		Platform:      "bingx",
+		Canonical:     "COPPER",
+		DisplaySymbol: "COPPER-USDT (perp)",
+		APISymbol:     "NCCOCOPPER2USD-USDT",
+	})
+	if err != nil {
+		t.Fatalf("paused BingX ticker should be statusized instead of returned as collector error: %v", err)
+	}
+	if vol.Status != domain.StatusUnsupported {
+		t.Fatalf("Status = %q, want unsupported", vol.Status)
+	}
+	if !strings.Contains(vol.Error, "pause currently") || !strings.Contains(vol.Error, "no live market data") {
+		t.Fatalf("Error should preserve paused/no-live-market-data reason, got %q", vol.Error)
+	}
+}
+
+func TestFetchBingXUnexpectedTickerCodeErrors(t *testing.T) {
+	adapter := RESTAdapter{
+		Platform: "bingx",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(`{"code":100001,"msg":"unexpected upstream error","data":{}}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+		Platform:      "bingx",
+		Canonical:     "COPPER",
+		DisplaySymbol: "COPPER-USDT (perp)",
+		APISymbol:     "NCCOCOPPER2USD-USDT",
+	})
+	if err == nil {
+		t.Fatalf("unexpected BingX ticker code should remain an error")
+	}
+	if vol.Status != domain.StatusError {
+		t.Fatalf("Status = %q, want error", vol.Status)
+	}
+	if !strings.Contains(vol.Error, "bingx ticker code 100001") {
+		t.Fatalf("Error = %q, want ticker code reason", vol.Error)
+	}
+}
+
+func TestFetchOKXMissingInstrumentTickerReturnsUnsupported(t *testing.T) {
+	adapter := RESTAdapter{
+		Platform: "okx",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(`{"code":"51001","msg":"Instrument ID, Instrument ID code, or Spread ID doesn't exist.","data":[]}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+		Platform:      "okx",
+		Canonical:     "SPACEX",
+		DisplaySymbol: "SPACEX-USDT (perp)",
+		APISymbol:     "SPACEX-USDT-SWAP",
+	})
+	if err != nil {
+		t.Fatalf("missing OKX ticker instrument should be statusized instead of returned as collector error: %v", err)
+	}
+	if vol.Status != domain.StatusUnsupported {
+		t.Fatalf("Status = %q, want unsupported", vol.Status)
+	}
+	if !strings.Contains(vol.Error, "Instrument ID") || !strings.Contains(vol.Error, "no live market data") {
+		t.Fatalf("Error should preserve missing-instrument/no-live-market-data reason, got %q", vol.Error)
+	}
+}
+
+func TestFetchOKXMissingInstrumentBookReturnsUnsupported(t *testing.T) {
+	adapter := RESTAdapter{
+		Platform: "okx",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			return jsonResponse(`{"code":"51001","msg":"Instrument ID does not exist."}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	book, err := adapter.FetchOrderBook(context.Background(), domain.SymbolSub{
+		Platform:      "okx",
+		Canonical:     "SPACEX",
+		DisplaySymbol: "SPACEX-USDT (perp)",
+		APISymbol:     "SPACEX-USDT-SWAP",
+		ContractSize:  1,
+	})
+	if err != nil {
+		t.Fatalf("missing OKX book instrument should be statusized instead of returned as collector error: %v", err)
+	}
+	if book.DepthStatus != domain.StatusUnsupported {
+		t.Fatalf("DepthStatus = %q, want unsupported", book.DepthStatus)
+	}
+	if !strings.Contains(book.Error, "Instrument ID") || !strings.Contains(book.Error, "no live market data") {
+		t.Fatalf("Error should preserve missing-instrument/no-live-market-data reason, got %q", book.Error)
+	}
+}
+
 func TestFetchLighterEmptyBookReturnsUnsupported(t *testing.T) {
 	marketID := 176
 	adapter := RESTAdapter{

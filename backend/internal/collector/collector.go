@@ -33,7 +33,7 @@ func NewCollector(cfg config.Config, store *Store) *Collector {
 func NewCollectorWithLighter(cfg config.Config, store *Store, lighter adapter.LighterBookProvider) *Collector {
 	adapters := map[string]adapter.ExchangeAdapter{}
 	for _, p := range cfg.Platforms {
-		adapters[p] = adapter.NewWithLighterProxyAndRateLimit(p, cfg.Runtime.HTTPTimeout, lighter, cfg.Runtime.ExchangeProxy, cfg.Runtime.Collection.PerPlatformRatePerSec)
+		adapters[p] = adapter.NewWithLighterProxyAndRateLimit(p, cfg.Runtime.HTTPTimeout, lighter, cfg.Runtime.ExchangeProxy, cfg.Runtime.Collection.RatePerSecFor(p))
 	}
 	return &Collector{
 		cfg:         cfg,
@@ -216,14 +216,10 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 }
 
 func (c *Collector) collectionSemaphores() map[string]chan struct{} {
-	limit := c.cfg.Runtime.Collection.PerPlatformConcurrency
-	if limit <= 0 {
-		limit = 1
-	}
 	out := map[string]chan struct{}{}
 	for _, sub := range c.cfg.Symbols {
 		if _, ok := out[sub.Platform]; !ok {
-			out[sub.Platform] = make(chan struct{}, limit)
+			out[sub.Platform] = make(chan struct{}, c.cfg.Runtime.Collection.ConcurrencyFor(sub.Platform))
 		}
 	}
 	return out

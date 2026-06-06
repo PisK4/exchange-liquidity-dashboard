@@ -185,6 +185,10 @@ ws_providers:
 collection:
   per_platform_concurrency: 7
   per_platform_rate_per_sec: 11
+  platform_overrides:
+    edgeX:
+      concurrency: 1
+      rate_per_sec: 2
 backfill:
   per_platform_concurrency: 2
   per_platform_rate_per_sec: 3
@@ -249,6 +253,15 @@ platforms:
 	}
 	if cfg.Runtime.Collection.PerPlatformRatePerSec != 11 {
 		t.Fatalf("collection rate = %d, want 11", cfg.Runtime.Collection.PerPlatformRatePerSec)
+	}
+	if cfg.Runtime.Collection.ConcurrencyFor("edgeX") != 1 {
+		t.Fatalf("edgeX collection concurrency = %d, want 1", cfg.Runtime.Collection.ConcurrencyFor("edgeX"))
+	}
+	if cfg.Runtime.Collection.RatePerSecFor("edgeX") != 2 {
+		t.Fatalf("edgeX collection rate = %d, want 2", cfg.Runtime.Collection.RatePerSecFor("edgeX"))
+	}
+	if cfg.Runtime.Collection.ConcurrencyFor("binance") != 7 || cfg.Runtime.Collection.RatePerSecFor("binance") != 11 {
+		t.Fatalf("collection defaults should still apply to binance: %+v", cfg.Runtime.Collection)
 	}
 	if cfg.Runtime.Backfill.PerPlatformConcurrency != 2 || cfg.Runtime.Backfill.PerPlatformRatePerSec != 3 {
 		t.Fatalf("backfill limits not loaded independently: %+v", cfg.Runtime.Backfill)

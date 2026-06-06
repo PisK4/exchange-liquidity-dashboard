@@ -33,7 +33,10 @@ type RESTAdapter struct {
 	limiter     *requestLimiter
 }
 
-var errLighterNoLiveLiquidity = errors.New("lighter market has no live liquidity")
+var (
+	errLighterNoLiveLiquidity = errors.New("lighter market has no live liquidity")
+	errMarketNoLiveData       = errors.New("market has no live market data")
+)
 
 func New(platform string, timeout time.Duration) ExchangeAdapter {
 	return RESTAdapter{Platform: platform, Client: newHTTPClient(timeout, ""), MaxAttempts: 2}
@@ -127,7 +130,7 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 	if err != nil {
 		book.DepthStatus = domain.StatusError
 		book.Error = err.Error()
-		if errors.Is(err, errLighterNoLiveLiquidity) {
+		if errors.Is(err, errLighterNoLiveLiquidity) || errors.Is(err, errMarketNoLiveData) {
 			book.DepthStatus = domain.StatusUnsupported
 			return book, nil
 		}
@@ -196,7 +199,7 @@ func (a RESTAdapter) FetchTicker(ctx context.Context, sub domain.SymbolSub) (dom
 	}
 	if err != nil {
 		vol.Error = err.Error()
-		if errors.Is(err, errLighterNoLiveLiquidity) {
+		if errors.Is(err, errLighterNoLiveLiquidity) || errors.Is(err, errMarketNoLiveData) {
 			vol.Status = domain.StatusUnsupported
 			return vol, nil
 		}
@@ -359,11 +362,19 @@ func (a RESTAdapter) fetchBinance(ctx context.Context, sub domain.SymbolSub) ([]
 
 func (a RESTAdapter) fetchOKX(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
 	var resp struct {
+		Code string `json:"code"`
+		Msg  string `json:"msg"`
 		Data []struct{ Bids, Asks [][]string }
 	}
 	url := "https://www.okx.com/api/v5/market/books-full?sz=5000&instId=" + sub.APISymbol
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return nil, nil, err
+	}
+	if isOKXNoLiveMarket(resp.Code, resp.Msg) {
+		return nil, nil, fmt.Errorf("okx book %s has no live market data: %s: %w", sub.APISymbol, strings.TrimSpace(resp.Msg), errMarketNoLiveData)
+	}
+	if resp.Code != "" && resp.Code != "0" {
+		return nil, nil, fmt.Errorf("okx book code %s: %s", resp.Code, strings.TrimSpace(resp.Msg))
 	}
 	if len(resp.Data) == 0 {
 		return nil, nil, errors.New("empty okx book")
@@ -622,6 +633,8 @@ func (a RESTAdapter) fetchBinanceVolume(ctx context.Context, sub domain.SymbolSu
 
 func (a RESTAdapter) fetchOKXVolume(ctx context.Context, sub domain.SymbolSub) (float64, error) {
 	var resp struct {
+		Code string `json:"code"`
+		Msg  string `json:"msg"`
 		Data []struct {
 			VolCcy24H string `json:"volCcy24h"`
 			Last      string `json:"last"`
@@ -630,12 +643,29 @@ func (a RESTAdapter) fetchOKXVolume(ctx context.Context, sub domain.SymbolSub) (
 	if err := a.fetchJSON(ctx, http.MethodGet, "https://www.okx.com/api/v5/market/ticker?instId="+sub.APISymbol, nil, &resp); err != nil {
 		return 0, err
 	}
+	if isOKXNoLiveMarket(resp.Code, resp.Msg) {
+		return 0, fmt.Errorf("okx ticker %s has no live market data: %s: %w", sub.APISymbol, strings.TrimSpace(resp.Msg), errMarketNoLiveData)
+	}
+	if resp.Code != "" && resp.Code != "0" {
+		return 0, fmt.Errorf("okx ticker code %s: %s", resp.Code, strings.TrimSpace(resp.Msg))
+	}
 	if len(resp.Data) == 0 {
 		return 0, errors.New("empty okx ticker")
 	}
 	vol, _ := strconv.ParseFloat(resp.Data[0].VolCcy24H, 64)
 	last, _ := strconv.ParseFloat(resp.Data[0].Last, 64)
 	return vol * last, nil
+}
+
+func isOKXNoLiveMarket(code string, msg string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(msg))
+	if code == "51001" && strings.Contains(normalized, "instrument") && strings.Contains(normalized, "exist") {
+		return true
+	}
+	if code == "51014" && strings.Contains(normalized, "index") && strings.Contains(normalized, "exist") {
+		return true
+	}
+	return false
 }
 
 func (a RESTAdapter) fetchBybitVolume(ctx context.Context, sub domain.SymbolSub) (float64, error) {
@@ -676,6 +706,8 @@ func (a RESTAdapter) fetchBitgetVolume(ctx context.Context, sub domain.SymbolSub
 
 func (a RESTAdapter) fetchBingXVolume(ctx context.Context, sub domain.SymbolSub) (float64, error) {
 	var resp struct {
+		Code int    `json:"code"`
+		Msg  string `json:"msg"`
 		Data struct {
 			QuoteVolume string `json:"quoteVolume"`
 			Volume      string `json:"volume"`
@@ -686,12 +718,35 @@ func (a RESTAdapter) fetchBingXVolume(ctx context.Context, sub domain.SymbolSub)
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return 0, err
 	}
-	if resp.Data.QuoteVolume != "" {
-		return strconv.ParseFloat(resp.Data.QuoteVolume, 64)
+	if resp.Code != 0 {
+		msg := strings.TrimSpace(resp.Msg)
+		if strings.Contains(strings.ToLower(msg), "pause currently") {
+			return 0, fmt.Errorf("bingx ticker %s is paused: %s: %w", sub.APISymbol, msg, errMarketNoLiveData)
+		}
+		return 0, fmt.Errorf("bingx ticker code %d: %s", resp.Code, msg)
 	}
-	volume, _ := strconv.ParseFloat(resp.Data.Volume, 64)
-	last, _ := strconv.ParseFloat(resp.Data.LastPrice, 64)
-	if volume <= 0 || last <= 0 {
+	if resp.Data.QuoteVolume != "" {
+		value, err := strconv.ParseFloat(resp.Data.QuoteVolume, 64)
+		if err != nil {
+			return 0, err
+		}
+		if value < 0 {
+			return 0, errors.New("invalid bingx quote volume")
+		}
+		return value, nil
+	}
+	volume, volumeOK := parseAnyFloat(resp.Data.Volume)
+	if !volumeOK {
+		return 0, errors.New("empty bingx quote volume")
+	}
+	if volume < 0 {
+		return 0, errors.New("invalid bingx quote volume")
+	}
+	if volume == 0 {
+		return 0, nil
+	}
+	last, lastOK := parseAnyFloat(resp.Data.LastPrice)
+	if !lastOK || last <= 0 {
 		return 0, errors.New("empty bingx quote volume")
 	}
 	return volume * last, nil
@@ -734,9 +789,12 @@ func (a RESTAdapter) fetchEdgeXVolume(ctx context.Context, sub domain.SymbolSub)
 	if len(resp.Data) == 0 {
 		return 0, errors.New("empty edgex ticker")
 	}
-	value := anyFloat(resp.Data[0].Value)
-	if value <= 0 {
+	value, ok := parseAnyFloat(resp.Data[0].Value)
+	if !ok {
 		return 0, errors.New("empty edgex ticker value")
+	}
+	if value < 0 {
+		return 0, errors.New("invalid edgex ticker value")
 	}
 	return value, nil
 }
@@ -905,16 +963,33 @@ func multiplySize(levels []domain.Level, multiplier float64) []domain.Level {
 }
 
 func anyFloat(v any) float64 {
+	f, _ := parseAnyFloat(v)
+	return f
+}
+
+func parseAnyFloat(v any) (float64, bool) {
 	switch x := v.(type) {
 	case float64:
-		return x
+		return x, true
+	case float32:
+		return float64(x), true
+	case int:
+		return float64(x), true
+	case int64:
+		return float64(x), true
+	case json.Number:
+		f, err := x.Float64()
+		return f, err == nil
 	case string:
-		f, _ := strconv.ParseFloat(x, 64)
-		return f
+		if strings.TrimSpace(x) == "" {
+			return 0, false
+		}
+		f, err := strconv.ParseFloat(x, 64)
+		return f, err == nil
 	case map[string]any:
 		if px, ok := x["px"]; ok {
-			return anyFloat(px)
+			return parseAnyFloat(px)
 		}
 	}
-	return 0
+	return 0, false
 }

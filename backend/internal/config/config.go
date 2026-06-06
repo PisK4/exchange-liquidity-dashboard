@@ -393,8 +393,33 @@ func (r Runtime) StaleThresholdFor(category string) time.Duration {
 // intentionally independent from BackfillConfig so operators can tune live
 // orderbook/ticker pressure without changing Top30 history repair traffic.
 type CollectionConfig struct {
-	PerPlatformConcurrency int `json:"per_platform_concurrency"`
-	PerPlatformRatePerSec  int `json:"per_platform_rate_per_sec"`
+	PerPlatformConcurrency int                                         `json:"per_platform_concurrency"`
+	PerPlatformRatePerSec  int                                         `json:"per_platform_rate_per_sec"`
+	PlatformOverrides      map[string]CollectionPlatformOverrideConfig `json:"platform_overrides,omitempty"`
+}
+
+type CollectionPlatformOverrideConfig struct {
+	Concurrency *int `yaml:"concurrency,omitempty" json:"concurrency,omitempty"`
+	RatePerSec  *int `yaml:"rate_per_sec,omitempty" json:"rate_per_sec,omitempty"`
+}
+
+func (c CollectionConfig) ConcurrencyFor(platform string) int {
+	limit := c.PerPlatformConcurrency
+	if override, ok := c.PlatformOverrides[platform]; ok && override.Concurrency != nil {
+		limit = *override.Concurrency
+	}
+	if limit <= 0 {
+		return 1
+	}
+	return limit
+}
+
+func (c CollectionConfig) RatePerSecFor(platform string) int {
+	rate := c.PerPlatformRatePerSec
+	if override, ok := c.PlatformOverrides[platform]; ok && override.RatePerSec != nil {
+		rate = *override.RatePerSec
+	}
+	return rate
 }
 
 // BackfillConfig drives the Top30 daily kline backfill. Defaults are tuned
@@ -885,6 +910,7 @@ func defaultCollectionConfig() CollectionConfig {
 	return CollectionConfig{
 		PerPlatformConcurrency: 3,
 		PerPlatformRatePerSec:  4,
+		PlatformOverrides:      map[string]CollectionPlatformOverrideConfig{},
 	}
 }
 
@@ -1227,8 +1253,9 @@ type top30DivergenceFile struct {
 }
 
 type collectionFile struct {
-	PerPlatformConcurrency *int `yaml:"per_platform_concurrency"`
-	PerPlatformRatePerSec  *int `yaml:"per_platform_rate_per_sec"`
+	PerPlatformConcurrency *int                                        `yaml:"per_platform_concurrency"`
+	PerPlatformRatePerSec  *int                                        `yaml:"per_platform_rate_per_sec"`
+	PlatformOverrides      map[string]CollectionPlatformOverrideConfig `yaml:"platform_overrides"`
 }
 
 type coinGeckoFile struct {
@@ -2244,6 +2271,24 @@ func applyCollectionFile(base CollectionConfig, file collectionFile) CollectionC
 	}
 	if file.PerPlatformRatePerSec != nil {
 		base.PerPlatformRatePerSec = *file.PerPlatformRatePerSec
+	}
+	if len(file.PlatformOverrides) > 0 {
+		merged := map[string]CollectionPlatformOverrideConfig{}
+		for platform, override := range base.PlatformOverrides {
+			merged[platform] = override
+		}
+		for platform, override := range file.PlatformOverrides {
+			if existing, ok := merged[platform]; ok {
+				if override.Concurrency == nil {
+					override.Concurrency = existing.Concurrency
+				}
+				if override.RatePerSec == nil {
+					override.RatePerSec = existing.RatePerSec
+				}
+			}
+			merged[platform] = override
+		}
+		base.PlatformOverrides = merged
 	}
 	return base
 }

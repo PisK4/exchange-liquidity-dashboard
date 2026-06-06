@@ -123,3 +123,25 @@ func TestCollectOnceLimitsPerPlatformConcurrency(t *testing.T) {
 		t.Fatalf("max in-flight binance requests = %d, want <= 1", probe.max())
 	}
 }
+
+func TestCollectionSemaphoresUsePlatformOverride(t *testing.T) {
+	cfg := config.Default()
+	cfg.Runtime.Collection.PerPlatformConcurrency = 3
+	edgeConcurrency := 1
+	cfg.Runtime.Collection.PlatformOverrides = map[string]config.CollectionPlatformOverrideConfig{
+		"edgeX": {Concurrency: &edgeConcurrency},
+	}
+	cfg.Symbols = []domain.SymbolSub{
+		{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", Canonical: "BTC"},
+		{Platform: "binance", DisplaySymbol: "BTC-USDT (perp)", Canonical: "BTC"},
+	}
+	c := &Collector{cfg: cfg}
+
+	semaphores := c.collectionSemaphores()
+	if cap(semaphores["edgeX"]) != 1 {
+		t.Fatalf("edgeX semaphore cap = %d, want 1", cap(semaphores["edgeX"]))
+	}
+	if cap(semaphores["binance"]) != 3 {
+		t.Fatalf("binance semaphore cap = %d, want 3", cap(semaphores["binance"]))
+	}
+}

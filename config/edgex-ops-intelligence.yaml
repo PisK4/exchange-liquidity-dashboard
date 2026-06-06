@@ -75,6 +75,13 @@ Runtime:
   collection:
     per_platform_concurrency: 3
     per_platform_rate_per_sec: 4
+    # EdgeX public quote endpoints are more sensitive to bursty fan-out
+    # than the CEX APIs; keep it slower than the global rate to avoid
+    # 429 / CF challenge pages without blocking startup on full serialization.
+    platform_overrides:
+      edgeX:
+        concurrency: 2
+        rate_per_sec: 2
 
   ws_providers:
     bitget:
