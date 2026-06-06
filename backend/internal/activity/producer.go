@@ -58,6 +58,10 @@ func ProduceOutbox(ctx context.Context, store ProducerStore, cfg ProducerConfig)
 			payload = []byte(`{}`)
 			res.DisabledMissingSecret++
 		} else {
+			summary := strings.TrimSpace(ev.ContentText)
+			if summary == "" {
+				summary = strings.TrimSpace(ev.Title)
+			}
 			card := ActivityEventCard{
 				EventID:             ev.ID,
 				EventVersion:        ev.EventVersion,
@@ -68,7 +72,7 @@ func ProduceOutbox(ctx context.Context, store ProducerStore, cfg ProducerConfig)
 				SourceHealth:        SourceStatusOK,
 				Title:               ev.Title,
 				ActivityType:        ev.ActivityType,
-				Summary:             ev.ContentText,
+				Summary:             summary,
 				SourceURL:           ev.SourceURL,
 				DedupeKey:           ev.DedupeKey,
 				TriggerTime:         now,

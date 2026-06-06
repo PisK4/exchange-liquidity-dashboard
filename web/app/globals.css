@@ -223,6 +223,15 @@ table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
 .kpi-value { color: var(--text); font-size: 20px; font-variant-numeric: tabular-nums; margin-top: 2px; }
 .activity-detail-body { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 12px; font-size: 12px; }
 .activity-detail-body strong { color: var(--text-mute); font-weight: 500; }
+.activity-content-block { margin: 0 12px 12px; padding: 10px; border: 1px solid var(--border); border-radius: 4px; background: #101216; color: var(--text); font-size: 12px; line-height: 1.6; }
+.activity-content-block.compact { padding: 8px 10px; }
+.activity-content-block strong { display: block; color: var(--text-mute); font-weight: 500; margin-bottom: 6px; }
+.activity-content-block p { margin: 0; white-space: pre-wrap; }
+.activity-content-block ul { margin: 0; padding-left: 18px; color: var(--text-mute); }
+.activity-evidence-list { display: grid; gap: 10px; padding: 10px; }
+.activity-evidence-card { border: 1px solid var(--border); border-radius: 4px; background: #101216; padding: 9px; font-size: 12px; line-height: 1.5; }
+.activity-evidence-card a { display: inline-block; margin-top: 4px; }
+.activity-evidence-card .evidence-preview { margin-top: 8px; max-height: 220px; background: #0d0f13; border: 1px solid var(--border); white-space: pre-wrap; }
 .json-block { margin: 0; padding: 10px; max-height: 360px; overflow: auto; color: var(--text-mute); font-size: 11px; }
 .depth-label-badge { margin-left: 6px; font-variant-numeric: normal; }
 .share-kpi-strip { display: flex; align-items: center; gap: 24px; padding: 8px 12px 14px; border-bottom: 1px solid var(--border); }

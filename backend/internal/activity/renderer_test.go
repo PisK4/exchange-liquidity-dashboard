@@ -49,9 +49,20 @@ func TestRenderActivityEventAlertPostMessageUsesActivityCardContract(t *testing.
 	if strings.Contains(string(payload), "confidence 0.") || strings.Contains(string(payload), "0.92") {
 		t.Fatalf("activity card must not expose numeric confidence: %s", payload)
 	}
+	for _, forbidden := range []string{"高价值", "**Source**", "**类型**", "主要原因", "建议动作", "Raw 摘要"} {
+		if strings.Contains(string(payload), forbidden) {
+			t.Fatalf("activity event card should not render low-value field %q: %s", forbidden, payload)
+		}
+	}
+	if !strings.Contains(string(payload), "运营活动 · 新发现") || !strings.Contains(string(payload), "<font color='red'>新发现</font> · Binance") {
+		t.Fatalf("activity event card should use simplified new-discovery copy: %s", payload)
+	}
+	if !strings.Contains(string(payload), "查看活动详情") || !strings.Contains(string(payload), "/activity/events/42") {
+		t.Fatalf("activity event card should link to internal detail page: %s", payload)
+	}
 }
 
-func TestRenderActivityReviewRequiredPostMessageRequiresFiveDecisionButtons(t *testing.T) {
+func TestRenderActivityReviewRequiredPostMessageRendersDetailAndDecisionButtons(t *testing.T) {
 	payload, err := RenderActivityReviewRequiredPostMessage(ActivityEventCard{
 		EventID:             7,
 		EventVersion:        1,
@@ -80,8 +91,88 @@ func TestRenderActivityReviewRequiredPostMessageRequiresFiveDecisionButtons(t *t
 		t.Fatalf("json decode: %v", err)
 	}
 	actions := countCardButtons(decoded)
-	if actions != 5 {
-		t.Fatalf("button count=%d want 5; payload=%s", actions, payload)
+	if actions != 7 {
+		t.Fatalf("button count=%d want 7; payload=%s", actions, payload)
+	}
+	for _, forbidden := range []string{"高价值", "运营活动推送新发现", "运营活动待复核", "需要人工确认", "复核原因", "**Source**", "**类型**", "主要原因", "建议动作", "Raw 摘要", "reward_pool_low_confidence", "local_timezone_unknown"} {
+		if strings.Contains(string(payload), forbidden) {
+			t.Fatalf("review card should not render review-only or low-value text %q: %s", forbidden, payload)
+		}
+	}
+	if !strings.Contains(string(payload), "运营活动 · 新发现") || !strings.Contains(string(payload), "<font color='red'>新发现</font> · MEXC") {
+		t.Fatalf("review card should be presented as a normal new activity card: %s", payload)
+	}
+	if !strings.Contains(string(payload), "查看活动详情") || !strings.Contains(string(payload), "打开原始来源") {
+		t.Fatalf("review card should render detail and source CTAs: %s", payload)
+	}
+}
+
+func TestRenderActivityCardTruncatesLongContentAndLabelsJSONSources(t *testing.T) {
+	longSummary := strings.Repeat("奖励活动", 500)
+	payload, err := RenderActivityEventAlertPostMessage(ActivityEventCard{
+		EventID:             99,
+		EventVersion:        1,
+		ContentHash:         "hash",
+		Platform:            "Gate",
+		FetchMode:           "utls_proxy_json",
+		Title:               "Gate Launchpool",
+		ActivityType:        "launchpool",
+		Summary:             longSummary,
+		SourceURL:           "https://gate.example/api/list.json",
+		DedupeKey:           "gate|launchpool|99",
+		TriggerTime:         time.Date(2026, 6, 5, 8, 0, 0, 0, time.UTC),
+		DecisionBaseURL:     "https://dashboard.example.test/activity",
+		DecisionTokenSecret: "secret",
+	})
+	if err != nil {
+		t.Fatalf("render err=%v", err)
+	}
+	assertActivityCardContract(t, payload)
+	if !strings.Contains(string(payload), "已截断") {
+		t.Fatalf("long content should be truncated: %s", payload)
+	}
+	if !strings.Contains(string(payload), "打开源数据") {
+		t.Fatalf("json/api source should be labelled source data: %s", payload)
+	}
+	if strings.Contains(string(payload), "/activity/activity/events/99") || !strings.Contains(string(payload), "https://dashboard.example.test/activity/events/99") {
+		t.Fatalf("dashboard base URL should be normalized: %s", payload)
+	}
+}
+
+func TestRenderActivityCardFormatsMarkdownDocumentationContent(t *testing.T) {
+	payload, err := RenderActivityEventAlertPostMessage(ActivityEventCard{
+		EventID:             183,
+		EventVersion:        1,
+		ContentHash:         "lighter-hash",
+		Platform:            "lighter",
+		FetchMode:           "markdown_doc",
+		Title:               "Points Program",
+		Summary:             "# Points Program\n\nLighter Season 2 points will be distributed every Friday.<br>Earn points by running organic trading strategies via UI and API.\n\n---\n\n# Agent Instructions: Querying This Documentation\n\nPerform an HTTP GET request on the current page URL with the `ask` query parameter:\n```\nGET https://docs.lighter.xyz/points-program.md?ask=<question>\n```",
+		SourceURL:           "https://docs.lighter.xyz/points-program.md",
+		DedupeKey:           "lighter|incentive_docs|points",
+		TriggerTime:         time.Date(2026, 6, 5, 8, 0, 0, 0, time.UTC),
+		DecisionBaseURL:     "https://dashboard.example.test/activity",
+		DecisionTokenSecret: "secret",
+	})
+	if err != nil {
+		t.Fatalf("render err=%v", err)
+	}
+	assertActivityCardContract(t, payload)
+	payloadText := string(payload)
+	if strings.Count(payloadText, "# Points Program") != 1 {
+		t.Fatalf("markdown title should only appear as the card title, not duplicated in content: %s", payload)
+	}
+	for _, forbidden := range []string{"Agent Instructions", "Querying This Documentation", "?ask=<question>", "```", "\n---\n"} {
+		if strings.Contains(payloadText, forbidden) {
+			t.Fatalf("markdown documentation boilerplate should be removed %q: %s", forbidden, payload)
+		}
+	}
+	if !strings.Contains(payloadText, "Lighter Season 2 points will be distributed every Friday.") ||
+		!strings.Contains(payloadText, "Earn points by running organic trading strategies") {
+		t.Fatalf("activity markdown body should remain readable: %s", payload)
+	}
+	if !strings.Contains(payloadText, `\nEarn points`) {
+		t.Fatalf("markdown line breaks should be preserved for Lark rendering: %s", payload)
 	}
 }
 
@@ -152,7 +243,7 @@ func TestRenderActivityEventUpdatePostMessageRendersDecisionButtons(t *testing.T
 	if err := json.Unmarshal(payload, &decoded); err != nil {
 		t.Fatalf("json decode: %v", err)
 	}
-	if countCardButtons(decoded) != 5 || !bytes.Contains(payload, []byte("运营活动更新")) {
+	if countCardButtons(decoded) != 7 || !bytes.Contains(payload, []byte("运营活动更新")) {
 		t.Fatalf("update card contract mismatch: %s", payload)
 	}
 }

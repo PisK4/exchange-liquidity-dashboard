@@ -4,11 +4,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"html"
 	"net/url"
 	"strconv"
 	"strings"
 	"time"
 )
+
+const activityCardExcerptLimit = 800
 
 type ActivityEventCard struct {
 	EventID             int64
@@ -98,45 +101,34 @@ type ActivitySourceHealthCard struct {
 func RenderActivityEventAlertPostMessage(card ActivityEventCard) ([]byte, error) {
 	lines := []any{
 		div(md("# " + truncate(card.Title, 120))),
-		div(md(fmt.Sprintf("<font color='red'>新活动</font> · %s · %s", safeDash(card.ActivityType), safeDash(card.Platform)))),
+		div(md(fmt.Sprintf("<font color='red'>新发现</font> · %s", safeDash(card.Platform)))),
 		fields(
-			field("Source", fmt.Sprintf("%s · %s · source %s", safeDash(card.SourceGroup), safeDash(card.FetchMode), safeDash(card.SourceHealth))),
-			field("摘要", safeDash(card.Summary)),
-			field("原文", linkOrDash(card.SourceURL, "打开原文")),
-			field("解析状态", "raw ok · rich fields optional"),
+			field("平台", safeDash(card.Platform)),
 		),
+		contentBlock(card.Summary, card),
 	}
 	for _, line := range card.ConfirmedRichLines {
 		lines = append(lines, div(md("<font color='blue'>●</font> "+line)))
 	}
+	lines = append(lines, eventCTAButtons(card)...)
 	lines = append(lines, actionButtons(card)...)
 	lines = append(lines, div(md(footer(card.TriggerTime, "activity_event|"+card.DedupeKey))))
-	return renderPostMessage("高价值运营活动 · 新发现", "red", lines)
+	return renderPostMessage("运营活动 · 新发现", "red", lines)
 }
 
 func RenderActivityReviewRequiredPostMessage(card ActivityEventCard) ([]byte, error) {
-	reasons := strings.Join(card.ReviewReasons, " / ")
-	if reasons == "" {
-		reasons = "parser_low_confidence"
-	}
 	lines := []any{
 		div(md("# " + truncate(card.Title, 120))),
-		div(md("<font color='orange'>需要人工确认</font> · " + reasons)),
+		div(md(fmt.Sprintf("<font color='red'>新发现</font> · %s", safeDash(card.Platform)))),
 		fields(
 			field("平台", safeDash(card.Platform)),
-			field("Source", fmt.Sprintf("%s · %s", safeDash(card.SourceGroup), safeDash(card.FetchMode))),
-			field("主要原因", reasons),
-			field("建议动作", "选择运营动作；确认页会同时完成事实审核"),
 		),
-		div(md("<font color='grey'>●</font> Raw 摘要：" + safeDash(card.Summary))),
+		contentBlock(card.Summary, card),
 	}
-	for _, line := range card.CandidateLines {
-		lines = append(lines, div(md("<font color='orange'>●</font> "+line)))
-	}
-	lines = append(lines, div(md("<font color='grey'>●</font> 原文："+linkOrDash(card.SourceURL, "打开原文"))))
+	lines = append(lines, eventCTAButtons(card)...)
 	lines = append(lines, actionButtons(card)...)
-	lines = append(lines, div(md(footer(card.TriggerTime, "activity_review_required|"+card.DedupeKey))))
-	return renderPostMessage("运营活动待复核", "purple", lines)
+	lines = append(lines, div(md(footer(card.TriggerTime, "activity_event|"+card.DedupeKey))))
+	return renderPostMessage("运营活动 · 新发现", "red", lines)
 }
 
 func RenderActivityDailyDigestPostMessage(card ActivityDigestCard) ([]byte, error) {
@@ -174,17 +166,18 @@ func RenderActivityDailyDigestPostMessage(card ActivityDigestCard) ([]byte, erro
 func RenderActivityEventUpdatePostMessage(card ActivityEventUpdateCard) ([]byte, error) {
 	lines := []any{
 		div(md("# " + truncate(card.Title, 120))),
-		div(md(fmt.Sprintf("<font color='orange'>关键字段变化</font> · event_version=%d", card.EventVersion))),
+		div(md(fmt.Sprintf("<font color='orange'>关键字段变化</font> · %s", safeDash(card.Platform)))),
 		fields(
-			field("Source", fmt.Sprintf("%s · %s · source %s", safeDash(card.SourceGroup), safeDash(card.FetchMode), safeDash(card.SourceHealth))),
+			field("平台", safeDash(card.Platform)),
 			field("变化摘要", safeDash(card.ChangeSummary)),
-			field("原文", linkOrDash(card.SourceURL, "打开原文")),
 			field("旧决策", safeDash(card.OldDecision)),
 		),
+		contentBlock(card.Summary, card.ActivityEventCard),
 	}
 	for _, line := range card.ChangeLines {
 		lines = append(lines, div(md("<font color='orange'>●</font> "+line)))
 	}
+	lines = append(lines, eventCTAButtons(card.ActivityEventCard)...)
 	lines = append(lines, actionButtons(card.ActivityEventCard)...)
 	lines = append(lines, div(md(footer(card.TriggerTime, fmt.Sprintf("activity_event_update|%d|v%d", card.EventID, card.EventVersion)))))
 	return renderPostMessage("运营活动更新 · 需要重新判断", "orange", lines)
@@ -305,11 +298,134 @@ func ctaButtons(ctas []cardCTA) []any {
 	return []any{map[string]any{"tag": "action", "actions": buttons}}
 }
 
-func decisionURL(card ActivityEventCard, action string) string {
-	base := strings.TrimRight(card.DecisionBaseURL, "/")
-	if base == "" {
-		base = "/"
+func eventCTAButtons(card ActivityEventCard) []any {
+	ctas := []cardCTA{{Label: "查看活动详情", URL: activityDetailURL(card)}}
+	if strings.TrimSpace(card.SourceURL) != "" {
+		ctas = append(ctas, cardCTA{Label: sourceLinkLabel(card), URL: card.SourceURL})
 	}
+	return ctaButtons(ctas)
+}
+
+func contentBlock(summary string, card ActivityEventCard) map[string]any {
+	formatted := formatActivityCardContent(summary, card)
+	excerpt, truncated := excerptText(formatted, activityCardExcerptLimit)
+	if excerpt == "" {
+		excerpt = "-"
+	}
+	if truncated {
+		excerpt += "...（已截断，查看详情阅读全文）"
+	}
+	return div(md("**内容**\n" + excerpt))
+}
+
+func formatActivityCardContent(summary string, card ActivityEventCard) string {
+	content := normalizeActivityContentLineBreaks(summary)
+	if isMarkdownActivitySource(card, content) {
+		content = formatMarkdownActivityContent(content, card.Title)
+	}
+	return strings.TrimSpace(content)
+}
+
+func normalizeActivityContentLineBreaks(raw string) string {
+	text := strings.ReplaceAll(raw, "\r\n", "\n")
+	text = strings.ReplaceAll(text, "\r", "\n")
+	for _, br := range []string{"<br>", "<br/>", "<br />", "<BR>", "<BR/>", "<BR />"} {
+		text = strings.ReplaceAll(text, br, "\n")
+	}
+	return html.UnescapeString(text)
+}
+
+func isMarkdownActivitySource(card ActivityEventCard, content string) bool {
+	fetchMode := strings.ToLower(strings.TrimSpace(card.FetchMode))
+	sourceURL := strings.ToLower(strings.TrimSpace(card.SourceURL))
+	if fetchMode == "markdown_doc" || strings.HasSuffix(sourceURL, ".md") {
+		return true
+	}
+	trimmed := strings.TrimSpace(content)
+	return strings.HasPrefix(trimmed, "# ") || strings.Contains(trimmed, "\n# ") || strings.Contains(trimmed, "\n---\n")
+}
+
+func formatMarkdownActivityContent(raw, title string) string {
+	lines := strings.Split(raw, "\n")
+	lines = truncateMarkdownAgentInstructions(lines)
+	lines = removeLeadingMarkdownTitle(lines, title)
+	lines = stripMarkdownNoiseLines(lines)
+	return collapseBlankLines(lines)
+}
+
+func truncateMarkdownAgentInstructions(lines []string) []string {
+	for i, line := range lines {
+		lower := strings.ToLower(strings.TrimSpace(line))
+		if strings.Contains(lower, "agent instructions") ||
+			strings.Contains(lower, "querying this documentation") ||
+			strings.Contains(lower, "ask query parameter") ||
+			strings.Contains(lower, "?ask=<question>") {
+			return lines[:i]
+		}
+	}
+	return lines
+}
+
+func removeLeadingMarkdownTitle(lines []string, title string) []string {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return lines
+	}
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		heading := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
+		if strings.EqualFold(heading, title) {
+			return lines[i+1:]
+		}
+		return lines
+	}
+	return lines
+}
+
+func stripMarkdownNoiseLines(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "---" || trimmed == "***" || trimmed == "___" || strings.HasPrefix(trimmed, "```") {
+			continue
+		}
+		out = append(out, line)
+	}
+	return out
+}
+
+func collapseBlankLines(lines []string) string {
+	out := make([]string, 0, len(lines))
+	blank := true
+	for _, line := range lines {
+		trimmedRight := strings.TrimRight(line, " \t")
+		if strings.TrimSpace(trimmedRight) == "" {
+			if !blank {
+				out = append(out, "")
+			}
+			blank = true
+			continue
+		}
+		out = append(out, trimmedRight)
+		blank = false
+	}
+	for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
+		out = out[:len(out)-1]
+	}
+	return strings.TrimSpace(strings.Join(out, "\n"))
+}
+
+func excerptText(s string, limit int) (string, bool) {
+	runes := []rune(strings.TrimSpace(s))
+	if limit <= 0 || len(runes) <= limit {
+		return string(runes), false
+	}
+	return string(runes[:limit]), true
+}
+
+func decisionURL(card ActivityEventCard, action string) string {
 	claims := DecisionTokenClaims{
 		EventID:      card.EventID,
 		EventVersion: card.EventVersion,
@@ -322,7 +438,58 @@ func decisionURL(card ActivityEventCard, action string) string {
 	q.Set("action", action)
 	q.Set("version", strconv.Itoa(card.EventVersion))
 	q.Set("token", token)
-	return fmt.Sprintf("%s/activity/events/%d/decision?%s", base, card.EventID, q.Encode())
+	return dashboardURL(card.DecisionBaseURL, fmt.Sprintf("/activity/events/%d/decision", card.EventID)) + "?" + q.Encode()
+}
+
+func activityDetailURL(card ActivityEventCard) string {
+	return dashboardURL(card.DecisionBaseURL, fmt.Sprintf("/activity/events/%d", card.EventID))
+}
+
+func dashboardURL(base, path string) string {
+	path = "/" + strings.TrimLeft(path, "/")
+	root := normalizedDashboardBaseURL(base)
+	if root == "" {
+		return path
+	}
+	if root == "/" {
+		return path
+	}
+	return strings.TrimRight(root, "/") + path
+}
+
+func normalizedDashboardBaseURL(raw string) string {
+	base := strings.TrimRight(strings.TrimSpace(raw), "/")
+	if base == "" {
+		return ""
+	}
+	if strings.HasSuffix(base, "/activity") {
+		base = strings.TrimSuffix(base, "/activity")
+	}
+	if base == "" {
+		return "/"
+	}
+	return base
+}
+
+func sourceLinkLabel(card ActivityEventCard) string {
+	if strings.Contains(strings.ToLower(card.FetchMode), "json") || looksRawSourceURL(card.SourceURL) {
+		return "打开源数据"
+	}
+	return "打开原始来源"
+}
+
+func looksRawSourceURL(raw string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	needle := strings.ToLower(parsed.Host + " " + parsed.Path + " " + parsed.RawQuery)
+	for _, token := range []string{"/api/", "openapi", "bapi", ".json", "json", "list", "query", "cloudfront"} {
+		if strings.Contains(needle, token) {
+			return true
+		}
+	}
+	return false
 }
 
 func fields(items ...map[string]any) map[string]any {

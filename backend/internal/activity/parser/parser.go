@@ -117,7 +117,7 @@ func collectJSONActivities(v any, out *[]rawActivity) {
 			ID:           firstString(x, "id", "articleCode", "code", "uuid", "slug", "project_id", "pid"),
 			Title:        firstString(x, "title", "name", "articleTitle", "activityName", "project_name", "subject"),
 			Summary:      firstString(x, "summary", "description", "content", "body", "brief", "desc"),
-			URL:          firstString(x, "url", "link", "sourceUrl", "source_url", "articleUrl", "redirectUrl", "href"),
+			URL:          firstString(x, "articleUrl", "article_url", "href", "redirectUrl", "redirect_url", "url", "link", "sourceUrl", "source_url"),
 			ActivityType: firstString(x, "activity_type", "activityType", "type", "category", "annType"),
 			Symbols:      stringList(x, "symbols", "target_symbols", "tokens", "coins"),
 		}

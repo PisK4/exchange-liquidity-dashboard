@@ -2,6 +2,7 @@ package activity
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 )
@@ -87,5 +88,27 @@ func TestProduceOutboxSkipsUnapprovedReviewRequiredFactFlow(t *testing.T) {
 	}
 	if res.ReviewRequired != 1 || store.outbox[0].EventType != DeliveryEventReviewRequired {
 		t.Fatalf("result=%+v outbox=%+v", res, store.outbox)
+	}
+}
+
+func TestProduceOutboxFallsBackSummaryToTitle(t *testing.T) {
+	store := &fakeProducerStore{events: []ActivityEvent{{
+		ID: 11, Platform: "lighter", SourceGroup: "incentive_docs", SourceURL: "https://lighter.example/docs",
+		Title: "Lighter Points Program", ActivityType: "incentive_rule_snapshot",
+		ContentHash: "hash", DedupeKey: "lighter|incentive|points", EventVersion: 1,
+		AutoPushAllowed: true, ReviewStatus: ReviewPending,
+	}}}
+	_, err := ProduceOutbox(context.Background(), store, ProducerConfig{
+		WebhookURL:          "https://example.invalid",
+		DecisionTokenSecret: "secret",
+		DashboardBaseURL:    "https://dashboard.example",
+		MaxPerTick:          10,
+	})
+	if err != nil {
+		t.Fatalf("ProduceOutbox err=%v", err)
+	}
+	payload := string(store.outbox[0].PayloadJSON)
+	if !strings.Contains(payload, "Lighter Points Program") || strings.Contains(payload, "**内容**\\n-") {
+		t.Fatalf("payload should fall back content to title: %s", payload)
 	}
 }

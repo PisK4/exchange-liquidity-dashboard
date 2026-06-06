@@ -6,11 +6,17 @@ export type ActivityDecisionAction = (typeof activityDecisionActions)[number];
 
 export type ActivityEventSummary = {
   id: number;
+  raw_evidence_id?: number;
   platform: string;
   source_group: string;
   source_url?: string;
   title: string;
   activity_type: string;
+  content_text?: string;
+  reward_pool_text?: string;
+  start_time?: string | null;
+  end_time?: string | null;
+  raw_time_text?: string;
   review_status: string;
   ops_decision_action?: string;
   event_status?: string;
@@ -20,6 +26,8 @@ export type ActivityEventSummary = {
   publish_time?: string | null;
   needs_human_review?: boolean;
   auto_push_allowed?: boolean;
+  parser_warnings?: string[];
+  rich_fields_summary?: Record<string, unknown>;
 };
 
 export type ActivityEventSymbol = {
@@ -35,9 +43,17 @@ export type ActivityEventSymbol = {
 export type ActivityRawEvidenceRef = {
   id?: number;
   source_key?: string;
+  platform?: string;
+  source_group?: string;
   source_url?: string;
+  fetch_mode?: string;
   fetched_at?: string;
   payload_hash?: string;
+  payload_preview?: string;
+  payload_size_bytes?: number;
+  payload_truncated?: boolean;
+  schema_hash?: string;
+  content_hash?: string;
 };
 
 export type ActivityEventsResponse = {

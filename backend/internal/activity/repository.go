@@ -321,10 +321,11 @@ func (r *Repository) ListActivityEvents(ctx context.Context, filter EventFilter)
 		return nil, "", errors.New("activity repository: no db attached")
 	}
 	limit := clampLimit(filter.Limit, 50, 200)
-	query := `SELECT id, platform, source_group, COALESCE(source_external_id,''), COALESCE(source_url,''), title, activity_type,
+	query := `SELECT id, COALESCE(raw_evidence_id,0), platform, source_group, COALESCE(source_external_id,''), COALESCE(source_url,''), title, activity_type,
+	                 COALESCE(content_text,''), COALESCE(reward_pool_text,''), start_time, end_time, publish_time, COALESCE(raw_time_text,''),
 	                 content_hash, dedupe_key, needs_human_review, auto_push_allowed, event_status,
 	                 review_status, COALESCE(ops_decision_action,''), ops_decision_stale,
-	                 event_version, parser_version, publish_time, created_at, updated_at
+	                 event_version, parser_version, COALESCE(parser_warnings_json,'[]'), COALESCE(rich_fields_summary_json,'{}'), created_at, updated_at
 	            FROM t_activity_event`
 	where := []string{}
 	args := []any{}
@@ -369,10 +370,11 @@ func (r *Repository) GetActivityEvent(ctx context.Context, id int64) (ActivityEv
 	if r.db == nil {
 		return ActivityEvent{}, nil, nil, errors.New("activity repository: no db attached")
 	}
-	row := r.db.QueryRowContext(ctx, `SELECT id, platform, source_group, COALESCE(source_external_id,''), COALESCE(source_url,''), title, activity_type,
+	row := r.db.QueryRowContext(ctx, `SELECT id, COALESCE(raw_evidence_id,0), platform, source_group, COALESCE(source_external_id,''), COALESCE(source_url,''), title, activity_type,
+	                 COALESCE(content_text,''), COALESCE(reward_pool_text,''), start_time, end_time, publish_time, COALESCE(raw_time_text,''),
 	                 content_hash, dedupe_key, needs_human_review, auto_push_allowed, event_status,
 	                 review_status, COALESCE(ops_decision_action,''), ops_decision_stale,
-	                 event_version, parser_version, publish_time, created_at, updated_at
+	                 event_version, parser_version, COALESCE(parser_warnings_json,'[]'), COALESCE(rich_fields_summary_json,'{}'), created_at, updated_at
 	            FROM t_activity_event WHERE id = ?`, id)
 	ev, err := scanEventSummary(row)
 	if err != nil {
@@ -382,7 +384,11 @@ func (r *Repository) GetActivityEvent(ctx context.Context, id int64) (ActivityEv
 	if err != nil {
 		return ActivityEvent{}, nil, nil, err
 	}
-	return ev, symbols, nil, nil
+	raw, err := r.loadRawEvidenceRefs(ctx, ev)
+	if err != nil {
+		return ActivityEvent{}, nil, nil, err
+	}
+	return ev, symbols, raw, nil
 }
 
 func (r *Repository) ListActivitySourceHealth(ctx context.Context, platform, status string, enabled *bool) ([]SourceState, error) {
@@ -501,15 +507,25 @@ func (r *Repository) ListOutboxCandidateEvents(ctx context.Context, limit int) (
 		return nil, errors.New("activity repository: no db attached")
 	}
 	limit = clampLimit(limit, 10, 200)
-	rows, err := r.db.QueryContext(ctx, `SELECT id, platform, source_group, COALESCE(source_external_id,''), COALESCE(source_url,''), title, activity_type,
-	                 content_hash, dedupe_key, needs_human_review, auto_push_allowed, event_status,
-	                 review_status, COALESCE(ops_decision_action,''), ops_decision_stale,
-	                 event_version, parser_version, publish_time, created_at, updated_at
-	            FROM t_activity_event
-	           WHERE event_status = ?
-	             AND review_status <> ?
-	             AND (auto_push_allowed = 1 OR review_status = ? OR needs_human_review = 1)
-	           ORDER BY updated_at DESC, id DESC
+	rows, err := r.db.QueryContext(ctx, `SELECT e.id, COALESCE(e.raw_evidence_id,0), e.platform, e.source_group, COALESCE(e.source_external_id,''), COALESCE(e.source_url,''), e.title, e.activity_type,
+	                 COALESCE(e.content_text,''), COALESCE(e.reward_pool_text,''), e.start_time, e.end_time, e.publish_time, COALESCE(e.raw_time_text,''),
+	                 e.content_hash, e.dedupe_key, e.needs_human_review, e.auto_push_allowed, e.event_status,
+	                 e.review_status, COALESCE(e.ops_decision_action,''), e.ops_decision_stale,
+	                 e.event_version, e.parser_version, COALESCE(e.parser_warnings_json,'[]'), COALESCE(e.rich_fields_summary_json,'{}'), e.created_at, e.updated_at
+	            FROM t_activity_event e
+	           WHERE e.event_status = ?
+	             AND e.review_status <> ?
+	             AND (e.auto_push_allowed = 1 OR e.review_status = ? OR e.needs_human_review = 1)
+	             AND NOT EXISTS (
+	               SELECT 1
+	                 FROM t_activity_delivery_outbox o
+	                WHERE o.dedupe_key = CASE
+	                  WHEN e.needs_human_review = 1 AND e.review_status <> 'approved'
+	                    THEN CONCAT('activity_review_required|', e.id, '|v', e.event_version)
+	                  ELSE CONCAT('activity_event_alert|', e.id, '|v', e.event_version)
+	                END
+	             )
+	           ORDER BY e.updated_at DESC, e.id DESC
 	           LIMIT ?`,
 		EventStatusActive, ReviewRejected, ReviewApproved, limit)
 	if err != nil {
@@ -548,10 +564,10 @@ func (r *Repository) InsertActivityOutbox(ctx context.Context, row DeliveryOutbo
 		   (event_type, dedupe_key, target_channel, status, attempt_count, max_attempts, next_attempt_at, payload_json, last_error, sent_at, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
-		   payload_json = VALUES(payload_json),
+		   payload_json = IF(status = 'sent', payload_json, VALUES(payload_json)),
 		   status = IF(status IN ('sent','pending','retry'), status, VALUES(status)),
-		   next_attempt_at = VALUES(next_attempt_at),
-		   updated_at = VALUES(updated_at)`,
+		   next_attempt_at = IF(status = 'sent', next_attempt_at, VALUES(next_attempt_at)),
+		   updated_at = IF(status = 'sent', updated_at, VALUES(updated_at))`,
 		row.EventType, row.DedupeKey, row.TargetChannel, row.Status, row.AttemptCount, row.MaxAttempts,
 		row.NextAttemptAt, row.PayloadJSON, nullString(row.LastError), row.SentAt, row.CreatedAt, row.UpdatedAt,
 	)
@@ -671,10 +687,12 @@ func scanEventSummary(row eventScanner) (ActivityEvent, error) {
 	var sourceExternalID, sourceURL, ops string
 	var eventStatus string
 	var needsReview, autoPush, stale int
-	var publish sql.NullTime
-	if err := row.Scan(&ev.ID, &ev.Platform, &ev.SourceGroup, &sourceExternalID, &sourceURL, &ev.Title, &ev.ActivityType,
+	var start, end, publish sql.NullTime
+	var parserWarnings, richFields []byte
+	if err := row.Scan(&ev.ID, &ev.RawEvidenceID, &ev.Platform, &ev.SourceGroup, &sourceExternalID, &sourceURL, &ev.Title, &ev.ActivityType,
+		&ev.ContentText, &ev.RewardPoolText, &start, &end, &publish, &ev.RawTimeText,
 		&ev.ContentHash, &ev.DedupeKey, &needsReview, &autoPush, &eventStatus,
-		&ev.ReviewStatus, &ops, &stale, &ev.EventVersion, &ev.ParserVersion, &publish, &ev.CreatedAt, &ev.UpdatedAt); err != nil {
+		&ev.ReviewStatus, &ops, &stale, &ev.EventVersion, &ev.ParserVersion, &parserWarnings, &richFields, &ev.CreatedAt, &ev.UpdatedAt); err != nil {
 		return ActivityEvent{}, err
 	}
 	ev.SourceExternalID = sourceExternalID
@@ -684,11 +702,61 @@ func scanEventSummary(row eventScanner) (ActivityEvent, error) {
 	ev.EventStatus = eventStatus
 	ev.OpsDecisionAction = ops
 	ev.OpsDecisionStale = stale != 0
+	if start.Valid {
+		t := start.Time.UTC()
+		ev.StartTime = &t
+	}
+	if end.Valid {
+		t := end.Time.UTC()
+		ev.EndTime = &t
+	}
 	if publish.Valid {
 		t := publish.Time.UTC()
 		ev.PublishTime = &t
 	}
+	if len(parserWarnings) > 0 {
+		ev.ParserWarningsJSON = json.RawMessage(parserWarnings)
+	}
+	if len(richFields) > 0 {
+		ev.RichFieldsSummaryJSON = json.RawMessage(richFields)
+	}
 	return ev, nil
+}
+
+func (r *Repository) loadRawEvidenceRefs(ctx context.Context, ev ActivityEvent) ([]RawEvidence, error) {
+	where := ""
+	args := []any{}
+	if ev.RawEvidenceID > 0 {
+		where = "id = ?"
+		args = append(args, ev.RawEvidenceID)
+	} else {
+		where = "platform = ? AND source_group = ?"
+		args = append(args, ev.Platform, ev.SourceGroup)
+	}
+	rows, err := r.db.QueryContext(ctx, `SELECT id, source_key, platform, source_group, COALESCE(source_url,''), fetch_mode,
+	             COALESCE(payload_hash,''), LEFT(COALESCE(payload_preview,''), 8000), payload_size_bytes, payload_truncated,
+	             COALESCE(schema_hash,''), COALESCE(content_hash,''), fetched_at
+	        FROM t_activity_raw_evidence
+	       WHERE `+where+`
+	       ORDER BY fetched_at DESC, id DESC
+	       LIMIT 5`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []RawEvidence{}
+	for rows.Next() {
+		var raw RawEvidence
+		var truncated int
+		if err := rows.Scan(&raw.ID, &raw.SourceKey, &raw.Platform, &raw.SourceGroup, &raw.SourceURL, &raw.FetchMode,
+			&raw.PayloadHash, &raw.PayloadPreview, &raw.PayloadSizeBytes, &truncated,
+			&raw.SchemaHash, &raw.ContentHash, &raw.FetchedAt); err != nil {
+			return nil, err
+		}
+		raw.PayloadTruncated = truncated != 0
+		out = append(out, raw)
+	}
+	return out, rows.Err()
 }
 
 func (r *Repository) loadEventSymbols(ctx context.Context, eventID int64) ([]ActivityEventSymbol, error) {

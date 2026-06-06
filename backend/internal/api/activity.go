@@ -95,7 +95,7 @@ func (s *Server) activityEventDetail(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{
 		"event":             activityEventSummaryToWire(ev),
 		"symbols":           symbols,
-		"raw_evidence_refs": raw,
+		"raw_evidence_refs": activityRawEvidenceToWire(raw),
 	})
 }
 
@@ -266,21 +266,58 @@ func (s *Server) activityDeliveryDetail(w http.ResponseWriter, r *http.Request) 
 func activityEventSummaryToWire(ev activity.ActivityEvent) map[string]any {
 	return map[string]any{
 		"id":                  ev.ID,
+		"raw_evidence_id":     ev.RawEvidenceID,
 		"platform":            ev.Platform,
 		"source_group":        ev.SourceGroup,
 		"source_url":          ev.SourceURL,
 		"title":               ev.Title,
 		"activity_type":       ev.ActivityType,
+		"content_text":        ev.ContentText,
+		"reward_pool_text":    ev.RewardPoolText,
+		"start_time":          ev.StartTime,
+		"end_time":            ev.EndTime,
+		"raw_time_text":       ev.RawTimeText,
 		"review_status":       ev.ReviewStatus,
 		"ops_decision_action": ev.OpsDecisionAction,
-		"event_status":        "active",
+		"event_status":        ev.EventStatus,
 		"event_version":       ev.EventVersion,
 		"content_hash":        ev.ContentHash,
 		"dedupe_key":          ev.DedupeKey,
 		"publish_time":        ev.PublishTime,
 		"needs_human_review":  ev.NeedsHumanReview,
 		"auto_push_allowed":   ev.AutoPushAllowed,
+		"parser_warnings":     rawJSONOrDefault(ev.ParserWarningsJSON, []byte(`[]`)),
+		"rich_fields_summary": rawJSONOrDefault(ev.RichFieldsSummaryJSON, []byte(`{}`)),
 	}
+}
+
+func activityRawEvidenceToWire(rows []activity.RawEvidence) []map[string]any {
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, map[string]any{
+			"id":                 row.ID,
+			"source_key":         row.SourceKey,
+			"platform":           row.Platform,
+			"source_group":       row.SourceGroup,
+			"source_url":         row.SourceURL,
+			"fetch_mode":         row.FetchMode,
+			"payload_hash":       row.PayloadHash,
+			"payload_preview":    row.PayloadPreview,
+			"payload_size_bytes": row.PayloadSizeBytes,
+			"payload_truncated":  row.PayloadTruncated,
+			"schema_hash":        row.SchemaHash,
+			"content_hash":       row.ContentHash,
+			"fetched_at":         row.FetchedAt,
+		})
+	}
+	return out
+}
+
+func rawJSONOrDefault(raw json.RawMessage, fallback []byte) json.RawMessage {
+	if len(raw) == 0 {
+		return json.RawMessage(fallback)
+	}
+	return raw
 }
 
 func activitySourceStateToWire(s activity.SourceState) map[string]any {

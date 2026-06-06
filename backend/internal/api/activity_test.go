@@ -94,6 +94,48 @@ func TestActivityEventsReturnsListWithoutTop30Context(t *testing.T) {
 	}
 }
 
+func TestActivityEventDetailReturnsReadableContentAndRawEvidencePreview(t *testing.T) {
+	now := time.Date(2026, 6, 5, 8, 0, 0, 0, time.UTC)
+	store := &fakeActivityStore{
+		event: activity.ActivityEvent{
+			ID: 42, RawEvidenceID: 9, Platform: "gate", SourceGroup: "launchpool_project_list", SourceURL: "https://gate.example/launchpool/abc",
+			Title: "Gate Launchpool ABC", ActivityType: "launchpool", ContentText: "Launchpool project list entry",
+			RewardPoolText: "100,000 USDT", ReviewStatus: activity.ReviewPending, EventStatus: activity.EventStatusActive,
+			EventVersion: 1, ContentHash: "hash", DedupeKey: "gate|launchpool|abc", PublishTime: &now,
+			ParserWarningsJSON:    json.RawMessage(`["raw_time_unknown"]`),
+			RichFieldsSummaryJSON: json.RawMessage(`{"reward":"100,000 USDT"}`),
+		},
+		raw: []activity.RawEvidence{{
+			ID: 9, SourceKey: "gate|launchpool_project_list|utls_proxy_json", Platform: "gate", SourceGroup: "launchpool_project_list",
+			SourceURL: "https://gate.example/api/list", FetchMode: "utls_proxy_json", PayloadHash: "payload-hash",
+			PayloadPreview: `{"title":"Gate Launchpool ABC"}`, PayloadSizeBytes: 1024, FetchedAt: now,
+		}},
+	}
+	server := NewServer(config.Config{}, fakeStoreReader{}, WithActivityStore(store))
+	req := httptest.NewRequest(http.MethodGet, "/api/activity/events/42", nil)
+	w := httptest.NewRecorder()
+	server.Routes().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+	var body map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&body); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	event := body["event"].(map[string]any)
+	if event["content_text"] != "Launchpool project list entry" || event["reward_pool_text"] != "100,000 USDT" {
+		t.Fatalf("event detail missing readable fields: %+v", event)
+	}
+	refs := body["raw_evidence_refs"].([]any)
+	first := refs[0].(map[string]any)
+	if first["payload_preview"] == "" || first["fetch_mode"] != "utls_proxy_json" {
+		t.Fatalf("raw evidence preview missing: %+v", first)
+	}
+	if bytes.Contains(w.Body.Bytes(), []byte("PayloadPreview")) {
+		t.Fatalf("activity detail must use snake_case wire shape: %s", w.Body.String())
+	}
+}
+
 func TestActivityReviewDefaultsReviewer(t *testing.T) {
 	store := &fakeActivityStore{}
 	server := NewServer(config.Config{}, fakeStoreReader{}, WithActivityStore(store))

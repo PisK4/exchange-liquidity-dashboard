@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,6 +127,94 @@ func TestRepositoryUpsertActivityEventPersistsSymbols(t *testing.T) {
 	}
 	if id != 77 || !inserted {
 		t.Fatalf("id=%d inserted=%v", id, inserted)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestRepositoryListOutboxCandidateEventsSkipsAlreadyProducedAndHydratesContent(t *testing.T) {
+	now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newActivityRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "raw_evidence_id", "platform", "source_group", "source_external_id", "source_url", "title", "activity_type",
+		"content_text", "reward_pool_text", "start_time", "end_time", "publish_time", "raw_time_text",
+		"content_hash", "dedupe_key", "needs_human_review", "auto_push_allowed", "event_status",
+		"review_status", "ops_decision_action", "ops_decision_stale", "event_version", "parser_version",
+		"parser_warnings_json", "rich_fields_summary_json", "created_at", "updated_at",
+	}).AddRow(
+		int64(42), int64(9), "binance", "cms_article_detail", "abc", "https://binance.example/abc", "Binance Launchpool ABC", "launchpool",
+		"Stake BNB to earn ABC", "300,000 USDT", nil, nil, now, "",
+		"hash", "binance|cms_article_detail|abc", 0, 1, EventStatusActive,
+		ReviewPending, "", 0, 1, "activity-parser-v1",
+		[]byte(`["raw_time_unknown"]`), []byte(`{"reward":"300,000 USDT"}`), now, now,
+	)
+	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_event e")).
+		WithArgs(EventStatusActive, ReviewRejected, ReviewApproved, 10).
+		WillReturnRows(rows)
+
+	events, err := repo.ListOutboxCandidateEvents(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("ListOutboxCandidateEvents err=%v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events len=%d want 1", len(events))
+	}
+	ev := events[0]
+	if ev.ContentText != "Stake BNB to earn ABC" || ev.RewardPoolText != "300,000 USDT" || ev.RawEvidenceID != 9 {
+		t.Fatalf("event did not hydrate detail fields: %+v", ev)
+	}
+	if !strings.Contains(string(ev.ParserWarningsJSON), "raw_time_unknown") {
+		t.Fatalf("parser warnings not hydrated: %s", ev.ParserWarningsJSON)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestRepositoryGetActivityEventReturnsRawEvidencePreview(t *testing.T) {
+	now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newActivityRepoWithMock(t, now)
+	defer cleanup()
+
+	eventRows := sqlmock.NewRows([]string{
+		"id", "raw_evidence_id", "platform", "source_group", "source_external_id", "source_url", "title", "activity_type",
+		"content_text", "reward_pool_text", "start_time", "end_time", "publish_time", "raw_time_text",
+		"content_hash", "dedupe_key", "needs_human_review", "auto_push_allowed", "event_status",
+		"review_status", "ops_decision_action", "ops_decision_stale", "event_version", "parser_version",
+		"parser_warnings_json", "rich_fields_summary_json", "created_at", "updated_at",
+	}).AddRow(
+		int64(42), int64(9), "gate", "launchpool_project_list", "gate-abc", "https://gate.example/abc", "Gate Launchpool ABC", "launchpool",
+		"Launchpool project list entry", "", nil, nil, nil, "",
+		"hash", "gate|launchpool|abc", 0, 1, EventStatusActive,
+		ReviewPending, "", 0, 1, "activity-parser-v1",
+		[]byte(`[]`), []byte(`{}`), now, now,
+	)
+	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_event WHERE id = ?")).
+		WithArgs(int64(42)).
+		WillReturnRows(eventRows)
+	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_event_symbol WHERE event_id = ?")).
+		WithArgs(int64(42)).
+		WillReturnRows(sqlmock.NewRows([]string{"event_id", "canonical_symbol", "display_symbol", "market_surface", "role", "sort_order"}))
+	rawRows := sqlmock.NewRows([]string{
+		"id", "source_key", "platform", "source_group", "source_url", "fetch_mode", "payload_hash", "payload_preview",
+		"payload_size_bytes", "payload_truncated", "schema_hash", "content_hash", "fetched_at",
+	}).AddRow(int64(9), "gate|launchpool_project_list|utls_proxy_json", "gate", "launchpool_project_list", "https://gate.example/api/list", "utls_proxy_json", "payload-hash", `{"title":"Gate Launchpool ABC"}`, int64(1024), 0, "schema", "content", now)
+	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_raw_evidence")).
+		WithArgs(int64(9)).
+		WillReturnRows(rawRows)
+
+	ev, _, raw, err := repo.GetActivityEvent(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("GetActivityEvent err=%v", err)
+	}
+	if ev.ContentText != "Launchpool project list entry" {
+		t.Fatalf("event content=%q", ev.ContentText)
+	}
+	if len(raw) != 1 || raw[0].PayloadPreview == "" || raw[0].PayloadSizeBytes != 1024 {
+		t.Fatalf("raw evidence=%+v", raw)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)

@@ -83,6 +83,27 @@ func TestParserExtractsActivityEventsFromJSONLists(t *testing.T) {
 	}
 }
 
+func TestParserPrefersArticleURLOverSourceURL(t *testing.T) {
+	doc := fixtureDoc("gate", "launchpool_project_list", `{
+		"id":"gate-article-1",
+		"title":"Gate Launchpool ABC",
+		"summary":"Launchpool project list entry",
+		"sourceUrl":"https://gate.example/api/list.json",
+		"articleUrl":"https://gate.example/article/abc",
+		"activity_type":"launchpool"
+	}`)
+	events, err := ParseGate(context.Background(), doc)
+	if err != nil {
+		t.Fatalf("parse err=%v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("events len=%d want 1", len(events))
+	}
+	if events[0].SourceURL != "https://gate.example/article/abc" {
+		t.Fatalf("SourceURL=%q want article URL", events[0].SourceURL)
+	}
+}
+
 func TestParserExtractsActivityEventFromHTMLOrMarkdown(t *testing.T) {
 	doc := fixtureDoc("lighter", "incentive_docs", "# Lighter Points Program\n\nRetail users receive weekly points for trading and liquidity activity.")
 	doc.FetchMode = "markdown_doc"

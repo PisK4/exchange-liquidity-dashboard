@@ -121,19 +121,22 @@ func PrepareRawEvidencePayload(payload string, limit int) RawPayload {
 }
 
 type RawEvidence struct {
-	ID           int64
-	SourceKey    string
-	Platform     string
-	SourceGroup  string
-	SourceURL    string
-	FetchMode    string
-	PayloadText  string
-	PayloadHash  string
-	SchemaHash   string
-	ContentHash  string
-	FetchedAt    time.Time
-	ResponseMeta json.RawMessage
-	FixtureRef   string
+	ID               int64
+	SourceKey        string
+	Platform         string
+	SourceGroup      string
+	SourceURL        string
+	FetchMode        string
+	PayloadText      string
+	PayloadPreview   string
+	PayloadHash      string
+	PayloadSizeBytes int64
+	PayloadTruncated bool
+	SchemaHash       string
+	ContentHash      string
+	FetchedAt        time.Time
+	ResponseMeta     json.RawMessage
+	FixtureRef       string
 }
 
 type ActivityEvent struct {
