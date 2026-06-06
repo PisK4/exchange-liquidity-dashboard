@@ -9,10 +9,19 @@ function apiBase(): string {
 
 export type GetJSONOptions = {
   signal?: AbortSignal;
+  method?: string;
+  body?: BodyInit | null;
+  headers?: HeadersInit;
 };
 
 export async function getJSON<T>(path: string, options: GetJSONOptions = {}): Promise<T> {
-  const res = await fetch(`${apiBase()}${path}`, { cache: 'no-store', signal: options.signal });
+  const res = await fetch(`${apiBase()}${path}`, {
+    cache: 'no-store',
+    signal: options.signal,
+    method: options.method,
+    body: options.body,
+    headers: options.headers ?? (options.body ? { 'Content-Type': 'application/json' } : undefined),
+  });
   if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
   return res.json() as Promise<T>;
 }

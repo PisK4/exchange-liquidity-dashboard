@@ -255,6 +255,112 @@
         }
       }
     },
+    "/api/activity/events": {
+      "get": {
+        "parameters": [
+          {"in": "query", "name": "platform", "schema": {"type": "string"}},
+          {"in": "query", "name": "activity_type", "schema": {"type": "string"}},
+          {"in": "query", "name": "status", "schema": {"type": "string"}},
+          {"in": "query", "name": "review_status", "schema": {"type": "string"}},
+          {"in": "query", "name": "limit", "schema": {"type": "integer"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "activity events",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityEventListResponse"}}}
+          },
+          "503": {
+            "description": "activity disabled",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityUnavailableResponse"}}}
+          }
+        }
+      }
+    },
+    "/api/activity/events/{id}": {
+      "get": {
+        "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "integer"}}],
+        "responses": {
+          "200": {
+            "description": "activity event detail",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityEventDetailResponse"}}}
+          },
+          "503": {
+            "description": "activity disabled",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityUnavailableResponse"}}}
+          }
+        }
+      }
+    },
+    "/api/activity/source-health": {
+      "get": {
+        "parameters": [
+          {"in": "query", "name": "platform", "schema": {"type": "string"}},
+          {"in": "query", "name": "source_status", "schema": {"type": "string"}},
+          {"in": "query", "name": "enabled", "schema": {"type": "boolean"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "activity source health",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivitySourceHealthResponse"}}}
+          },
+          "503": {
+            "description": "activity disabled",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityUnavailableResponse"}}}
+          }
+        }
+      }
+    },
+    "/api/activity/deliveries": {
+      "get": {
+        "parameters": [
+          {"in": "query", "name": "limit", "schema": {"type": "integer"}},
+          {"in": "query", "name": "event_type", "schema": {"type": "string"}},
+          {"in": "query", "name": "status", "schema": {"type": "string"}}
+        ],
+        "responses": {
+          "200": {
+            "description": "activity delivery outbox",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityDeliveryListResponse"}}}
+          },
+          "503": {
+            "description": "activity disabled",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityUnavailableResponse"}}}
+          }
+        }
+      }
+    },
+    "/api/activity/review/{id}": {
+      "post": {
+        "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "integer"}}],
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityReviewRequest"}}}},
+        "responses": {
+          "200": {"description": "review updated", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityMutationResponse"}}}},
+          "503": {"description": "activity disabled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityUnavailableResponse"}}}}
+        }
+      }
+    },
+    "/api/activity/decision/{id}": {
+      "post": {
+        "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "integer"}}],
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityDecisionRequest"}}}},
+        "responses": {
+          "200": {"description": "decision recorded", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityMutationResponse"}}}},
+          "409": {"description": "event version changed"},
+          "503": {"description": "activity disabled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityUnavailableResponse"}}}}
+        }
+      }
+    },
+    "/api/activity/deliveries/{id}/redrive": {
+      "post": {
+        "parameters": [{"in": "path", "name": "id", "required": true, "schema": {"type": "integer"}}],
+        "requestBody": {"content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityRedriveRequest"}}}},
+        "responses": {
+          "200": {"description": "redrive queued", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityRedriveResponse"}}}},
+          "409": {"description": "redrive not allowed"},
+          "503": {"description": "activity disabled", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ActivityUnavailableResponse"}}}}
+        }
+      }
+    },
     "/api/listing/candidates": {
       "get": {
         "parameters": [
@@ -1586,6 +1692,170 @@
       "RuntimeConfig": {
         "type": "object",
         "additionalProperties": true
+      },
+      "ActivityEventSummary": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "platform", "source_group", "title", "activity_type", "review_status", "event_version", "content_hash", "dedupe_key"],
+        "properties": {
+          "id": {"type": "integer"},
+          "platform": {"type": "string"},
+          "source_group": {"type": "string"},
+          "source_url": {"type": "string", "nullable": true},
+          "title": {"type": "string"},
+          "activity_type": {"type": "string"},
+          "review_status": {"type": "string"},
+          "ops_decision_action": {"type": "string", "nullable": true},
+          "event_status": {"type": "string"},
+          "event_version": {"type": "integer"},
+          "content_hash": {"type": "string"},
+          "dedupe_key": {"type": "string"},
+          "publish_time": {"type": "string", "format": "date-time", "nullable": true},
+          "needs_human_review": {"type": "boolean"},
+          "auto_push_allowed": {"type": "boolean"}
+        }
+      },
+      "ActivityEventSymbol": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "event_id": {"type": "integer"},
+          "canonical_symbol": {"type": "string"},
+          "display_symbol": {"type": "string"},
+          "market_surface": {"type": "string"},
+          "role": {"type": "string"},
+          "sort_order": {"type": "integer"}
+        }
+      },
+      "ActivityRawEvidenceRef": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "id": {"type": "integer"},
+          "source_key": {"type": "string"},
+          "source_url": {"type": "string"},
+          "fetched_at": {"type": "string", "format": "date-time"},
+          "payload_hash": {"type": "string"}
+        }
+      },
+      "ActivityEventListResponse": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/ActivityEventSummary"}},
+          "next_cursor": {"type": "string"}
+        }
+      },
+      "ActivityEventDetailResponse": {
+        "type": "object",
+        "required": ["event"],
+        "properties": {
+          "event": {"$ref": "#/components/schemas/ActivityEventSummary"},
+          "symbols": {"type": "array", "items": {"$ref": "#/components/schemas/ActivityEventSymbol"}},
+          "raw_evidence_refs": {"type": "array", "items": {"$ref": "#/components/schemas/ActivityRawEvidenceRef"}}
+        }
+      },
+      "ActivitySourceHealth": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["platform", "source_group", "enabled"],
+        "properties": {
+          "id": {"type": "integer"},
+          "platform": {"type": "string"},
+          "source_group": {"type": "string"},
+          "source_type": {"type": "string"},
+          "source_url": {"type": "string", "nullable": true},
+          "fetch_mode": {"type": "string"},
+          "enabled": {"type": "boolean"},
+          "auto_push_enabled": {"type": "boolean"},
+          "source_status": {"type": "string"},
+          "last_http_status": {"type": "integer", "nullable": true},
+          "last_error_kind": {"type": "string"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ActivitySourceHealthResponse": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/ActivitySourceHealth"}}
+        }
+      },
+      "ActivityDelivery": {
+        "type": "object",
+        "additionalProperties": true,
+        "required": ["id", "event_type", "dedupe_key", "target_channel", "status", "attempt_count", "max_attempts"],
+        "properties": {
+          "id": {"type": "integer"},
+          "event_type": {"type": "string"},
+          "dedupe_key": {"type": "string"},
+          "target_channel": {"type": "string"},
+          "status": {"type": "string"},
+          "attempt_count": {"type": "integer"},
+          "max_attempts": {"type": "integer"},
+          "last_error": {"type": "string"},
+          "created_at": {"type": "string", "format": "date-time"},
+          "updated_at": {"type": "string", "format": "date-time"}
+        }
+      },
+      "ActivityDeliveryListResponse": {
+        "type": "object",
+        "required": ["items"],
+        "properties": {
+          "items": {"type": "array", "items": {"$ref": "#/components/schemas/ActivityDelivery"}},
+          "next_cursor": {"type": "string"}
+        }
+      },
+      "ActivityReviewRequest": {
+        "type": "object",
+        "required": ["action"],
+        "properties": {
+          "action": {"type": "string", "enum": ["approve", "reject"]},
+          "reviewer": {"type": "string"},
+          "reason": {"type": "string"}
+        }
+      },
+      "ActivityDecisionRequest": {
+        "type": "object",
+        "required": ["action", "version", "token"],
+        "properties": {
+          "action": {"type": "string", "enum": ["follow_now", "benchmark_watch", "differentiate", "no_follow", "ignore_duplicate"]},
+          "version": {"type": "integer"},
+          "token": {"type": "string"},
+          "reviewer": {"type": "string"},
+          "reason": {"type": "string"}
+        }
+      },
+      "ActivityMutationResponse": {
+        "type": "object",
+        "additionalProperties": true,
+        "properties": {
+          "status": {"type": "string"},
+          "event_id": {"type": "integer"},
+          "action": {"type": "string"}
+        }
+      },
+      "ActivityRedriveRequest": {
+        "type": "object",
+        "properties": {
+          "reason": {"type": "string"},
+          "reviewer": {"type": "string"}
+        }
+      },
+      "ActivityRedriveResponse": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string"},
+          "id": {"type": "integer"}
+        }
+      },
+      "ActivityUnavailableResponse": {
+        "type": "object",
+        "properties": {
+          "status": {"type": "string"},
+          "feature": {"type": "string"},
+          "reason": {"type": "string"}
+        }
       },
       "ListingCandidate": {
         "type": "object",

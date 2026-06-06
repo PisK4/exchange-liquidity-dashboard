@@ -442,6 +442,362 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/activity/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    platform?: string;
+                    activity_type?: string;
+                    status?: string;
+                    review_status?: string;
+                    limit?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description activity events */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityEventListResponse"];
+                    };
+                };
+                /** @description activity disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity/events/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description activity event detail */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityEventDetailResponse"];
+                    };
+                };
+                /** @description activity disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity/source-health": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    platform?: string;
+                    source_status?: string;
+                    enabled?: boolean;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description activity source health */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivitySourceHealthResponse"];
+                    };
+                };
+                /** @description activity disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity/deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: {
+                    limit?: number;
+                    event_type?: string;
+                    status?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description activity delivery outbox */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityDeliveryListResponse"];
+                    };
+                };
+                /** @description activity disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity/review/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ActivityReviewRequest"];
+                };
+            };
+            responses: {
+                /** @description review updated */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityMutationResponse"];
+                    };
+                };
+                /** @description activity disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity/decision/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ActivityDecisionRequest"];
+                };
+            };
+            responses: {
+                /** @description decision recorded */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityMutationResponse"];
+                    };
+                };
+                /** @description event version changed */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description activity disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/activity/deliveries/{id}/redrive": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": components["schemas"]["ActivityRedriveRequest"];
+                };
+            };
+            responses: {
+                /** @description redrive queued */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityRedriveResponse"];
+                    };
+                };
+                /** @description redrive not allowed */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description activity disabled */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ActivityUnavailableResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/listing/candidates": {
         parameters: {
             query?: never;
@@ -1038,6 +1394,129 @@ export interface components {
         };
         RuntimeConfig: {
             [key: string]: unknown;
+        };
+        ActivityEventSummary: {
+            id: number;
+            platform: string;
+            source_group: string;
+            source_url?: string | null;
+            title: string;
+            activity_type: string;
+            review_status: string;
+            ops_decision_action?: string | null;
+            event_status?: string;
+            event_version: number;
+            content_hash: string;
+            dedupe_key: string;
+            /** Format: date-time */
+            publish_time?: string | null;
+            needs_human_review?: boolean;
+            auto_push_allowed?: boolean;
+        } & {
+            [key: string]: unknown;
+        };
+        ActivityEventSymbol: {
+            event_id?: number;
+            canonical_symbol?: string;
+            display_symbol?: string;
+            market_surface?: string;
+            role?: string;
+            sort_order?: number;
+        } & {
+            [key: string]: unknown;
+        };
+        ActivityRawEvidenceRef: {
+            id?: number;
+            source_key?: string;
+            source_url?: string;
+            /** Format: date-time */
+            fetched_at?: string;
+            payload_hash?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        ActivityEventListResponse: {
+            items: components["schemas"]["ActivityEventSummary"][];
+            next_cursor?: string;
+        };
+        ActivityEventDetailResponse: {
+            event: components["schemas"]["ActivityEventSummary"];
+            symbols?: components["schemas"]["ActivityEventSymbol"][];
+            raw_evidence_refs?: components["schemas"]["ActivityRawEvidenceRef"][];
+        };
+        ActivitySourceHealth: {
+            id?: number;
+            platform: string;
+            source_group: string;
+            source_type?: string;
+            source_url?: string | null;
+            fetch_mode?: string;
+            enabled: boolean;
+            auto_push_enabled?: boolean;
+            source_status?: string;
+            last_http_status?: number | null;
+            last_error_kind?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        ActivitySourceHealthResponse: {
+            items: components["schemas"]["ActivitySourceHealth"][];
+        };
+        ActivityDelivery: {
+            id: number;
+            event_type: string;
+            dedupe_key: string;
+            target_channel: string;
+            status: string;
+            attempt_count: number;
+            max_attempts: number;
+            last_error?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        ActivityDeliveryListResponse: {
+            items: components["schemas"]["ActivityDelivery"][];
+            next_cursor?: string;
+        };
+        ActivityReviewRequest: {
+            /** @enum {string} */
+            action: "approve" | "reject";
+            reviewer?: string;
+            reason?: string;
+        };
+        ActivityDecisionRequest: {
+            /** @enum {string} */
+            action: "follow_now" | "benchmark_watch" | "differentiate" | "no_follow" | "ignore_duplicate";
+            version: number;
+            token: string;
+            reviewer?: string;
+            reason?: string;
+        };
+        ActivityMutationResponse: {
+            status?: string;
+            event_id?: number;
+            action?: string;
+        } & {
+            [key: string]: unknown;
+        };
+        ActivityRedriveRequest: {
+            reason?: string;
+            reviewer?: string;
+        };
+        ActivityRedriveResponse: {
+            status?: string;
+            id?: number;
+        };
+        ActivityUnavailableResponse: {
+            status?: string;
+            feature?: string;
+            reason?: string;
         };
         ListingCandidate: {
             id?: number;

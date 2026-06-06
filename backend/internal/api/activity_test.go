@@ -151,3 +151,30 @@ func TestActivityRedriveRejectsDisallowedStatus(t *testing.T) {
 		t.Fatalf("status=%d want 409 body=%s", w.Code, w.Body.String())
 	}
 }
+
+func TestActivitySourceHealthAndDeliveriesUseSnakeCaseWireShape(t *testing.T) {
+	status := 200
+	store := &fakeActivityStore{
+		sourceHealth: []activity.SourceState{{
+			ID: 1, Platform: "gate", SourceGroup: "launchpool_project_list", FetchMode: "utls_proxy_json",
+			Enabled: true, SourceStatus: activity.SourceStatusOK, LastHTTPStatus: &status,
+		}},
+		deliveries: []activity.DeliveryOutbox{{
+			ID: 9, EventType: activity.DeliveryEventEventAlert, DedupeKey: "activity_event|9|1",
+			TargetChannel: activity.DeliveryChannelLarkActivity, Status: activity.DeliveryStatusPending,
+			AttemptCount: 1, MaxAttempts: 5,
+		}},
+	}
+	server := NewServer(config.Config{}, fakeStoreReader{}, WithActivityStore(store))
+	for _, path := range []string{"/api/activity/source-health", "/api/activity/deliveries"} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		w := httptest.NewRecorder()
+		server.Routes().ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("%s status=%d body=%s", path, w.Code, w.Body.String())
+		}
+		if bytes.Contains(w.Body.Bytes(), []byte("SourceGroup")) || bytes.Contains(w.Body.Bytes(), []byte("EventType")) {
+			t.Fatalf("%s must use snake_case wire shape: %s", path, w.Body.String())
+		}
+	}
+}

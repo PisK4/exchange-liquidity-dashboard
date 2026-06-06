@@ -36,19 +36,25 @@ func TestOpenAPIResponsesHaveSchemas(t *testing.T) {
 
 	paths := spec["paths"].(map[string]any)
 	for path, rawPath := range paths {
-		get := rawPath.(map[string]any)["get"].(map[string]any)
-		response := get["responses"].(map[string]any)["200"].(map[string]any)
-		content, ok := response["content"].(map[string]any)
-		if !ok {
-			t.Fatalf("%s 200 response missing content", path)
-		}
-		media, ok := content["application/json"].(map[string]any)
-		if !ok {
-			t.Fatalf("%s 200 response missing application/json content", path)
-		}
-		schema, ok := media["schema"].(map[string]any)
-		if !ok || len(schema) == 0 {
-			t.Fatalf("%s 200 response missing schema", path)
+		pathSpec := rawPath.(map[string]any)
+		for _, method := range []string{"get", "post", "put", "patch", "delete"} {
+			operation, ok := pathSpec[method].(map[string]any)
+			if !ok {
+				continue
+			}
+			response := operation["responses"].(map[string]any)["200"].(map[string]any)
+			content, ok := response["content"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s %s 200 response missing content", method, path)
+			}
+			media, ok := content["application/json"].(map[string]any)
+			if !ok {
+				t.Fatalf("%s %s 200 response missing application/json content", method, path)
+			}
+			schema, ok := media["schema"].(map[string]any)
+			if !ok || len(schema) == 0 {
+				t.Fatalf("%s %s 200 response missing schema", method, path)
+			}
 		}
 	}
 }

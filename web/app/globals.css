@@ -217,6 +217,13 @@ table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
 .approx-mark { color: var(--text-mute); margin-left: 2px; font-size: 11px; cursor: help; }
 .panel-foot-note { text-align: right; padding: 6px 12px 4px; color: var(--text-mute); font-size: 11px; }
 .panel-foot-note .approx-mark { cursor: default; }
+.kpi-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; padding: 10px; border-bottom: 1px solid var(--border); }
+.kpi-card { border: 1px solid var(--border); background: #101216; border-radius: 3px; padding: 8px 10px; }
+.kpi-label { color: var(--text-mute); font-size: 11px; }
+.kpi-value { color: var(--text); font-size: 20px; font-variant-numeric: tabular-nums; margin-top: 2px; }
+.activity-detail-body { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; padding: 12px; font-size: 12px; }
+.activity-detail-body strong { color: var(--text-mute); font-weight: 500; }
+.json-block { margin: 0; padding: 10px; max-height: 360px; overflow: auto; color: var(--text-mute); font-size: 11px; }
 .depth-label-badge { margin-left: 6px; font-variant-numeric: normal; }
 .share-kpi-strip { display: flex; align-items: center; gap: 24px; padding: 8px 12px 14px; border-bottom: 1px solid var(--border); }
 .share-kpi-strip div { min-width: 160px; }

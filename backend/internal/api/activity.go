@@ -115,7 +115,11 @@ func (s *Server) activitySourceHealth(w http.ResponseWriter, r *http.Request) {
 		writeActivityError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{"items": rows})
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, activitySourceStateToWire(row))
+	}
+	writeJSON(w, map[string]any{"items": out})
 }
 
 func (s *Server) activityDeliveries(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +139,11 @@ func (s *Server) activityDeliveries(w http.ResponseWriter, r *http.Request) {
 		writeActivityError(w, err)
 		return
 	}
-	writeJSON(w, map[string]any{"items": rows, "next_cursor": next})
+	out := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, activityDeliveryToWire(row))
+	}
+	writeJSON(w, map[string]any{"items": out, "next_cursor": next})
 }
 
 func (s *Server) activityReview(w http.ResponseWriter, r *http.Request) {
@@ -272,6 +280,47 @@ func activityEventSummaryToWire(ev activity.ActivityEvent) map[string]any {
 		"publish_time":        ev.PublishTime,
 		"needs_human_review":  ev.NeedsHumanReview,
 		"auto_push_allowed":   ev.AutoPushAllowed,
+	}
+}
+
+func activitySourceStateToWire(s activity.SourceState) map[string]any {
+	return map[string]any{
+		"id":                       s.ID,
+		"platform":                 s.Platform,
+		"source_group":             s.SourceGroup,
+		"source_type":              s.SourceType,
+		"source_url":               s.SourceURL,
+		"source_key":               s.SourceKey,
+		"fetch_mode":               s.FetchMode,
+		"evidence_quality":         s.EvidenceQuality,
+		"enabled":                  s.Enabled,
+		"auto_push_enabled":        s.AutoPushEnabled,
+		"requires_proxy":           s.RequiresProxy,
+		"requires_browser_context": s.RequiresBrowserContext,
+		"requires_login":           s.RequiresLogin,
+		"personalized":             s.Personalized,
+		"source_status":            s.SourceStatus,
+		"last_http_status":         s.LastHTTPStatus,
+		"last_error_kind":          s.LastErrorKind,
+		"disabled_until":           s.DisabledUntil,
+		"updated_at":               s.UpdatedAt,
+	}
+}
+
+func activityDeliveryToWire(d activity.DeliveryOutbox) map[string]any {
+	return map[string]any{
+		"id":              d.ID,
+		"event_type":      d.EventType,
+		"dedupe_key":      d.DedupeKey,
+		"target_channel":  d.TargetChannel,
+		"status":          d.Status,
+		"attempt_count":   d.AttemptCount,
+		"max_attempts":    d.MaxAttempts,
+		"next_attempt_at": d.NextAttemptAt,
+		"last_error":      d.LastError,
+		"sent_at":         d.SentAt,
+		"created_at":      d.CreatedAt,
+		"updated_at":      d.UpdatedAt,
 	}
 }
 
