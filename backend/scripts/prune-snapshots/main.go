@@ -9,7 +9,7 @@
 //   - t_symbol_mapping          : current catalog, not history
 //
 // Each successful run writes a JSON prune-history record under
-// $DASHBOARD_DATA_DIR/prune-history/<RFC3339>.json so operators can
+// $OPS_INTELLIGENCE_DATA_DIR/prune-history/<RFC3339>.json so operators can
 // reconstruct exactly what was deleted when. The history file is
 // written even on dry-run so plans can be reviewed before --confirm.
 //
@@ -106,7 +106,7 @@ func main() {
 
 func parseFlags() cliFlags {
 	var f cliFlags
-	flag.StringVar(&f.mysqlDSN, "mysql-dsn", os.Getenv("DASHBOARD_MYSQL_DSN"), "MySQL DSN; falls back to $DASHBOARD_MYSQL_DSN")
+	flag.StringVar(&f.mysqlDSN, "mysql-dsn", os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN"), "MySQL DSN; falls back to $OPS_INTELLIGENCE_MYSQL_DSN")
 	flag.IntVar(&f.days, "days", 0, "retention window in days (must be >= 7)")
 	flag.BoolVar(&f.confirm, "confirm", false, "set true to actually issue DELETEs (default dry-run)")
 	flag.IntVar(&f.batchSize, "batch-size", defaultBatchSize, "rows deleted per DELETE statement")
@@ -116,7 +116,7 @@ func parseFlags() cliFlags {
 }
 
 func defaultDataDir() string {
-	if v := os.Getenv("DASHBOARD_DATA_DIR"); v != "" {
+	if v := os.Getenv("OPS_INTELLIGENCE_DATA_DIR"); v != "" {
 		return v
 	}
 	return "."

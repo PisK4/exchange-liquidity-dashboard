@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
-	"edgex-dashboard/backend/internal/marketdata/coingecko"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
 )
 
 // CoinGeckoCollector polls CoinGecko's /derivatives endpoint on a fixed

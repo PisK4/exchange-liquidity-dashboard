@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 func TestRoleStartsLiveProviders(t *testing.T) {
@@ -133,13 +133,13 @@ func TestResolveConfigPathRelativeToConfigDir(t *testing.T) {
 
 func TestResolveConfigPathKeepsAbsoluteAndFallsBackOnUnresolvedEnv(t *testing.T) {
 	configDir := filepath.Join("..", "config")
-	fallback := filepath.Join("/var/lib/edgex-dashboard", "listed_universe.runtime.yaml")
+	fallback := filepath.Join("/var/lib/edgex-ops-intelligence", "listed_universe.runtime.yaml")
 	abs := filepath.Join(string(filepath.Separator), "tmp", "listed_universe.runtime.yaml")
 
 	if got := resolveConfigPath(abs, fallback, configDir); got != abs {
 		t.Fatalf("resolveConfigPath absolute = %q, want %q", got, abs)
 	}
-	if got := resolveConfigPath("${DASHBOARD_DATA_DIR}/listed_universe.runtime.yaml", fallback, configDir); got != fallback {
+	if got := resolveConfigPath("${OPS_INTELLIGENCE_DATA_DIR}/listed_universe.runtime.yaml", fallback, configDir); got != fallback {
 		t.Fatalf("resolveConfigPath unresolved env = %q, want fallback %q", got, fallback)
 	}
 }

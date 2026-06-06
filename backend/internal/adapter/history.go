@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // ErrInstrumentNotFound is returned by adapter daily-history fetchers when

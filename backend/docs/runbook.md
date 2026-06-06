@@ -1,7 +1,7 @@
-# EdgeX Dashboard Runbook
+# EdgeX Ops Intelligence Runbook
 
 Operational procedures for the V1 production release. Treat this as
-the canonical source for "the dashboard is broken, what do I do?";
+the canonical source for "the Ops Intelligence liquidity module is broken, what do I do?";
 escalate only when a section here does not cover the symptom.
 
 ## 1. Topology
@@ -17,7 +17,7 @@ escalate only when a section here does not cover the symptom.
                                                  +---> :3306 (MySQL persistence)
 ```
 
-Single Compose project (`edgex-dashboard`). All bind on 127.0.0.1 by
+Single Compose project (`edgex-ops-intelligence`). All bind on 127.0.0.1 by
 default; expose via a reverse proxy if external access is required.
 
 ## 2. Health and Readiness Probes
@@ -63,7 +63,7 @@ Either `/api/health` itself is failing (very rare; usually OOM) or the
 inner `wget` cannot reach 127.0.0.1:8080 (port mis-bind). Confirm:
 
 ```
-docker exec -u 65532 edgex-dashboard-backend-1 wget -qO- http://127.0.0.1:8080/api/health
+docker exec -u 65532 edgex-ops-intelligence-backend-1 wget -qO- http://127.0.0.1:8080/api/health
 ```
 
 If this works but Docker still reports unhealthy, check `interval` and
@@ -76,7 +76,7 @@ platforms. The largest (`t_orderbook_snapshot`) accumulates >1M rows
 per week. Run the prune script:
 
 ```
-# Dry run first -- writes a JSON plan to ${DASHBOARD_DATA_DIR}/prune-history/
+# Dry run first -- writes a JSON plan to ${OPS_INTELLIGENCE_DATA_DIR}/prune-history/
 make -C backend prune-snapshots-dry DAYS=30
 
 # Apply if the plan looks right
@@ -136,7 +136,7 @@ Diagnosis order:
 2. Find which native ticker is failing:
 
    ```
-   docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -e \
+   docker exec deploy-mysql-1 mysql -uroot -proot edgex_ops_intelligence -e \
      "SELECT platform, status, error_message, snapshot_ts
         FROM t_symbol_volume_snapshot
        WHERE display_symbol='ETH-USDT (perp)'

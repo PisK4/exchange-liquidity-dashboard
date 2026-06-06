@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 	"gopkg.in/yaml.v3"
 )
 
@@ -36,7 +36,7 @@ type Runtime struct {
 	// CooldownFailureThreshold is the number of consecutive failures for a
 	// (platform, canonical) pair before the collector pauses collecting
 	// it. CooldownDuration is the pause length. Both default to safe
-	// values (3 / 5m) and can be overridden in edgex-liquidity-dashboard.yaml.
+	// values (3 / 5m) and can be overridden in the dashboard config file.
 	CooldownFailureThreshold int           `json:"cooldown_failure_threshold,omitempty"`
 	CooldownDuration         time.Duration `json:"cooldown_duration,omitempty"`
 	// Top30Divergence configures the CEX-vs-DEX comparison view inside
@@ -155,7 +155,7 @@ type ListedUniverseRefreshConfig struct {
 // engine tick to keep a fresh deploy from bursting the Lark channel.
 //
 // Callback.Secret / Callback.OperatorAllow / Callback.MaxClockSkew
-// flow into the api.NewServer options via cmd/dashboard wiring; the
+// flow into the api.NewServer options via cmd/ops-intelligence wiring; the
 // secret is never persisted and never logged.
 type ListingDecisionCardConfig struct {
 	Enabled        bool                          `json:"enabled"`
@@ -417,7 +417,7 @@ type BackfillConfig struct {
 
 // CoinGeckoConfig controls the CoinGecko derivatives ingestion path.
 //
-// Proxy is read as a literal URL string from edgex-liquidity-dashboard.yaml; the CoinGecko
+// Proxy is read as a literal URL string from the dashboard config file; the CoinGecko
 // client builds its own *http.Transport from this URL. Process-level
 // HTTPS_PROXY / HTTP_PROXY env vars are intentionally NOT consulted, so that
 // turning the CoinGecko proxy on never silently routes the other 9 native
@@ -536,7 +536,7 @@ func Load(configDir string) (Config, error) {
 	loadDotEnv(filepath.Join(configDir, ".env"))
 	cfg := Default()
 
-	mainCfg, hasMain, err := loadDashboardConfig(filepath.Join(configDir, "edgex-liquidity-dashboard.yaml"))
+	mainCfg, hasMain, err := loadDashboardConfig(filepath.Join(configDir, "edgex-ops-intelligence.yaml"))
 	if err != nil {
 		return Config{}, err
 	}
@@ -554,7 +554,7 @@ func Load(configDir string) (Config, error) {
 		}
 	} else {
 		cfg.Catalog = defaultCatalogConfig()
-		cfg.Database.DSN = os.Getenv("DASHBOARD_MYSQL_DSN")
+		cfg.Database.DSN = os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN")
 	}
 
 	endpoints, err := loadEndpoints(filepath.Join(configDir, cfg.Catalog.ExchangeEndpointsFile))
@@ -890,7 +890,7 @@ func defaultCollectionConfig() CollectionConfig {
 
 // defaultBackfillConfig keeps Top30 backfill enabled by default; an
 // operator who explicitly wants to disable it can set
-// `backfill.enabled: false` in edgex-liquidity-dashboard.yaml.
+// `backfill.enabled: false` in the dashboard config file.
 func defaultBackfillConfig() BackfillConfig {
 	return BackfillConfig{
 		Enabled:                true,

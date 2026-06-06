@@ -5,7 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"edgex-dashboard/backend/internal/adapter"
+	"edgex-ops-intelligence/backend/internal/adapter"
 )
 
 func TestMatchInstrumentCryptoFallsBackToCanonical(t *testing.T) {

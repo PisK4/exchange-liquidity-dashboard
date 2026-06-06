@@ -32,17 +32,17 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/listing"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/listing"
 )
 
 func main() {
 	var (
-		configDir = flag.String("config-dir", "../config", "Path to the dashboard config directory; values from edgex-liquidity-dashboard.yaml are used as defaults when --mysql-dsn / --webhook-url / --proxy / --dashboard-base are not given")
-		dsn       = flag.String("mysql-dsn", "", "MySQL DSN for the dashboard DB; falls back to DASHBOARD_MYSQL_DSN env, then Database.DSN from config-dir")
+		configDir = flag.String("config-dir", "../config", "Path to the EdgeX Ops Intelligence config directory; values from the dashboard config file are used as defaults when --mysql-dsn / --webhook-url / --proxy / --dashboard-base are not given")
+		dsn       = flag.String("mysql-dsn", "", "MySQL DSN for the EdgeX Ops Intelligence DB; falls back to OPS_INTELLIGENCE_MYSQL_DSN env, then Database.DSN from config-dir")
 		webhook   = flag.String("webhook-url", "", "Lark webhook URL; falls back to Alert.WebHookP3 from config-dir; leave both empty for dry-run (stdout only)")
 		proxy     = flag.String("proxy", "", "Optional HTTP(S) proxy for the webhook POST; falls back to Runtime.listing_agent.delivery.proxy from config-dir. Note: host CLI typically needs 127.0.0.1:<port> while the in-container value is host.docker.internal:<port>")
-		dashboard = flag.String("dashboard-base", "", "Dashboard base URL inserted into the '查看 Top30 详情' button; falls back to Runtime.listing_agent.delivery.dashboard_base_url from config-dir; empty hides the button")
+		dashboard = flag.String("dashboard-base", "", "EdgeX Ops Intelligence base URL inserted into the '查看 Top30 详情' button; falls back to Runtime.listing_agent.delivery.dashboard_base_url from config-dir; empty hides the button")
 		dryRun    = flag.Bool("dry-run", false, "Print rendered card JSON to stdout but never POST")
 		limit     = flag.Int("limit", 0, "Cap the number of events rendered/posted (0 = no cap)")
 	)
@@ -55,7 +55,7 @@ func main() {
 	resolveFromConfig(cfgErr == nil, &cfg, dsn, webhook, proxy, dashboard)
 
 	if strings.TrimSpace(*dsn) == "" {
-		log.Fatal("missing MySQL DSN: pass --mysql-dsn, set DASHBOARD_MYSQL_DSN, or fill Database in config-dir")
+		log.Fatal("missing MySQL DSN: pass --mysql-dsn, set OPS_INTELLIGENCE_MYSQL_DSN, or fill Database in config-dir")
 	}
 	db, err := sql.Open("mysql", *dsn)
 	if err != nil {
@@ -125,7 +125,7 @@ func main() {
 
 // resolveFromConfig fills empty CLI flag values from config + env. Precedence:
 //  1. Explicit flag value (non-empty after TrimSpace).
-//  2. Environment variable (DASHBOARD_MYSQL_DSN for DSN; nothing for the others).
+//  2. Environment variable (OPS_INTELLIGENCE_MYSQL_DSN for DSN; nothing for the others).
 //  3. Loaded YAML config (only when configOK).
 //
 // Webhook: matches the production resolver (Alert.WebHookP3 first, then
@@ -137,7 +137,7 @@ func main() {
 // 127.0.0.1 so the same config works for both runtimes.
 func resolveFromConfig(configOK bool, cfg *config.Config, dsn, webhook, proxy, dashboard *string) {
 	if strings.TrimSpace(*dsn) == "" {
-		if env := strings.TrimSpace(os.Getenv("DASHBOARD_MYSQL_DSN")); env != "" {
+		if env := strings.TrimSpace(os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN")); env != "" {
 			*dsn = env
 		} else if configOK && strings.TrimSpace(cfg.Database.DSN) != "" {
 			*dsn = cfg.Database.DSN

@@ -5,7 +5,7 @@ import { DashboardShell } from '@/components/dashboard-shell';
 import {
   getFrontendURLLookup,
   getJSONWithFallback,
-  type DashboardMeta,
+  type OpsIntelligenceMeta,
   type FrontendURLLookup,
   type LiquiditySnapshot,
   type QualitySnapshot,
@@ -29,7 +29,7 @@ type Query = Record<string, string | undefined> & {
 };
 
 type DashboardData = {
-  meta: DashboardMeta;
+  meta: OpsIntelligenceMeta;
   liquidity: LiquiditySnapshot;
   quality: QualitySnapshot;
   share: ShareSnapshot;
@@ -61,7 +61,7 @@ type DashboardData = {
 function buildPaths(query: Query) {
   const symbolParam = encodeURIComponent(query.symbol);
   return {
-    meta: '/api/dashboard/meta',
+    meta: '/api/ops-intelligence/meta',
     liquidity: `/api/snapshot/liquidity?symbol=${symbolParam}`,
     quality: `/api/snapshot/quality?symbol=${symbolParam}`,
     share: `/api/snapshot/share?window=${query.window}`,
@@ -238,7 +238,7 @@ export function DashboardClient({ query, initialWatchlist = [] }: { query: Query
     const fetchAll = async () => {
       try {
         const [meta, liquidity, quality, share, top30, top30Divergence, lookup, liquidityByCanonical, qualityByCanonical] = await Promise.all([
-          getJSONWithFallback<DashboardMeta>(metaPath, { signal: controller.signal }),
+          getJSONWithFallback<OpsIntelligenceMeta>(metaPath, { signal: controller.signal }),
           getJSONWithFallback<LiquiditySnapshot>(liquidityPath, { signal: controller.signal }),
           getJSONWithFallback<QualitySnapshot>(qualityPath, { signal: controller.signal }),
           getJSONWithFallback<ShareSnapshot>(sharePath, { signal: controller.signal }),

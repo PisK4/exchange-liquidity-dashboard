@@ -12,7 +12,7 @@ COPY backend/ ./
 ARG BUILD_VERSION=dev
 RUN CGO_ENABLED=0 go build \
         -ldflags "-X main.version=${BUILD_VERSION}" \
-        -o /out/dashboard ./cmd/dashboard
+        -o /out/ops-intelligence ./cmd/ops-intelligence
 RUN CGO_ENABLED=0 go build -o /out/coingecko-backfill ./cmd/coingecko-backfill
 
 FROM alpine:3.20
@@ -24,7 +24,7 @@ RUN apk add --no-cache ca-certificates wget
 # `user: "65532:65532"` pin so file permissions on bind-mounted configs
 # behave consistently across hosts.
 RUN addgroup -g 65532 -S nonroot && adduser -u 65532 -S nonroot -G nonroot
-COPY --from=build /out/dashboard /app/dashboard
+COPY --from=build /out/ops-intelligence /app/ops-intelligence
 COPY --from=build /out/coingecko-backfill /app/coingecko-backfill
 COPY config/ /config/
 COPY backend/docs/raw-instruments/ /app/docs/raw-instruments/
@@ -32,9 +32,9 @@ COPY backend/docs/raw-instruments/ /app/docs/raw-instruments/
 # forgets the named volume mount still lets the listing engine write
 # its refreshed listed_universe.runtime.yaml (Dockerfile baseline)
 # instead of crashing on a read-only filesystem.
-RUN mkdir -p /var/lib/edgex-dashboard && chown -R nonroot:nonroot /var/lib/edgex-dashboard
+RUN mkdir -p /var/lib/edgex-ops-intelligence && chown -R nonroot:nonroot /var/lib/edgex-ops-intelligence
 USER nonroot
 EXPOSE 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
     CMD wget -qO- http://127.0.0.1:8080/api/health || exit 1
-CMD ["/app/dashboard", "--role=all", "--addr=:8080"]
+CMD ["/app/ops-intelligence", "--role=all", "--addr=:8080"]

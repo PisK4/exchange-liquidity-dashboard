@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/activity"
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/activity"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 var allActivityCards = []string{"daily", "event", "update", "review", "weekly", "health"}
@@ -24,10 +24,10 @@ type previewCard struct {
 
 func main() {
 	var (
-		configDir = flag.String("config-dir", "../config", "Path to dashboard config directory")
+		configDir = flag.String("config-dir", "../config", "Path to the EdgeX Ops Intelligence config directory")
 		cardFlag  = flag.String("card", "all", "Card names to render: all or comma-separated daily,event,update,review,weekly,health")
 		dryRun    = flag.Bool("dry-run", true, "Print rendered card JSON to stdout")
-		dashboard = flag.String("dashboard-base", "", "Dashboard base URL for CTA/deep-link buttons")
+		dashboard = flag.String("dashboard-base", "", "EdgeX Ops Intelligence base URL for CTA/deep-link buttons")
 		secret    = flag.String("decision-token-secret", "", "Preview-only decision token secret; falls back to env then preview-secret")
 	)
 	flag.Parse()

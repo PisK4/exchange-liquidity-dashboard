@@ -71,12 +71,12 @@ production.
 - **`/api/readiness` route**: 503 when catalog is empty or MySQL ping
   fails. In-memory mode still passes.
 - **`api.Version` package var + `--version` flag** wired through
-  `cmd/dashboard` and the new `make build` target with
+  `cmd/ops-intelligence` and the new `make build` target with
   `BUILD_VERSION = git describe`.
 - **Snapshot pruning**: `backend/scripts/prune-snapshots/main.go`
   with --days (floor 7), --confirm (default dry-run), --batch-size
   (default 10000), --data-dir. Writes JSON prune-history to
-  `${DASHBOARD_DATA_DIR}/prune-history/<RFC3339>.json` on every run.
+  `${OPS_INTELLIGENCE_DATA_DIR}/prune-history/<RFC3339>.json` on every run.
 - **Migration 000007**: time-window indexes on the six snapshot
   tables that lacked them; t_top30_snapshot excluded (own auto-prune)
   and t_coingecko_platform_volume_snapshot excluded (already had
@@ -90,7 +90,7 @@ production.
   empty HTTP_PROXY default; `deploy/.env` gitignored.
 - **`deploy/Makefile`**: up/down/logs/ps/smoke/smoke-readiness/
   backup-mysql/restore-mysql/build-image/test-image with
-  `--project-name edgex-dashboard` so the production stack is
+  `--project-name edgex-ops-intelligence` so the production stack is
   namespaced away from any developer's deploy-* containers.
 - **`backend/scripts/verify-frontend-urls`**: HEAD-then-GET probe
   with --proxy support; writes
@@ -124,7 +124,7 @@ production.
   variables; CATALOG_ARGS conditional --proxy; new
   `prune-snapshots-{dry,confirm}` and `verify-urls` targets;
   BUILD_VERSION via git describe + LDFLAGS injection; `make build`
-  target writing bin/dashboard.
+  target writing bin/ops-intelligence.
 - **`Dockerfile.backend`**: ARG BUILD_VERSION → -ldflags injection;
   apk add ca-certificates + wget; nonroot 65532:65532 user; HEALTHCHECK
   on /api/health.

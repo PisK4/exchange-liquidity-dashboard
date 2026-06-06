@@ -43,7 +43,7 @@ func TestLoadActivityAgentConfigAndWebhook(t *testing.T) {
 	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), "endpoints: {}\n")
 	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), "platforms: [edgeX]\nsymbols: []\n")
 	mustWrite(t, filepath.Join(dir, "instrument_catalog.yaml"), "schema_version: 1\nplatforms: {}\n")
-	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
 Alert:
   Enabled: true
   Webhooks:

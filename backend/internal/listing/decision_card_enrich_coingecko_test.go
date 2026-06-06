@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"edgex-dashboard/backend/internal/marketdata/coingecko"
+	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
 )
 
 type stubCoinGecko struct {

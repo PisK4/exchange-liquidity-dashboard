@@ -12,7 +12,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 // ListedUniverseRefreshArgs bundles every value RefreshListedUniverseFromSnapshots

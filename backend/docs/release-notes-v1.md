@@ -1,7 +1,9 @@
-# EdgeX Dashboard v1.0.0 Release Notes
+# EdgeX Ops Intelligence v1.0.0 Release Notes
 
 **Tag**: v1.0.0
 **Date**: 2026-05-23
+
+> Naming note: this historical V1 release shipped the Liquidity Dashboard before the broader **EdgeX Ops Intelligence** naming was adopted. The Liquidity Dashboard remains the listed-market health module under EdgeX Ops Intelligence.
 
 This is the first production-ready release. It ships the complete V1
 liquidity dashboard with 10 exchange adapters, 74 canonicals (66 with

@@ -6,9 +6,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"edgex-dashboard/backend/internal/collector"
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/collector"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 func TestHealthSurfacesBuildVersionAndCatalogStats(t *testing.T) {
@@ -36,6 +36,15 @@ func TestHealthSurfacesBuildVersionAndCatalogStats(t *testing.T) {
 	}
 	if got["build_version"] != "v1.0.0-test" {
 		t.Errorf("build_version = %v, want v1.0.0-test", got["build_version"])
+	}
+	if got["service"] != "edgex-ops-intelligence" {
+		t.Errorf("service = %v, want edgex-ops-intelligence", got["service"])
+	}
+	if got["product"] != "edgex-ops-intelligence" {
+		t.Errorf("product = %v, want edgex-ops-intelligence", got["product"])
+	}
+	if got["display_name"] != "EdgeX Ops Intelligence" {
+		t.Errorf("display_name = %v, want EdgeX Ops Intelligence", got["display_name"])
 	}
 	deps, ok := got["deps"].(map[string]any)
 	if !ok {

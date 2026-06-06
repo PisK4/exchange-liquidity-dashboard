@@ -15,8 +15,8 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"edgex-dashboard/backend/internal/activity"
-	"edgex-dashboard/backend/internal/collector"
+	"edgex-ops-intelligence/backend/internal/activity"
+	"edgex-ops-intelligence/backend/internal/collector"
 )
 
 func TestActivityEngineProducesAndDeliversOutbox(t *testing.T) {

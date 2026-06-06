@@ -28,7 +28,7 @@ import (
 	"sync"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 
 	"gopkg.in/yaml.v3"
 )
@@ -238,7 +238,7 @@ func tryProbe(client *http.Client, method, target string, timeout time.Duration,
 	if err != nil {
 		return singleProbeResult{Error: err.Error()}
 	}
-	req.Header.Set("User-Agent", "edgex-dashboard-url-verifier/1.0")
+	req.Header.Set("User-Agent", "edgex-ops-intelligence-url-verifier/1.0")
 	begin := time.Now()
 	resp, err := client.Do(req)
 	if err != nil {

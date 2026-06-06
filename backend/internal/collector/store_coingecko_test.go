@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 func newCoinGeckoStore(t *testing.T) *Store {
@@ -235,11 +235,11 @@ func TestTop30ReturnsUnsupportedForUnknownPlatform(t *testing.T) {
 	}
 }
 
-func TestDashboardMetaIncludesCoinGeckoLineageWhenEnabled(t *testing.T) {
+func TestOpsIntelligenceMetaIncludesCoinGeckoLineageWhenEnabled(t *testing.T) {
 	cfg := config.Default()
 	cfg.Runtime.CoinGecko.Enabled = true
 	store := NewStore(cfg)
-	meta := store.DashboardMeta()
+	meta := store.OpsIntelligenceMeta()
 	ds, ok := meta["data_sources"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected data_sources block, got %+v", meta)

@@ -3,7 +3,7 @@ package listing
 import (
 	"testing"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 func TestBuildEdgexListedLookupNilUniverseReturnsUnknown(t *testing.T) {

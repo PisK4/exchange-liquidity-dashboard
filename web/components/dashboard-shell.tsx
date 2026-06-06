@@ -10,13 +10,13 @@ import { SymbolBlock } from '@/components/symbol-block';
 import { Top30DivergenceView } from '@/components/top30-divergence-view';
 import { WatchlistToolbar } from '@/components/watchlist-toolbar';
 import { resolveSymbolContext, type SymbolContext } from '@/components/lib/symbol-context';
-import { money, moneyAuto, pct, ratio, type DashboardMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30DivergenceSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
+import { money, moneyAuto, pct, ratio, type OpsIntelligenceMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30DivergenceSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
 import { normalizeSymbol } from '@/lib/watchlist';
 
 type Query = Record<string, string | undefined>;
 
 type DashboardData = {
-  meta: DashboardMeta;
+  meta: OpsIntelligenceMeta;
   liquidity: LiquiditySnapshot;
   quality: QualitySnapshot;
   share: ShareSnapshot;
@@ -238,8 +238,8 @@ export function DashboardShell({
     <>
       <header className="topbar">
         <span className="logo">◆ edgeX</span>
-        <span className="title">流动性 &amp; 深度监控面板</span>
-        <span className="crumb">EdgeX Ops / Liquidity Dashboard</span>
+        <span className="title">EdgeX Ops Intelligence</span>
+        <span className="crumb">Liquidity Dashboard</span>
         <span className="spacer" />
         {/* <span className="meta">数据快照 · {snapshotTime(data, tab)} · 自动刷新 {data.meta.refresh_interval_sec || 30}s</span> */}
       </header>
@@ -267,7 +267,7 @@ export function DashboardShell({
           />
         ) : null}
       </main>
-      <footer className="footer">edgeX Liquidity Monitor · 正式版</footer>
+      <footer className="footer">EdgeX Ops Intelligence · Liquidity</footer>
     </>
   );
 }
@@ -333,7 +333,7 @@ function LiquidityTab({
   );
 }
 
-type SymbolMeta = NonNullable<DashboardMeta['categories']>[number]['symbols'][number];
+type SymbolMeta = NonNullable<OpsIntelligenceMeta['categories']>[number]['symbols'][number];
 
 // FundingTab is the dedicated 资金费率 surface, sitting between the
 // Liquidity and Quality Tabs. It mirrors the v2 stacked-block layout:

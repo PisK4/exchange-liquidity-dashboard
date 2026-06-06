@@ -21,7 +21,7 @@ func TestOpenAPIResponsesHaveSchemas(t *testing.T) {
 		"HealthResponse",
 		"SymbolsResponse",
 		"CoverageResponse",
-		"DashboardMeta",
+		"OpsIntelligenceMeta",
 		"LiquiditySnapshot",
 		"QualitySnapshot",
 		"ShareSnapshot",

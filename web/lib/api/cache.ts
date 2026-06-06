@@ -4,7 +4,7 @@
 // existing localStorage entry under the previous namespace, which is the
 // intended fail-safe — better an empty fallback than a crash on stale shape.
 export const CACHE_SCHEMA_VERSION = 'v1';
-const NAMESPACE = `edgex-dashboard:${CACHE_SCHEMA_VERSION}:`;
+const NAMESPACE = `edgex-ops-intelligence:${CACHE_SCHEMA_VERSION}:`;
 const TTL_MS = 24 * 60 * 60 * 1000;
 
 type Envelope<T> = { ts: number; data: T };

@@ -8,9 +8,9 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
-	"edgex-dashboard/backend/internal/marketdata/coingecko"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
 )
 
 // fakeDerivativesPayload covers 3 platforms (binance, mexc, lighter) so the
@@ -257,7 +257,7 @@ func TestCoinGeckoCollectorAdvancesLastPullTS(t *testing.T) {
 	if err := col.CollectOnce(context.Background()); err != nil {
 		t.Fatalf("CollectOnce: %v", err)
 	}
-	meta := store.DashboardMeta()
+	meta := store.OpsIntelligenceMeta()
 	ds := meta["data_sources"].(map[string]any)
 	cg := ds["coingecko"].(map[string]any)
 	last, ok := cg["last_pull_ts"].(time.Time)

@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // defaultCatalogResolverTTL is the per-platform refresh window for
@@ -23,7 +23,7 @@ const defaultCatalogResolverTTL = 5 * time.Minute
 // SnapshotRow is the minimum projection of t_listing_instrument_snapshot
 // the catalog resolver needs. Keeping it in this package (rather than
 // importing listing.InstrumentSnapshot) avoids a circular dependency:
-// the listing package owns the Repository; cmd/dashboard wires an
+// the listing package owns the Repository; cmd/ops-intelligence wires an
 // adapter that fans out the listing.Repository method into this
 // shape.
 type SnapshotRow struct {

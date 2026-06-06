@@ -1,6 +1,6 @@
 Database:
   # Fill these in Nacos for dev/prod. Leave empty for local in-memory mode
-  # unless DASHBOARD_MYSQL_DSN is provided via .env or environment.
+  # unless OPS_INTELLIGENCE_MYSQL_DSN is provided via .env or environment.
   Name: ""
   Addr: ""
   UserName: ""
@@ -11,7 +11,10 @@ Database:
   ConnMaxLifeTime: 30m
 
 Alert:
-  AppName: edgex-liquidity-dashboard
+  # Alert display identity. Runtime/deployment identifiers such as
+  # edgex-ops-intelligence, OPS_INTELLIGENCE_* and edgex_ops_intelligence are intentionally
+  # preserved elsewhere for compatibility.
+  AppName: edgex-ops-intelligence
   Enabled: true
   FeishuUid: ""
   DestPhoneNumber: ""
@@ -37,10 +40,10 @@ Alert:
     # dedicated bot in the Liquidity group and paste its URL here
     # before flipping enabled=true.
     Liquidity: ""
-    # Activity Agent uses its own Lark bot. Keep this empty in committed
-    # config; local/dev/prod webhooks must be injected through
-    # ACTIVITY_LARK_WEBHOOK_URL or a private runtime overlay.
-    Activity: ""
+    # Activity Agent uses its own Lark bot for local operator validation.
+    # Production should still inject this through ACTIVITY_LARK_WEBHOOK_URL
+    # or a private runtime overlay.
+    Activity: "https://open.larksuite.com/open-apis/bot/v2/hook/091da0b1-bcfe-432e-a15a-79dfeba56714"
 
 Catalog:
   ExchangeEndpointsFile: exchange_endpoints.yaml
@@ -249,10 +252,10 @@ Runtime:
       enabled: true
       interval: 15m
       # seed_path is intentionally relative to --config-dir; the
-      # runtime path lives under DASHBOARD_DATA_DIR so a restart does
+      # runtime path lives under OPS_INTELLIGENCE_DATA_DIR so a restart does
       # not lose the latest refresh.
       seed_path: listed_universe.yaml
-      runtime_path: ${DASHBOARD_DATA_DIR}/listed_universe.runtime.yaml
+      runtime_path: ${OPS_INTELLIGENCE_DATA_DIR}/listed_universe.runtime.yaml
       fresh_window: 30m
       seed_shrink_floor: 0.5
       covered_platforms:
@@ -274,7 +277,7 @@ Runtime:
       top30_webhook_url: ""
       top30_webhook_url_env: ""
       top30_webhook_secret: ""
-      # Dashboard base URL embedded into the Top30 push card's
+      # EdgeX Ops Intelligence base URL embedded into the Top30 push card's
       # "📊 查看 Top30 详情" primary button. The renderer appends
       # "?symbol=<display_symbol>" (or "&symbol=" if the base already
       # has a query string), so put your tab pre-selection here, e.g.
@@ -283,7 +286,7 @@ Runtime:
       # button still renders). Different deployments fill this with
       # their own URL — local Docker stacks typically use something
       # like "http://localhost:3001/?tab=top30"; production should set
-      # the public dashboard hostname here. The preview CLI in
+      # the public Ops Intelligence hostname here. The preview CLI in
       # backend/scripts/top30-preview reads this same value via
       # --config-dir, so changing it here covers both the production
       # listing engine and ad-hoc operator previews.
@@ -391,9 +394,7 @@ Runtime:
         max_clock_skew: 300s
         operator_allow: []
 
-  # Operations Activity Radar. Webhook and decision token secrets must
-  # come from env/secret injection; committed YAML intentionally keeps
-  # the Activity webhook empty.
+  # Operations Activity Radar.
   activity_agent:
     enabled: true
     default_poll_interval: 1h
@@ -411,8 +412,8 @@ Runtime:
       enabled: true
       webhook_url_env: ACTIVITY_LARK_WEBHOOK_URL
       collect_only_without_webhook: true
-      proxy: ""
-      dashboard_base_url: ""
+      proxy: "http://host.docker.internal:7897"
+      dashboard_base_url: "http://127.0.0.1:3001/activity"
       max_per_tick: 10
       send_spacing: 30s
       source_health_cooldown: 1h

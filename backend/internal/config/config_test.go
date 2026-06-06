@@ -7,10 +7,10 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
-func TestLoadReadsDashboardMainConfigAndDatabase(t *testing.T) {
+func TestLoadReadsOpsIntelligenceMainConfigAndDatabase(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "symbols-dev.yaml"), `
 symbols:
@@ -37,18 +37,18 @@ platforms:
       settle_asset: USDT
       source_endpoint: https://example.invalid/binance-depth
 `)
-	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
 Database:
-  Name: edgex_dashboard
+  Name: edgex_ops_intelligence
   Addr: mysql.dev:3306
-  UserName: dashboard
+  UserName: ops
   Password: secret
   ParseTime: true
   MaxIdleConn: 5
   MaxOpenConn: 12
   ConnMaxLifeTime: 45m
 Alert:
-  AppName: edgex-liquidity-dashboard
+  AppName: edgex-ops-intelligence
   Enabled: true
   WebHookP12: p12-hook
   WebHookP3: p3-hook
@@ -67,13 +67,13 @@ Catalog:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.Database.Name != "edgex_dashboard" || cfg.Database.Addr != "mysql.dev:3306" || cfg.Database.UserName != "dashboard" {
+	if cfg.Database.Name != "edgex_ops_intelligence" || cfg.Database.Addr != "mysql.dev:3306" || cfg.Database.UserName != "ops" {
 		t.Fatalf("database block not loaded: %+v", cfg.Database)
 	}
-	if cfg.MySQLDSN() != "dashboard:secret@tcp(mysql.dev:3306)/edgex_dashboard?parseTime=true" {
+	if cfg.MySQLDSN() != "ops:secret@tcp(mysql.dev:3306)/edgex_ops_intelligence?parseTime=true" {
 		t.Fatalf("MySQLDSN() = %q", cfg.MySQLDSN())
 	}
-	if !cfg.Alert.Enabled || cfg.Alert.AppName != "edgex-liquidity-dashboard" || cfg.Alert.WebHookP12 != "p12-hook" {
+	if !cfg.Alert.Enabled || cfg.Alert.AppName != "edgex-ops-intelligence" || cfg.Alert.WebHookP12 != "p12-hook" {
 		t.Fatalf("alert block not loaded: %+v", cfg.Alert)
 	}
 	if cfg.Runtime.CollectionInterval != 2*time.Minute || cfg.Runtime.HTTPTimeout != 9*time.Second {
@@ -84,10 +84,50 @@ Catalog:
 	}
 }
 
-func TestLoadFallsBackToDotEnvWhenDashboardConfigMissing(t *testing.T) {
+func TestLoadReadsOpsIntelligenceConfig(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
+symbols:
+  - display_symbol: ETH-USDT (perp)
+    canonical: ETH
+platforms: [binance]
+`)
+	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), `
+endpoints:
+  binance: https://example.invalid/binance
+`)
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
+Database:
+  Name: ops_intelligence
+  Addr: mysql.ops:3306
+  UserName: ops
+  Password: secret
+Alert:
+  AppName: edgex-ops-intelligence
+  Enabled: true
+Runtime:
+  collection_interval: 3m
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Database.Name != "ops_intelligence" || cfg.Database.Addr != "mysql.ops:3306" {
+		t.Fatalf("ops intelligence config not loaded: %+v", cfg.Database)
+	}
+	if !cfg.Alert.Enabled || cfg.Alert.AppName != "edgex-ops-intelligence" {
+		t.Fatalf("ops intelligence alert block not loaded: %+v", cfg.Alert)
+	}
+	if cfg.Runtime.CollectionInterval != 3*time.Minute {
+		t.Fatalf("collection interval = %s, want 3m", cfg.Runtime.CollectionInterval)
+	}
+}
+
+func TestLoadFallsBackToDotEnvWhenOpsIntelligenceConfigMissing(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, ".env"), `
-DASHBOARD_MYSQL_DSN=env_user:env_pass@tcp(mysql.env:3306)/env_dashboard?parseTime=true
+OPS_INTELLIGENCE_MYSQL_DSN=env_user:env_pass@tcp(mysql.env:3306)/env_ops_intelligence?parseTime=true
 COINGECKO_DEMO_API_KEY=demo-key-from-env-file
 `)
 	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
@@ -105,7 +145,7 @@ endpoints:
 	if err != nil {
 		t.Fatalf("Load() error = %v", err)
 	}
-	if cfg.MySQLDSN() != "env_user:env_pass@tcp(mysql.env:3306)/env_dashboard?parseTime=true" {
+	if cfg.MySQLDSN() != "env_user:env_pass@tcp(mysql.env:3306)/env_ops_intelligence?parseTime=true" {
 		t.Fatalf("MySQLDSN() = %q", cfg.MySQLDSN())
 	}
 	if got := os.Getenv("COINGECKO_DEMO_API_KEY"); got != "demo-key-from-env-file" {
@@ -128,7 +168,7 @@ endpoints:
   binance: https://example.invalid/binance-depth
   hyperliquid: https://example.invalid/hyperliquid-info
 `)
-	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
 collection_interval: 90s
 display_fallback_window: 45m
 depth_tiers: [0.001, 0.02]
@@ -231,7 +271,7 @@ platforms: [binance]
 endpoints:
   binance: https://example.invalid/binance
 `)
-	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
 backfill:
   per_platform_concurrency: 9
   per_platform_rate_per_sec: 10
@@ -265,7 +305,7 @@ platforms: [edgeX]
 endpoints:
   edgeX: https://example.invalid/edgex
 `)
-	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
 coingecko:
   enabled: true
   base_url: https://example.invalid/cg/v3
@@ -329,7 +369,7 @@ platforms: [edgeX]
 endpoints:
   edgeX: https://example.invalid/edgex
 `)
-	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
 collection_interval: 90s
 `)
 	cfg, err := Load(dir)
@@ -373,9 +413,9 @@ func TestCommittedRuntimeAlignsCoinGeckoCadence(t *testing.T) {
 	if cfg.Runtime.Collection.PerPlatformRatePerSec <= 0 {
 		t.Fatalf("collection per_platform_rate_per_sec must be configured, got %d", cfg.Runtime.Collection.PerPlatformRatePerSec)
 	}
-	raw, err := os.ReadFile("../../../config/edgex-liquidity-dashboard.yaml")
+	raw, err := os.ReadFile("../../../config/edgex-ops-intelligence.yaml")
 	if err != nil {
-		t.Fatalf("read committed edgex-liquidity-dashboard.yaml: %v", err)
+		t.Fatalf("read committed edgex-ops-intelligence.yaml: %v", err)
 	}
 	text := string(raw)
 	if cfg.Runtime.ListingAgent.Candidate.HistoricalListingGracePeriod != 48*time.Hour {
@@ -383,7 +423,7 @@ func TestCommittedRuntimeAlignsCoinGeckoCadence(t *testing.T) {
 	}
 	for _, needle := range []string{"collection:", "per_platform_concurrency:", "per_platform_rate_per_sec:", "historical_listing_grace_period:"} {
 		if !strings.Contains(text, needle) {
-			t.Fatalf("edgex-liquidity-dashboard.yaml should explicitly declare %q", needle)
+			t.Fatalf("edgex-ops-intelligence.yaml should explicitly declare %q", needle)
 		}
 	}
 }
@@ -784,7 +824,7 @@ Runtime:
           - ou_ops_alice
           - ou_ops_bob
 `
-	if err := os.WriteFile(filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), []byte(body), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "edgex-ops-intelligence.yaml"), []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "exchange_endpoints.yaml"), []byte("endpoints: {}\n"), 0o644); err != nil {
@@ -934,7 +974,7 @@ symbols:
     instrument_kind: canonical
 platforms: [edgeX]
 `)
-	mustWrite(t, filepath.Join(dir, "edgex-liquidity-dashboard.yaml"), `
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
 collection_interval: 5m
 http_timeout: 5s
 staleness_by_category:

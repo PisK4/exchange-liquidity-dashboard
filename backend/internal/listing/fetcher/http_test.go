@@ -10,7 +10,7 @@ import (
 )
 
 // TestNewHTTPClientRejectsMalformedProxy locks the fail-loud contract:
-// production cmd/dashboard relies on configuration-time validation so
+// production cmd/ops-intelligence relies on configuration-time validation so
 // a typo in `runtime.exchange_proxy` does not silently route every
 // fetcher direct-to-internet and bypass the operator's egress
 // expectations.

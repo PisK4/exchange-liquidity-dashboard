@@ -2,13 +2,13 @@
 # directory: `cd deploy && make up`.
 #
 # COMPOSE_PROJECT_NAME deliberately namespaces these containers as
-# `edgex-dashboard-*` so they can coexist on the same host as a
+# `edgex-ops-intelligence-*` so they can coexist on the same host as a
 # developer's `deploy-*` containers without conflicting on names or the
 # default network.
 
 .PHONY: help up down logs ps smoke smoke-readiness backup-mysql restore-mysql build-image test-image
 
-PROJECT_NAME ?= edgex-dashboard
+PROJECT_NAME ?= edgex-ops-intelligence
 COMPOSE = docker compose --project-name $(PROJECT_NAME)
 
 # BUILD_VERSION is forwarded into the Dockerfile as a build arg so the
@@ -18,7 +18,7 @@ COMPOSE = docker compose --project-name $(PROJECT_NAME)
 BUILD_VERSION ?= $(shell cd .. && git describe --tags --always --dirty 2>/dev/null || echo dev)
 
 help:
-	@echo "EdgeX Dashboard deploy targets:"
+	@echo "EdgeX Ops Intelligence deploy targets:"
 	@echo "  make up              - bring up MySQL + backend + web in detached mode"
 	@echo "  make down            - stop and remove containers (keeps mysql-data volume)"
 	@echo "  make logs            - tail backend + web logs"
@@ -65,13 +65,13 @@ backup-mysql:
 	    --single-transaction \
 	    --routines \
 	    --triggers \
-	    $${MYSQL_DATABASE:-edgex_dashboard} | gzip > $$OUT; \
+	    $${MYSQL_DATABASE:-edgex_ops_intelligence} | gzip > $$OUT; \
 	ls -lh $$OUT
 
 restore-mysql:
 	@if [ -z "$(FILE)" ]; then echo "FILE=<path> is required"; exit 1; fi
 	gunzip -c $(FILE) | $(COMPOSE) exec -T mysql mysql \
-	    -uroot -p$${MYSQL_ROOT_PASSWORD:-root} $${MYSQL_DATABASE:-edgex_dashboard}
+	    -uroot -p$${MYSQL_ROOT_PASSWORD:-root} $${MYSQL_DATABASE:-edgex_ops_intelligence}
 
 build-image:
 	BUILD_VERSION=$(BUILD_VERSION) $(COMPOSE) build backend
@@ -81,4 +81,4 @@ build-image:
 # Dockerfile -ldflags injection.
 test-image:
 	BUILD_VERSION=$(BUILD_VERSION) $(COMPOSE) build backend
-	$(COMPOSE) run --rm --no-deps backend /app/dashboard --version
+	$(COMPOSE) run --rm --no-deps backend /app/ops-intelligence --version

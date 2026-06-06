@@ -131,7 +131,7 @@ export async function routeDashboardAPI(page: Page) {
   await page.route('**/api/**', async (route: Route) => {
     const url = new URL(route.request().url());
     const payload =
-      url.pathname === '/api/dashboard/meta' ? meta :
+      url.pathname === '/api/ops-intelligence/meta' ? meta :
       url.pathname === '/api/symbols' ? { symbols: ['BTC-USDT (perp)'], mappings } :
       url.pathname === '/api/symbols/coverage' ? { snapshot_ts: now, rows: mappings.map(m => ({ platform: m.platform, display_symbol: m.display_symbol, depth_status: 'complete', source_endpoint: 'fixture' })) } :
       url.pathname === '/api/snapshot/liquidity' ? liquidity() :

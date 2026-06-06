@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // TestBinanceDailyHistoryReturnsQuoteVolume verifies index 7 (quote volume)

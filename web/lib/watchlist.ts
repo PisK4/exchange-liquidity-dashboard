@@ -1,4 +1,4 @@
-export const WATCHLIST_STORAGE_KEY = 'edgex-dashboard:watchlist:v1';
+export const WATCHLIST_STORAGE_KEY = 'edgex-ops-intelligence:watchlist:v1';
 
 // V1 caps the list at 10 entries because the toolbar chips render
 // horizontally and the underlying /api/snapshot/liquidity endpoint has no

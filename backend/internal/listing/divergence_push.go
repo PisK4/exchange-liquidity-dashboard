@@ -10,9 +10,9 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/divergence"
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/divergence"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // DivergencePushEvent is one of the four UTC-day cards produced by

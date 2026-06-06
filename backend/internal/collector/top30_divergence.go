@@ -1,8 +1,8 @@
 package collector
 
 import (
-	"edgex-dashboard/backend/internal/divergence"
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/divergence"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // Top30Divergence builds the CEX-vs-DEX aggregate comparison from the

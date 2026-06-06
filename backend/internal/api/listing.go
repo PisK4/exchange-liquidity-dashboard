@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"strings"
 
-	"edgex-dashboard/backend/internal/listing"
+	"edgex-ops-intelligence/backend/internal/listing"
 )
 
 // ListingReader is the narrow read interface the API uses to surface

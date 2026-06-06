@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // OKXPublicInstrumentsURL is the public-instruments endpoint. The

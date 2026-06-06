@@ -61,9 +61,9 @@ import (
 
 // fundingPeriodHours maps an internal platform identifier to its native
 // funding settlement period in hours. Internal platform names are the
-// canonical lower-case identifiers used in edgex-liquidity-dashboard.yaml (binance, okx,
+// canonical lower-case identifiers used in edgex-ops-intelligence.yaml (binance, okx,
 // bybit, ...) plus edgeX (case-preserving) as defined in
-// config/edgex-liquidity-dashboard.yaml.platforms.
+// config/edgex-ops-intelligence.yaml.platforms.
 var fundingPeriodHours = map[string]int{
 	"binance":     8,
 	"okx":         8,

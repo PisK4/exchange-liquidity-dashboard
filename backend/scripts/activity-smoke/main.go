@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/activity"
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/activity"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 var requiredPlatforms = []string{"binance", "okx", "bingx", "gate", "mexc", "bybit", "bitget", "hyperliquid", "lighter"}
@@ -24,7 +24,7 @@ type sourceCoverageReport struct {
 
 func main() {
 	var (
-		configDir    = flag.String("config-dir", "../config", "Path to dashboard config directory")
+		configDir    = flag.String("config-dir", "../config", "Path to the EdgeX Ops Intelligence config directory")
 		allowPartial = flag.Bool("allow-partial", false, "Warn instead of failing when some V1 platforms are missing")
 	)
 	flag.Parse()

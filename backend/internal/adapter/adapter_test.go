@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

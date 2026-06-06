@@ -12,13 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 // top30CoverageDenominator is the fixed denominator for the
 // "X/Y 平台" summary field on the Lark card. The Top30 cross-tabulation
 // always considers the same 9 competitor exchanges (per
-// repos/edgex-dashboard/AGENTS.md), independent of the listed_universe.
+// repos/edgex-ops-intelligence/AGENTS.md), independent of the listed_universe.
 const top30CoverageDenominator = 9
 
 // Top30RowForPush is the per-row projection of t_top30_snapshot used

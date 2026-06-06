@@ -26,11 +26,11 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"edgex-dashboard/backend/internal/api"
-	"edgex-dashboard/backend/internal/collector"
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
-	"edgex-dashboard/backend/internal/listing"
+	"edgex-ops-intelligence/backend/internal/api"
+	"edgex-ops-intelligence/backend/internal/collector"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/listing"
 )
 
 const (
@@ -896,7 +896,7 @@ func (fakeStoreReader) PingDB(context.Context) error                            
 func (fakeStoreReader) SnapshotRowCounts(context.Context) (map[string]int64, error) { return nil, nil }
 func (fakeStoreReader) Symbols() []string                                           { return nil }
 func (fakeStoreReader) SymbolMappings() []domain.SymbolSub                          { return nil }
-func (fakeStoreReader) DashboardMeta() map[string]any                               { return nil }
+func (fakeStoreReader) OpsIntelligenceMeta() map[string]any                               { return nil }
 func (fakeStoreReader) Coverage() map[string]any                                    { return nil }
 func (fakeStoreReader) Liquidity(string) map[string]any                             { return nil }
 func (fakeStoreReader) Quality(string) map[string]any                               { return nil }

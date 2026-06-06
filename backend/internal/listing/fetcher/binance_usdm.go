@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"net/http"
 
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // BinanceUSDMExchangeInfoURL is the canonical USD-M futures
-// exchangeInfo endpoint. Exported so cmd/dashboard wiring can stamp
+// exchangeInfo endpoint. Exported so cmd/ops-intelligence wiring can stamp
 // the same URL into both the InstrumentSource and the source-state
 // audit row.
 const BinanceUSDMExchangeInfoURL = "https://fapi.binance.com/fapi/v1/exchangeInfo"

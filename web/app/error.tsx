@@ -1,13 +1,13 @@
 'use client';
 
 // Anything dashboard-client / fetcher / watchlist writes to localStorage
-// is namespaced under "edgex-dashboard". When the operator lands on this
+// is namespaced under "edgex-ops-intelligence". When the operator lands on this
 // error boundary because of a stale watchlist (e.g. ?watchlist= points
 // at a delisted canonical) Retry alone loops: the URL + persisted
 // watchlist replay the same bad fetch. resetAndGoHome wipes everything
 // under the namespace and hard-navigates to "/" so the page reloads
 // with a clean state and re-seeds the default canonical.
-const STORAGE_PREFIX = 'edgex-dashboard';
+const STORAGE_PREFIX = 'edgex-ops-intelligence';
 
 function resetAndGoHome() {
   try {

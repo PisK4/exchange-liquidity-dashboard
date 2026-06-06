@@ -3,7 +3,7 @@ package indicators
 import (
 	"math"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 func MidPrice(book domain.OrderBookSnapshot) float64 {

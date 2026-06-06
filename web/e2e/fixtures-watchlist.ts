@@ -243,7 +243,7 @@ const top30Divergence = {
 export async function routeWatchlistAPI(page: Page) {
   await page.route('**/api/**', async (route: Route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === '/api/dashboard/meta') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(meta) });
+    if (url.pathname === '/api/ops-intelligence/meta') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(meta) });
     if (url.pathname === '/api/symbols') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ symbols: meta.symbols, mappings }) });
     if (url.pathname === '/api/symbols/coverage') {
       return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ snapshot_ts: now, rows: mappings.map(m => ({ platform: m.platform, display_symbol: m.display_symbol, depth_status: 'complete', source_endpoint: 'fixture' })) }) });

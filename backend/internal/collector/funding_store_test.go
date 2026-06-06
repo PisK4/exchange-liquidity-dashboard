@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 func ptr(v float64) *float64 { return &v }

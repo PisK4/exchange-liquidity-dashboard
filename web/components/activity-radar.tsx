@@ -115,10 +115,10 @@ export function ActivityTopbar() {
   return (
     <>
       <header className="topbar">
-        <Link className="logo" href="/">EdgeX Intelligence</Link>
+        <Link className="logo" href="/">EdgeX Ops Intelligence</Link>
         <span className="muted">Operations Activity Agent</span>
         <span className="spacer" />
-        <Link className="pill" href="/">Liquidity Dashboard</Link>
+        <Link className="pill" href="/">Liquidity</Link>
       </header>
       <nav className="tabs">
         <Link className="tab active" href="/activity">Activity Radar</Link>

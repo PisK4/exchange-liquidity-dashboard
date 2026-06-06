@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // BitgetMixContractsURL is the v2 mix contracts endpoint shared by

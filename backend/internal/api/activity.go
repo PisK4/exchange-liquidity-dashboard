@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/activity"
+	"edgex-ops-intelligence/backend/internal/activity"
 )
 
 type ActivityStore interface {

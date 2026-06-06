@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"edgex-dashboard/backend/internal/marketdata/coingecko"
+	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
 )
 
 // CoinGeckoClient is the subset of *coingecko.Client the decision

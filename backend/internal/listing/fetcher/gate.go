@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // Gate public endpoints. Both return a top-level JSON array; there

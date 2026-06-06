@@ -3,7 +3,7 @@ package adapter
 import (
 	"sort"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 func finalizeBook(book domain.OrderBookSnapshot, sourceID, depthSource, sourceEndpoint string) domain.OrderBookSnapshot {

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 var smokeSymbol = flag.String("symbol", "BTC-USDT", "symbol for live adapter smoke")

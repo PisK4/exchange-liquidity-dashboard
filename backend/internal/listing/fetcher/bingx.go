@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // BingX public endpoints. The swap endpoint is the same one used by

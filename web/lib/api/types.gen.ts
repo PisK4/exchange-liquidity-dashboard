@@ -83,7 +83,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/dashboard/meta": {
+    "/api/ops-intelligence/meta": {
         parameters: {
             query?: never;
             header?: never;
@@ -99,13 +99,13 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description dashboard metadata */
+                /** @description ops intelligence metadata */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
-                        "application/json": components["schemas"]["DashboardMeta"];
+                        "application/json": components["schemas"]["OpsIntelligenceMeta"];
                     };
                 };
             };
@@ -1049,6 +1049,8 @@ export interface components {
         HealthResponse: {
             ok: boolean;
             service: string;
+            product: string;
+            display_name: string;
             mode: string;
             build_version: string;
             deps: {
@@ -1126,7 +1128,7 @@ export interface components {
         DataSources: {
             coingecko?: components["schemas"]["CoinGeckoLineage"];
         };
-        DashboardMeta: {
+        OpsIntelligenceMeta: {
             tabs: string[];
             platforms: string[];
             symbols: string[];

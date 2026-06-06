@@ -65,9 +65,9 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/listing"
-	"edgex-dashboard/backend/internal/listing/liquidity"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/listing"
+	"edgex-ops-intelligence/backend/internal/listing/liquidity"
 )
 
 // smokePrefix is the stable dedupe_key marker for every smoke run.
@@ -77,12 +77,12 @@ const smokePrefix = "lark_push_test"
 
 func main() {
 	var (
-		configDir     = flag.String("config-dir", "../config", "Path to the dashboard config directory; values from edgex-liquidity-dashboard.yaml are used as defaults when other flags are omitted")
-		dsn           = flag.String("mysql-dsn", "", "MySQL DSN for the dashboard DB; falls back to DASHBOARD_MYSQL_DSN env, then Database.DSN from config-dir")
+		configDir     = flag.String("config-dir", "../config", "Path to the EdgeX Ops Intelligence config directory; values from the dashboard config file are used as defaults when other flags are omitted")
+		dsn           = flag.String("mysql-dsn", "", "MySQL DSN for the EdgeX Ops Intelligence DB; falls back to OPS_INTELLIGENCE_MYSQL_DSN env, then Database.DSN from config-dir")
 		webhook       = flag.String("webhook-url", "", "Lark webhook URL; falls back to Alert.WebHookP3, then listing_agent.delivery.top30_webhook_url/_env from config-dir")
 		webhookSecret = flag.String("webhook-secret", "", "Lark webhook signing secret; falls back to listing_agent.delivery.top30_webhook_secret from config-dir; empty disables signing")
 		proxy         = flag.String("proxy", "", "Optional HTTP(S) proxy used for the webhook POST; falls back to listing_agent.delivery.proxy from config-dir; host.docker.internal is rewritten to 127.0.0.1 automatically")
-		dashboard     = flag.String("dashboard-base", "", "Dashboard base URL inserted into the action buttons; falls back to listing_agent.delivery.dashboard_base_url from config-dir; empty hides the button")
+		dashboard     = flag.String("dashboard-base", "", "EdgeX Ops Intelligence base URL inserted into the action buttons; falls back to listing_agent.delivery.dashboard_base_url from config-dir; empty hides the button")
 		include       = flag.String("include", "all", "Which card families to exercise: all | hot_gap | divergence")
 		skipCleanup   = flag.Bool("skip-cleanup", false, "Leave smoke rows in t_listing_delivery_outbox after the run (default cleans up)")
 		maxAttempts   = flag.Int("max-attempts", 3, "MaxAttempts written on smoke outbox rows; bounds DrainDueOutbox retry behaviour during the run")
@@ -104,7 +104,7 @@ func main() {
 	resolveFromConfig(cfgErr == nil, &cfg, dsn, webhook, webhookSecret, proxy, dashboard)
 
 	if strings.TrimSpace(*dsn) == "" {
-		log.Fatal("missing MySQL DSN: pass --mysql-dsn, set DASHBOARD_MYSQL_DSN, or fill Database in config-dir")
+		log.Fatal("missing MySQL DSN: pass --mysql-dsn, set OPS_INTELLIGENCE_MYSQL_DSN, or fill Database in config-dir")
 	}
 	if strings.TrimSpace(*webhook) == "" {
 		log.Fatal("missing webhook URL: pass --webhook-url, or fill Alert.WebHookP3 / listing_agent.delivery.top30_webhook_url in config-dir.\n" +
@@ -288,7 +288,7 @@ func main() {
 // resolveFromConfig fills empty CLI flag values from config + env so
 // the script reuses whatever the production engine reads. Precedence:
 //  1. Explicit flag value (non-empty after TrimSpace).
-//  2. Environment variable (DASHBOARD_MYSQL_DSN for DSN).
+//  2. Environment variable (OPS_INTELLIGENCE_MYSQL_DSN for DSN).
 //  3. Loaded YAML config (only when configOK).
 //
 // Webhook precedence matches the production resolver in
@@ -296,7 +296,7 @@ func main() {
 // top30_webhook_url_env.
 func resolveFromConfig(configOK bool, cfg *config.Config, dsn, webhook, secret, proxy, dashboard *string) {
 	if strings.TrimSpace(*dsn) == "" {
-		if env := strings.TrimSpace(os.Getenv("DASHBOARD_MYSQL_DSN")); env != "" {
+		if env := strings.TrimSpace(os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN")); env != "" {
 			*dsn = env
 		} else if configOK && strings.TrimSpace(cfg.Database.DSN) != "" {
 			*dsn = cfg.Database.DSN

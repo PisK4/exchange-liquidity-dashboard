@@ -2,7 +2,7 @@
 
 ## Project Background & Reference Documents
 
-This repo (`edgex-dashboard`) implements the EdgeX 平台核心交易对流动性对比 Dashboard. Before changing data shape, indicator formulas, exchange adapters, or surface taxonomy, read the upstream specs — they are the contractual source of truth, not this README.
+This repo (`edgex-ops-intelligence`) currently implements the first production slice of **EdgeX Ops Intelligence** (EdgeX 运营决策系统). Liquidity Dashboard remains the listed-market health monitoring module, while Listing Agent and future operations agents are capability modules under the broader Ops Intelligence system. Before changing data shape, indicator formulas, exchange adapters, or surface taxonomy, read the upstream specs — they are the contractual source of truth, not this README.
 
 - **Original product requirement (V2 PRD)**: `../../architecture/方案设计/EdgeX运营/原需求/平台核心交易对流动性对比dashboard V2.md` — business goals, 4 Tabs, 5min refresh cadence, target exchange list.
 - **Requirement breakdown directory**: `../../architecture/方案设计/EdgeX运营/需求梳理/` — full needs analysis, per-exchange API research (CoinGecko / Hyperliquid / EdgeX / Binance / OKX / Lighter / Bitget / Bybit / Gate / MEXC / BingX), 统计口径闭环, 数据源横评, 目标标的交易所覆盖矩阵.
@@ -11,7 +11,7 @@ This repo (`edgex-dashboard`) implements the EdgeX 平台核心交易对流动�
 
 ## Project Structure & Module Organization
 
-This workspace object implements the EdgeX platform liquidity Dashboard V1. Backend code lives in `backend/`: `cmd/dashboard` is the entrypoint, `internal/api` serves HTTP routes, `internal/collector` coordinates collection and persistence, `internal/adapter` contains exchange REST adapters, and `internal/indicators` computes depth/spread/slippage metrics. Frontend code lives in `web/` using Next.js App Router; pages are under `web/app`, shared UI under `web/components`, API helpers under `web/lib`. Runtime source-of-truth config is in `config/*.yaml`; Docker assets are in `deploy/`; helper scripts are in `scripts/`.
+This workspace object implements EdgeX Ops Intelligence V1, with Liquidity Dashboard as the initial listed-market monitoring surface. Backend code lives in `backend/`: `cmd/ops-intelligence` is the entrypoint, `internal/api` serves HTTP routes, `internal/collector` coordinates collection and persistence, `internal/adapter` contains exchange REST adapters, and `internal/indicators` computes depth/spread/slippage metrics. Frontend code lives in `web/` using Next.js App Router; pages are under `web/app`, shared UI under `web/components`, API helpers under `web/lib`. Runtime source-of-truth config is in `config/*.yaml`; Docker assets are in `deploy/`; helper scripts are in `scripts/`.
 
 ## Operator Documentation
 
@@ -68,16 +68,16 @@ Cross-family contracts (set by hot-gap, honoured by the others):
 # Dry-run: pick up webhook / proxy / dashboard from yaml; only DSN is flag-driven
 cd backend && go run ./scripts/top30-preview \
   --config-dir=../config \
-  --mysql-dsn="root:root@tcp(127.0.0.1:3306)/edgex_dashboard?parseTime=true&loc=UTC&charset=utf8mb4" \
+  --mysql-dsn="root:root@tcp(127.0.0.1:3306)/edgex_ops_intelligence?parseTime=true&loc=UTC&charset=utf8mb4" \
   --dry-run --limit=3
 
 # Live preview: same config source as the listing engine
 cd backend && go run ./scripts/top30-preview \
   --config-dir=../config \
-  --mysql-dsn="root:root@tcp(127.0.0.1:3306)/edgex_dashboard?parseTime=true&loc=UTC&charset=utf8mb4" \
+  --mysql-dsn="root:root@tcp(127.0.0.1:3306)/edgex_ops_intelligence?parseTime=true&loc=UTC&charset=utf8mb4" \
   --limit=2
 ```
 
 ## Commit & Pull Request Guidelines
 
-Use Conventional Commits, e.g. `feat(edgex-dashboard): add exchange adapter`. PRs should summarize backend/frontend impact, list validation commands, mention known unsupported exchanges (for V1 this excludes EdgeX Perp V1 BTC/ETH/SOL and Lighter BTC/ETH/SOL), and include screenshots or Playwright evidence for UI changes.
+Use Conventional Commits, e.g. `feat(edgex-ops-intelligence): add exchange adapter`. PRs should summarize backend/frontend impact, list validation commands, mention known unsupported exchanges (for V1 this excludes EdgeX Perp V1 BTC/ETH/SOL and Lighter BTC/ETH/SOL), and include screenshots or Playwright evidence for UI changes.

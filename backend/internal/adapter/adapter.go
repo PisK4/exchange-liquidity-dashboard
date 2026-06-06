@@ -14,7 +14,7 @@ import (
 	"sync"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 type ExchangeAdapter interface {
@@ -253,7 +253,7 @@ func (a RESTAdapter) doJSONRequest(ctx context.Context, method, url string, body
 	if err != nil {
 		return nil, 0, err
 	}
-	req.Header.Set("User-Agent", "edgex-dashboard/0.1")
+	req.Header.Set("User-Agent", "edgex-ops-intelligence/0.1")
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}

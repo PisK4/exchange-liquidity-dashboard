@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // qualityRow builds a minimal PlatformSnapshot fixture for the

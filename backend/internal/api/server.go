@@ -7,14 +7,20 @@ import (
 	"runtime"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // Version is the human-readable build identifier surfaced by the
 // /api/health endpoint. It is "dev" by default and is intended to be
-// overridden at link time via -ldflags="-X edgex-dashboard/backend/internal/api.Version=v1.0.0-N-gXXXXX".
+// overridden at link time via -ldflags="-X edgex-ops-intelligence/backend/internal/api.Version=v1.0.0-N-gXXXXX".
 var Version = "dev"
+
+const (
+	healthServiceName = "edgex-ops-intelligence"
+	healthProductName = "edgex-ops-intelligence"
+	healthDisplayName = "EdgeX Ops Intelligence"
+)
 
 type Server struct {
 	cfg                    config.Config
@@ -34,7 +40,7 @@ type StoreReader interface {
 	SnapshotRowCounts(context.Context) (map[string]int64, error)
 	Symbols() []string
 	SymbolMappings() []domain.SymbolSub
-	DashboardMeta() map[string]any
+	OpsIntelligenceMeta() map[string]any
 	Coverage() map[string]any
 	Liquidity(string) map[string]any
 	Quality(string) map[string]any
@@ -57,7 +63,7 @@ func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/readiness", s.readiness)
-	mux.HandleFunc("/api/dashboard/meta", s.dashboardMeta)
+	mux.HandleFunc("/api/ops-intelligence/meta", s.opsIntelligenceMeta)
 	mux.HandleFunc("/api/symbols", s.symbols)
 	mux.HandleFunc("/api/symbols/coverage", s.coverage)
 	mux.HandleFunc("/api/snapshot/liquidity", s.liquidity)
@@ -119,7 +125,9 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, map[string]any{
 		"ok":            true,
-		"service":       "edgex-dashboard",
+		"service":       healthServiceName,
+		"product":       healthProductName,
+		"display_name":  healthDisplayName,
 		"mode":          "v1-real-adapter-attempts",
 		"build_version": Version,
 		"deps":          deps,
@@ -170,8 +178,8 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 func (s *Server) symbols(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, map[string]any{"symbols": s.store.Symbols(), "mappings": s.store.SymbolMappings()})
 }
-func (s *Server) dashboardMeta(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.store.DashboardMeta())
+func (s *Server) opsIntelligenceMeta(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, s.store.OpsIntelligenceMeta())
 }
 func (s *Server) coverage(w http.ResponseWriter, r *http.Request) { writeJSON(w, s.store.Coverage()) }
 func (s *Server) liquidity(w http.ResponseWriter, r *http.Request) {

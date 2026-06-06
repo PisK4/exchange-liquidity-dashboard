@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // boolPtr is a tiny helper so the table-driven tests below keep their

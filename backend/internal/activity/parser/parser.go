@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"edgex-dashboard/backend/internal/activity"
+	"edgex-ops-intelligence/backend/internal/activity"
 )
 
 type RawDocument struct {

@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/activity"
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/activity"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 type fakeActivityStore struct {

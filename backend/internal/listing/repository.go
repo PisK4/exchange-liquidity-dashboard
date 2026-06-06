@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/listing/announcement"
+	"edgex-ops-intelligence/backend/internal/listing/announcement"
 )
 
 // Thin aliases so call sites in this file stay short while the

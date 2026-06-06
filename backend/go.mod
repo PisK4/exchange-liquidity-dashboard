@@ -1,4 +1,4 @@
-module edgex-dashboard/backend
+module edgex-ops-intelligence/backend
 
 go 1.23
 

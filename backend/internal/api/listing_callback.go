@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/listing"
+	"edgex-ops-intelligence/backend/internal/listing"
 )
 
 // DecisionWriter is the narrow write interface the callback handler

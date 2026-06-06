@@ -2,7 +2,7 @@
 
 PORT ?= 18080
 SYMBOL ?= BTC-USDT
-MYSQL_DSN ?= root:root@tcp(127.0.0.1:3306)/edgex_dashboard?parseTime=true
+MYSQL_DSN ?= root:root@tcp(127.0.0.1:3306)/edgex_ops_intelligence?parseTime=true
 BACKFILL_DAYS ?= 30
 COINGECKO_API_KEY_ENV ?= COINGECKO_DEMO_API_KEY
 COINGECKO_PROXY ?=
@@ -47,14 +47,14 @@ BUILD_VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || ech
 LDFLAGS = -X main.version=$(BUILD_VERSION)
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o bin/dashboard ./cmd/dashboard
+	go build -ldflags "$(LDFLAGS)" -o bin/ops-intelligence ./cmd/ops-intelligence
 
 run:
-	go run -ldflags "$(LDFLAGS)" ./cmd/dashboard --role=all --addr=:$${PORT:-$(PORT)}
+	go run -ldflags "$(LDFLAGS)" ./cmd/ops-intelligence --role=all --addr=:$${PORT:-$(PORT)}
 
 smoke-api:
-	tmp_bin=$$(mktemp -t edgex-dashboard-smoke.XXXXXX); \
-	go build -o $$tmp_bin ./cmd/dashboard; \
+	tmp_bin=$$(mktemp -t edgex-ops-intelligence-smoke.XXXXXX); \
+	go build -o $$tmp_bin ./cmd/ops-intelligence; \
 	$$tmp_bin --role=api --addr=:$(PORT) & \
 	pid=$$!; \
 	trap 'kill $$pid 2>/dev/null || true; rm -f $$tmp_bin' EXIT; \
@@ -88,7 +88,7 @@ smoke-coingecko:
 # ignored (R1). Idempotent: any pre-existing live row beats a backfill row
 # for the same (platform, day, display_symbol) slot.
 backfill-share:
-	DASHBOARD_MYSQL_DSN="$(MYSQL_DSN)" \
+	OPS_INTELLIGENCE_MYSQL_DSN="$(MYSQL_DSN)" \
 	go run ./cmd/coingecko-backfill --days=$(BACKFILL_DAYS)
 
 # Run one full Listing Agent tick (fusion + Top30 push + delivery
@@ -97,8 +97,8 @@ backfill-share:
 # URLs cause Top30 outbox rows to be marked disabled instead of
 # attempting network delivery.
 smoke-listing:
-	DASHBOARD_MYSQL_DSN="$(MYSQL_DSN)" \
-	go run ./cmd/dashboard --role=listing --run-once --mysql-dsn="$(MYSQL_DSN)"
+	OPS_INTELLIGENCE_MYSQL_DSN="$(MYSQL_DSN)" \
+	go run ./cmd/ops-intelligence --role=listing --run-once --mysql-dsn="$(MYSQL_DSN)"
 
 smoke-activity:
 	go run ./scripts/activity-smoke --config-dir=../config --allow-partial
@@ -176,10 +176,10 @@ catalog-diff:
 # t_top30_snapshot is intentionally excluded — it has its own 30-day
 # retention inside the collector.
 prune-snapshots-dry:
-	DASHBOARD_MYSQL_DSN="$(MYSQL_DSN)" \
+	OPS_INTELLIGENCE_MYSQL_DSN="$(MYSQL_DSN)" \
 	go run ./scripts/prune-snapshots --days $(DAYS)
 prune-snapshots-confirm:
-	DASHBOARD_MYSQL_DSN="$(MYSQL_DSN)" \
+	OPS_INTELLIGENCE_MYSQL_DSN="$(MYSQL_DSN)" \
 	go run ./scripts/prune-snapshots --days $(DAYS) --confirm
 
 # One-off audit: HEAD/GET each frontend_url in instrument_catalog.yaml,

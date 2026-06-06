@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/adapter"
+	"edgex-ops-intelligence/backend/internal/adapter"
 )
 
 func TestBuildListedUniverseUnionsMarketsAndDropsDelisted(t *testing.T) {

@@ -11,16 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/activity"
-	activityfetcher "edgex-dashboard/backend/internal/activity/fetcher"
-	activityparser "edgex-dashboard/backend/internal/activity/parser"
-	"edgex-dashboard/backend/internal/adapter"
-	"edgex-dashboard/backend/internal/api"
-	"edgex-dashboard/backend/internal/collector"
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/listing"
-	listingfetcher "edgex-dashboard/backend/internal/listing/fetcher"
-	"edgex-dashboard/backend/internal/marketdata/coingecko"
+	"edgex-ops-intelligence/backend/internal/activity"
+	activityfetcher "edgex-ops-intelligence/backend/internal/activity/fetcher"
+	activityparser "edgex-ops-intelligence/backend/internal/activity/parser"
+	"edgex-ops-intelligence/backend/internal/adapter"
+	"edgex-ops-intelligence/backend/internal/api"
+	"edgex-ops-intelligence/backend/internal/collector"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/listing"
+	listingfetcher "edgex-ops-intelligence/backend/internal/listing/fetcher"
+	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
 )
 
 // version is set at link time via -ldflags. Falls back to "dev" for
@@ -33,16 +33,16 @@ func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
 	role := flag.String("role", "all", "role: api, collector, or all")
 	runOnce := flag.Bool("run-once", false, "run one collection cycle at startup")
-	mysqlDSN := flag.String("mysql-dsn", os.Getenv("DASHBOARD_MYSQL_DSN"), "optional MySQL DSN, for example root:root@tcp(127.0.0.1:3306)/edgex_dashboard?parseTime=true")
-	configDir := flag.String("config-dir", "../config", "directory containing dashboard yaml configs")
+	mysqlDSN := flag.String("mysql-dsn", os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN"), "optional MySQL DSN, for example root:root@tcp(127.0.0.1:3306)/edgex_ops_intelligence?parseTime=true")
+	configDir := flag.String("config-dir", "../config", "directory containing EdgeX Ops Intelligence yaml configs")
 	catalogReloadInterval := flag.Duration("catalog-reload-interval", 2*time.Second, "polling interval for instrument_catalog.yaml hot reload; 0 disables the watcher")
 	rawInstrumentsDir := flag.String("raw-instruments-dir", "docs/raw-instruments", "directory containing per-platform raw instrument dumps used by Top30 backfill")
-	runtimeDataDir := flag.String("runtime-data-dir", envOr("DASHBOARD_DATA_DIR", ""), "writable directory for runtime-regenerated files (listed_universe.runtime.yaml). Overrides DASHBOARD_DATA_DIR; empty means write next to --config-dir (legacy behaviour).")
+	runtimeDataDir := flag.String("runtime-data-dir", envOr("OPS_INTELLIGENCE_DATA_DIR", ""), "writable directory for runtime-regenerated files (listed_universe.runtime.yaml). Overrides OPS_INTELLIGENCE_DATA_DIR; empty means write next to --config-dir.")
 	showVersion := flag.Bool("version", false, "print the embedded build version and exit")
 	flag.Parse()
 
 	if *showVersion {
-		log.Printf("edgex-dashboard %s", version)
+		log.Printf("edgex-ops-intelligence %s", version)
 		os.Exit(0)
 	}
 	api.Version = version
@@ -73,7 +73,7 @@ func main() {
 		activityRepo = activity.NewRepository(db)
 	} else {
 		if roleRequiresMySQL(*role) {
-			log.Fatalf("role %q requires MySQL DSN (--mysql-dsn or DASHBOARD_MYSQL_DSN)", *role)
+			log.Fatalf("role %q requires MySQL DSN (--mysql-dsn or OPS_INTELLIGENCE_MYSQL_DSN)", *role)
 		}
 		if roleStartsListing(*role) {
 			log.Printf("listing engine disabled: no MySQL DSN configured")
@@ -167,7 +167,7 @@ func main() {
 	// Bind the refresh job to the runtime path resolved above so a
 	// running listing engine always writes where the consumer
 	// closures expect to read. The YAML form may contain
-	// "${DASHBOARD_DATA_DIR}" or other env placeholders (operator
+	// "${OPS_INTELLIGENCE_DATA_DIR}" or other env placeholders (operator
 	// convenience); we run os.ExpandEnv first so unresolved
 	// placeholders never reach the engine. After expansion we also
 	// fall back to the resolved default if the field ended up empty
@@ -306,8 +306,8 @@ func buildUniverseLoader(runtimePath, seedPath string) func() *config.ListedUniv
 // empty or (b) expansion left behind an unresolved "${...}" segment
 // (i.e. the env var was unset). Returning the default in case (b) is
 // what lets a docker-compose YAML write
-// "${DASHBOARD_DATA_DIR}/listed_universe.runtime.yaml" once and have
-// it work on dev hosts that do not set DASHBOARD_DATA_DIR.
+// "${OPS_INTELLIGENCE_DATA_DIR}/listed_universe.runtime.yaml" once and have
+// it work on dev hosts that do not set OPS_INTELLIGENCE_DATA_DIR.
 func resolveConfigPath(raw, fallback, configDir string) string {
 	trimmed := strings.TrimSpace(raw)
 	missingEnv := false
@@ -339,7 +339,7 @@ func envOr(key, fallback string) string {
 
 // resolveRuntimeUniversePath picks the writable path for the
 // refresh job's runtime listed_universe.yaml. Priority:
-//  1. --runtime-data-dir flag (or DASHBOARD_DATA_DIR env)
+//  1. --runtime-data-dir flag (or OPS_INTELLIGENCE_DATA_DIR env)
 //  2. configDir (legacy / single-binary deployments)
 //
 // In every case the file lives next to a "listed_universe.runtime.yaml"

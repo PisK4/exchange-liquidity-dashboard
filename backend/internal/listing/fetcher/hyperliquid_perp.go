@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // HyperliquidInfoURL is the JSON-RPC-style POST endpoint that

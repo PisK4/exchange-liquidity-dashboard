@@ -7,7 +7,7 @@
 //
 //	make backfill-share                              # default 30 days
 //	go run ./cmd/coingecko-backfill --days=7         # custom window
-//	DASHBOARD_MYSQL_DSN=root:root@tcp(127.0.0.1:3306)/edgex_dashboard?parseTime=true \
+//	OPS_INTELLIGENCE_MYSQL_DSN=root:root@tcp(127.0.0.1:3306)/edgex_ops_intelligence?parseTime=true \
 //	    go run ./cmd/coingecko-backfill --days=30
 //
 // The backfill is idempotent: rows where a live coingecko/native daily
@@ -22,15 +22,15 @@ import (
 	"os"
 	"time"
 
-	"edgex-dashboard/backend/internal/collector"
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/marketdata/coingecko"
+	"edgex-ops-intelligence/backend/internal/collector"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
 )
 
 func main() {
 	days := flag.Int("days", 30, "number of days to backfill (clamped 1..30)")
-	configDir := flag.String("config-dir", "../config", "directory containing dashboard yaml configs")
-	mysqlDSN := flag.String("mysql-dsn", os.Getenv("DASHBOARD_MYSQL_DSN"), "MySQL DSN for the dashboard schema")
+	configDir := flag.String("config-dir", "../config", "directory containing EdgeX Ops Intelligence yaml configs")
+	mysqlDSN := flag.String("mysql-dsn", os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN"), "MySQL DSN for the EdgeX Ops Intelligence schema")
 	timeout := flag.Duration("timeout", 5*time.Minute, "overall timeout for the backfill run")
 	flag.Parse()
 
@@ -49,7 +49,7 @@ func main() {
 		resolvedDSN = cfg.MySQLDSN()
 	}
 	if resolvedDSN == "" {
-		log.Fatalf("--mysql-dsn, DASHBOARD_MYSQL_DSN, or Database config is required: backfill must persist to MySQL")
+		log.Fatalf("--mysql-dsn, OPS_INTELLIGENCE_MYSQL_DSN, or Database config is required: backfill must persist to MySQL")
 	}
 	db, err := collector.OpenMySQL(resolvedDSN)
 	if err != nil {

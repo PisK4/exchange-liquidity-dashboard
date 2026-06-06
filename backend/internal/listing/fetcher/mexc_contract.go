@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"net/http"
 
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // MEXCContractDetailURL is the v1 contract details endpoint.

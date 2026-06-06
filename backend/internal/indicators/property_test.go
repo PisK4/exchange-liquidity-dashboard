@@ -5,7 +5,7 @@ import (
 	"testing"
 	"testing/quick"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 func TestIndicatorProperties(t *testing.T) {

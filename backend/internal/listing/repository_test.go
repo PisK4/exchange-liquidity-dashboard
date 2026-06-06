@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/listing/announcement"
+	"edgex-ops-intelligence/backend/internal/listing/announcement"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )

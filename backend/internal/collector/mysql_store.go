@@ -11,7 +11,7 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 const initSchemaSQL = `

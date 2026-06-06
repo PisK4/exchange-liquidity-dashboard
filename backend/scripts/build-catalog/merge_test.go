@@ -3,7 +3,7 @@ package main
 import (
 	"testing"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 func TestMergeURLVerifiedPropagatesFlagWhenURLUnchanged(t *testing.T) {

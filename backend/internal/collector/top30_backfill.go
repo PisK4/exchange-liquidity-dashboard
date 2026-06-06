@@ -7,8 +7,8 @@ import (
 	"sync"
 	"time"
 
-	"edgex-dashboard/backend/internal/adapter"
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/adapter"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 // Top30Backfiller pulls per-(platform, base_asset) daily kline rows for the

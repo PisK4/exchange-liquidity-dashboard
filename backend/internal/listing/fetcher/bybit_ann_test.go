@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"edgex-dashboard/backend/internal/listing/announcement"
+	"edgex-ops-intelligence/backend/internal/listing/announcement"
 )
 
 func TestFetchBybitAnnouncementsReshapesV5Envelope(t *testing.T) {

@@ -8,8 +8,8 @@ import (
 	"reflect"
 	"testing"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 type fakeStoreReader struct {
@@ -33,7 +33,7 @@ func (f fakeStoreReader) SnapshotRowCounts(ctx context.Context) (map[string]int6
 }
 func (f fakeStoreReader) Symbols() []string                  { return f.symbols }
 func (f fakeStoreReader) SymbolMappings() []domain.SymbolSub { return f.mappings }
-func (f fakeStoreReader) DashboardMeta() map[string]any      { return f.meta }
+func (f fakeStoreReader) OpsIntelligenceMeta() map[string]any      { return f.meta }
 func (f fakeStoreReader) Coverage() map[string]any           { return f.coverage }
 func (f fakeStoreReader) Liquidity(symbol string) map[string]any {
 	out := cloneMap(f.liquidity)
@@ -104,7 +104,7 @@ func TestSnapshotHandlersReadThroughStoreReader(t *testing.T) {
 		path string
 		want map[string]any
 	}{
-		{name: "meta", path: "/api/dashboard/meta", want: map[string]any{"service": "meta"}},
+		{name: "meta", path: "/api/ops-intelligence/meta", want: map[string]any{"service": "meta"}},
 		{name: "symbols", path: "/api/symbols", want: map[string]any{"symbols": []any{"BTC-USDT (perp)"}}},
 		{name: "coverage", path: "/api/symbols/coverage", want: map[string]any{"rows": []any{}}},
 		{name: "liquidity", path: "/api/snapshot/liquidity?symbol=BTC", want: map[string]any{"kind": "liquidity", "requested_symbol": "BTC"}},

@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "EdgeX Liquidity Dashboard V1 API",
+    "title": "EdgeX Ops Intelligence - Liquidity API",
     "version": "0.1.0"
   },
   "paths": {
@@ -47,15 +47,15 @@
         }
       }
     },
-    "/api/dashboard/meta": {
+    "/api/ops-intelligence/meta": {
       "get": {
         "responses": {
           "200": {
-            "description": "dashboard metadata",
+            "description": "ops intelligence metadata",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DashboardMeta"
+                  "$ref": "#/components/schemas/OpsIntelligenceMeta"
                 }
               }
             }
@@ -485,6 +485,8 @@
         "required": [
           "ok",
           "service",
+          "product",
+          "display_name",
           "mode",
           "build_version",
           "deps"
@@ -494,6 +496,12 @@
             "type": "boolean"
           },
           "service": {
+            "type": "string"
+          },
+          "product": {
+            "type": "string"
+          },
+          "display_name": {
             "type": "string"
           },
           "mode": {
@@ -769,7 +777,7 @@
           }
         }
       },
-      "DashboardMeta": {
+      "OpsIntelligenceMeta": {
         "type": "object",
         "required": [
           "tabs",

@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 // TestCatalogCoversAllRuntimePairs is the post-Step-6 completeness gate. The

@@ -26,7 +26,7 @@
 
 ## 背景
 
-本轮改造目标是将 HTML 原型中的视觉结构落成 `edgex-dashboard` 正式版前端，同时保持“真实数据优先、不造假”的数据原则。当前后端已经具备部分实时盘口、深度和 24h 成交量能力；暂未实现的历史、市占率趋势和 Top30 live ranking 能力统一以 `unsupported` 返回，并由前端保留正式展示结构。
+本轮改造目标是将 HTML 原型中的视觉结构落成 `edgex-ops-intelligence` 正式版前端，同时保持“真实数据优先、不造假”的数据原则。当前后端已经具备部分实时盘口、深度和 24h 成交量能力；暂未实现的历史、市占率趋势和 Top30 live ranking 能力统一以 `unsupported` 返回，并由前端保留正式展示结构。
 
 ## Review 结论与修正
 
@@ -53,7 +53,7 @@
 
 ## 已完整支撑当前前端展示的接口
 
-### `GET /api/dashboard/meta`
+### `GET /api/ops-intelligence/meta`
 
 **前端使用位置**
 
@@ -253,13 +253,13 @@
 本记录对应的实现应通过以下命令验证：
 
 ```bash
-cd /Users/pis/workspace-intelligence/edgex-intelligence/repos/edgex-dashboard/backend
+cd /Users/pis/workspace-intelligence/edgex-intelligence/repos/edgex-ops-intelligence/backend
 make test
 make smoke-api PORT=18080 SYMBOL=BTC-USDT
 ```
 
 ```bash
-cd /Users/pis/workspace-intelligence/edgex-intelligence/repos/edgex-dashboard/web
+cd /Users/pis/workspace-intelligence/edgex-intelligence/repos/edgex-ops-intelligence/web
 npm run lint
 npm run typecheck
 npm run build

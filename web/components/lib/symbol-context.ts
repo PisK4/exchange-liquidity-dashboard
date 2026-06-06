@@ -1,4 +1,4 @@
-import type { DashboardMeta } from '@/lib/api/client';
+import type { OpsIntelligenceMeta } from '@/lib/api/client';
 
 export type SymbolContext = {
   canonical: string;
@@ -7,7 +7,7 @@ export type SymbolContext = {
   category: string;
 };
 
-export function resolveSymbolContext(meta: DashboardMeta, raw: string): SymbolContext {
+export function resolveSymbolContext(meta: OpsIntelligenceMeta, raw: string): SymbolContext {
   const all = meta.categories?.flatMap(c => c.symbols.map(s => ({ ...s, _category: c.key }))) ?? [];
   const upper = (raw ?? '').trim().toUpperCase();
   const byCanon = all.find(s => s.canonical.toUpperCase() === upper);

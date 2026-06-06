@@ -1,8 +1,8 @@
 FROM node:20-alpine
 
 WORKDIR /app
-COPY backend/bin/dashboard /app/dashboard
+COPY backend/bin/ops-intelligence /app/ops-intelligence
 COPY config/ /config/
 COPY backend/docs/raw-instruments/ /app/docs/raw-instruments/
 EXPOSE 8080
-CMD ["/app/dashboard", "--role=all", "--addr=:8080"]
+CMD ["/app/ops-intelligence", "--role=all", "--addr=:8080"]

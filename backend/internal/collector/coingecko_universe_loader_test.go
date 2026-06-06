@@ -3,8 +3,8 @@ package collector
 import (
 	"testing"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // TestSetListedUniverseLoaderHotReloadsAcrossTicks pins the F1

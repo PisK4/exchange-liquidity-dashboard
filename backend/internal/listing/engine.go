@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 // Engine orchestrates the Listing Agent worker loop. It exposes both
@@ -54,7 +54,7 @@ type EngineDeps struct {
 	// (edgeX listed lookup, market status loader, CoinGecko fetcher,
 	// depth fetcher) injected into ProduceDecisionCards. Optional;
 	// when all fields are nil the renderer degrades gracefully and
-	// surfaces empty placeholders. Wiring done in cmd/dashboard.
+	// surfaces empty placeholders. Wiring done in cmd/ops-intelligence.
 	DecisionCardEnrich DecisionCardEnrichDeps
 }
 

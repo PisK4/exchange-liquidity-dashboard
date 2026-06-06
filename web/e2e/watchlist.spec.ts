@@ -43,7 +43,7 @@ test('adding a symbol via the dropdown commits to URL and localStorage', async (
   // URL is replaceState-rewritten with the merged list.
   await expect(page).toHaveURL(/watchlist=BTC%2CETH|watchlist=BTC,ETH/);
   // localStorage holds the same canonical-uppercase value.
-  const stored = await page.evaluate(() => window.localStorage.getItem('edgex-dashboard:watchlist:v1'));
+  const stored = await page.evaluate(() => window.localStorage.getItem('edgex-ops-intelligence:watchlist:v1'));
   expect(stored).not.toBeNull();
   expect(JSON.parse(stored as string)).toEqual(['BTC', 'ETH']);
 });
@@ -56,14 +56,14 @@ test('removing the last chip restores BTC fallback and persists it to localStora
   // to localStorage so a refresh keeps the BTC fallback intact.
   await expect(page.getByTestId('watchlist-chip-BTC')).toBeVisible();
   await expect(page.getByTestId('watchlist-chip-ETH')).toHaveCount(0);
-  const stored = await page.evaluate(() => window.localStorage.getItem('edgex-dashboard:watchlist:v1'));
+  const stored = await page.evaluate(() => window.localStorage.getItem('edgex-ops-intelligence:watchlist:v1'));
   expect(stored).not.toBeNull();
   expect(JSON.parse(stored as string)).toEqual(['BTC']);
 });
 
 test('localStorage seeded before mount populates the watchlist when URL is bare', async ({ page }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem('edgex-dashboard:watchlist:v1', JSON.stringify(['BTC', 'ETH']));
+    window.localStorage.setItem('edgex-ops-intelligence:watchlist:v1', JSON.stringify(['BTC', 'ETH']));
   });
   await page.goto('/');
   // Post-mount reconciliation should pull BTC + ETH from storage and
@@ -75,7 +75,7 @@ test('localStorage seeded before mount populates the watchlist when URL is bare'
 
 test('URL parameter wins over localStorage on direct navigation', async ({ page }) => {
   await page.addInitScript(() => {
-    window.localStorage.setItem('edgex-dashboard:watchlist:v1', JSON.stringify(['BTC']));
+    window.localStorage.setItem('edgex-ops-intelligence:watchlist:v1', JSON.stringify(['BTC']));
   });
   await page.goto('/?watchlist=ETH,SOL');
   // The URL list (ETH,SOL) takes precedence over the storage list (BTC).
@@ -177,7 +177,7 @@ test('clicking 查看明细 on a card collapses the watchlist to that single sym
   // URL and localStorage reflect the collapsed state via the
   // side-effect bus in DashboardClient.
   await expect(page).toHaveURL(/watchlist=ETH/);
-  const stored = await page.evaluate(() => window.localStorage.getItem('edgex-dashboard:watchlist:v1'));
+  const stored = await page.evaluate(() => window.localStorage.getItem('edgex-ops-intelligence:watchlist:v1'));
   expect(JSON.parse(stored as string)).toEqual(['ETH']);
 });
 
@@ -237,7 +237,7 @@ test('manage-favorites trigger stays enabled at MAX_WATCHLIST cap so users can d
   // disabled when watchlist.length >= MAX_WATCHLIST.
   await page.addInitScript(() => {
     window.localStorage.setItem(
-      'edgex-dashboard:watchlist:v1',
+      'edgex-ops-intelligence:watchlist:v1',
       JSON.stringify(['BTC', 'ETH', 'SOL', 'GOLD', 'A', 'B', 'C', 'D', 'E', 'F']),
     );
   });

@@ -4,7 +4,7 @@ import (
 	"math"
 	"testing"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 func TestDepthAtTierAndSpread(t *testing.T) {

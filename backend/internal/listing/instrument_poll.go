@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // SignalingMode controls whether the instrument poll driver emits

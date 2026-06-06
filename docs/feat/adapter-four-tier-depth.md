@@ -28,10 +28,10 @@ per-tier 多视图选择
 已完成并拆成 4 个本地提交：
 
 ```text
-9c6070e feat(edgex-dashboard): add depth display contract fields
-3ff992e feat(edgex-dashboard): render loose depth availability
-ecea8b2 feat(edgex-dashboard): select per-tier REST depth views
-2542983 feat(edgex-dashboard): add websocket provider flags
+9c6070e feat(edgex-ops-intelligence): add depth display contract fields
+3ff992e feat(edgex-ops-intelligence): render loose depth availability
+ecea8b2 feat(edgex-ops-intelligence): select per-tier REST depth views
+2542983 feat(edgex-ops-intelligence): add websocket provider flags
 ```
 
 当前状态：
@@ -220,7 +220,7 @@ hyperliquid_s3
 
 ## WS provider feature flags
 
-`config/edgex-liquidity-dashboard.yaml` 的 `Runtime.ws_providers` 新增（dev/prod 由 Nacos dataId `edgex-liquidity-dashboard.yaml` 渲染到 `/config/edgex-liquidity-dashboard.yaml`）：
+`config/edgex-ops-intelligence.yaml` 的 `Runtime.ws_providers` 新增（dev/prod 由 Nacos dataId `edgex-ops-intelligence.yaml` 渲染到 `/config/edgex-ops-intelligence.yaml`）：
 
 ```yaml
 Runtime:
@@ -281,4 +281,4 @@ curl -fsS 'http://127.0.0.1:8080/api/snapshot/liquidity?symbol=BTC-USDT%20%28per
 2. OKX / MEXC / Bybit / BingX 的 UI WS provider 尚未接入，只完成 feature flag 配置。
 3. Hyperliquid 已有多 REST view，但 view plan 的数量级边界重选与 30s debounce 仍在后续模块。
 4. `make catalog` / `make catalog-probe` 拆分与 probe diff 防抖尚未实现。
-5. 当前本地 Docker 环境依赖 `/config/edgex-liquidity-dashboard.yaml` 里的 `Runtime.exchange_proxy=http://host.docker.internal:7897`，若宿主机没有对应代理，部分上游交易所仍可能返回 error；JP / SG 等直连可达环境应在 Nacos 中将相关 proxy 字段留空。
+5. 当前本地 Docker 环境依赖 `/config/edgex-ops-intelligence.yaml` 里的 `Runtime.exchange_proxy=http://host.docker.internal:7897`，若宿主机没有对应代理，部分上游交易所仍可能返回 error；JP / SG 等直连可达环境应在 Nacos 中将相关 proxy 字段留空。

@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // BybitLinearInstrumentsURL is the v5 instruments-info endpoint used

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )

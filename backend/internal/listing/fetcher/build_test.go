@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 func TestBuildListingSourcesAssemblesFullDefaultRoster(t *testing.T) {

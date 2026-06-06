@@ -6,7 +6,7 @@ import (
 )
 
 // RecordCoinGeckoPullSuccess advances the last-success timestamp surfaced
-// under DashboardMeta.data_sources.coingecko.last_pull_ts.
+// under OpsIntelligenceMeta.data_sources.coingecko.last_pull_ts.
 //
 // Kept in this file (rather than store.go) so the CoinGecko collector can
 // be merged independently of unrelated Store WIP touching the same

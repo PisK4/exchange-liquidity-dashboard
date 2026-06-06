@@ -156,7 +156,7 @@ var venueSymbolSuffixes = []string{
 // NormaliseSymbol converts a CoinGecko ticker symbol from any of the 9
 // competitor venues (e.g. "BTCUSDT", "BTC-USDT", "BTC-USDT-SWAP",
 // "BTCUSDT_UMCBL", "BTC_USDT") into the canonical display symbol used by
-// edgex-dashboard ("BTC-USDT (perp)"). Symbols not recognised as a perp pair
+// edgex-ops-intelligence ("BTC-USDT (perp)"). Symbols not recognised as a perp pair
 // are returned unchanged so callers can still log them for triage.
 //
 // Convergence sequence:

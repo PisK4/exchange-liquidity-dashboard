@@ -3,8 +3,8 @@ package collector
 import (
 	"testing"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // TestResolveSymbolMapsCanonicalToDisplaySymbol pins the new canonical-keyed
@@ -42,15 +42,15 @@ func TestResolveSymbolPassesThroughUnknown(t *testing.T) {
 	}
 }
 
-// TestDashboardMetaIncludesCategories pins the new shape /api/dashboard/meta
+// TestOpsIntelligenceMetaIncludesCategories pins the new shape /api/ops-intelligence/meta
 // must expose so the C3 frontend can drive the dropdown filter without
 // hard-coding categories on the client side.
-func TestDashboardMetaIncludesCategories(t *testing.T) {
+func TestOpsIntelligenceMetaIncludesCategories(t *testing.T) {
 	store := NewStore(config.Default())
-	meta := store.DashboardMeta()
+	meta := store.OpsIntelligenceMeta()
 	raw, ok := meta["categories"]
 	if !ok {
-		t.Fatalf("categories field missing from DashboardMeta")
+		t.Fatalf("categories field missing from OpsIntelligenceMeta")
 	}
 	categories, ok := raw.([]map[string]any)
 	if !ok {

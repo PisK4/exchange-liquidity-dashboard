@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // LighterOrderBookDetailsURL is the public endpoint that lists every

@@ -3,13 +3,13 @@ package main
 import (
 	"context"
 
-	"edgex-dashboard/backend/internal/collector"
-	"edgex-dashboard/backend/internal/listing"
+	"edgex-ops-intelligence/backend/internal/collector"
+	"edgex-ops-intelligence/backend/internal/listing"
 )
 
 // listingSnapshotReader adapts *listing.Repository to the narrow
 // collector.SnapshotReader interface the CatalogResolver consumes.
-// Keeping the adapter in cmd/dashboard (not in listing or collector)
+// Keeping the adapter in cmd/ops-intelligence (not in listing or collector)
 // is what lets listing keep its rich domain.InstrumentSnapshot type
 // without leaking it across package boundaries, and lets collector
 // stay agnostic of the repository layer.

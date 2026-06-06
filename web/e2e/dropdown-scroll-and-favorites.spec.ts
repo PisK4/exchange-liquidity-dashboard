@@ -2,10 +2,10 @@ import { expect, test, type Page, type Route } from '@playwright/test';
 
 // dropdown-scroll-and-favorites.spec.ts validates two related fixes
 // landed together:
-//   1. fix(edgex-dashboard): make symbol dropdown reliably scrollable —
+//   1. fix(edgex-ops-intelligence): make symbol dropdown reliably scrollable —
 //      asserts that opening the symbol pill dropdown over a long
 //      catalog yields a scrollable list with a visible scrollbar.
-//   2. feat(edgex-dashboard): favorite-star symbol picker — asserts
+//   2. feat(edgex-ops-intelligence): favorite-star symbol picker — asserts
 //      that the per-row ★ button toggles the watchlist (URL +
 //      localStorage in lockstep) without closing the dropdown, that
 //      the cap at MAX_WATCHLIST=10 disables further stars, and that
@@ -107,7 +107,7 @@ const top30Divergence = {
 async function routeMany(page: Page) {
   await page.route('**/api/**', async (route: Route) => {
     const url = new URL(route.request().url());
-    if (url.pathname === '/api/dashboard/meta') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(meta) });
+    if (url.pathname === '/api/ops-intelligence/meta') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(meta) });
     if (url.pathname === '/api/symbols') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ symbols: meta.symbols, mappings: [] }) });
     if (url.pathname === '/api/symbols/coverage') return route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ snapshot_ts: now, rows: [] }) });
     if (url.pathname === '/api/snapshot/liquidity') {
@@ -181,7 +181,7 @@ test('clicking the ★ on a row toggles the watchlist without closing the dropdo
   // URL syncs.
   await expect(page).toHaveURL(/watchlist=[^&]*SYM02/);
   // localStorage syncs.
-  const stored = await page.evaluate(() => window.localStorage.getItem('edgex-dashboard:watchlist:v1'));
+  const stored = await page.evaluate(() => window.localStorage.getItem('edgex-ops-intelligence:watchlist:v1'));
   expect(stored).not.toBeNull();
   const parsed = JSON.parse(stored as string) as string[];
   expect(parsed).toContain('SYM02');

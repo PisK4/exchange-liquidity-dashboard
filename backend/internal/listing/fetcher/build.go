@@ -3,9 +3,9 @@ package fetcher
 import (
 	"fmt"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/listing"
-	"edgex-dashboard/backend/internal/listing/announcement"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/listing"
+	"edgex-ops-intelligence/backend/internal/listing/announcement"
 )
 
 // BuiltListingSources is what BuildListingSources hands back: the

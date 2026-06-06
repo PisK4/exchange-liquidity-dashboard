@@ -24,8 +24,8 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/adapter"
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/adapter"
+	"edgex-ops-intelligence/backend/internal/config"
 
 	"gopkg.in/yaml.v3"
 )

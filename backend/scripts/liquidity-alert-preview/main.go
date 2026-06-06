@@ -31,18 +31,18 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/listing"
-	"edgex-dashboard/backend/internal/listing/liquidity"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/listing"
+	"edgex-ops-intelligence/backend/internal/listing/liquidity"
 )
 
 func main() {
 	var (
-		configDir = flag.String("config-dir", "../config", "Path to the dashboard config directory; values from edgex-liquidity-dashboard.yaml are used as defaults when --mysql-dsn / --webhook-url / --proxy / --dashboard-base / --tier-pct are not given")
-		dsn       = flag.String("mysql-dsn", "", "MySQL DSN for the dashboard DB; falls back to DASHBOARD_MYSQL_DSN env, then Database.DSN from config-dir")
+		configDir = flag.String("config-dir", "../config", "Path to the EdgeX Ops Intelligence config directory; values from the dashboard config file are used as defaults when --mysql-dsn / --webhook-url / --proxy / --dashboard-base / --tier-pct are not given")
+		dsn       = flag.String("mysql-dsn", "", "MySQL DSN for the EdgeX Ops Intelligence DB; falls back to OPS_INTELLIGENCE_MYSQL_DSN env, then Database.DSN from config-dir")
 		webhook   = flag.String("webhook-url", "", "Lark webhook URL; falls back to Alert.Webhooks.Liquidity from config-dir; leave both empty for dry-run (stdout only)")
 		proxy     = flag.String("proxy", "", "Optional HTTP(S) proxy for the webhook POST; falls back to Runtime.listing_agent.delivery.proxy from config-dir")
-		dashboard = flag.String("dashboard-base", "", "Dashboard base URL inserted into the '查看深度对比' button; falls back to Runtime.listing_agent.delivery.dashboard_base_url from config-dir")
+		dashboard = flag.String("dashboard-base", "", "EdgeX Ops Intelligence base URL inserted into the '查看深度对比' button; falls back to Runtime.listing_agent.delivery.dashboard_base_url from config-dir")
 		tierPct   = flag.Float64("tier-pct", 0, "Depth tier as a fractional percentage (e.g. 0.001 for 0.1%); falls back to Runtime.listing_agent.liquidity_alert.depth_tier_pct from config-dir")
 		stale     = flag.Duration("stale-after", 0, "Snapshot freshness window; falls back to Runtime.listing_agent.liquidity_alert.stale_after from config-dir")
 		lagThresh = flag.Float64("lag-threshold", 0, "Lag threshold ratio (default 0.5 == edgeX < half competitor median); falls back to config")
@@ -96,7 +96,7 @@ func main() {
 	}
 
 	if strings.TrimSpace(*dsn) == "" {
-		log.Fatal("missing MySQL DSN: pass --mysql-dsn, set DASHBOARD_MYSQL_DSN, or fill Database in config-dir")
+		log.Fatal("missing MySQL DSN: pass --mysql-dsn, set OPS_INTELLIGENCE_MYSQL_DSN, or fill Database in config-dir")
 	}
 
 	db, err := sql.Open("mysql", *dsn)
@@ -206,7 +206,7 @@ func resolveFromConfig(
 	minCmp *int,
 ) {
 	if strings.TrimSpace(*dsn) == "" {
-		if env := strings.TrimSpace(os.Getenv("DASHBOARD_MYSQL_DSN")); env != "" {
+		if env := strings.TrimSpace(os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN")); env != "" {
 			*dsn = env
 		} else if configOK && strings.TrimSpace(cfg.Database.DSN) != "" {
 			*dsn = cfg.Database.DSN

@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/listing"
+	"edgex-ops-intelligence/backend/internal/listing"
 )
 
 // buildBinanceDepthFetcher returns a listing.PlatformDepthFetcher

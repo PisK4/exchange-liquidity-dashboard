@@ -12,9 +12,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
-	"edgex-dashboard/backend/internal/indicators"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/indicators"
 )
 
 type Store struct {
@@ -483,7 +483,7 @@ func (s *Store) Coverage() map[string]any {
 	return map[string]any{"rows": rows, "snapshot_ts": time.Now().UTC()}
 }
 
-func (s *Store) DashboardMeta() map[string]any {
+func (s *Store) OpsIntelligenceMeta() map[string]any {
 	out := map[string]any{
 		"tabs":                 []string{"monitor", "quality", "share", "top30"},
 		"platforms":            s.cfg.Platforms,

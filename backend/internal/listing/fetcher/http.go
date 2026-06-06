@@ -20,7 +20,7 @@ import (
 // to the listing fetcher proxy setting.
 //
 // A blank proxy returns a default-transport client; an invalid proxy
-// returns an error so cmd/dashboard fails loud rather than silently
+// returns an error so cmd/ops-intelligence fails loud rather than silently
 // dialing direct.
 func NewHTTPClient(timeout time.Duration, proxy string) (*http.Client, error) {
 	if timeout <= 0 {

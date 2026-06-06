@@ -31,18 +31,18 @@ import (
 
 	_ "github.com/go-sql-driver/mysql"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
-	"edgex-dashboard/backend/internal/listing"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/listing"
 )
 
 func main() {
 	var (
-		configDir = flag.String("config-dir", "../config", "Path to the dashboard config directory; values from edgex-liquidity-dashboard.yaml are used as defaults when --mysql-dsn / --webhook-url / --proxy / --dashboard-base are not given")
-		dsn       = flag.String("mysql-dsn", "", "MySQL DSN for the dashboard DB; falls back to DASHBOARD_MYSQL_DSN env, then Database.DSN from config-dir")
+		configDir = flag.String("config-dir", "../config", "Path to the EdgeX Ops Intelligence config directory; values from the dashboard config file are used as defaults when --mysql-dsn / --webhook-url / --proxy / --dashboard-base are not given")
+		dsn       = flag.String("mysql-dsn", "", "MySQL DSN for the EdgeX Ops Intelligence DB; falls back to OPS_INTELLIGENCE_MYSQL_DSN env, then Database.DSN from config-dir")
 		webhook   = flag.String("webhook-url", "", "Lark webhook URL; falls back to Alert.WebHookP3 from config-dir; leave both empty for dry-run (stdout only)")
 		proxy     = flag.String("proxy", "", "Optional HTTP(S) proxy for the webhook POST; falls back to Runtime.listing_agent.delivery.proxy from config-dir")
-		dashboard = flag.String("dashboard-base", "", "Dashboard base URL inserted into the '查看 Top30 详情' button; falls back to Runtime.listing_agent.delivery.dashboard_base_url from config-dir; empty hides the button")
+		dashboard = flag.String("dashboard-base", "", "EdgeX Ops Intelligence base URL inserted into the '查看 Top30 详情' button; falls back to Runtime.listing_agent.delivery.dashboard_base_url from config-dir; empty hides the button")
 		topN      = flag.Int("top-n", 10, "Max rows per card (default 10)")
 		dryRun    = flag.Bool("dry-run", false, "Print rendered card JSON to stdout but never POST")
 		only      = flag.String("only", "", "Optional comma-separated category filter (cex_only,dex_only,heavy_gap,both_hot_gap)")
@@ -57,7 +57,7 @@ func main() {
 	resolveFromConfig(cfgErr == nil, &cfg, dsn, webhook, proxy, dashboard)
 
 	if strings.TrimSpace(*dsn) == "" {
-		log.Fatal("missing MySQL DSN: pass --mysql-dsn, set DASHBOARD_MYSQL_DSN, or fill Database in config-dir")
+		log.Fatal("missing MySQL DSN: pass --mysql-dsn, set OPS_INTELLIGENCE_MYSQL_DSN, or fill Database in config-dir")
 	}
 	db, err := sql.Open("mysql", *dsn)
 	if err != nil {
@@ -128,7 +128,7 @@ func main() {
 // same operator workflow.
 func resolveFromConfig(configOK bool, cfg *config.Config, dsn, webhook, proxy, dashboard *string) {
 	if strings.TrimSpace(*dsn) == "" {
-		if env := strings.TrimSpace(os.Getenv("DASHBOARD_MYSQL_DSN")); env != "" {
+		if env := strings.TrimSpace(os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN")); env != "" {
 			*dsn = env
 		} else if configOK && strings.TrimSpace(cfg.Database.DSN) != "" {
 			*dsn = cfg.Database.DSN

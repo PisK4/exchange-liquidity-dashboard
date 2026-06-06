@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	"edgex-dashboard/backend/internal/listing/announcement"
-	"edgex-dashboard/backend/internal/listing/instrument"
+	"edgex-ops-intelligence/backend/internal/listing/announcement"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 // SourceHealthKey identifies one source in t_listing_source_state.

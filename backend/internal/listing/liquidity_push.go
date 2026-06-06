@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/listing/liquidity"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/listing/liquidity"
 )
 
 // LiquidityAlertDeps wires the dependencies for one ProduceLiquidityAlertPush

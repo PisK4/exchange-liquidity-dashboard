@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BACKEND_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.activity-e2e.yaml"
 PROJECT="activity-e2e"
-DSN='root:root@tcp(127.0.0.1:13307)/edgex_dashboard_activity_e2e?parseTime=true&loc=UTC&multiStatements=true'
+DSN='root:root@tcp(127.0.0.1:13307)/edgex_ops_intelligence_activity_e2e?parseTime=true&loc=UTC&multiStatements=true'
 
 cleanup() {
   echo "==> tearing down ${PROJECT}"

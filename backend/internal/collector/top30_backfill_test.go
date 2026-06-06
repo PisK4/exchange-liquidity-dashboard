@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
-	"edgex-dashboard/backend/internal/adapter"
-	"edgex-dashboard/backend/internal/config"
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/adapter"
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // TestNextTop30BackfillDelay pins the schedule arithmetic: the next slot

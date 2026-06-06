@@ -38,7 +38,7 @@ import (
 // (Binance, Bybit, Bitget) often reject requests with the default Go
 // `Go-http-client/2.0` UA, so every fetcher must use one of these
 // helpers (or set its own) when constructing requests.
-const DefaultUserAgent = "edgex-dashboard/listing-fetcher (+https://edgex.exchange)"
+const DefaultUserAgent = "edgex-ops-intelligence/listing-fetcher (+https://edgex.exchange)"
 
 // DefaultRequestTimeout bounds the wait for a single fetch round
 // trip. Cold-start ticks call into multiple sources serially; a

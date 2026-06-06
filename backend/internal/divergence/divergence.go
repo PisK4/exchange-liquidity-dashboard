@@ -23,7 +23,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 // aggregateLimit caps the per-class aggregate ranking at the same N

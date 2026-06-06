@@ -32,7 +32,7 @@ type Config struct {
 const (
 	DefaultAPIKeyHeader = "x-cg-demo-api-key"
 	DefaultBaseURL      = "https://api.coingecko.com/api/v3"
-	DefaultUserAgent    = "edgex-dashboard/coingecko-client"
+	DefaultUserAgent    = "edgex-ops-intelligence/coingecko-client"
 )
 
 // Client is the minimal HTTP client used by the CoinGecko collector. It is

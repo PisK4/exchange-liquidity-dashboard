@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"edgex-dashboard/backend/internal/activity"
+	"edgex-ops-intelligence/backend/internal/activity"
 )
 
 func TestNinePlatformParsersProduceActivityEvents(t *testing.T) {

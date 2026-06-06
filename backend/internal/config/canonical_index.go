@@ -5,7 +5,7 @@ import "strings"
 // CanonicalIndex is the reverse-direction lookup table built from
 // symbol_mapping.yaml's `aliases:` map. Given a (platform, raw base
 // asset) tuple it returns the V1-canonical key used to unify the
-// symbol across the dashboard's Top30 aggregation, the divergence
+// symbol across Ops Intelligence Top30 aggregation, the divergence
 // "edgeX 未上线" alert cards, and the V1 liquidity monitor page —
 // keeping a single source of truth for "PAXG on edgeX == XAUT on
 // bitget == XAU on binance == GOLD canonical".

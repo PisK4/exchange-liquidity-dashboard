@@ -16,7 +16,7 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"edgex-dashboard/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/domain"
 )
 
 const defaultLighterWSURL = "wss://mainnet.zklighter.elliot.ai/stream?readonly=true"

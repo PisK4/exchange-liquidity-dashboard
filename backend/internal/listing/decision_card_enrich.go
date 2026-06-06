@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"edgex-dashboard/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/config"
 )
 
 // edgexListedPlatformName matches the key used in config/listed_universe.yaml
