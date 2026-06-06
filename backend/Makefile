@@ -1,4 +1,4 @@
-.PHONY: build test run smoke-api smoke-adapters smoke-coingecko smoke-listing e2e-listing backfill-share swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci prune-snapshots-dry prune-snapshots-confirm verify-urls
+.PHONY: build test run smoke-api smoke-adapters smoke-coingecko smoke-listing smoke-activity e2e-listing e2e-activity backfill-share swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci prune-snapshots-dry prune-snapshots-confirm verify-urls
 
 PORT ?= 18080
 SYMBOL ?= BTC-USDT
@@ -100,6 +100,9 @@ smoke-listing:
 	DASHBOARD_MYSQL_DSN="$(MYSQL_DSN)" \
 	go run ./cmd/dashboard --role=listing --run-once --mysql-dsn="$(MYSQL_DSN)"
 
+smoke-activity:
+	go run ./scripts/activity-smoke --config-dir=../config --allow-partial
+
 # Spin up an isolated `listing-e2e` MySQL container on port 13306,
 # run the build-tagged e2e Go test suite end-to-end, and tear the
 # container down regardless of pass/fail. Designed to never touch
@@ -107,6 +110,9 @@ smoke-listing:
 # on ports 3306 / 8080 / 3001).
 e2e-listing:
 	./e2e/run-e2e.sh
+
+e2e-activity:
+	./e2e/run-activity-e2e.sh
 
 swagger:
 	mkdir -p docs
