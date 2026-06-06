@@ -14,7 +14,7 @@ import (
 // is no envelope, so HTTP 200 + non-array body counts as schema
 // drift.
 const (
-	GateSpotCurrencyPairsURL  = "https://api.gateio.ws/api/v4/spot/currency_pairs"
+	GateSpotCurrencyPairsURL    = "https://api.gateio.ws/api/v4/spot/currency_pairs"
 	GateUSDTFuturesContractsURL = "https://api.gateio.ws/api/v4/futures/usdt/contracts"
 )
 

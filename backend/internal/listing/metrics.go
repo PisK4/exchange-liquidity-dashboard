@@ -19,8 +19,8 @@ type MetricRecorder interface {
 // without affecting behaviour.
 type NopMetrics struct{}
 
-func (NopMetrics) Inc(string, ...string)            {}
-func (NopMetrics) Add(string, float64, ...string)   {}
+func (NopMetrics) Inc(string, ...string)          {}
+func (NopMetrics) Add(string, float64, ...string) {}
 
 // InMemoryMetrics is the test sink. It records every Inc/Add call so
 // assertions like "listed_universe_shrink_fallback_total fired once

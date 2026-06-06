@@ -28,11 +28,11 @@ import (
 // Concurrency: the collector itself runs single-threaded; the Store APIs it
 // calls are responsible for their own locking.
 type CoinGeckoCollector struct {
-	cfg              config.CoinGeckoConfig
-	client           *coingecko.Client
-	mapping          *coingecko.Mapping
-	cache            *coingecko.TickerCache
-	store            *Store
+	cfg     config.CoinGeckoConfig
+	client  *coingecko.Client
+	mapping *coingecko.Mapping
+	cache   *coingecko.TickerCache
+	store   *Store
 	// universeLoader returns the current listed universe; resolved on
 	// every CollectOnce so the dynamic-discovery refresh job
 	// (spec §B) becomes visible to the Top30 enrichment within one

@@ -214,8 +214,8 @@ func goldenTop30OnlyRecord() DecisionCardEvent {
 		TriggerTime:     fxTime(2026, 5, 31, 12, 0),
 		Enrichment: DecisionCardEnrichment{
 			EdgexListed: false, EdgexListedKnown: true,
-			MarketStatuses: nil,
-			MarketCapUSD:    fxPtrFloat(95_000_000),
+			MarketStatuses:   nil,
+			MarketCapUSD:     fxPtrFloat(95_000_000),
 			Spot24hVolumeUSD: fxPtrFloat(15_000_000),
 			SpotDepth:        &DepthEvidence{Platform: "bybit", USDValue: 90_000, Tier: "2pct"},
 			PerpDepth:        &DepthEvidence{Platform: "hyperliquid", USDValue: 240_000, Tier: "2pct"},

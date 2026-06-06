@@ -13,8 +13,8 @@ import (
 // BingX public endpoints. The swap endpoint is the same one used by
 // build-catalog so production traffic patterns remain unchanged.
 const (
-	BingXSpotSymbolsURL    = "https://open-api.bingx.com/openApi/spot/v1/common/symbols"
-	BingXSwapContractsURL  = "https://open-api.bingx.com/openApi/swap/v2/quote/contracts"
+	BingXSpotSymbolsURL   = "https://open-api.bingx.com/openApi/spot/v1/common/symbols"
+	BingXSwapContractsURL = "https://open-api.bingx.com/openApi/swap/v2/quote/contracts"
 )
 
 type bingxSpotEnvelope struct {

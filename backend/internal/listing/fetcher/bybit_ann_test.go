@@ -88,7 +88,7 @@ func TestDeriveBybitAnnouncementIDExtractsConcatenatedSlug(t *testing.T) {
 	cases := map[string]string{
 		"https://announcements.bybit.com/en-US/article/new-listing-slxusdt-perpetual-contract-with-up-to-20x-leverage-blte2872c09549e9399":  "blte2872c09549e9399",
 		"https://announcements.bybit.com/en-US/article/new-listing-slxusdt-perpetual-contract-with-up-to-20x-leverage-blte2872c09549e9399/": "blte2872c09549e9399",
-		"https://announcements.bybit.com/en-US/article/abc-xyz-perp-listing-bltf662314c211a8616/":                                            "bltf662314c211a8616",
+		"https://announcements.bybit.com/en-US/article/abc-xyz-perp-listing-bltf662314c211a8616/":                                           "bltf662314c211a8616",
 		"https://announcements.bybit.com/en-US/article/some-listing-without-slug":                                                           "https://announcements.bybit.com/en-US/article/some-listing-without-slug",
 	}
 	for url, want := range cases {

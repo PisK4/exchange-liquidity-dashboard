@@ -23,7 +23,7 @@ type ListedUniverseRefreshArgs struct {
 	SeedPath         string
 	RuntimePath      string
 	FreshWindow      time.Duration
-	ShrinkFloor      float64        // default 0.5; clamped at 0..1
+	ShrinkFloor      float64 // default 0.5; clamped at 0..1
 	CoveredPlatforms []string
 	Now              time.Time      // pinned for tests; zero means use repo clock
 	Metrics          MetricRecorder // optional; defaults to NopMetrics

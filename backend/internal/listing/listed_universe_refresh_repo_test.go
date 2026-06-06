@@ -22,7 +22,7 @@ func TestQueryActiveListedBasesFiltersFreshWindowAndSynthetic(t *testing.T) {
 	// the WHERE columns to be present. The cutoff arg must be
 	// (now - freshWindow).
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
-		WithArgs(now.Add(-30*time.Minute)).
+		WithArgs(now.Add(-30 * time.Minute)).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp").
 			AddRow("edgeX", "ETH", "perp").
