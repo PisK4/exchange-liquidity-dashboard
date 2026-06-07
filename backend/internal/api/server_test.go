@@ -10,6 +10,7 @@ import (
 
 	"edgex-ops-intelligence/backend/internal/config"
 	"edgex-ops-intelligence/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/startup"
 )
 
 type fakeStoreReader struct {
@@ -26,15 +27,64 @@ type fakeStoreReader struct {
 	runtime          config.Runtime
 }
 
+func TestCollectionStatusIncludesStartupAndLiveProviderState(t *testing.T) {
+	startupState := startup.New("all")
+	startupState.MarkAPIListening()
+	startupState.MarkLighterStarted(2)
+	startupState.MarkLighterProgress(1, 2)
+
+	store := fakeStoreReader{
+		mappings:         []domain.SymbolSub{{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)"}},
+		collectionStatus: map[string]any{"success": 1},
+	}
+	server := NewServer(
+		config.Config{Symbols: store.mappings, Platforms: []string{"edgeX"}},
+		store,
+		WithStartupStatus(startupState),
+	)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/collection-status", nil)
+	w := httptest.NewRecorder()
+	server.Routes().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d", w.Code)
+	}
+	var got map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if got["success"] != float64(1) {
+		t.Fatalf("success = %#v", got["success"])
+	}
+	startupBlock, ok := got["startup"].(map[string]any)
+	if !ok {
+		t.Fatalf("startup block missing: %#v", got)
+	}
+	if startupBlock["role"] != "all" || startupBlock["api_listening"] != true {
+		t.Fatalf("startup block = %#v", startupBlock)
+	}
+	liveProviders, ok := got["live_providers"].(map[string]any)
+	if !ok {
+		t.Fatalf("live_providers missing: %#v", got)
+	}
+	lighterWS, ok := liveProviders["lighter_ws"].(map[string]any)
+	if !ok {
+		t.Fatalf("lighter_ws missing: %#v", liveProviders)
+	}
+	if lighterWS["state"] != startup.StatePartial || lighterWS["ready_count"] != float64(1) {
+		t.Fatalf("lighter_ws = %#v", lighterWS)
+	}
+}
+
 func (f fakeStoreReader) MySQLBacked() bool                { return false }
 func (f fakeStoreReader) PingDB(ctx context.Context) error { return nil }
 func (f fakeStoreReader) SnapshotRowCounts(ctx context.Context) (map[string]int64, error) {
 	return nil, nil
 }
-func (f fakeStoreReader) Symbols() []string                  { return f.symbols }
-func (f fakeStoreReader) SymbolMappings() []domain.SymbolSub { return f.mappings }
-func (f fakeStoreReader) OpsIntelligenceMeta() map[string]any      { return f.meta }
-func (f fakeStoreReader) Coverage() map[string]any           { return f.coverage }
+func (f fakeStoreReader) Symbols() []string                   { return f.symbols }
+func (f fakeStoreReader) SymbolMappings() []domain.SymbolSub  { return f.mappings }
+func (f fakeStoreReader) OpsIntelligenceMeta() map[string]any { return f.meta }
+func (f fakeStoreReader) Coverage() map[string]any            { return f.coverage }
 func (f fakeStoreReader) Liquidity(symbol string) map[string]any {
 	out := cloneMap(f.liquidity)
 	out["requested_symbol"] = symbol

@@ -72,6 +72,18 @@ func TestActivityRoleRequiresMySQLAndStartsOnlyActivityWorker(t *testing.T) {
 	}
 }
 
+func TestRoleAllLoadsLatestSnapshotsAsynchronously(t *testing.T) {
+	if shouldLoadLatestSynchronously("all", false) {
+		t.Fatalf("role=all should not block API startup on latest snapshot restore")
+	}
+	if !shouldLoadLatestSynchronously("all", true) {
+		t.Fatalf("role=all run-once should keep synchronous snapshot restore")
+	}
+	if !shouldLoadLatestSynchronously("api", false) || !shouldLoadLatestSynchronously("collector", false) {
+		t.Fatalf("non-all roles should keep synchronous snapshot restore")
+	}
+}
+
 func TestBuildActivityEngineConfigResolvesEnvWebhookFirst(t *testing.T) {
 	t.Setenv("ACTIVITY_WEBHOOK_TEST", "https://env.example/webhook")
 	t.Setenv("ACTIVITY_SECRET_TEST", "decision-secret")

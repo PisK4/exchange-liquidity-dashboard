@@ -47,20 +47,35 @@ Two distinct endpoints with deliberately different semantics:
 
 | Endpoint            | Always 200? | Purpose                                                                 |
 |---------------------|-------------|-------------------------------------------------------------------------|
-| `/api/health`       | Yes         | Liveness. Container HEALTHCHECK targets this. Surfaces build_version, deps.mysql ping latency, deps.catalog symbol count, goroutine count. |
-| `/api/readiness`    | No (200 or 503) | "Should this instance receive traffic?" gate. 503 when catalog is empty or MySQL ping fails. |
+| `/api/health`       | Yes         | Liveness. Container HEALTHCHECK targets this. Surfaces build_version, deps.mysql ping latency, deps.catalog symbol count, goroutine count, and startup state when enabled. |
+| `/api/readiness`    | No (200 or 503) | "Should this instance receive traffic?" gate. 503 when catalog is empty, MySQL ping fails, or `--role=all` has neither warm cache nor a terminal first collection. |
 
 Why split: pointing the container HEALTHCHECK at `/api/readiness`
 would put the container into a restart loop during transient upstream
 exchange outages. `/api/health` always returns 200 once the process is
 responsive; readiness is allowed to fail.
 
+For the Docker/production default `--role=all`, the API starts listening before
+the MySQL latest-snapshot restore, Lighter WS, and the first Liquidity Collector
+cycle finish. Startup readiness uses the `cached_or_collected` policy: traffic is
+allowed once either persisted warm cache was restored from MySQL
+(`warm_cache.has_usable_data=true`) or the first collector cycle reaches a
+terminal state (`complete`, `failed`, or `skipped`). Lighter WS is tracked as a
+soft dependency under `startup.lighter_ws`; an upstream WS delay should be
+visible in status output, not block liveness.
+
 Smoke commands:
 
 ```
 make -C deploy smoke              # liveness only
 make -C deploy smoke-readiness    # the strict gate
+make -C backend smoke-all-startup # role=all fast liveness + startup gate shape
 ```
+
+`smoke-all-startup` intentionally defaults to no MySQL DSN so it can validate
+fast liveness on a laptop or CI host without depending on a pre-created local
+database. To exercise warm-cache readiness against a real DB, pass
+`STARTUP_MYSQL_DSN='user:pass@tcp(host:3306)/db?parseTime=true'`.
 
 ## 3. Common Symptoms
 
@@ -89,6 +104,36 @@ docker exec -u 65532 edgex-ops-intelligence-backend-1 wget -qO- http://127.0.0.1
 
 If this works but Docker still reports unhealthy, check `interval` and
 `timeout` in `deploy/docker-compose.yaml`.
+
+### 3.2.1 Backend is healthy but readiness is 503 during `--role=all` startup
+
+This is expected while a fresh instance has no restored snapshot and the first
+collector cycle is still warming in the background. Confirm the split between
+liveness and readiness:
+
+```
+curl -fsS http://127.0.0.1:8080/api/health | jq '.deps.startup'
+curl -sS http://127.0.0.1:8080/api/readiness | jq '.ready, .checks.startup'
+curl -fsS http://127.0.0.1:8080/api/collection-status | jq '.startup, .live_providers.lighter_ws'
+```
+
+Interpretation:
+
+- `phase="collector_warming_up"` and `reason="collector_warming_up"` means the
+  process is alive, but traffic should wait because no usable cache has been
+  restored yet and the first collector cycle is not terminal.
+- `latest_snapshots.state="running"` means the backend is restoring the latest
+  persisted MySQL snapshots in the background. On a large local DB this can be
+  slower than the API listener; it should not block `/api/health`.
+- `reason="warm_cache_available"` means MySQL restored enough dashboard state
+  for the API to serve while live collectors continue refreshing.
+- `reason="initial_collection_completed"` means the first collector cycle has
+  finished or failed explicitly. Inspect `/api/collection-status` for per-source
+  `complete` / `partial` / `error` / `unsupported` details rather than treating
+  readiness as proof that every upstream exchange is healthy.
+- `lighter_ws.state="timeout"` means the local Lighter book did not become
+  fully ready within the startup observation window. It should degrade affected
+  Lighter depth rows explicitly; it should not restart the container by itself.
 
 ### 3.3 MySQL volume is filling up
 

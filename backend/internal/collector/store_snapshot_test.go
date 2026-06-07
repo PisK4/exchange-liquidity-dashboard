@@ -56,3 +56,24 @@ func TestStoreSnapshotPublishesConsistentReadModel(t *testing.T) {
 		t.Fatalf("Snapshot must isolate nested slippage maps, got %#v", snap2.Platforms["edgeX|BTC-USDT (perp)"].BuySlippageBP)
 	}
 }
+
+func TestWarmCacheSummaryDetectsUsableSnapshotData(t *testing.T) {
+	store := NewStore(config.Config{
+		Symbols:   []domain.SymbolSub{{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", Canonical: "BTC"}},
+		Platforms: []string{"edgeX"},
+	})
+	if got := store.WarmCacheSummary(); got.HasUsableData {
+		t.Fatalf("empty store must not be warm: %+v", got)
+	}
+	store.SavePlatformSnapshot(domain.PlatformSnapshot{
+		Platform:      "edgeX",
+		DisplaySymbol: "BTC-USDT (perp)",
+		SnapshotTS:    time.Date(2026, 5, 25, 12, 0, 0, 0, time.UTC),
+		DepthStatus:   domain.StatusComplete,
+		DepthByTier:   map[string]domain.DepthMetrics{"0.10%": {TotalUSD: 100}},
+	})
+	got := store.WarmCacheSummary()
+	if !got.HasUsableData || got.PlatformSnapshots != 1 {
+		t.Fatalf("warm cache summary = %+v", got)
+	}
+}

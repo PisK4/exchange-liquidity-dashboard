@@ -9,6 +9,7 @@ import (
 	"edgex-ops-intelligence/backend/internal/collector"
 	"edgex-ops-intelligence/backend/internal/config"
 	"edgex-ops-intelligence/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/startup"
 )
 
 func TestHealthSurfacesBuildVersionAndCatalogStats(t *testing.T) {
@@ -95,5 +96,73 @@ func TestReadinessIsOKWithLoadedCatalogAndInMemoryStore(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("loaded catalog + in-memory store must be ready, got %d", w.Code)
+	}
+}
+
+func TestHealthIncludesStartupStateWithoutChangingLiveness(t *testing.T) {
+	cfg := config.Config{
+		Symbols:   []domain.SymbolSub{{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", Canonical: "BTC"}},
+		Platforms: []string{"edgeX"},
+	}
+	store := collector.NewStore(cfg)
+	startupState := startup.New("all")
+	startupState.MarkAPIListening()
+	srv := NewServer(cfg, store, WithStartupStatus(startupState))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/health", nil)
+	w := httptest.NewRecorder()
+	srv.health(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("health must remain liveness 200 while startup is warming, got %d", w.Code)
+	}
+	var got map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	deps, ok := got["deps"].(map[string]any)
+	if !ok {
+		t.Fatalf("deps missing: %#v", got)
+	}
+	startupBlock, ok := deps["startup"].(map[string]any)
+	if !ok {
+		t.Fatalf("deps.startup missing: %#v", deps)
+	}
+	if startupBlock["phase"] != "collector_warming_up" {
+		t.Fatalf("startup phase = %v", startupBlock["phase"])
+	}
+}
+
+func TestReadinessUsesStartupGate(t *testing.T) {
+	cfg := config.Config{
+		Symbols:   []domain.SymbolSub{{Platform: "edgeX", DisplaySymbol: "BTC-USDT (perp)", Canonical: "BTC"}},
+		Platforms: []string{"edgeX"},
+	}
+	store := collector.NewStore(cfg)
+	startupState := startup.New("all")
+	startupState.MarkAPIListening()
+	srv := NewServer(cfg, store, WithStartupStatus(startupState))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/readiness", nil)
+	w := httptest.NewRecorder()
+	srv.readiness(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("startup warming without cache must return 503, got %d", w.Code)
+	}
+
+	startupState.SetWarmCache(startup.WarmCacheSummary{PlatformSnapshots: 1, HasUsableData: true})
+	w = httptest.NewRecorder()
+	srv.readiness(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("warm cache should allow readiness, got %d", w.Code)
+	}
+	var got map[string]any
+	if err := json.NewDecoder(w.Body).Decode(&got); err != nil {
+		t.Fatalf("decode body: %v", err)
+	}
+	checks := got["checks"].(map[string]any)
+	startupCheck := checks["startup"].(map[string]any)
+	if startupCheck["reason"] != "warm_cache_available" {
+		t.Fatalf("startup reason = %v", startupCheck["reason"])
 	}
 }

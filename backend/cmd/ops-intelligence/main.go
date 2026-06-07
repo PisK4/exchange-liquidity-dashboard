@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -21,6 +22,7 @@ import (
 	"edgex-ops-intelligence/backend/internal/listing"
 	listingfetcher "edgex-ops-intelligence/backend/internal/listing/fetcher"
 	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
+	"edgex-ops-intelligence/backend/internal/startup"
 )
 
 // version is set at link time via -ldflags. Falls back to "dev" for
@@ -46,11 +48,13 @@ func main() {
 		os.Exit(0)
 	}
 	api.Version = version
+	startupState := startup.New(*role)
 
 	cfg, err := config.Load(*configDir)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+	startupState.MarkConfigLoaded()
 	cgGovernor := buildCoinGeckoGovernor(cfg.Runtime.CoinGecko.Governance)
 
 	store := collector.NewStore(cfg)
@@ -62,17 +66,25 @@ func main() {
 		if err != nil {
 			log.Fatalf("connect mysql: %v", err)
 		}
+		startupState.MarkMySQLConnected()
 		defer db.Close()
 		if err := collector.ApplyMigrations(db); err != nil {
 			log.Fatalf("apply mysql migrations: %v", err)
 		}
+		startupState.MarkMigrationsApplied(nil)
 		store.AttachDB(db)
-		if err := store.LoadLatestFromDB(context.Background()); err != nil {
-			log.Printf("load latest snapshots from mysql: %v", err)
-		}
 		listingRepo = listing.NewRepository(db)
 		activityRepo = activity.NewRepository(db)
+		if shouldLoadLatestSynchronously(*role, *runOnce) {
+			if err := loadLatestSnapshots(context.Background(), startupState, store); err != nil {
+				log.Printf("load latest snapshots from mysql: %v", err)
+			}
+		}
 	} else {
+		startupState.MarkMySQLNotConfigured()
+		startupState.MarkMigrationsSkipped()
+		startupState.MarkLatestSnapshotsSkipped()
+		startupState.SetWarmCache(store.WarmCacheSummary())
 		if roleRequiresMySQL(*role) {
 			log.Fatalf("role %q requires MySQL DSN (--mysql-dsn or OPS_INTELLIGENCE_MYSQL_DSN)", *role)
 		}
@@ -87,33 +99,52 @@ func main() {
 		go store.WatchCatalog(ctx, catalogPath, *catalogReloadInterval)
 		log.Printf("watching %s for frontend metadata hot reload (interval=%s)", catalogPath, *catalogReloadInterval)
 	}
+	seedUniversePath := filepath.Join(*configDir, "listed_universe.yaml")
+	runtimeUniversePath := resolveRuntimeUniversePath(*runtimeDataDir, *configDir)
+	cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath = resolveConfigPath(
+		cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath, runtimeUniversePath, *configDir)
+	cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath = resolveConfigPath(
+		cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath, seedUniversePath, *configDir)
+	resolveListingCallbackSecret(&cfg)
+	apiStarted := false
+	if *role == "all" && !*runOnce {
+		server := api.NewServer(cfg, store, buildAPIOptions(cfg, listingRepo, activityRepo, startupState)...)
+		startAPIServerAsync(*addr, server, startupState)
+		apiStarted = true
+		startLatestSnapshotLoad(ctx, startupState, store)
+	}
 	var lighterProvider *adapter.LighterWSProvider
 	if roleStartsLiveProviders(*role) {
 		lighterProvider = adapter.NewLighterWSProviderWithProxy(cfg.Runtime.LighterWSURL, cfg.Runtime.LighterStaleAfter, cfg.Runtime.ExchangeProxy)
 		lighterMarketIDs := lighterMarketIDsFromConfig(cfg)
+		startupState.MarkLighterStarted(len(lighterMarketIDs))
 		go lighterProvider.Run(ctx, lighterMarketIDs)
-		waitForLighter(ctx, lighterProvider, lighterMarketIDs)
+		if *role == "all" && !*runOnce {
+			go monitorLighterStartup(ctx, startupState, lighterProvider, lighterMarketIDs)
+		} else {
+			monitorLighterStartup(ctx, startupState, lighterProvider, lighterMarketIDs)
+		}
 	}
 
 	if *role == "collector" || *role == "all" {
 		c := collector.NewCollectorWithLighter(cfg, store, lighterProvider)
 		backfiller := collector.NewSymbolBackfiller(cfg, store, lighterProvider)
 		var top30bf *collector.Top30Backfiller
-		if err := runCollectionCycle(ctx, c, cfg.Runtime.CollectionInterval); err != nil {
-			log.Printf("initial collection completed with errors: %v", err)
-		}
 		if !*runOnce {
-			go func() {
-				ticker := time.NewTicker(cfg.Runtime.CollectionInterval)
-				defer ticker.Stop()
-				for range ticker.C {
-					if err := runCollectionCycle(ctx, c, cfg.Runtime.CollectionInterval); err != nil {
-						log.Printf("collection completed with errors: %v", err)
-					}
+			if *role == "all" {
+				startCollectorLoop(ctx, startupState, store, c, cfg.Runtime.CollectionInterval)
+			} else {
+				if err := runInitialCollection(ctx, startupState, store, c, cfg.Runtime.CollectionInterval); err != nil {
+					log.Printf("initial collection completed with errors: %v", err)
 				}
-			}()
+				startPeriodicCollectionLoop(ctx, startupState, store, c, cfg.Runtime.CollectionInterval)
+			}
+			startupState.MarkWorker("symbol_backfill", startup.StateScheduled, nil)
 			backfiller.Run(ctx, 14)
 		} else {
+			if err := runInitialCollection(ctx, startupState, store, c, cfg.Runtime.CollectionInterval); err != nil {
+				log.Printf("initial collection completed with errors: %v", err)
+			}
 			if err := backfiller.RunOnce(ctx, 14); err != nil {
 				log.Printf("symbol-volume backfill run-once completed with errors: %v", err)
 			}
@@ -132,6 +163,7 @@ func main() {
 			resolver := collector.NewCatalogResolverWithDB(*rawInstrumentsDir, snapshots, 0, nil)
 			top30bf = collector.NewTop30Backfiller(cfg, store, lighterProvider, resolver)
 			top30bf.Run(ctx)
+			startupState.MarkWorker("top30_backfill", startup.StateScheduled, nil)
 			log.Printf("top30 backfill scheduled (cold_start=%dd, daily=%02d:%02d UTC, concurrency=%d, rate=%d/s)",
 				cfg.Runtime.Backfill.ColdStartDays,
 				cfg.Runtime.Backfill.ScheduleUTCHour, cfg.Runtime.Backfill.ScheduleUTCMinute,
@@ -141,9 +173,8 @@ func main() {
 		if cfg.Runtime.CoinGecko.Enabled {
 			if cgCollector, err := buildCoinGeckoCollector(cfg, store, cgGovernor); err != nil {
 				log.Printf("coingecko collector disabled: %v", err)
+				startupState.MarkWorker("coingecko", startup.StateFailed, err)
 			} else {
-				seedUniversePath := filepath.Join(*configDir, "listed_universe.yaml")
-				runtimeUniversePath := resolveRuntimeUniversePath(*runtimeDataDir, *configDir)
 				log.Printf("listed_universe loader: seed=%s runtime=%s (hot-reloaded every CollectOnce tick)", seedUniversePath, runtimeUniversePath)
 				cgCollector.SetListedUniverseLoader(buildUniverseLoader(runtimeUniversePath, seedUniversePath))
 				if top30bf != nil {
@@ -154,31 +185,16 @@ func main() {
 						log.Printf("coingecko initial collection failed: %v", err)
 					}
 				} else {
+					startupState.MarkWorker("coingecko", startup.StateRunning, nil)
 					go cgCollector.Run(ctx)
 				}
 			}
 		}
 	}
-
-	seedUniversePath := filepath.Join(*configDir, "listed_universe.yaml")
-	runtimeUniversePath := resolveRuntimeUniversePath(*runtimeDataDir, *configDir)
 	universeClosure := buildUniverseLoader(runtimeUniversePath, seedUniversePath)
 	listingUniverseLoader := func() (*config.ListedUniverse, error) {
 		return universeClosure(), nil
 	}
-	// Bind the refresh job to the runtime path resolved above so a
-	// running listing engine always writes where the consumer
-	// closures expect to read. The YAML form may contain
-	// "${OPS_INTELLIGENCE_DATA_DIR}" or other env placeholders (operator
-	// convenience); we run os.ExpandEnv first so unresolved
-	// placeholders never reach the engine. After expansion we also
-	// fall back to the resolved default if the field ended up empty
-	// or still contains a literal "${" (env var unset).
-	cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath = resolveConfigPath(
-		cfg.Runtime.ListingAgent.ListedUniverseRefresh.RuntimePath, runtimeUniversePath, *configDir)
-	cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath = resolveConfigPath(
-		cfg.Runtime.ListingAgent.ListedUniverseRefresh.SeedPath, seedUniversePath, *configDir)
-	resolveListingCallbackSecret(&cfg)
 	if roleStartsListing(*role) && cfg.Runtime.ListingAgent.Enabled && listingRepo != nil {
 		listingHTTPClient, err := listingfetcher.NewHTTPClient(listingfetcher.DefaultRequestTimeout, cfg.Runtime.ExchangeProxy)
 		if err != nil {
@@ -210,11 +226,15 @@ func main() {
 			}
 			return
 		}
+		startupState.MarkWorker("listing", startup.StateRunning, nil)
 		go func() {
 			if err := engine.Run(ctx); err != nil {
+				startupState.MarkWorker("listing", startup.StateFailed, err)
 				log.Printf("listing engine stopped: %v", err)
 			}
 		}()
+	} else if roleStartsListing(*role) {
+		startupState.MarkWorker("listing", startup.StateSkipped, nil)
 	}
 
 	if *role == "collector" && *runOnce {
@@ -224,11 +244,13 @@ func main() {
 	if roleStartsActivity(*role) {
 		if !cfg.Runtime.ActivityAgent.Enabled {
 			log.Printf("activity agent disabled by runtime config")
+			startupState.MarkWorker("activity", startup.StateDisabled, nil)
 			if *role == "activity" {
 				os.Exit(1)
 			}
 		} else if activityRepo == nil {
 			log.Printf("activity agent disabled: no repository configured")
+			startupState.MarkWorker("activity", startup.StateSkipped, nil)
 			if *role == "activity" {
 				os.Exit(1)
 			}
@@ -243,9 +265,11 @@ func main() {
 				}
 				return
 			}
+			startupState.MarkWorker("activity", startup.StateRunning, nil)
 			go func() {
 				interval := cfg.Runtime.ActivityAgent.DefaultPollInterval
 				if err := engine.Run(ctx, interval, log.Printf); err != nil {
+					startupState.MarkWorker("activity", startup.StateFailed, err)
 					log.Printf("activity engine stopped: %v", err)
 				}
 			}()
@@ -256,7 +280,19 @@ func main() {
 		select {}
 	}
 
-	opts := []api.Option{}
+	if !apiStarted {
+		server := api.NewServer(cfg, store, buildAPIOptions(cfg, listingRepo, activityRepo, startupState)...)
+		startupState.MarkAPIListening()
+		log.Printf("EdgeX liquidity dashboard API listening on %s", *addr)
+		if err := http.ListenAndServe(*addr, server.Routes()); err != nil {
+			log.Fatal(err)
+		}
+	}
+	select {}
+}
+
+func buildAPIOptions(cfg config.Config, listingRepo *listing.Repository, activityRepo *activity.Repository, startupState *startup.State) []api.Option {
+	opts := []api.Option{api.WithStartupStatus(startupState)}
 	if listingRepo != nil {
 		opts = append(opts, api.WithListingReader(listingRepo))
 		opts = append(opts, listingDecisionOptions(cfg, listingRepo)...)
@@ -265,11 +301,21 @@ func main() {
 		opts = append(opts, api.WithActivityStore(activityRepo))
 		opts = append(opts, api.WithActivityDecisionTokenSecret(os.Getenv(cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv)))
 	}
-	server := api.NewServer(cfg, store, opts...)
-	log.Printf("EdgeX liquidity dashboard API listening on %s", *addr)
-	if err := http.ListenAndServe(*addr, server.Routes()); err != nil {
-		log.Fatal(err)
+	return opts
+}
+
+func startAPIServerAsync(addr string, server *api.Server, startupState *startup.State) {
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("listen api %s: %v", addr, err)
 	}
+	startupState.MarkAPIListening()
+	log.Printf("EdgeX liquidity dashboard API listening on %s", addr)
+	go func() {
+		if err := http.Serve(listener, server.Routes()); err != nil {
+			log.Fatalf("api server stopped: %v", err)
+		}
+	}()
 }
 
 // buildUniverseLoader returns a closure that resolves the listed
@@ -374,6 +420,27 @@ func roleStartsLiveProviders(role string) bool {
 	return role == "collector" || role == "all"
 }
 
+func shouldLoadLatestSynchronously(role string, runOnce bool) bool {
+	return role != "all" || runOnce
+}
+
+func loadLatestSnapshots(ctx context.Context, status *startup.State, store *collector.Store) error {
+	status.MarkLatestSnapshotsLoading()
+	err := store.LoadLatestFromDB(ctx)
+	if err != nil {
+		log.Printf("load latest snapshots from mysql: %v", err)
+	}
+	status.MarkLatestSnapshotsLoaded(err)
+	status.SetWarmCache(store.WarmCacheSummary())
+	return err
+}
+
+func startLatestSnapshotLoad(ctx context.Context, status *startup.State, store *collector.Store) {
+	go func() {
+		_ = loadLatestSnapshots(ctx, status, store)
+	}()
+}
+
 func runCollectionCycle(ctx context.Context, c *collector.Collector, timeout time.Duration) error {
 	if timeout <= 0 {
 		timeout = time.Minute
@@ -381,6 +448,46 @@ func runCollectionCycle(ctx context.Context, c *collector.Collector, timeout tim
 	cycleCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	return c.CollectOnce(cycleCtx)
+}
+
+func runInitialCollection(ctx context.Context, status *startup.State, store *collector.Store, c *collector.Collector, timeout time.Duration) error {
+	status.MarkInitialCollectionStarted()
+	err := runCollectionCycle(ctx, c, timeout)
+	status.SetWarmCache(store.WarmCacheSummary())
+	status.MarkInitialCollectionCompleted(err)
+	return err
+}
+
+func startCollectorLoop(ctx context.Context, status *startup.State, store *collector.Store, c *collector.Collector, interval time.Duration) {
+	go func() {
+		if err := runInitialCollection(ctx, status, store, c, interval); err != nil {
+			log.Printf("initial collection completed with errors: %v", err)
+		}
+		startPeriodicCollectionLoop(ctx, status, store, c, interval)
+	}()
+}
+
+func startPeriodicCollectionLoop(ctx context.Context, status *startup.State, store *collector.Store, c *collector.Collector, interval time.Duration) {
+	if interval <= 0 {
+		interval = time.Minute
+	}
+	go func() {
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := runCollectionCycle(ctx, c, interval); err != nil {
+					log.Printf("collection completed with errors: %v", err)
+				}
+				if status != nil {
+					status.SetWarmCache(store.WarmCacheSummary())
+				}
+			}
+		}
+	}()
 }
 
 // buildCoinGeckoCollector wires the CoinGecko client + mapping using the
@@ -442,7 +549,7 @@ func lighterMarketIDsFromConfig(cfg config.Config) []int {
 	return marketIDs
 }
 
-func waitForLighter(ctx context.Context, provider *adapter.LighterWSProvider, marketIDs []int) {
+func monitorLighterStartup(ctx context.Context, status *startup.State, provider *adapter.LighterWSProvider, marketIDs []int) {
 	if provider == nil || len(marketIDs) == 0 {
 		return
 	}
@@ -452,6 +559,7 @@ func waitForLighter(ctx context.Context, provider *adapter.LighterWSProvider, ma
 	defer ticker.Stop()
 	for {
 		readyCount := provider.ReadyCount(marketIDs)
+		status.MarkLighterProgress(readyCount, len(marketIDs))
 		if readyCount == len(marketIDs) {
 			return
 		}
@@ -459,6 +567,7 @@ func waitForLighter(ctx context.Context, provider *adapter.LighterWSProvider, ma
 		case <-ctx.Done():
 			return
 		case <-deadline.C:
+			status.MarkLighterTimeout(readyCount, len(marketIDs))
 			log.Printf("lighter ws not fully ready before initial collection; continuing with statusized failures (ready=%d/%d)", readyCount, len(marketIDs))
 			return
 		case <-ticker.C:

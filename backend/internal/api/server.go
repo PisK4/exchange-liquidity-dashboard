@@ -9,6 +9,7 @@ import (
 
 	"edgex-ops-intelligence/backend/internal/config"
 	"edgex-ops-intelligence/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/startup"
 )
 
 // Version is the human-readable build identifier surfaced by the
@@ -32,6 +33,12 @@ type Server struct {
 	callback               ListingCallbackConfig
 	activityDecisionSecret string
 	activityNow            func() time.Time
+	startup                StartupReader
+}
+
+type StartupReader interface {
+	Snapshot() startup.Snapshot
+	Readiness() startup.ReadinessDecision
 }
 
 type StoreReader interface {
@@ -57,6 +64,10 @@ func NewServer(cfg config.Config, store StoreReader, opts ...Option) *Server {
 		opt(s)
 	}
 	return s
+}
+
+func WithStartupStatus(status StartupReader) Option {
+	return func(s *Server) { s.startup = status }
 }
 
 func (s *Server) Routes() http.Handler {
@@ -122,6 +133,9 @@ func (s *Server) health(w http.ResponseWriter, r *http.Request) {
 		"go_max_procs":    runtime.GOMAXPROCS(0),
 		"goroutine_count": runtime.NumGoroutine(),
 	}
+	if s.startup != nil {
+		deps["startup"] = s.startup.Snapshot()
+	}
 
 	writeJSON(w, map[string]any{
 		"ok":            true,
@@ -166,6 +180,13 @@ func (s *Server) readiness(w http.ResponseWriter, r *http.Request) {
 	if len(s.cfg.Symbols) == 0 {
 		httpStatus = http.StatusServiceUnavailable
 	}
+	if s.startup != nil {
+		decision := s.startup.Readiness()
+		checks["startup"] = decision
+		if !decision.OK {
+			httpStatus = http.StatusServiceUnavailable
+		}
+	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(httpStatus)
@@ -198,7 +219,16 @@ func (s *Server) top30Divergence(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.store.Top30Divergence())
 }
 func (s *Server) collectionStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, s.store.CollectionStatus())
+	out := s.store.CollectionStatus()
+	if out == nil {
+		out = map[string]any{}
+	}
+	if s.startup != nil {
+		snap := s.startup.Snapshot()
+		out["startup"] = snap
+		out["live_providers"] = map[string]any{"lighter_ws": snap.LighterWS}
+	}
+	writeJSON(w, out)
 }
 func (s *Server) runtimeConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, s.store.RuntimeConfig())

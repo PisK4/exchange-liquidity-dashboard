@@ -1,8 +1,9 @@
-.PHONY: build test run smoke-api smoke-adapters smoke-coingecko smoke-listing smoke-activity e2e-listing e2e-activity backfill-share swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci prune-snapshots-dry prune-snapshots-confirm verify-urls
+.PHONY: build test run smoke-api smoke-all-startup smoke-adapters smoke-coingecko smoke-listing smoke-activity e2e-listing e2e-activity backfill-share swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci prune-snapshots-dry prune-snapshots-confirm verify-urls
 
 PORT ?= 18080
 SYMBOL ?= BTC-USDT
 MYSQL_DSN ?= root:root@tcp(127.0.0.1:3306)/edgex_ops_intelligence?parseTime=true
+STARTUP_MYSQL_DSN ?=
 BACKFILL_DAYS ?= 30
 COINGECKO_API_KEY_ENV ?= COINGECKO_DEMO_API_KEY
 COINGECKO_PROXY ?=
@@ -65,6 +66,27 @@ smoke-api:
 	done; \
 	curl -fsS http://127.0.0.1:$(PORT)/api/health; \
 	curl -fsS 'http://127.0.0.1:$(PORT)/api/snapshot/liquidity?symbol=$(SYMBOL)%20%28perp%29'
+
+smoke-all-startup:
+	tmp_bin=$$(mktemp -t edgex-ops-intelligence-all-smoke.XXXXXX); \
+	readiness_body=$$(mktemp -t edgex-ops-intelligence-readiness.XXXXXX); \
+	go build -o $$tmp_bin ./cmd/ops-intelligence; \
+	OPS_INTELLIGENCE_MYSQL_DSN="$(STARTUP_MYSQL_DSN)" $$tmp_bin --role=all --addr=:$(PORT) --mysql-dsn="$(STARTUP_MYSQL_DSN)" & \
+	pid=$$!; \
+	trap 'kill $$pid 2>/dev/null || true; rm -f $$tmp_bin $$readiness_body' EXIT; \
+	i=0; \
+	until curl -fsS http://127.0.0.1:$(PORT)/api/health >/dev/null || [ $$i -ge 30 ]; do \
+		i=$$((i + 1)); \
+		sleep 0.5; \
+	done; \
+	curl -fsS http://127.0.0.1:$(PORT)/api/health; \
+	readiness_status=$$(curl -sS -o $$readiness_body -w '%{http_code}' http://127.0.0.1:$(PORT)/api/readiness); \
+	cat $$readiness_body; \
+	if [ "$$readiness_status" != "200" ] && [ "$$readiness_status" != "503" ]; then \
+		echo "unexpected readiness status $$readiness_status"; \
+		exit 1; \
+	fi; \
+	curl -fsS http://127.0.0.1:$(PORT)/api/collection-status >/dev/null
 
 smoke-adapters:
 	LIVE_ADAPTER_SMOKE=1 go test ./internal/adapter -run TestLiveAdapterSmoke -count=1 -v -args -symbol=$(SYMBOL)
