@@ -16,6 +16,17 @@ backend/top30-preview
 .factory
 docs
 
+# Track repo-local feature contracts while keeping other local docs ignored
+# by default. If a docs/feat/*.md file is referenced as an implementation
+# contract, it must be visible to git and reviewable in PRs.
+!docs/
+docs/*
+!docs/feat/
+docs/feat/*
+!docs/feat/*.md
+!docs/feat/**/
+!docs/feat/**/*.md
+
 # Track raw instrument audit snapshots under backend/docs despite ignoring docs elsewhere.
 !backend/docs/
 !backend/docs/raw-instruments/

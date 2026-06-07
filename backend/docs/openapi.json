@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "EdgeX Ops Intelligence - Liquidity API",
+    "title": "EdgeX Ops Intelligence API",
     "version": "0.1.0"
   },
   "paths": {

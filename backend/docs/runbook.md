@@ -1,8 +1,17 @@
 # EdgeX Ops Intelligence Runbook
 
-Operational procedures for the V1 production release. Treat this as
-the canonical source for "the Ops Intelligence liquidity module is broken, what do I do?";
-escalate only when a section here does not cover the symptom.
+Operational procedures for the current EdgeX Ops Intelligence runtime. Treat
+this as the canonical source for "an Ops Intelligence module is broken, what do
+I do?"; escalate only when a section here does not cover the symptom.
+
+The backend runs three active modules behind one binary:
+
+- **Liquidity Dashboard**: collector/adapters/CoinGecko/Top30/backfill and
+  `/api/snapshot/*` surfaces.
+- **Listing Agent**: instrument and announcement polling, candidate fusion,
+  Top30/divergence/liquidity alert cards, callback, and delivery outbox.
+- **Activity Agent**: campaign source ingestion, parser, review/decision,
+  delivery outbox, redrive, and `/api/activity/*` surfaces.
 
 ## 1. Topology
 
@@ -14,11 +23,23 @@ escalate only when a section here does not cover the symptom.
                                                  |      mexc/gate/hyperliquid/lighter/edgeX)
                                                  |
                                                  +---> CoinGecko (Demo API key)
+                                                 +---> Listing Agent workers + Lark bots
+                                                 +---> Activity Agent workers + Lark bot
                                                  +---> :3306 (MySQL persistence)
 ```
 
 Single Compose project (`edgex-ops-intelligence`). All bind on 127.0.0.1 by
 default; expose via a reverse proxy if external access is required.
+
+Backend roles are selected by `--role`:
+
+| Role | Starts | MySQL required? | Typical use |
+|---|---|---:|---|
+| `api` | HTTP API only | No | Local API smoke / read-only in-memory checks. |
+| `collector` | Liquidity collector, live providers, CoinGecko, backfill, Listing dynamic universe helper when MySQL is present | No, degrades without Listing repository | Data collection worker. |
+| `listing` | Listing Agent worker | Yes | Listing run-once / worker isolation. |
+| `activity` | Activity Agent worker | Yes | Activity run-once / worker isolation. |
+| `all` | API + collector + Listing Agent + Activity Agent | Listing/Activity need MySQL | Docker/production default. |
 
 ## 2. Health and Readiness Probes
 
@@ -50,8 +71,8 @@ make -C deploy smoke-readiness    # the strict gate
    to see the per-collector status rows.
 3. Look for `"skipped: pair in cooldown after consecutive failures"` --
    the collector parks a (platform, canonical) pair after three
-   consecutive failures (default; see `cooldown_failure_threshold` in
-   runtime.yaml). Cooldown clears after `cooldown_duration` (default
+   consecutive failures (default; see `Runtime.cooldown_failure_threshold` in
+   `config/edgex-ops-intelligence.yaml`). Cooldown clears after `Runtime.cooldown_duration` (default
    5m) or on a single successful collection.
 4. Look for `"hint: api_symbol unsupported on platform"` -- the catalog
    resolver did not find a match for that (platform, canonical).
@@ -136,7 +157,8 @@ Diagnosis order:
 2. Find which native ticker is failing:
 
    ```
-   docker exec deploy-mysql-1 mysql -uroot -proot edgex_ops_intelligence -e \
+   docker compose --project-name edgex-ops-intelligence exec -T mysql \
+     mysql -uroot -p"${MYSQL_ROOT_PASSWORD:-root}" edgex_ops_intelligence -e \
      "SELECT platform, status, error_message, snapshot_ts
         FROM t_symbol_volume_snapshot
        WHERE display_symbol='ETH-USDT (perp)'
@@ -178,7 +200,7 @@ Diagnosis order:
 Cadence: monthly, plus ad-hoc when an exchange announces a relisting.
 
 ```
-# 1. Refresh raw instrument dumps (writes backend/docs/raw-instruments/<platform>/<date>.json)
+# 1. Refresh raw instrument dumps (writes backend/docs/raw-instruments/<platform>-<market_type>/<YYYY-MM-DD>.json)
 make -C backend catalog-raw CATALOG_PROXY=http://127.0.0.1:7897
 
 # 2. Diff vs current
@@ -200,7 +222,7 @@ make -C backend verify-urls CATALOG_PROXY=http://127.0.0.1:7897
 cd backend && make ci
 
 # 2. Frontend gate
-cd web && pnpm typecheck && pnpm lint && pnpm e2e
+cd web && npm run typecheck && npm run lint && npm run build && npm run test:e2e
 
 # 3. Build production image with embedded version
 cd deploy && make build-image
@@ -214,7 +236,52 @@ make up
 
 # 6. Verify
 make smoke && make smoke-readiness
+
+# 7. Optional module smoke checks
+cd ../backend && make smoke-listing && make smoke-activity
 ```
+
+For Docker/Compose E2E, run the web check with the Compose port:
+
+```
+cd web && PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 npm run test:e2e
+```
+
+## 5.1 Listing Agent checks
+
+Use these checks when `/api/listing/*`, Top30 hot-gap cards, divergence cards,
+liquidity alerts, or decision callbacks are suspected:
+
+```
+# API/worker run-once against a MySQL DSN; unset webhooks mark outbox rows disabled.
+make -C backend smoke-listing MYSQL_DSN='root:root@tcp(127.0.0.1:3306)/edgex_ops_intelligence?parseTime=true'
+
+# Inspect source health and deliveries.
+curl -fsS 'http://127.0.0.1:8080/api/listing/source-health' | jq
+curl -fsS 'http://127.0.0.1:8080/api/listing/deliveries?limit=20' | jq
+```
+
+Webhook routing uses `Alert.Webhooks.Listing` for Top30/divergence cards and
+`Alert.Webhooks.Liquidity` for Dashboard liquidity-lag / worst-depth cards.
+The legacy `Alert.WebHookP3` is a Listing fallback only.
+
+## 5.2 Activity Agent checks
+
+Use these checks when `/api/activity/*`, campaign ingestion, source health,
+review/decision links, or Activity Lark delivery are suspected:
+
+```
+# Parser/source smoke; allows partial upstream failures for WAF/network drift.
+make -C backend smoke-activity
+
+# Inspect source health and deliveries.
+curl -fsS 'http://127.0.0.1:8080/api/activity/source-health' | jq
+curl -fsS 'http://127.0.0.1:8080/api/activity/deliveries?limit=20' | jq
+```
+
+Activity delivery uses `Alert.Webhooks.Activity` or the configured
+`ACTIVITY_LARK_WEBHOOK_URL`; decision links require
+`ACTIVITY_DECISION_TOKEN_SECRET` so stale/forged decisions can be rejected.
 
 ## 6. Backup and Restore
 
@@ -257,4 +324,4 @@ locking writers; the CR remains observable during the dump.
   cooldown expires or a single success clears the counter.
 - **staleness_by_category**: per-asset_category staleness threshold.
   crypto:30s, commodity:300s, stock:600s, index_etf:600s; configurable
-  via runtime.yaml.
+  via `config/edgex-ops-intelligence.yaml`.

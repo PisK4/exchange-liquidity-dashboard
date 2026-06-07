@@ -1,5 +1,7 @@
-# V1 Platform x Canonical Coverage Matrix
+# Platform x Canonical Coverage Matrix Snapshot
 
+**Status**: V1.0.0 historical snapshot. Regenerate with `cd backend && make catalog`
+and refresh this table before using it as a current operations source.
 **Generated**: 2026-05-23
 **Source**: `config/instrument_catalog.yaml` (406 entries) and `config/symbol_mapping.yaml` (74 canonicals)
 

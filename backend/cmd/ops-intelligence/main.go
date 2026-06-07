@@ -31,7 +31,7 @@ var version = "dev"
 
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
-	role := flag.String("role", "all", "role: api, collector, or all")
+	role := flag.String("role", "all", "role: api, collector, listing, activity, or all")
 	runOnce := flag.Bool("run-once", false, "run one collection cycle at startup")
 	mysqlDSN := flag.String("mysql-dsn", os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN"), "optional MySQL DSN, for example root:root@tcp(127.0.0.1:3306)/edgex_ops_intelligence?parseTime=true")
 	configDir := flag.String("config-dir", "../config", "directory containing EdgeX Ops Intelligence yaml configs")

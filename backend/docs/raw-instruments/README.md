@@ -25,7 +25,7 @@ backend/docs/raw-instruments/
 | bingx        | `spot`, `swap`                                        |
 | mexc         | `spot`, `contract`                                    |
 | gate         | `spot`, `futures-usdt`                                |
-| hyperliquid  | `perp`, `spot`                                        |
+| hyperliquid  | `perp`, `spot`, `perpdex-*` when emitted by adapter   |
 | lighter      | `perp`, `spot`                                        |
 | edgeX        | `perp-v1`, `perp-v2`, `spot`                          |
 
@@ -54,8 +54,9 @@ make catalog            # full refresh (requires network to all 10 exchanges)
 This fetches every endpoint live, rewrites every `<platform>-<market>/<YYYY-MM-DD>.json`,
 and regenerates two yaml files in `config/`:
 
-- `instrument_catalog.yaml` — canonical BTC/ETH/SOL per-platform fields
-  consumed by the depth adapters.
+- `instrument_catalog.yaml` — canonical whitelist per-platform fields
+  consumed by depth adapters, Top30 backfill/catalog resolution, and listed
+  universe regeneration.
 - `listed_universe.yaml` — per-platform union of all listed base assets
   (perp + spot), consumed by the CoinGecko collector at runtime to fill the
   "edgeX 已上线?" column on the Top30 tab. Stale or absent universe entries
@@ -100,9 +101,9 @@ git rm backend/docs/raw-instruments/*/2024-*.json
 Two reasons:
 
 1. **Reproducibility** — the structured `config/instrument_catalog.yaml`
-   filters BTC / ETH / SOL perp; raw dumps preserve the full universe so
-   you can rerun the filter for any new canonical without re-hitting the
-   exchange.
+   filters the configured canonical whitelist into runtime-ready instruments;
+   raw dumps preserve the full exchange universe so you can rerun the filter
+   for any new canonical without re-hitting the exchange.
 2. **Drift forensics** — when MEXC `contract_size` flips or Lighter
    `market_id` is reassigned, the raw dump diff identifies what changed
    upstream vs. what changed in our filter logic.

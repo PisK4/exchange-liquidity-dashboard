@@ -10,10 +10,10 @@ and stores the top 30 rows in `t_top30_snapshot`.
 
 ## Cadence
 
-`config/runtime.yaml` sets CoinGecko `pull_interval` to `5m`, matching the
-dashboard collection interval. This improves ranking freshness for CoinGecko's
-rolling 24h volume, especially around ranks 25-30 where symbols can move in
-and out.
+`config/edgex-ops-intelligence.yaml` controls this through
+`Runtime.coingecko.pull_interval` and keeps it aligned with the dashboard
+collection cadence. This improves ranking freshness for CoinGecko's rolling
+24h volume, especially around ranks 25-30 where symbols can move in and out.
 
 `cache_ttl` is `0s`: the periodic collector is the only live reader today, so
 an in-process CoinGecko ticker cache would obscure freshness without saving
@@ -48,6 +48,8 @@ Common causes:
 5. The native kline endpoint has fewer than seven positive UTC-day rows in
    the window.
 
-Planned follow-up: trigger incremental native backfill when a new symbol
-appears in a platform's Top30 roster, and expose skip reasons separately from
-ordinary history warm-up.
+The current collector wires `Top30Backfiller` after the first CoinGecko
+derivatives round, so newly observed Top30 symbols can schedule native kline
+backfill through the platform catalog resolver. Remaining product debt: expose
+the concrete skip reason separately from ordinary history warm-up instead of
+collapsing all unavailable history into `insufficient_history`.
