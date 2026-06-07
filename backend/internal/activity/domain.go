@@ -232,6 +232,8 @@ type SourceState struct {
 	EventCount             int
 	SourceContextJSON      json.RawMessage
 	DisabledUntil          *time.Time
+	LastCheckedAt          *time.Time
+	LastSuccessAt          *time.Time
 	UpdatedAt              time.Time
 }
 

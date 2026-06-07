@@ -23,6 +23,16 @@ func newActivityRepoWithMock(t *testing.T, now time.Time) (*Repository, sqlmock.
 	return repo, mock, func() { _ = db.Close() }
 }
 
+func activitySourceStateRows() *sqlmock.Rows {
+	return sqlmock.NewRows([]string{
+		"id", "platform", "source_group", "source_type", "source_url", "source_key", "fetch_mode",
+		"evidence_quality", "enabled", "poll_interval_seconds", "auto_push_enabled", "requires_proxy", "requires_browser_context",
+		"requires_login", "personalized", "source_status", "last_http_status", "last_error_kind",
+		"last_schema_hash", "last_content_hash", "sample_count", "event_count", "source_context_json",
+		"disabled_until", "last_checked_at", "last_success_at", "updated_at",
+	})
+}
+
 func TestRepositoryUpsertRawEvidenceTruncatesAndHashesPayload(t *testing.T) {
 	now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newActivityRepoWithMock(t, now)
@@ -80,6 +90,57 @@ func TestRepositoryUpsertActivitySourceState(t *testing.T) {
 		UpdatedAt:              now,
 	}); err != nil {
 		t.Fatalf("UpsertActivitySourceState err=%v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestRepositoryLoadActivitySourceState(t *testing.T) {
+	now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
+	checkedAt := now.Add(-10 * time.Minute)
+	successAt := now.Add(-20 * time.Minute)
+	disabledUntil := now.Add(30 * time.Minute)
+	repo, mock, cleanup := newActivityRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_source_state")).
+		WithArgs("gate|launchpool_project_list|utls_proxy_json").
+		WillReturnRows(activitySourceStateRows().AddRow(
+			int64(9), "gate", "launchpool_project_list", "announcement_api", "https://gate.example/launchpool",
+			"gate|launchpool_project_list|utls_proxy_json", "utls_proxy_json", "api_json",
+			1, 600, 1, 1, 0, 0, 0, SourceStatusDegraded, 429, "http_429",
+			"schema-hash", "content-hash", 3, 4, []byte(`{"region":"sg"}`), disabledUntil, checkedAt, successAt, now,
+		))
+	state, ok, err := repo.LoadActivitySourceState(context.Background(), "gate|launchpool_project_list|utls_proxy_json")
+	if err != nil {
+		t.Fatalf("LoadActivitySourceState err=%v", err)
+	}
+	if !ok {
+		t.Fatalf("LoadActivitySourceState ok=false")
+	}
+	if state.SourceKey != "gate|launchpool_project_list|utls_proxy_json" || state.PollIntervalSeconds != 600 || state.LastHTTPStatus == nil || *state.LastHTTPStatus != 429 {
+		t.Fatalf("state=%+v", state)
+	}
+	if state.DisabledUntil == nil || !state.DisabledUntil.Equal(disabledUntil) {
+		t.Fatalf("DisabledUntil=%v want %s", state.DisabledUntil, disabledUntil)
+	}
+	if state.LastCheckedAt == nil || !state.LastCheckedAt.Equal(checkedAt) {
+		t.Fatalf("LastCheckedAt=%v want %s", state.LastCheckedAt, checkedAt)
+	}
+	if state.LastSuccessAt == nil || !state.LastSuccessAt.Equal(successAt) {
+		t.Fatalf("LastSuccessAt=%v want %s", state.LastSuccessAt, successAt)
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_source_state")).
+		WithArgs("missing|source|http_direct").
+		WillReturnRows(activitySourceStateRows())
+	_, ok, err = repo.LoadActivitySourceState(context.Background(), "missing|source|http_direct")
+	if err != nil {
+		t.Fatalf("LoadActivitySourceState missing err=%v", err)
+	}
+	if ok {
+		t.Fatalf("LoadActivitySourceState missing ok=true")
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)

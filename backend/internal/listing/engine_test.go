@@ -15,10 +15,59 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
+func expectListingRunOnceLeaseAcquired(mock sqlmock.Sqlmock, ownerID string) {
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_worker_lease")).
+		WithArgs("listing:run_once", ownerID, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT owner_id FROM t_listing_worker_lease WHERE lease_name = ?")).
+		WithArgs("listing:run_once").
+		WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(ownerID))
+}
+
+func expectListingRunOnceLeaseReleased(mock sqlmock.Sqlmock, ownerID string) {
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM t_listing_worker_lease WHERE lease_name = ? AND owner_id = ?")).
+		WithArgs("listing:run_once", ownerID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+}
+
+func TestEngineRunOnceSkipsWhenLeaseNotAcquired(t *testing.T) {
+	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+	const ownerID = "listing-engine-test"
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_worker_lease")).
+		WithArgs("listing:run_once", ownerID, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT owner_id FROM t_listing_worker_lease WHERE lease_name = ?")).
+		WithArgs("listing:run_once").
+		WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow("other-owner"))
+
+	engine := NewEngine(config.Config{}, repo, EngineDeps{
+		Now:          func() time.Time { return now },
+		OwnerID:      ownerID,
+		LoadUniverse: func() (*config.ListedUniverse, error) { return &config.ListedUniverse{}, nil },
+	})
+	summary, err := engine.RunOnce(context.Background())
+	if err != nil {
+		t.Fatalf("RunOnce err = %v", err)
+	}
+	if summary.LeaseAcquired {
+		t.Fatalf("summary.LeaseAcquired = true, want false")
+	}
+	if !summary.Finished.Equal(now) {
+		t.Fatalf("summary.Finished = %s, want %s", summary.Finished, now)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestEngineRunOnceReturnsSummary(t *testing.T) {
 	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
+	const ownerID = "listing-engine-test"
+	expectListingRunOnceLeaseAcquired(mock, ownerID)
 
 	// FuseSignals and Top30 push fail closed because the universe is
 	// not loaded. Delivery drain still runs and reads an empty due
@@ -28,11 +77,13 @@ func TestEngineRunOnceReturnsSummary(t *testing.T) {
 			"id", "event_type", "dedupe_key", "target_channel", "status", "attempt_count", "max_attempts",
 			"next_attempt_at", "payload_json", "last_error", "sent_at", "created_at", "updated_at",
 		}))
+	expectListingRunOnceLeaseReleased(mock, ownerID)
 
 	cfg := config.Config{}
 	cfg.Runtime.ListingAgent = config.ListingAgentConfig{Enabled: true}
 	engine := NewEngine(cfg, repo, EngineDeps{
-		Now: func() time.Time { return now },
+		Now:     func() time.Time { return now },
+		OwnerID: ownerID,
 		LoadUniverse: func() (*config.ListedUniverse, error) {
 			return &config.ListedUniverse{}, nil
 		},
@@ -56,6 +107,8 @@ func TestEngineRunOnceDrainsOutboxWhenUniverseLoaded(t *testing.T) {
 	now := time.Date(2026, 5, 27, 12, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
+	const ownerID = "listing-engine-test"
+	expectListingRunOnceLeaseAcquired(mock, ownerID)
 
 	// Fusion: no unfused signals.
 	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).
@@ -75,6 +128,7 @@ func TestEngineRunOnceDrainsOutboxWhenUniverseLoaded(t *testing.T) {
 			"id", "event_type", "dedupe_key", "target_channel", "status", "attempt_count", "max_attempts",
 			"next_attempt_at", "payload_json", "last_error", "sent_at", "created_at", "updated_at",
 		}))
+	expectListingRunOnceLeaseReleased(mock, ownerID)
 
 	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
 	cfg := config.Config{}
@@ -86,6 +140,7 @@ func TestEngineRunOnceDrainsOutboxWhenUniverseLoaded(t *testing.T) {
 	}
 	engine := NewEngine(cfg, repo, EngineDeps{
 		Now:          func() time.Time { return now },
+		OwnerID:      ownerID,
 		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
 	})
 	summary, err := engine.RunOnce(context.Background())
@@ -108,6 +163,8 @@ func TestEngineRunOnceProducesDivergencePushWhenEnabled(t *testing.T) {
 	snapshot := now.Add(-2 * time.Minute)
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
+	const ownerID = "listing-engine-test"
+	expectListingRunOnceLeaseAcquired(mock, ownerID)
 
 	// Fusion: no unfused signals.
 	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).
@@ -154,6 +211,7 @@ func TestEngineRunOnceProducesDivergencePushWhenEnabled(t *testing.T) {
 			"id", "event_type", "dedupe_key", "target_channel", "status", "attempt_count", "max_attempts",
 			"next_attempt_at", "payload_json", "last_error", "sent_at", "created_at", "updated_at",
 		}))
+	expectListingRunOnceLeaseReleased(mock, ownerID)
 
 	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
 	cfg := config.Config{}
@@ -180,6 +238,7 @@ func TestEngineRunOnceProducesDivergencePushWhenEnabled(t *testing.T) {
 	}
 	engine := NewEngine(cfg, repo, EngineDeps{
 		Now:          func() time.Time { return now },
+		OwnerID:      ownerID,
 		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
 	})
 	summary, err := engine.RunOnce(context.Background())
@@ -204,6 +263,8 @@ func TestEngineRunOnceProducesDecisionCardsWhenEnabled(t *testing.T) {
 	now := time.Date(2026, 5, 30, 14, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
+	const ownerID = "listing-engine-test"
+	expectListingRunOnceLeaseAcquired(mock, ownerID)
 
 	// Fusion: no unfused signals.
 	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).
@@ -249,6 +310,7 @@ func TestEngineRunOnceProducesDecisionCardsWhenEnabled(t *testing.T) {
 			"id", "event_type", "dedupe_key", "target_channel", "status", "attempt_count", "max_attempts",
 			"next_attempt_at", "payload_json", "last_error", "sent_at", "created_at", "updated_at",
 		}))
+	expectListingRunOnceLeaseReleased(mock, ownerID)
 
 	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
 	cfg := config.Config{}
@@ -265,6 +327,7 @@ func TestEngineRunOnceProducesDecisionCardsWhenEnabled(t *testing.T) {
 	}
 	engine := NewEngine(cfg, repo, EngineDeps{
 		Now:          func() time.Time { return now },
+		OwnerID:      ownerID,
 		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
 	})
 	summary, err := engine.RunOnce(context.Background())
@@ -294,6 +357,8 @@ func TestEngineRunOnceDrivesInstrumentAndAnnouncementSourcesBeforeFusion(t *test
 	now := time.Date(2026, 5, 29, 19, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
+	const ownerID = "listing-engine-test"
+	expectListingRunOnceLeaseAcquired(mock, ownerID)
 
 	// --- Instrument source (cold start, single BTC) ---
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT source_key, source_type, platform, status")).
@@ -345,6 +410,7 @@ func TestEngineRunOnceDrivesInstrumentAndAnnouncementSourcesBeforeFusion(t *test
 			"id", "event_type", "dedupe_key", "target_channel", "status", "attempt_count", "max_attempts",
 			"next_attempt_at", "payload_json", "last_error", "sent_at", "created_at", "updated_at",
 		}))
+	expectListingRunOnceLeaseReleased(mock, ownerID)
 
 	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
 	cfg := config.Config{}
@@ -359,6 +425,7 @@ func TestEngineRunOnceDrivesInstrumentAndAnnouncementSourcesBeforeFusion(t *test
 	annCalls := 0
 	engine := NewEngine(cfg, repo, EngineDeps{
 		Now:          func() time.Time { return now },
+		OwnerID:      ownerID,
 		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
 		InstrumentSources: []InstrumentSource{{
 			Platform:   "binance",

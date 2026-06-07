@@ -60,6 +60,7 @@ type EngineDeps struct {
 
 // RunSummary aggregates per-stage results from a single RunOnce tick.
 type RunSummary struct {
+	LeaseAcquired      bool
 	InstrumentPolls    []InstrumentPollResult
 	AnnouncementPolls  []AnnouncementPollResult
 	InstrumentHealth   []PollHealthOutcome
@@ -136,6 +137,24 @@ func buildDeliveryHTTPClient(proxyURL string) (*http.Client, error) {
 func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	start := e.deps.Now()
 	summary := RunSummary{Started: start}
+	if e.repo == nil {
+		return summary, errors.New("listing engine: repository is nil")
+	}
+	leaseTTL := e.cfg.Runtime.ListingAgent.Worker.LeaseTTL
+	acquired, err := e.repo.AcquireLease(ctx, "listing:run_once", e.deps.OwnerID, leaseTTL)
+	if err != nil {
+		return summary, err
+	}
+	summary.LeaseAcquired = acquired
+	if !acquired {
+		summary.Finished = e.deps.Now()
+		return summary, nil
+	}
+	defer func() {
+		if err := e.repo.ReleaseLease(context.Background(), "listing:run_once", e.deps.OwnerID); err != nil {
+			e.deps.Logger.Printf("listing engine: release lease: %v", err)
+		}
+	}()
 
 	// Step 0a: drive each instrument source through the source-health
 	// wrapper. The wrapper handles disabled_until + counter logic so

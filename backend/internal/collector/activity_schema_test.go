@@ -38,6 +38,8 @@ func TestActivitySchemaIncludedInInitSchemaSQL(t *testing.T) {
 		"eligibility_rules_json JSON",
 		"rich_fields_summary_json JSON",
 		"uk_activity_event_symbol",
+		"last_checked_at DATETIME(3) NULL",
+		"last_success_at DATETIME(3) NULL",
 		"disabled_no_webhook",
 		"disabled_missing_secret",
 	} {
@@ -48,26 +50,44 @@ func TestActivitySchemaIncludedInInitSchemaSQL(t *testing.T) {
 }
 
 func TestActivityMigrationUpAndDownExist(t *testing.T) {
-	migrations := map[string][]string{
+	migrations := map[string]struct {
+		upSnippets   []string
+		downSnippets []string
+	}{
 		"000013_activity_source_event": {
-			"t_activity_source_state",
-			"t_activity_raw_evidence",
-			"t_activity_event",
+			upSnippets: []string{
+				"t_activity_source_state",
+				"t_activity_raw_evidence",
+				"t_activity_event",
+			},
+			downSnippets: []string{"DROP"},
 		},
 		"000014_activity_event_children": {
-			"t_activity_event_symbol",
+			upSnippets:   []string{"t_activity_event_symbol"},
+			downSnippets: []string{"DROP"},
 		},
 		"000015_activity_delivery_review": {
-			"t_activity_delivery_outbox",
-			"t_activity_delivery_attempt",
-			"t_activity_review_item",
-			"t_activity_worker_lease",
+			upSnippets: []string{
+				"t_activity_delivery_outbox",
+				"t_activity_delivery_attempt",
+				"t_activity_review_item",
+				"t_activity_worker_lease",
+			},
+			downSnippets: []string{"DROP"},
 		},
 		"000016_activity_indexes_postinit": {
-			"idx_activity_event_status_updated",
+			upSnippets:   []string{"idx_activity_event_status_updated"},
+			downSnippets: []string{"SELECT 1"},
+		},
+		"000017_activity_source_poll_state": {
+			upSnippets: []string{
+				"last_checked_at",
+				"last_success_at",
+			},
+			downSnippets: []string{"DROP COLUMN last_success_at", "DROP COLUMN last_checked_at"},
 		},
 	}
-	for name, snippets := range migrations {
+	for name, spec := range migrations {
 		upPath := filepath.Join("..", "..", "migrations", name+".up.sql")
 		downPath := filepath.Join("..", "..", "migrations", name+".down.sql")
 		up, err := os.ReadFile(upPath)
@@ -78,13 +98,15 @@ func TestActivityMigrationUpAndDownExist(t *testing.T) {
 		if err != nil {
 			t.Fatalf("read %s: %v", downPath, err)
 		}
-		for _, snippet := range snippets {
+		for _, snippet := range spec.upSnippets {
 			if !contains(string(up), snippet) {
 				t.Fatalf("%s missing %s", upPath, snippet)
 			}
 		}
-		if !contains(string(down), "DROP") {
-			t.Fatalf("%s should contain DROP statements", downPath)
+		for _, snippet := range spec.downSnippets {
+			if !contains(string(down), snippet) {
+				t.Fatalf("%s missing %s", downPath, snippet)
+			}
 		}
 	}
 }

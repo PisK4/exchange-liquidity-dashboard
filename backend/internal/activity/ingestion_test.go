@@ -8,11 +8,22 @@ import (
 )
 
 type fakeIngestionStore struct {
-	sourceStates []SourceState
-	rawEvidence  []RawEvidence
-	events       []ActivityEvent
-	nextRawID    int64
-	nextEventID  int64
+	existingStates map[string]SourceState
+	loadCalls      []string
+	sourceStates   []SourceState
+	rawEvidence    []RawEvidence
+	events         []ActivityEvent
+	nextRawID      int64
+	nextEventID    int64
+}
+
+func (f *fakeIngestionStore) LoadActivitySourceState(ctx context.Context, sourceKey string) (SourceState, bool, error) {
+	f.loadCalls = append(f.loadCalls, sourceKey)
+	if f.existingStates == nil {
+		return SourceState{}, false, nil
+	}
+	state, ok := f.existingStates[sourceKey]
+	return state, ok, nil
 }
 
 func (f *fakeIngestionStore) UpsertActivitySourceState(ctx context.Context, state SourceState) error {

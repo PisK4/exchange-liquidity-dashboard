@@ -57,6 +57,7 @@ type RawDocument struct {
 }
 
 type IngestionStore interface {
+	LoadActivitySourceState(ctx context.Context, sourceKey string) (SourceState, bool, error)
 	UpsertActivitySourceState(ctx context.Context, state SourceState) error
 	UpsertRawEvidence(ctx context.Context, row RawEvidence) (int64, error)
 	UpsertActivityEvent(ctx context.Context, event ActivityEvent) (int64, bool, error)
@@ -82,6 +83,35 @@ type IngestionResult struct {
 	SkippedSources int
 }
 
+const defaultActivitySourcePollInterval = time.Hour
+
+type ActivitySourcePollDecision struct {
+	ShouldPoll bool
+	Reason     string
+}
+
+func ShouldPollActivitySource(src SourceConfig, state SourceState, hasState bool, now time.Time) ActivitySourcePollDecision {
+	if !src.Enabled {
+		return ActivitySourcePollDecision{Reason: "disabled_config"}
+	}
+	if hasState && state.DisabledUntil != nil && now.Before(state.DisabledUntil.UTC()) {
+		return ActivitySourcePollDecision{Reason: "disabled_until"}
+	}
+	if hasState && state.LastCheckedAt != nil && !state.LastCheckedAt.IsZero() {
+		interval := src.PollInterval
+		if interval <= 0 && state.PollIntervalSeconds > 0 {
+			interval = time.Duration(state.PollIntervalSeconds) * time.Second
+		}
+		if interval <= 0 {
+			interval = defaultActivitySourcePollInterval
+		}
+		if now.Before(state.LastCheckedAt.UTC().Add(interval)) {
+			return ActivitySourcePollDecision{Reason: "poll_interval"}
+		}
+	}
+	return ActivitySourcePollDecision{ShouldPoll: true, Reason: "due"}
+}
+
 func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps) (IngestionResult, error) {
 	if store == nil {
 		return IngestionResult{}, errors.New("activity ingestion: store is nil")
@@ -99,6 +129,16 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 	res := IngestionResult{}
 	for _, src := range deps.Sources {
 		if !src.Enabled {
+			res.SkippedSources++
+			continue
+		}
+		sourceKey := BuildSourceKey(src.Platform, src.SourceGroup, src.FetchMode)
+		state, hasState, err := store.LoadActivitySourceState(ctx, sourceKey)
+		if err != nil {
+			return res, err
+		}
+		decision := ShouldPollActivitySource(src, state, hasState, now)
+		if !decision.ShouldPoll {
 			res.SkippedSources++
 			continue
 		}
@@ -141,7 +181,7 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 			"payload_hash": payloadHash,
 		})
 		rawID, err := store.UpsertRawEvidence(ctx, RawEvidence{
-			SourceKey:    BuildSourceKey(src.Platform, src.SourceGroup, src.FetchMode),
+			SourceKey:    sourceKey,
 			Platform:     src.Platform,
 			SourceGroup:  src.SourceGroup,
 			SourceURL:    src.SourceURL,
@@ -206,13 +246,16 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 			if ev.Title == "" {
 				continue
 			}
-			if _, _, err := store.UpsertActivityEvent(ctx, ev); err != nil {
+			_, _, err = store.UpsertActivityEvent(ctx, ev)
+			if err != nil {
 				return res, err
 			}
 			res.Events++
 		}
-		state := buildSourceState(src, now, &httpStatus, SourceStatusOK, "", 1, contentHash)
+		state = buildSourceState(src, now, &httpStatus, SourceStatusOK, "", 1, contentHash)
 		state.EventCount = len(events)
+		successAt := now
+		state.LastSuccessAt = &successAt
 		if err := store.UpsertActivitySourceState(ctx, state); err != nil {
 			return res, err
 		}
@@ -227,8 +270,9 @@ func BuildSourceKey(platform, sourceGroup, fetchMode string) string {
 func buildSourceState(src SourceConfig, now time.Time, httpStatus *int, status, errorKind string, sampleCount int, contentHash string) SourceState {
 	intervalSeconds := int(src.PollInterval.Seconds())
 	if intervalSeconds <= 0 {
-		intervalSeconds = 3600
+		intervalSeconds = int(defaultActivitySourcePollInterval.Seconds())
 	}
+	checkedAt := now
 	return SourceState{
 		Platform:               strings.ToLower(strings.TrimSpace(src.Platform)),
 		SourceGroup:            src.SourceGroup,
@@ -249,6 +293,7 @@ func buildSourceState(src SourceConfig, now time.Time, httpStatus *int, status, 
 		LastContentHash:        contentHash,
 		SampleCount:            sampleCount,
 		PollIntervalSeconds:    intervalSeconds,
+		LastCheckedAt:          &checkedAt,
 		UpdatedAt:              now,
 	}
 }

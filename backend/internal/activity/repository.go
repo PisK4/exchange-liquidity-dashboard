@@ -87,6 +87,13 @@ func (r *Repository) UpsertActivitySourceState(ctx context.Context, s SourceStat
 	if s.LastHTTPStatus != nil {
 		httpStatus = *s.LastHTTPStatus
 	}
+	var lastCheckedAt, lastSuccessAt any
+	if s.LastCheckedAt != nil {
+		lastCheckedAt = *s.LastCheckedAt
+	}
+	if s.LastSuccessAt != nil {
+		lastSuccessAt = *s.LastSuccessAt
+	}
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO t_activity_source_state
 		   (platform, source_group, source_type, source_url, source_key, fetch_mode,
@@ -94,8 +101,8 @@ func (r *Repository) UpsertActivitySourceState(ctx context.Context, s SourceStat
 		    requires_proxy, requires_browser_context, requires_login, region_sensitive,
 		    personalized, source_context_json, last_http_status, last_error_kind,
 		    last_schema_hash, last_content_hash, sample_count, event_count,
-		    source_status, disabled_until, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		    source_status, disabled_until, last_checked_at, last_success_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
 		   source_type = VALUES(source_type),
 		   source_url = VALUES(source_url),
@@ -117,15 +124,38 @@ func (r *Repository) UpsertActivitySourceState(ctx context.Context, s SourceStat
 		   event_count = event_count + VALUES(event_count),
 		   source_status = VALUES(source_status),
 		   disabled_until = VALUES(disabled_until),
+		   last_checked_at = VALUES(last_checked_at),
+		   last_success_at = COALESCE(VALUES(last_success_at), last_success_at),
 		   updated_at = VALUES(updated_at)`,
 		s.Platform, s.SourceGroup, s.SourceType, nullString(s.SourceURL), s.SourceKey, s.FetchMode,
 		s.EvidenceQuality, boolInt(s.Enabled), s.PollIntervalSeconds, boolInt(s.AutoPushEnabled),
 		boolInt(s.RequiresProxy), boolInt(s.RequiresBrowserContext), boolInt(s.RequiresLogin), 0,
 		boolInt(s.Personalized), sourceContext, httpStatus, nullString(s.LastErrorKind),
 		nullString(s.LastSchemaHash), nullString(s.LastContentHash), s.SampleCount, s.EventCount,
-		s.SourceStatus, s.DisabledUntil, s.UpdatedAt, s.UpdatedAt,
+		s.SourceStatus, s.DisabledUntil, lastCheckedAt, lastSuccessAt, s.UpdatedAt, s.UpdatedAt,
 	)
 	return err
+}
+
+func (r *Repository) LoadActivitySourceState(ctx context.Context, sourceKey string) (SourceState, bool, error) {
+	if r.db == nil {
+		return SourceState{}, false, errors.New("activity repository: no db attached")
+	}
+	row := r.db.QueryRowContext(ctx, `SELECT id, platform, source_group, source_type, COALESCE(source_url,''), source_key, fetch_mode,
+	                 evidence_quality, enabled, poll_interval_seconds, auto_push_enabled, requires_proxy, requires_browser_context,
+	                 requires_login, personalized, source_status, last_http_status, COALESCE(last_error_kind,''),
+	                 COALESCE(last_schema_hash,''), COALESCE(last_content_hash,''), sample_count, event_count,
+	                 COALESCE(source_context_json,'{}'), disabled_until, last_checked_at, last_success_at, updated_at
+	            FROM t_activity_source_state
+	           WHERE source_key = ?`, sourceKey)
+	state, err := scanActivitySourceState(row)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return SourceState{}, false, nil
+		}
+		return SourceState{}, false, err
+	}
+	return state, true, nil
 }
 
 func (r *Repository) UpsertActivityEvent(ctx context.Context, ev ActivityEvent) (int64, bool, error) {
@@ -396,9 +426,10 @@ func (r *Repository) ListActivitySourceHealth(ctx context.Context, platform, sta
 		return nil, errors.New("activity repository: no db attached")
 	}
 	query := `SELECT id, platform, source_group, source_type, COALESCE(source_url,''), source_key, fetch_mode,
-	                 evidence_quality, enabled, auto_push_enabled, requires_proxy, requires_browser_context,
+	                 evidence_quality, enabled, poll_interval_seconds, auto_push_enabled, requires_proxy, requires_browser_context,
 	                 requires_login, personalized, source_status, last_http_status, COALESCE(last_error_kind,''),
-	                 disabled_until, updated_at
+	                 COALESCE(last_schema_hash,''), COALESCE(last_content_hash,''), sample_count, event_count,
+	                 COALESCE(source_context_json,'{}'), disabled_until, last_checked_at, last_success_at, updated_at
 	            FROM t_activity_source_state`
 	where := []string{}
 	args := []any{}
@@ -425,32 +456,53 @@ func (r *Repository) ListActivitySourceHealth(ctx context.Context, platform, sta
 	defer rows.Close()
 	out := []SourceState{}
 	for rows.Next() {
-		var s SourceState
-		var enabledInt, autoPush, requiresProxy, requiresBrowser, requiresLogin, personalized int
-		var httpStatus sql.NullInt64
-		var disabled sql.NullTime
-		if err := rows.Scan(&s.ID, &s.Platform, &s.SourceGroup, &s.SourceType, &s.SourceURL, &s.SourceKey, &s.FetchMode,
-			&s.EvidenceQuality, &enabledInt, &autoPush, &requiresProxy, &requiresBrowser, &requiresLogin, &personalized,
-			&s.SourceStatus, &httpStatus, &s.LastErrorKind, &disabled, &s.UpdatedAt); err != nil {
+		s, err := scanActivitySourceState(rows)
+		if err != nil {
 			return nil, err
-		}
-		s.Enabled = enabledInt != 0
-		s.AutoPushEnabled = autoPush != 0
-		s.RequiresProxy = requiresProxy != 0
-		s.RequiresBrowserContext = requiresBrowser != 0
-		s.RequiresLogin = requiresLogin != 0
-		s.Personalized = personalized != 0
-		if httpStatus.Valid {
-			v := int(httpStatus.Int64)
-			s.LastHTTPStatus = &v
-		}
-		if disabled.Valid {
-			t := disabled.Time.UTC()
-			s.DisabledUntil = &t
 		}
 		out = append(out, s)
 	}
 	return out, rows.Err()
+}
+
+type activitySourceStateScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanActivitySourceState(scanner activitySourceStateScanner) (SourceState, error) {
+	var s SourceState
+	var enabledInt, autoPush, requiresProxy, requiresBrowser, requiresLogin, personalized int
+	var httpStatus sql.NullInt64
+	var disabled, lastChecked, lastSuccess sql.NullTime
+	if err := scanner.Scan(&s.ID, &s.Platform, &s.SourceGroup, &s.SourceType, &s.SourceURL, &s.SourceKey, &s.FetchMode,
+		&s.EvidenceQuality, &enabledInt, &s.PollIntervalSeconds, &autoPush, &requiresProxy, &requiresBrowser, &requiresLogin, &personalized,
+		&s.SourceStatus, &httpStatus, &s.LastErrorKind, &s.LastSchemaHash, &s.LastContentHash, &s.SampleCount, &s.EventCount,
+		&s.SourceContextJSON, &disabled, &lastChecked, &lastSuccess, &s.UpdatedAt); err != nil {
+		return SourceState{}, err
+	}
+	s.Enabled = enabledInt != 0
+	s.AutoPushEnabled = autoPush != 0
+	s.RequiresProxy = requiresProxy != 0
+	s.RequiresBrowserContext = requiresBrowser != 0
+	s.RequiresLogin = requiresLogin != 0
+	s.Personalized = personalized != 0
+	if httpStatus.Valid {
+		v := int(httpStatus.Int64)
+		s.LastHTTPStatus = &v
+	}
+	if disabled.Valid {
+		t := disabled.Time.UTC()
+		s.DisabledUntil = &t
+	}
+	if lastChecked.Valid {
+		t := lastChecked.Time.UTC()
+		s.LastCheckedAt = &t
+	}
+	if lastSuccess.Valid {
+		t := lastSuccess.Time.UTC()
+		s.LastSuccessAt = &t
+	}
+	return s, nil
 }
 
 func (r *Repository) ListActivityDeliveries(ctx context.Context, filter DeliveryFilter) ([]DeliveryOutbox, string, error) {

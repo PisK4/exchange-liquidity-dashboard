@@ -82,10 +82,11 @@ smoke-coingecko:
 
 # Back-fill BACKFILL_DAYS (default 30) of per-platform daily volume from
 # CoinGecko's /exchanges/{id}/volume_chart/range, converted to USD via
-# /coins/bitcoin/market_chart/range. The runtime.yaml CoinGecko block
-# supplies the proxy / api_key_env / exchange mapping; runtime.yaml.proxy is
-# used as-is and process-level HTTPS_PROXY env vars are intentionally
-# ignored (R1). Idempotent: any pre-existing live row beats a backfill row
+# /coins/bitcoin/market_chart/range. The repo config
+# (`config/edgex-ops-intelligence.yaml`) Runtime.coingecko block supplies
+# the proxy / api_key_env / exchange mapping; Runtime.coingecko.proxy is used
+# as-is and process-level HTTPS_PROXY env vars are intentionally ignored (R1).
+# Idempotent: any pre-existing live row beats a backfill row
 # for the same (platform, day, display_symbol) slot.
 backfill-share:
 	OPS_INTELLIGENCE_MYSQL_DSN="$(MYSQL_DSN)" \
@@ -106,8 +107,8 @@ smoke-activity:
 # Spin up an isolated `listing-e2e` MySQL container on port 13306,
 # run the build-tagged e2e Go test suite end-to-end, and tear the
 # container down regardless of pass/fail. Designed to never touch
-# the production deploy stack (which uses project name `deploy`
-# on ports 3306 / 8080 / 3001).
+# the normal Ops Intelligence deploy stack (project name
+# `edgex-ops-intelligence`, commonly on ports 3306 / 8080 / 3001).
 e2e-listing:
 	./e2e/run-e2e.sh
 
@@ -131,10 +132,22 @@ migrate-up:
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000009_top30_unique_key.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000010_listing_agent_p1.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000011_listing_alert_state.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000012_widen_signal_fingerprint.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000013_activity_source_event.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000014_activity_event_children.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000015_activity_delivery_review.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000016_activity_indexes_postinit.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000017_activity_source_poll_state.up.sql"
 
 migrate-down:
 	@echo "Apply backend/migrations/*.down.sql to MySQL DSN: $(MYSQL_DSN)"
-	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000011_listing_alert_state.down.sql"
+	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000017_activity_source_poll_state.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000016_activity_indexes_postinit.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000015_activity_delivery_review.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000014_activity_event_children.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000013_activity_source_event.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000012_widen_signal_fingerprint.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000011_listing_alert_state.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000010_listing_agent_p1.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000009_top30_unique_key.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000008_drop_empty_tables.down.sql"

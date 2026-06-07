@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS t_listing_action_dispatch (id BIGINT AUTO_INCREMENT P
 CREATE TABLE IF NOT EXISTS t_listing_delivery_outbox (id BIGINT AUTO_INCREMENT PRIMARY KEY, event_type VARCHAR(64) NOT NULL, dedupe_key VARCHAR(191) NOT NULL, target_channel VARCHAR(64) NOT NULL, status VARCHAR(32) NOT NULL, attempt_count INT NOT NULL DEFAULT 0, max_attempts INT NOT NULL DEFAULT 5, next_attempt_at TIMESTAMP NULL, payload_json JSON NOT NULL, last_error TEXT NULL, sent_at TIMESTAMP NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_delivery_dedupe (dedupe_key), KEY idx_listing_delivery_due (status, next_attempt_at), KEY idx_listing_delivery_event (event_type, created_at));
 CREATE TABLE IF NOT EXISTS t_listing_delivery_attempt (id BIGINT AUTO_INCREMENT PRIMARY KEY, outbox_id BIGINT NOT NULL, attempt_no INT NOT NULL, status VARCHAR(32) NOT NULL, http_status INT NULL, error_message TEXT NULL, attempted_at TIMESTAMP NOT NULL, response_body TEXT NULL, latency_ms BIGINT NOT NULL DEFAULT 0, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_delivery_attempt (outbox_id, attempt_no), KEY idx_listing_delivery_attempt_outbox (outbox_id, attempted_at));
 CREATE TABLE IF NOT EXISTS t_listing_alert_state (id BIGINT AUTO_INCREMENT PRIMARY KEY, alert_kind VARCHAR(64) NOT NULL, canonical_symbol VARCHAR(64) NOT NULL, status VARCHAR(32) NOT NULL, severity_seq INT NOT NULL DEFAULT 1, reissue_count INT NOT NULL DEFAULT 0, clear_streak INT NOT NULL DEFAULT 0, first_triggered_at TIMESTAMP NOT NULL, last_pushed_at TIMESTAMP NULL, last_evaluated_at TIMESTAMP NOT NULL, last_severity_json JSON NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_alert_state (alert_kind, canonical_symbol), KEY idx_listing_alert_state_status (alert_kind, status, last_evaluated_at));
-CREATE TABLE IF NOT EXISTS t_activity_source_state (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, source_group VARCHAR(96) NOT NULL, source_type VARCHAR(32) NOT NULL, source_url VARCHAR(512) NULL, source_key VARCHAR(191) NOT NULL UNIQUE, fetch_mode VARCHAR(32) NOT NULL, evidence_quality VARCHAR(32) NOT NULL DEFAULT 'unknown', enabled TINYINT(1) NOT NULL DEFAULT 1, poll_interval_seconds INT NOT NULL DEFAULT 3600, auto_push_enabled TINYINT(1) NOT NULL DEFAULT 1, requires_proxy TINYINT(1) NOT NULL DEFAULT 0, requires_browser_context TINYINT(1) NOT NULL DEFAULT 0, requires_login TINYINT(1) NOT NULL DEFAULT 0, region_sensitive TINYINT(1) NOT NULL DEFAULT 0, personalized TINYINT(1) NOT NULL DEFAULT 0, source_context_json JSON NULL, last_http_status INT NULL, last_error_kind VARCHAR(64) NULL, last_schema_hash CHAR(64) NULL, last_content_hash CHAR(64) NULL, sample_count INT NOT NULL DEFAULT 0, event_count INT NOT NULL DEFAULT 0, source_status VARCHAR(32) NOT NULL DEFAULT 'ok', disabled_until DATETIME(3) NULL, created_at DATETIME(3) NOT NULL, updated_at DATETIME(3) NOT NULL, KEY idx_activity_source_platform (platform), KEY idx_activity_source_group (source_group), KEY idx_activity_source_type (source_type), KEY idx_activity_source_fetch_mode (fetch_mode), KEY idx_activity_source_status (source_status, disabled_until));
+CREATE TABLE IF NOT EXISTS t_activity_source_state (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, source_group VARCHAR(96) NOT NULL, source_type VARCHAR(32) NOT NULL, source_url VARCHAR(512) NULL, source_key VARCHAR(191) NOT NULL UNIQUE, fetch_mode VARCHAR(32) NOT NULL, evidence_quality VARCHAR(32) NOT NULL DEFAULT 'unknown', enabled TINYINT(1) NOT NULL DEFAULT 1, poll_interval_seconds INT NOT NULL DEFAULT 3600, auto_push_enabled TINYINT(1) NOT NULL DEFAULT 1, requires_proxy TINYINT(1) NOT NULL DEFAULT 0, requires_browser_context TINYINT(1) NOT NULL DEFAULT 0, requires_login TINYINT(1) NOT NULL DEFAULT 0, region_sensitive TINYINT(1) NOT NULL DEFAULT 0, personalized TINYINT(1) NOT NULL DEFAULT 0, source_context_json JSON NULL, last_http_status INT NULL, last_error_kind VARCHAR(64) NULL, last_schema_hash CHAR(64) NULL, last_content_hash CHAR(64) NULL, sample_count INT NOT NULL DEFAULT 0, event_count INT NOT NULL DEFAULT 0, source_status VARCHAR(32) NOT NULL DEFAULT 'ok', disabled_until DATETIME(3) NULL, last_checked_at DATETIME(3) NULL, last_success_at DATETIME(3) NULL, created_at DATETIME(3) NOT NULL, updated_at DATETIME(3) NOT NULL, KEY idx_activity_source_platform (platform), KEY idx_activity_source_group (source_group), KEY idx_activity_source_type (source_type), KEY idx_activity_source_fetch_mode (fetch_mode), KEY idx_activity_source_status (source_status, disabled_until));
 CREATE TABLE IF NOT EXISTS t_activity_raw_evidence (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, source_key VARCHAR(191) NOT NULL, platform VARCHAR(32) NOT NULL, source_group VARCHAR(96) NOT NULL, source_url VARCHAR(512) NULL, fetch_mode VARCHAR(32) NOT NULL, payload_text LONGTEXT NULL, payload_hash CHAR(64) NOT NULL, schema_hash CHAR(64) NULL, content_hash CHAR(64) NULL, payload_size_bytes BIGINT UNSIGNED NOT NULL, payload_truncated TINYINT(1) NOT NULL DEFAULT 0, payload_preview MEDIUMTEXT NULL, response_meta_json JSON NULL, fixture_ref VARCHAR(255) NULL, fetched_at DATETIME(3) NOT NULL, created_at DATETIME(3) NOT NULL, updated_at DATETIME(3) NOT NULL, KEY idx_activity_raw_source_fetched (source_key, fetched_at), KEY idx_activity_raw_payload_hash (payload_hash));
 CREATE TABLE IF NOT EXISTS t_activity_event (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, raw_evidence_id BIGINT UNSIGNED NULL, platform VARCHAR(32) NOT NULL, source_group VARCHAR(96) NOT NULL, source_external_id VARCHAR(191) NULL, source_url VARCHAR(512) NULL, title TEXT NOT NULL, activity_type VARCHAR(64) NOT NULL, target_symbols_json JSON NULL, reward_pool_text TEXT NULL, reward_pool_usd_estimate DECIMAL(28,8) NULL, reward_pool_primary_token VARCHAR(32) NULL, reward_pool_parse_confidence VARCHAR(32) NULL, has_reward_pool TINYINT(1) NOT NULL DEFAULT 0, start_time DATETIME(3) NULL, end_time DATETIME(3) NULL, publish_time DATETIME(3) NULL, raw_time_text TEXT NULL, raw_timezone_hint VARCHAR(64) NULL, time_parse_confidence VARCHAR(32) NULL, content_text MEDIUMTEXT NULL, content_hash CHAR(64) NOT NULL, dedupe_key VARCHAR(191) NOT NULL UNIQUE, confidence_score DECIMAL(8,4) NOT NULL DEFAULT 0, needs_human_review TINYINT(1) NOT NULL DEFAULT 0, auto_push_allowed TINYINT(1) NOT NULL DEFAULT 0, event_status VARCHAR(32) NOT NULL DEFAULT 'active', review_status VARCHAR(32) NOT NULL DEFAULT 'pending', ops_decision_action VARCHAR(32) NULL, ops_decision_stale TINYINT(1) NOT NULL DEFAULT 0, reviewer VARCHAR(128) NULL, review_reason TEXT NULL, reviewed_at DATETIME(3) NULL, event_version INT NOT NULL DEFAULT 1, parser_version VARCHAR(64) NOT NULL, source_context_json JSON NULL, parser_warnings_json JSON NULL, reward_pools_json JSON NULL, task_conditions_json JSON NULL, eligibility_rules_json JSON NULL, rich_fields_summary_json JSON NULL, created_at DATETIME(3) NOT NULL, updated_at DATETIME(3) NOT NULL, KEY idx_activity_event_platform_publish (platform, publish_time), KEY idx_activity_event_review_auto (review_status, auto_push_allowed), KEY idx_activity_event_status_updated (event_status, updated_at));
 CREATE TABLE IF NOT EXISTS t_activity_event_symbol (id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, event_id BIGINT UNSIGNED NOT NULL, canonical_symbol VARCHAR(64) NOT NULL, display_symbol VARCHAR(128) NULL, market_surface VARCHAR(32) NOT NULL, role VARCHAR(32) NOT NULL, sort_order INT NOT NULL DEFAULT 0, created_at DATETIME(3) NOT NULL, updated_at DATETIME(3) NOT NULL, UNIQUE KEY uk_activity_event_symbol (event_id, canonical_symbol, market_surface, role), KEY idx_activity_event_symbol_lookup (canonical_symbol, market_surface));
@@ -78,26 +78,23 @@ func ApplyMigrations(db *sql.DB) error {
 			return fmt.Errorf("migration failed at %q: %w", firstLine(stmt), err)
 		}
 	}
-	return applyListingSchemaPostInit(db)
+	return applySchemaPostInit(db)
 }
 
-// applyListingSchemaPostInit runs in-place ALTER TABLE migrations that
+// applySchemaPostInit runs in-place ALTER TABLE migrations that
 // `CREATE TABLE IF NOT EXISTS` can't pick up on existing prod databases.
 // Each step checks INFORMATION_SCHEMA first so the function stays
 // effectively no-op on every subsequent boot.
-//
-// Currently the only step here widens t_listing_signal_observation
-// fingerprint from VARCHAR(96) to VARCHAR(160) — the original
-// migration sized it for short identifier fingerprints, but the
-// instrument_diff / announcement_listing producers generate up to
-// ~191-char plaintext fingerprints (two 64-char sha256 hashes + prefix
-// metadata) which overflow the column. Under strict sql_mode `INSERT
-// IGNORE` silently demotes the data-too-long error to a warning and
-// drops the row, then the resolve-by-fingerprint SELECT returns no
-// rows and the listing poll loop aborts (see 2026-06-01 root cause).
-// Code-side the producers have switched to sha256-prefixed (~80 char)
-// fingerprints that fit inside the original 96, but we keep the
-// widened column as a defence-in-depth guard against future drift.
+func applySchemaPostInit(db *sql.DB) error {
+	if err := applyListingSchemaPostInit(db); err != nil {
+		return err
+	}
+	return applyActivitySchemaPostInit(db)
+}
+
+// applyListingSchemaPostInit widens t_listing_signal_observation
+// fingerprint from VARCHAR(96) to VARCHAR(160) as a defence-in-depth
+// guard against future producer fingerprint drift.
 func applyListingSchemaPostInit(db *sql.DB) error {
 	const (
 		listingSignalTable      = "t_listing_signal_observation"
@@ -128,6 +125,46 @@ func applyListingSchemaPostInit(db *sql.DB) error {
 		listingSignalTable, fingerprintColumn, fingerprintTargetLength)); err != nil {
 		return fmt.Errorf("widen %s.%s to VARCHAR(%d): %w",
 			listingSignalTable, fingerprintColumn, fingerprintTargetLength, err)
+	}
+	return nil
+}
+
+func applyActivitySchemaPostInit(db *sql.DB) error {
+	columns := []struct {
+		name       string
+		after      string
+		definition string
+	}{
+		{name: "last_checked_at", after: "disabled_until", definition: "DATETIME(3) NULL"},
+		{name: "last_success_at", after: "last_checked_at", definition: "DATETIME(3) NULL"},
+	}
+	for _, col := range columns {
+		if err := ensureColumnExists(db, "t_activity_source_state", col.name, col.definition, col.after); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureColumnExists(db *sql.DB, tableName, columnName, definition, afterColumn string) error {
+	var exists int
+	err := db.QueryRow(`SELECT COUNT(*)
+		   FROM INFORMATION_SCHEMA.COLUMNS
+		  WHERE TABLE_SCHEMA = DATABASE()
+		    AND TABLE_NAME = ?
+		    AND COLUMN_NAME = ?`, tableName, columnName).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("inspect %s.%s existence: %w", tableName, columnName, err)
+	}
+	if exists > 0 {
+		return nil
+	}
+	stmt := fmt.Sprintf(`ALTER TABLE %s ADD COLUMN %s %s`, tableName, columnName, definition)
+	if afterColumn != "" {
+		stmt += fmt.Sprintf(` AFTER %s`, afterColumn)
+	}
+	if _, err := db.Exec(stmt); err != nil {
+		return fmt.Errorf("add %s.%s: %w", tableName, columnName, err)
 	}
 	return nil
 }
