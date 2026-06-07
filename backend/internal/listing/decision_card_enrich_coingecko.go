@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
 )
@@ -16,6 +17,22 @@ import (
 type CoinGeckoClient interface {
 	SearchCoinsBySymbol(ctx context.Context, query string) ([]coingecko.CoinSearchResult, string, error)
 	FetchCoinMarketSnapshot(ctx context.Context, coinID string) (*coingecko.CoinMarketSnapshot, string, error)
+}
+
+type CoinGeckoFetcherOptions struct {
+	CoinIDCacheTTL         time.Duration
+	MarketSnapshotCacheTTL time.Duration
+	Now                    func() time.Time
+}
+
+type coinIDCacheEntry struct {
+	id        string
+	expiresAt time.Time
+}
+
+type marketSnapshotCacheEntry struct {
+	snap      *coingecko.CoinMarketSnapshot
+	expiresAt time.Time
 }
 
 // BuildCoinGeckoFetcher adapts a CoinGeckoClient into the
@@ -36,15 +53,23 @@ type CoinGeckoClient interface {
 // The map is keyed by upper-case canonical and never bleeds across
 // engine ticks because BuildCoinGeckoFetcher returns a fresh closure
 // each call.
-func BuildCoinGeckoFetcher(cg CoinGeckoClient) func(ctx context.Context, canonical string) (*float64, *float64, string, error) {
+func BuildCoinGeckoFetcher(cg CoinGeckoClient, options ...CoinGeckoFetcherOptions) func(ctx context.Context, canonical string) (*float64, *float64, string, error) {
 	if cg == nil {
 		return func(context.Context, string) (*float64, *float64, string, error) {
 			return nil, nil, "", errors.New("coingecko client not configured")
 		}
 	}
+	opts := CoinGeckoFetcherOptions{}
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	if opts.Now == nil {
+		opts.Now = func() time.Time { return time.Now().UTC() }
+	}
 	var (
-		mu   sync.Mutex
-		seen = make(map[string]string)
+		mu          sync.Mutex
+		seen        = make(map[string]coinIDCacheEntry)
+		marketSnaps = make(map[string]marketSnapshotCacheEntry)
 	)
 	return func(ctx context.Context, canonical string) (*float64, *float64, string, error) {
 		canonical = strings.TrimSpace(canonical)
@@ -52,9 +77,15 @@ func BuildCoinGeckoFetcher(cg CoinGeckoClient) func(ctx context.Context, canonic
 			return nil, nil, "", errors.New("canonical required")
 		}
 		key := strings.ToUpper(canonical)
+		now := opts.Now()
 
 		mu.Lock()
-		id, cached := seen[key]
+		idEntry, cached := seen[key]
+		if cached && !idEntry.expiresAt.IsZero() && now.After(idEntry.expiresAt) {
+			delete(seen, key)
+			cached = false
+		}
+		id := idEntry.id
 		mu.Unlock()
 		if !cached {
 			results, _, err := cg.SearchCoinsBySymbol(ctx, canonical)
@@ -65,9 +96,26 @@ func BuildCoinGeckoFetcher(cg CoinGeckoClient) func(ctx context.Context, canonic
 			if id == "" {
 				return nil, nil, "", fmt.Errorf("no coin id found for symbol %q", canonical)
 			}
+			expiresAt := time.Time{}
+			if opts.CoinIDCacheTTL > 0 {
+				expiresAt = now.Add(opts.CoinIDCacheTTL)
+			}
 			mu.Lock()
-			seen[key] = id
+			seen[key] = coinIDCacheEntry{id: id, expiresAt: expiresAt}
 			mu.Unlock()
+		}
+
+		if opts.MarketSnapshotCacheTTL > 0 {
+			mu.Lock()
+			entry, ok := marketSnaps[id]
+			if ok && !entry.expiresAt.IsZero() && now.After(entry.expiresAt) {
+				delete(marketSnaps, id)
+				ok = false
+			}
+			mu.Unlock()
+			if ok && entry.snap != nil {
+				return coinMarketSnapshotValues(entry.snap, id)
+			}
 		}
 
 		snap, _, err := cg.FetchCoinMarketSnapshot(ctx, id)
@@ -77,17 +125,29 @@ func BuildCoinGeckoFetcher(cg CoinGeckoClient) func(ctx context.Context, canonic
 		if snap == nil {
 			return nil, nil, id, fmt.Errorf("no market data for id %q", id)
 		}
-		mc := snap.MarketCapUSD
-		vol := snap.Volume24HUSD
-		var mcPtr, volPtr *float64
-		if mc > 0 {
-			mcPtr = &mc
+		if opts.MarketSnapshotCacheTTL > 0 {
+			mu.Lock()
+			marketSnaps[id] = marketSnapshotCacheEntry{snap: snap, expiresAt: now.Add(opts.MarketSnapshotCacheTTL)}
+			mu.Unlock()
 		}
-		if vol > 0 {
-			volPtr = &vol
-		}
-		return mcPtr, volPtr, id, nil
+		return coinMarketSnapshotValues(snap, id)
 	}
+}
+
+func coinMarketSnapshotValues(snap *coingecko.CoinMarketSnapshot, id string) (*float64, *float64, string, error) {
+	if snap == nil {
+		return nil, nil, id, fmt.Errorf("no market data for id %q", id)
+	}
+	mc := snap.MarketCapUSD
+	vol := snap.Volume24HUSD
+	var mcPtr, volPtr *float64
+	if mc > 0 {
+		mcPtr = &mc
+	}
+	if vol > 0 {
+		volPtr = &vol
+	}
+	return mcPtr, volPtr, id, nil
 }
 
 // pickCoinIDForSymbol filters /search hits to coins whose symbol

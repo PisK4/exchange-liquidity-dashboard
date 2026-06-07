@@ -28,11 +28,12 @@ import (
 // Concurrency: the collector itself runs single-threaded; the Store APIs it
 // calls are responsible for their own locking.
 type CoinGeckoCollector struct {
-	cfg     config.CoinGeckoConfig
-	client  *coingecko.Client
-	mapping *coingecko.Mapping
-	cache   *coingecko.TickerCache
-	store   *Store
+	cfg      config.CoinGeckoConfig
+	client   *coingecko.Client
+	mapping  *coingecko.Mapping
+	cache    *coingecko.TickerCache
+	governor *coingecko.BudgetGovernor
+	store    *Store
 	// universeLoader returns the current listed universe; resolved on
 	// every CollectOnce so the dynamic-discovery refresh job
 	// (spec §B) becomes visible to the Top30 enrichment within one
@@ -114,6 +115,11 @@ func (c *CoinGeckoCollector) SetTop30BackfillScheduler(scheduler Top30BackfillSc
 	c.top30BackfillJob = scheduler
 }
 
+func (c *CoinGeckoCollector) SetGovernor(governor *coingecko.BudgetGovernor) {
+	c.governor = governor
+	c.recordGovernanceStatus("configured")
+}
+
 // Run starts the periodic /derivatives pull loop until ctx is cancelled.
 // First poll executes immediately so the dashboard surfaces data on boot
 // rather than after one full PullInterval.
@@ -122,9 +128,7 @@ func (c *CoinGeckoCollector) Run(ctx context.Context) {
 	if interval <= 0 {
 		interval = 15 * time.Minute
 	}
-	if err := c.CollectOnce(ctx); err != nil {
-		log.Printf("coingecko: initial collection failed: %v", err)
-	}
+	_ = c.CollectOnce(ctx)
 	go c.runDailyBackfill(ctx)
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
@@ -133,9 +137,7 @@ func (c *CoinGeckoCollector) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if err := c.CollectOnce(ctx); err != nil {
-				log.Printf("coingecko: periodic collection failed: %v", err)
-			}
+			_ = c.CollectOnce(ctx)
 		}
 	}
 }
@@ -151,13 +153,18 @@ func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
 	}
 
 	now := time.Now().UTC()
-	tickers, endpoint, cached, err := c.fetchTickers(ctx, now)
+	tickers, endpoint, cacheState, err := c.fetchTickers(ctx, now)
 	if err != nil {
 		c.store.RecordCoinGeckoPullFailure(now, err)
+		c.recordGovernanceStatus("error")
 		return err
 	}
-	if cached {
-		log.Printf("coingecko: serving cached /derivatives snapshot (%d tickers)", len(tickers))
+	if cacheState == "fresh_cache" || cacheState == "stale_cache" {
+		log.Printf("coingecko: serving %s /derivatives snapshot (%d tickers)", cacheState, len(tickers))
+	}
+	rowStatus := domain.StatusComplete
+	if cacheState == "stale_cache" {
+		rowStatus = domain.StatusStale
 	}
 
 	// 1) Bucket every relevant ticker per (platform, displaySymbol). For
@@ -215,13 +222,13 @@ func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
 			OpenInterestUSD: totalOI,
 			DataSource:      domain.DataSourceCoinGecko,
 			SourceEndpoint:  endpoint,
-			Status:          domain.StatusComplete,
+			Status:          rowStatus,
 		})
 		dailyRows = append(dailyRows, domain.DailyVolumeAggregate{
 			Platform:       platform,
 			Day:            day,
 			Volume24HUSD:   totalVol,
-			Status:         domain.StatusComplete,
+			Status:         rowStatus,
 			DataSource:     domain.DataSourceCoinGecko,
 			SourceEndpoint: endpoint,
 			SnapshotTS:     now,
@@ -295,7 +302,7 @@ func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
 				DisplaySymbol:  display,
 				Day:            day,
 				Volume24HUSD:   vol,
-				Status:         domain.StatusComplete,
+				Status:         rowStatus,
 				DataSource:     domain.DataSourceCoinGecko,
 				SourceEndpoint: endpoint,
 				SnapshotTS:     now,
@@ -329,7 +336,7 @@ func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
 				Delta7DStatus:  domain.StatusInsufficientHistory,
 				DataSource:     domain.DataSourceCoinGecko,
 				SourceEndpoint: endpoint,
-				Status:         domain.StatusComplete,
+				Status:         rowStatus,
 				SnapshotTS:     now,
 			})
 		}
@@ -359,7 +366,10 @@ func (c *CoinGeckoCollector) CollectOnce(ctx context.Context) error {
 		}
 	}
 
-	c.store.RecordCoinGeckoPullSuccess(now)
+	if cacheState == "live" {
+		c.store.RecordCoinGeckoPullSuccess(now)
+	}
+	c.recordGovernanceStatus(cacheState)
 	return nil
 }
 
@@ -521,19 +531,33 @@ func deriveSuggestedAction(platform string, listed bool, coverage int, listingLo
 	}
 }
 
-// fetchTickers returns either a fresh /derivatives response or the cached
-// one if a previous call landed within TTL. cached==true is informational
-// and only used for log output.
-func (c *CoinGeckoCollector) fetchTickers(ctx context.Context, now time.Time) ([]coingecko.Ticker, string, bool, error) {
+// fetchTickers returns either a live /derivatives response or a cached one.
+// cacheState is one of live, fresh_cache, or stale_cache.
+func (c *CoinGeckoCollector) fetchTickers(ctx context.Context, now time.Time) ([]coingecko.Ticker, string, string, error) {
 	if cached, endpoint, ok := c.cache.Get(now); ok {
-		return cached, endpoint, true, nil
+		return cached, endpoint, "fresh_cache", nil
 	}
 	tickers, endpoint, err := c.client.FetchDerivatives(ctx)
 	if err != nil {
-		return nil, endpoint, false, err
+		if coingecko.IsCoolingDown(err) || coingecko.IsRateLimited(err) {
+			if cached, cachedEndpoint, ok := c.cache.GetStale(now, c.cfg.Governance.StaleCacheTTL); ok {
+				if cachedEndpoint != "" {
+					endpoint = cachedEndpoint
+				}
+				return cached, endpoint, "stale_cache", nil
+			}
+		}
+		return nil, endpoint, "error", err
 	}
 	c.cache.Put(now, tickers, endpoint)
-	return tickers, endpoint, false, nil
+	return tickers, endpoint, "live", nil
+}
+
+func (c *CoinGeckoCollector) recordGovernanceStatus(cacheState string) {
+	if c == nil || c.store == nil {
+		return
+	}
+	c.store.RecordCoinGeckoGovernance(c.governor.Status(), cacheState)
 }
 
 // logUnknownMarketsOnce logs CoinGecko market_name values we couldn't map to
@@ -593,6 +617,11 @@ func (c *CoinGeckoCollector) BackfillVolumeHistory(ctx context.Context, days int
 	if c.mapping == nil {
 		return errors.New("coingecko: mapping not initialised")
 	}
+	if c.cfg.Governance.Enabled && !c.cfg.Governance.BackfillEnabled {
+		log.Printf("coingecko backfill: skipped by governance config")
+		c.recordGovernanceStatus("backfill_disabled")
+		return nil
+	}
 	if days < 1 {
 		days = 1
 	}
@@ -605,6 +634,7 @@ func (c *CoinGeckoCollector) BackfillVolumeHistory(ctx context.Context, days int
 
 	pricePts, btcEndpoint, err := c.client.FetchBitcoinPriceChartRange(ctx, from, to)
 	if err != nil {
+		c.recordGovernanceStatus("backfill_error")
 		return fmt.Errorf("fetch BTC price chart: %w", err)
 	}
 	btcByDay := bucketLatestPriceByDay(pricePts)
@@ -627,6 +657,11 @@ func (c *CoinGeckoCollector) BackfillVolumeHistory(ctx context.Context, days int
 		}
 		points, endpoint, err := c.fetchVolumeChartWithRetry(ctx, exchangeID, days)
 		if err != nil {
+			if coingecko.IsRateLimited(err) || coingecko.IsCoolingDown(err) {
+				log.Printf("coingecko backfill: stopping run after rate limit platform=%s exchange_id=%s endpoint=%s err=%v", platform, exchangeID, endpoint, err)
+				c.recordGovernanceStatus("backfill_rate_limited")
+				return err
+			}
 			log.Printf("coingecko backfill: %s (%s) failed: %v", platform, exchangeID, err)
 			continue
 		}
@@ -656,34 +691,20 @@ func (c *CoinGeckoCollector) BackfillVolumeHistory(ctx context.Context, days int
 		log.Printf("coingecko backfill: %s persisted %d daily rows", platform, len(rows))
 	}
 	log.Printf("coingecko backfill: complete, %d platforms processed, %d rows persisted", len(platforms), totalRows)
+	c.recordGovernanceStatus("backfill_complete")
 	return nil
 }
 
-// fetchVolumeChartWithRetry calls /exchanges/{id}/volume_chart and retries
-// each backoff in backfillRetryBackoffs after a 429. Any other error is
-// returned immediately; the outer loop just logs and skips the platform.
+// fetchVolumeChartWithRetry calls /exchanges/{id}/volume_chart. 429 is now
+// returned immediately so the whole low-priority backfill run yields to the
+// shared CoinGecko cooldown instead of continuing across platforms.
 func (c *CoinGeckoCollector) fetchVolumeChartWithRetry(ctx context.Context, exchangeID string, days int) ([]coingecko.VolumeChartPoint, string, error) {
 	pts, endpoint, err := c.client.FetchExchangeVolumeChart(ctx, exchangeID, days)
 	if err == nil {
 		return pts, endpoint, nil
 	}
-	if !coingecko.IsRateLimited(err) {
-		return nil, endpoint, err
-	}
-	for _, backoff := range backfillRetryBackoffs {
-		log.Printf("coingecko backfill: %s 429 received, retrying after %s", exchangeID, backoff)
-		select {
-		case <-ctx.Done():
-			return nil, endpoint, ctx.Err()
-		case <-time.After(backoff):
-		}
-		pts, endpoint, err = c.client.FetchExchangeVolumeChart(ctx, exchangeID, days)
-		if err == nil {
-			return pts, endpoint, nil
-		}
-		if !coingecko.IsRateLimited(err) {
-			return nil, endpoint, err
-		}
+	if coingecko.IsRateLimited(err) {
+		log.Printf("coingecko backfill: %s 429 received, yielding to shared cooldown (endpoint=%s)", exchangeID, endpoint)
 	}
 	return nil, endpoint, err
 }
@@ -696,7 +717,11 @@ func (c *CoinGeckoCollector) fetchVolumeChartWithRetry(ctx context.Context, exch
 // window; subsequent daily runs only request 7 days because the rolling
 // catch-up window never needs to look further back than that.
 func (c *CoinGeckoCollector) runDailyBackfill(ctx context.Context) {
-	t := time.NewTimer(90 * time.Second)
+	bootDelay := c.cfg.Governance.BackfillBootDelay
+	if bootDelay <= 0 {
+		bootDelay = 90 * time.Second
+	}
+	t := time.NewTimer(bootDelay)
 	defer t.Stop()
 	days := 30
 	for {

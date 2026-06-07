@@ -448,15 +448,33 @@ type BackfillConfig struct {
 // turning the CoinGecko proxy on never silently routes the other 9 native
 // exchange adapters through 127.0.0.1.
 type CoinGeckoConfig struct {
-	Enabled        bool              `json:"enabled"`
-	BaseURL        string            `json:"base_url"`
-	APIKeyEnv      string            `json:"api_key_env"`
-	Proxy          string            `json:"proxy,omitempty"`
-	PullInterval   time.Duration     `json:"pull_interval"`
-	CacheTTL       time.Duration     `json:"cache_ttl"`
-	RequestTimeout time.Duration     `json:"request_timeout"`
-	ExchangeID     map[string]string `json:"exchange_id,omitempty"`
-	MarketName     map[string]string `json:"market_name,omitempty"`
+	Enabled        bool                      `json:"enabled"`
+	BaseURL        string                    `json:"base_url"`
+	APIKeyEnv      string                    `json:"api_key_env"`
+	Proxy          string                    `json:"proxy,omitempty"`
+	PullInterval   time.Duration             `json:"pull_interval"`
+	CacheTTL       time.Duration             `json:"cache_ttl"`
+	RequestTimeout time.Duration             `json:"request_timeout"`
+	Governance     CoinGeckoGovernanceConfig `json:"governance"`
+	ExchangeID     map[string]string         `json:"exchange_id,omitempty"`
+	MarketName     map[string]string         `json:"market_name,omitempty"`
+}
+
+// CoinGeckoGovernanceConfig treats CoinGecko as a finite-budget source. It is
+// intentionally scoped to the CoinGecko client so native exchange adapters do
+// not inherit its pacing or cooldown decisions.
+type CoinGeckoGovernanceConfig struct {
+	Enabled                       bool          `json:"enabled"`
+	RequestsPerMinute             int           `json:"requests_per_minute"`
+	Burst                         int           `json:"burst"`
+	DefaultCooldown               time.Duration `json:"default_cooldown"`
+	MaxCooldown                   time.Duration `json:"max_cooldown"`
+	StaleCacheTTL                 time.Duration `json:"stale_cache_ttl"`
+	BackfillEnabled               bool          `json:"backfill_enabled"`
+	BackfillBootDelay             time.Duration `json:"backfill_boot_delay"`
+	BackfillRequestsPerMinute     int           `json:"backfill_requests_per_minute"`
+	ListingCoinIDCacheTTL         time.Duration `json:"listing_coin_id_cache_ttl"`
+	ListingMarketSnapshotCacheTTL time.Duration `json:"listing_market_snapshot_cache_ttl"`
 }
 
 type WSProviderConfig struct {
@@ -966,8 +984,21 @@ func defaultCoinGeckoConfig() CoinGeckoConfig {
 		APIKeyEnv:      "COINGECKO_DEMO_API_KEY",
 		Proxy:          "",
 		PullInterval:   15 * time.Minute,
-		CacheTTL:       5 * time.Minute,
+		CacheTTL:       10 * time.Minute,
 		RequestTimeout: 30 * time.Second,
+		Governance: CoinGeckoGovernanceConfig{
+			Enabled:                       true,
+			RequestsPerMinute:             4,
+			Burst:                         1,
+			DefaultCooldown:               15 * time.Minute,
+			MaxCooldown:                   time.Hour,
+			StaleCacheTTL:                 2 * time.Hour,
+			BackfillEnabled:               true,
+			BackfillBootDelay:             20 * time.Minute,
+			BackfillRequestsPerMinute:     2,
+			ListingCoinIDCacheTTL:         24 * time.Hour,
+			ListingMarketSnapshotCacheTTL: time.Hour,
+		},
 		ExchangeID: map[string]string{
 			"binance":     "binance_futures",
 			"okx":         "okex_swap",
@@ -1259,15 +1290,30 @@ type collectionFile struct {
 }
 
 type coinGeckoFile struct {
-	Enabled        *bool             `yaml:"enabled"`
-	BaseURL        string            `yaml:"base_url"`
-	APIKeyEnv      string            `yaml:"api_key_env"`
-	Proxy          string            `yaml:"proxy"`
-	PullInterval   string            `yaml:"pull_interval"`
-	CacheTTL       string            `yaml:"cache_ttl"`
-	RequestTimeout string            `yaml:"request_timeout"`
-	ExchangeID     map[string]string `yaml:"exchange_id"`
-	MarketName     map[string]string `yaml:"market_name"`
+	Enabled        *bool                    `yaml:"enabled"`
+	BaseURL        string                   `yaml:"base_url"`
+	APIKeyEnv      string                   `yaml:"api_key_env"`
+	Proxy          string                   `yaml:"proxy"`
+	PullInterval   string                   `yaml:"pull_interval"`
+	CacheTTL       string                   `yaml:"cache_ttl"`
+	RequestTimeout string                   `yaml:"request_timeout"`
+	Governance     *coinGeckoGovernanceFile `yaml:"governance"`
+	ExchangeID     map[string]string        `yaml:"exchange_id"`
+	MarketName     map[string]string        `yaml:"market_name"`
+}
+
+type coinGeckoGovernanceFile struct {
+	Enabled                       *bool  `yaml:"enabled"`
+	RequestsPerMinute             *int   `yaml:"requests_per_minute"`
+	Burst                         *int   `yaml:"burst"`
+	DefaultCooldown               string `yaml:"default_cooldown"`
+	MaxCooldown                   string `yaml:"max_cooldown"`
+	StaleCacheTTL                 string `yaml:"stale_cache_ttl"`
+	BackfillEnabled               *bool  `yaml:"backfill_enabled"`
+	BackfillBootDelay             string `yaml:"backfill_boot_delay"`
+	BackfillRequestsPerMinute     *int   `yaml:"backfill_requests_per_minute"`
+	ListingCoinIDCacheTTL         string `yaml:"listing_coin_id_cache_ttl"`
+	ListingMarketSnapshotCacheTTL string `yaml:"listing_market_snapshot_cache_ttl"`
 }
 
 type wsProviderFile struct {
@@ -2382,11 +2428,88 @@ func applyCoinGeckoFile(base CoinGeckoConfig, file coinGeckoFile) (CoinGeckoConf
 		}
 		base.RequestTimeout = d
 	}
+	if file.Governance != nil {
+		gov, err := applyCoinGeckoGovernanceFile(base.Governance, *file.Governance)
+		if err != nil {
+			return CoinGeckoConfig{}, err
+		}
+		base.Governance = gov
+	}
 	if len(file.ExchangeID) > 0 {
 		base.ExchangeID = file.ExchangeID
 	}
 	if len(file.MarketName) > 0 {
 		base.MarketName = file.MarketName
+	}
+	return base, nil
+}
+
+func applyCoinGeckoGovernanceFile(base CoinGeckoGovernanceConfig, file coinGeckoGovernanceFile) (CoinGeckoGovernanceConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.RequestsPerMinute != nil {
+		if *file.RequestsPerMinute < 0 {
+			return CoinGeckoGovernanceConfig{}, fmt.Errorf("coingecko.governance.requests_per_minute: must be >= 0")
+		}
+		base.RequestsPerMinute = *file.RequestsPerMinute
+	}
+	if file.Burst != nil {
+		if *file.Burst < 0 {
+			return CoinGeckoGovernanceConfig{}, fmt.Errorf("coingecko.governance.burst: must be >= 0")
+		}
+		base.Burst = *file.Burst
+	}
+	if file.DefaultCooldown != "" {
+		d, err := time.ParseDuration(file.DefaultCooldown)
+		if err != nil {
+			return CoinGeckoGovernanceConfig{}, fmt.Errorf("coingecko.governance.default_cooldown: %w", err)
+		}
+		base.DefaultCooldown = d
+	}
+	if file.MaxCooldown != "" {
+		d, err := time.ParseDuration(file.MaxCooldown)
+		if err != nil {
+			return CoinGeckoGovernanceConfig{}, fmt.Errorf("coingecko.governance.max_cooldown: %w", err)
+		}
+		base.MaxCooldown = d
+	}
+	if file.StaleCacheTTL != "" {
+		d, err := time.ParseDuration(file.StaleCacheTTL)
+		if err != nil {
+			return CoinGeckoGovernanceConfig{}, fmt.Errorf("coingecko.governance.stale_cache_ttl: %w", err)
+		}
+		base.StaleCacheTTL = d
+	}
+	if file.BackfillEnabled != nil {
+		base.BackfillEnabled = *file.BackfillEnabled
+	}
+	if file.BackfillBootDelay != "" {
+		d, err := time.ParseDuration(file.BackfillBootDelay)
+		if err != nil {
+			return CoinGeckoGovernanceConfig{}, fmt.Errorf("coingecko.governance.backfill_boot_delay: %w", err)
+		}
+		base.BackfillBootDelay = d
+	}
+	if file.BackfillRequestsPerMinute != nil {
+		if *file.BackfillRequestsPerMinute < 0 {
+			return CoinGeckoGovernanceConfig{}, fmt.Errorf("coingecko.governance.backfill_requests_per_minute: must be >= 0")
+		}
+		base.BackfillRequestsPerMinute = *file.BackfillRequestsPerMinute
+	}
+	if file.ListingCoinIDCacheTTL != "" {
+		d, err := time.ParseDuration(file.ListingCoinIDCacheTTL)
+		if err != nil {
+			return CoinGeckoGovernanceConfig{}, fmt.Errorf("coingecko.governance.listing_coin_id_cache_ttl: %w", err)
+		}
+		base.ListingCoinIDCacheTTL = d
+	}
+	if file.ListingMarketSnapshotCacheTTL != "" {
+		d, err := time.ParseDuration(file.ListingMarketSnapshotCacheTTL)
+		if err != nil {
+			return CoinGeckoGovernanceConfig{}, fmt.Errorf("coingecko.governance.listing_market_snapshot_cache_ttl: %w", err)
+		}
+		base.ListingMarketSnapshotCacheTTL = d
 	}
 	return base, nil
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
 )
@@ -119,6 +120,47 @@ func TestBuildCoinGeckoFetcherCachesResolvedID(t *testing.T) {
 	}
 	if stub.snapshots != 3 {
 		t.Errorf("snapshots = %d, want 3", stub.snapshots)
+	}
+}
+
+func TestBuildCoinGeckoFetcherCachesMarketSnapshotWithinTTL(t *testing.T) {
+	now := time.Date(2026, 6, 7, 0, 0, 0, 0, time.UTC)
+	stub := &stubCoinGecko{
+		searchHits: []coingecko.CoinSearchResult{
+			{ID: "bitcoin", Symbol: "BTC", MarketCapRank: 1},
+		},
+		snap: &coingecko.CoinMarketSnapshot{
+			ID: "bitcoin", MarketCapUSD: 1, Volume24HUSD: 1,
+		},
+	}
+	fetch := BuildCoinGeckoFetcher(stub, CoinGeckoFetcherOptions{
+		CoinIDCacheTTL:         time.Hour,
+		MarketSnapshotCacheTTL: 10 * time.Minute,
+		Now:                    func() time.Time { return now },
+	})
+	for i := 0; i < 3; i++ {
+		_, _, _, err := fetch(context.Background(), "BTC")
+		if err != nil {
+			t.Fatalf("iteration %d: %v", i, err)
+		}
+	}
+	if stub.searches != 1 {
+		t.Errorf("searches = %d, want 1", stub.searches)
+	}
+	if stub.snapshots != 1 {
+		t.Errorf("snapshots = %d, want 1 while cache is fresh", stub.snapshots)
+	}
+
+	now = now.Add(11 * time.Minute)
+	_, _, _, err := fetch(context.Background(), "BTC")
+	if err != nil {
+		t.Fatalf("after ttl expiry: %v", err)
+	}
+	if stub.searches != 1 {
+		t.Errorf("searches = %d, want 1 because coin id ttl is still fresh", stub.searches)
+	}
+	if stub.snapshots != 2 {
+		t.Errorf("snapshots = %d, want 2 after market snapshot ttl expiry", stub.snapshots)
 	}
 }
 

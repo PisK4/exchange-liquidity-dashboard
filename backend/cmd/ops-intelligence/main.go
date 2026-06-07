@@ -51,6 +51,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+	cgGovernor := buildCoinGeckoGovernor(cfg.Runtime.CoinGecko.Governance)
 
 	store := collector.NewStore(cfg)
 	resolvedDSN := resolveMySQLDSN(*mysqlDSN, cfg)
@@ -138,7 +139,7 @@ func main() {
 		}
 
 		if cfg.Runtime.CoinGecko.Enabled {
-			if cgCollector, err := buildCoinGeckoCollector(cfg, store); err != nil {
+			if cgCollector, err := buildCoinGeckoCollector(cfg, store, cgGovernor); err != nil {
 				log.Printf("coingecko collector disabled: %v", err)
 			} else {
 				seedUniversePath := filepath.Join(*configDir, "listed_universe.yaml")
@@ -194,7 +195,7 @@ func main() {
 		for _, src := range listingSources.Announcement {
 			log.Printf("listing announcement source armed: platform=%s url=%s", src.Platform, src.SourceURL)
 		}
-		listingEnrichDeps := buildListingEnrichDeps(cfg, listingRepo, universeClosure)
+		listingEnrichDeps := buildListingEnrichDeps(cfg, listingRepo, universeClosure, cgGovernor)
 		engine := listing.NewEngine(cfg, listingRepo, listing.EngineDeps{
 			LoadUniverse:        listingUniverseLoader,
 			InstrumentSources:   listingSources.Instrument,
@@ -386,7 +387,7 @@ func runCollectionCycle(ctx context.Context, c *collector.Collector, timeout tim
 // runtime config. The API key is sourced from the environment variable
 // named by cfg.APIKeyEnv (default COINGECKO_DEMO_API_KEY); leaving it
 // unset is allowed (the public endpoint still works at lower QPS).
-func buildCoinGeckoCollector(cfg config.Config, store *collector.Store) (*collector.CoinGeckoCollector, error) {
+func buildCoinGeckoCollector(cfg config.Config, store *collector.Store, governor *coingecko.BudgetGovernor) (*collector.CoinGeckoCollector, error) {
 	cgCfg := cfg.Runtime.CoinGecko
 	apiKey := ""
 	if cgCfg.APIKeyEnv != "" {
@@ -397,14 +398,28 @@ func buildCoinGeckoCollector(cfg config.Config, store *collector.Store) (*collec
 		APIKey:         apiKey,
 		Proxy:          cgCfg.Proxy,
 		RequestTimeout: cgCfg.RequestTimeout,
+		Governor:       governor,
 	})
 	if err != nil {
 		return nil, err
 	}
 	mapping := coingecko.NewMapping(cgCfg.ExchangeID, cgCfg.MarketName)
-	log.Printf("coingecko collector wired (interval=%s, base=%s, proxy=%q, exchanges=%d)",
-		cgCfg.PullInterval, cgCfg.BaseURL, cgCfg.Proxy, len(cgCfg.ExchangeID))
-	return collector.NewCoinGeckoCollector(cgCfg, store, client, mapping), nil
+	log.Printf("coingecko collector wired (interval=%s, base=%s, proxy=%q, exchanges=%d, governance=%t)",
+		cgCfg.PullInterval, cgCfg.BaseURL, cgCfg.Proxy, len(cgCfg.ExchangeID), cgCfg.Governance.Enabled)
+	cgCollector := collector.NewCoinGeckoCollector(cgCfg, store, client, mapping)
+	cgCollector.SetGovernor(governor)
+	return cgCollector, nil
+}
+
+func buildCoinGeckoGovernor(cfg config.CoinGeckoGovernanceConfig) *coingecko.BudgetGovernor {
+	return coingecko.NewBudgetGovernor(coingecko.GovernorConfig{
+		Enabled:                   cfg.Enabled,
+		RequestsPerMinute:         cfg.RequestsPerMinute,
+		Burst:                     cfg.Burst,
+		DefaultCooldown:           cfg.DefaultCooldown,
+		MaxCooldown:               cfg.MaxCooldown,
+		BackfillRequestsPerMinute: cfg.BackfillRequestsPerMinute,
+	})
 }
 
 func lighterMarketIDsFromConfig(cfg config.Config) []int {
@@ -658,7 +673,7 @@ func resolveListingCallbackSecret(cfg *config.Config) {
 // API symbols and hits Binance's spot + USDM-perp depth endpoints
 // directly; the aggregator runs the spot and perp calls in parallel
 // with a per-call deadline.
-func buildListingEnrichDeps(cfg config.Config, repo *listing.Repository, universeLoader func() *config.ListedUniverse) listing.DecisionCardEnrichDeps {
+func buildListingEnrichDeps(cfg config.Config, repo *listing.Repository, universeLoader func() *config.ListedUniverse, governor *coingecko.BudgetGovernor) listing.DecisionCardEnrichDeps {
 	deps := listing.DecisionCardEnrichDeps{
 		Now: func() time.Time { return time.Now().UTC() },
 	}
@@ -682,8 +697,12 @@ func buildListingEnrichDeps(cfg config.Config, repo *listing.Repository, univers
 		APIKey:         apiKey,
 		Proxy:          cgCfg.Proxy,
 		RequestTimeout: 4 * time.Second,
+		Governor:       governor,
 	}); err == nil {
-		deps.CoinGeckoFetcher = listing.BuildCoinGeckoFetcher(cgClient)
+		deps.CoinGeckoFetcher = listing.BuildCoinGeckoFetcher(cgClient, listing.CoinGeckoFetcherOptions{
+			CoinIDCacheTTL:         cgCfg.Governance.ListingCoinIDCacheTTL,
+			MarketSnapshotCacheTTL: cgCfg.Governance.ListingMarketSnapshotCacheTTL,
+		})
 	} else {
 		log.Printf("listing enrich: coingecko client init failed: %v (market-cap/24h-vol will render n/a)", err)
 	}

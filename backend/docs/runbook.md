@@ -195,6 +195,64 @@ Diagnosis order:
    so a 100% share is the natural state and a `stale` reading is
    itself the alert.
 
+### 3.7 CoinGecko reports HTTP 429 rate limit
+
+CoinGecko is governed as a finite-budget source. The fix is **not** to rely on
+adding `COINGECKO_DEMO_API_KEY` for more quota; the backend must remain safe
+without it.
+
+Diagnosis order:
+
+1. Check the governance state:
+
+   ```
+   curl -fsS http://127.0.0.1:8080/api/collection-status | jq '.coingecko'
+   curl -fsS http://127.0.0.1:8080/api/ops-intelligence/meta | jq '.data_sources.coingecko.governance'
+   ```
+
+2. Interpret `state` and `cache_state`:
+
+   - `state = healthy`, `cache_state = live` — normal live pull.
+   - `state = cooling_down` — a previous 429 triggered a local cooldown. Check
+     `cooldown_until`, `last_endpoint`, and `last_error`.
+   - `cache_state = stale_cache` — the dashboard is serving the last derivative
+     snapshot inside `stale_cache_ttl`; derived rows should surface `stale`, not
+     fresh `complete`.
+   - `cache_state = backfill_rate_limited` — the historical backfill yielded
+     after a 429. This is expected; it will try again in a later scheduled run.
+   - `cache_state = backfill_disabled` — backfill is explicitly disabled by
+     `Runtime.coingecko.governance.backfill_enabled=false`.
+
+3. Confirm the active knobs in `config/edgex-ops-intelligence.yaml`:
+
+   ```yaml
+   Runtime:
+     coingecko:
+       cache_ttl: 10m
+       governance:
+         enabled: true
+         requests_per_minute: 4
+         burst: 1
+         default_cooldown: 15m
+         max_cooldown: 1h
+         stale_cache_ttl: 2h
+         backfill_enabled: true
+         backfill_boot_delay: 20m
+         backfill_requests_per_minute: 2
+         listing_coin_id_cache_ttl: 24h
+         listing_market_snapshot_cache_ttl: 1h
+   ```
+
+4. If local Docker logs are noisy, do not restart-loop immediately. Wait until
+   `cooldown_until`, then confirm that the next main collector tick either
+   returns to `live` or continues serving `stale_cache`. Repeated 429s usually
+   mean the shared egress IP is exhausted by another process; reduce
+   `requests_per_minute` or temporarily set `backfill_enabled=false`.
+
+5. If stale data is older than `stale_cache_ttl`, the collector must return an
+   explicit error/stale surface rather than fabricate a successful snapshot.
+   Investigate upstream access or egress proxy health before widening the TTL.
+
 ## 4. Catalog Re-generation Workflow
 
 Cadence: monthly, plus ad-hoc when an exchange announces a relisting.

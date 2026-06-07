@@ -40,6 +40,24 @@ func (c *TickerCache) Get(now time.Time) ([]Ticker, string, bool) {
 	return dup, c.endpoint, true
 }
 
+// GetStale returns the latest cached value when it is not fresh but still
+// inside maxAge. This is only used while the CoinGecko governor is cooling
+// down; callers must mark downstream status as stale/cache_served rather than
+// treating the data as a new successful upstream pull.
+func (c *TickerCache) GetStale(now time.Time, maxAge time.Duration) ([]Ticker, string, bool) {
+	if c == nil || maxAge <= 0 {
+		return nil, "", false
+	}
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	if c.at.IsZero() || len(c.tickers) == 0 || now.Sub(c.at) > maxAge {
+		return nil, "", false
+	}
+	dup := make([]Ticker, len(c.tickers))
+	copy(dup, c.tickers)
+	return dup, c.endpoint, true
+}
+
 // Put records a fresh response. Callers should pass the same now value used
 // for the request so successive Get calls share a monotonic view.
 func (c *TickerCache) Put(now time.Time, tickers []Ticker, endpoint string) {

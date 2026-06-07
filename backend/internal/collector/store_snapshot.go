@@ -21,6 +21,7 @@ type StoreSnapshot struct {
 	Top30ByPlatform          map[string][]domain.Top30Row
 	Top30BackfillSkipCounts  map[string]map[string]int
 	CoinGeckoLastPullTS      time.Time
+	CoinGeckoGovernance      map[string]any
 }
 
 func (s *Store) Snapshot() StoreSnapshot {
@@ -61,6 +62,7 @@ func (s *Store) buildSnapshotLocked() StoreSnapshot {
 		Top30ByPlatform:          cloneMapOfSlices(s.top30ByPlatform),
 		Top30BackfillSkipCounts:  cloneNestedIntMap(s.top30BackfillSkipCounts),
 		CoinGeckoLastPullTS:      s.cgLastPullTS,
+		CoinGeckoGovernance:      cloneMap(s.cgGovernance),
 	}
 }
 
@@ -79,6 +81,7 @@ func (snap StoreSnapshot) clone() StoreSnapshot {
 		Top30ByPlatform:          cloneMapOfSlices(snap.Top30ByPlatform),
 		Top30BackfillSkipCounts:  cloneNestedIntMap(snap.Top30BackfillSkipCounts),
 		CoinGeckoLastPullTS:      snap.CoinGeckoLastPullTS,
+		CoinGeckoGovernance:      cloneMap(snap.CoinGeckoGovernance),
 	}
 }
 

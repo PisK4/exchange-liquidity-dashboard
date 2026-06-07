@@ -26,6 +26,7 @@ type Config struct {
 	Proxy          string
 	RequestTimeout time.Duration
 	UserAgent      string
+	Governor       *BudgetGovernor
 }
 
 // DefaultAPIKeyHeader is the canonical header CoinGecko Demo and Pro keys use.
@@ -40,6 +41,7 @@ const (
 type Client struct {
 	cfg        Config
 	httpClient *http.Client
+	governor   *BudgetGovernor
 }
 
 // New constructs a CoinGecko HTTP client honoring the v2 R1 contract:
@@ -88,6 +90,7 @@ func New(cfg Config) (*Client, error) {
 			Transport: tr,
 			Timeout:   cfg.RequestTimeout,
 		},
+		governor: cfg.Governor,
 	}, nil
 }
 
@@ -102,8 +105,12 @@ func (c *Client) BaseURL() string { return c.cfg.BaseURL }
 // log, back off, and keep the rest of the cycle running rather than crash.
 func (c *Client) FetchDerivatives(ctx context.Context) ([]Ticker, string, error) {
 	endpoint := c.cfg.BaseURL + "/derivatives?include_tickers=unexpired"
+	if err := c.beforeRequest(ctx, endpoint, PriorityPrimary); err != nil {
+		return nil, endpoint, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
+		c.afterResponse(endpoint, PriorityPrimary, err)
 		return nil, endpoint, err
 	}
 	if c.cfg.APIKey != "" {
@@ -114,24 +121,33 @@ func (c *Client) FetchDerivatives(ctx context.Context) ([]Ticker, string, error)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, endpoint, fmt.Errorf("coingecko fetch derivatives: %w", err)
+		err = fmt.Errorf("coingecko fetch derivatives: %w", err)
+		c.afterResponse(endpoint, PriorityPrimary, err)
+		return nil, endpoint, err
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode == http.StatusTooManyRequests {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
-		return nil, endpoint, &RateLimitedError{Status: resp.StatusCode, Body: string(body)}
+		err := newRateLimitedError(resp, endpoint, string(body))
+		c.afterResponse(endpoint, PriorityPrimary, err)
+		return nil, endpoint, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
-		return nil, endpoint, &HTTPError{Status: resp.StatusCode, Body: string(body), Endpoint: endpoint}
+		err := &HTTPError{Status: resp.StatusCode, Body: string(body), Endpoint: endpoint}
+		c.afterResponse(endpoint, PriorityPrimary, err)
+		return nil, endpoint, err
 	}
 	var tickers []Ticker
 	dec := json.NewDecoder(resp.Body)
 	dec.UseNumber()
 	if err := dec.Decode(&tickers); err != nil {
-		return nil, endpoint, fmt.Errorf("coingecko decode derivatives: %w", err)
+		err = fmt.Errorf("coingecko decode derivatives: %w", err)
+		c.afterResponse(endpoint, PriorityPrimary, err)
+		return nil, endpoint, err
 	}
+	c.afterResponse(endpoint, PriorityPrimary, nil)
 	return tickers, endpoint, nil
 }
 
@@ -338,8 +354,13 @@ func (c *Client) getJSONArray(ctx context.Context, endpoint string) ([][]json.Nu
 }
 
 func (c *Client) getJSONBytes(ctx context.Context, endpoint string) ([]byte, error) {
+	priority := requestPriorityForEndpoint(endpoint)
+	if err := c.beforeRequest(ctx, endpoint, priority); err != nil {
+		return nil, err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, endpoint, nil)
 	if err != nil {
+		c.afterResponse(endpoint, priority, err)
 		return nil, err
 	}
 	if c.cfg.APIKey != "" {
@@ -350,18 +371,50 @@ func (c *Client) getJSONBytes(ctx context.Context, endpoint string) ([]byte, err
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("coingecko GET %s: %w", endpoint, err)
+		err = fmt.Errorf("coingecko GET %s: %w", endpoint, err)
+		c.afterResponse(endpoint, priority, err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode == http.StatusTooManyRequests {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
-		return nil, &RateLimitedError{Status: resp.StatusCode, Body: string(body)}
+		err := newRateLimitedError(resp, endpoint, string(body))
+		c.afterResponse(endpoint, priority, err)
+		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4*1024))
-		return nil, &HTTPError{Status: resp.StatusCode, Body: string(body), Endpoint: endpoint}
+		err := &HTTPError{Status: resp.StatusCode, Body: string(body), Endpoint: endpoint}
+		c.afterResponse(endpoint, priority, err)
+		return nil, err
 	}
-	return io.ReadAll(io.LimitReader(resp.Body, 16*1024*1024))
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 16*1024*1024))
+	c.afterResponse(endpoint, priority, err)
+	return body, err
+}
+
+func (c *Client) beforeRequest(ctx context.Context, endpoint string, priority RequestPriority) error {
+	if c == nil || c.governor == nil {
+		return nil
+	}
+	return c.governor.BeforeRequest(ctx, endpoint, priority)
+}
+
+func (c *Client) afterResponse(endpoint string, priority RequestPriority, err error) {
+	if c == nil || c.governor == nil {
+		return
+	}
+	c.governor.AfterResponse(endpoint, priority, err)
+}
+
+func requestPriorityForEndpoint(endpoint string) RequestPriority {
+	if strings.Contains(endpoint, "/exchanges/") || strings.Contains(endpoint, "/market_chart/range") {
+		return PriorityBackfill
+	}
+	if strings.Contains(endpoint, "/search?") || strings.Contains(endpoint, "/coins/markets?") {
+		return PriorityListing
+	}
+	return PriorityPrimary
 }
 
 // HTTPError is returned for any non-2xx response other than 429.
@@ -378,12 +431,42 @@ func (e *HTTPError) Error() string {
 // RateLimitedError signals a 429 so callers can back off without treating the
 // run as fatal.
 type RateLimitedError struct {
-	Status int
-	Body   string
+	Status        int
+	Body          string
+	Endpoint      string
+	RetryAfter    time.Duration
+	RetryAfterRaw string
 }
 
 func (e *RateLimitedError) Error() string {
+	if e.Endpoint != "" {
+		return fmt.Sprintf("coingecko: rate limited (HTTP %d) from %s: %s", e.Status, e.Endpoint, truncate(e.Body, 200))
+	}
 	return fmt.Sprintf("coingecko: rate limited (HTTP %d): %s", e.Status, truncate(e.Body, 200))
+}
+
+func newRateLimitedError(resp *http.Response, endpoint, body string) *RateLimitedError {
+	raw := strings.TrimSpace(resp.Header.Get("Retry-After"))
+	return &RateLimitedError{
+		Status:        resp.StatusCode,
+		Body:          body,
+		Endpoint:      endpoint,
+		RetryAfter:    parseRetryAfter(raw, time.Now().UTC()),
+		RetryAfterRaw: raw,
+	}
+}
+
+func parseRetryAfter(raw string, now time.Time) time.Duration {
+	if raw == "" {
+		return 0
+	}
+	if d, err := time.ParseDuration(raw + "s"); err == nil {
+		return d
+	}
+	if at, err := http.ParseTime(raw); err == nil && at.After(now) {
+		return at.Sub(now)
+	}
+	return 0
 }
 
 // IsRateLimited reports whether err is a RateLimitedError.

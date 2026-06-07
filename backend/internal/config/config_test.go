@@ -417,8 +417,24 @@ func TestCommittedRuntimeAlignsCoinGeckoCadence(t *testing.T) {
 	if cfg.Runtime.CoinGecko.PullInterval != 5*time.Minute {
 		t.Fatalf("CoinGecko pull_interval = %s, want 5m", cfg.Runtime.CoinGecko.PullInterval)
 	}
-	if cfg.Runtime.CoinGecko.CacheTTL != 0 {
-		t.Fatalf("CoinGecko cache_ttl = %s, want disabled cache", cfg.Runtime.CoinGecko.CacheTTL)
+	if cfg.Runtime.CoinGecko.CacheTTL != 10*time.Minute {
+		t.Fatalf("CoinGecko cache_ttl = %s, want 10m fresh cache", cfg.Runtime.CoinGecko.CacheTTL)
+	}
+	gov := cfg.Runtime.CoinGecko.Governance
+	if !gov.Enabled {
+		t.Fatalf("CoinGecko governance should be enabled in committed config")
+	}
+	if gov.RequestsPerMinute != 4 || gov.Burst != 1 {
+		t.Fatalf("CoinGecko governance budget = rpm:%d burst:%d, want rpm:4 burst:1", gov.RequestsPerMinute, gov.Burst)
+	}
+	if gov.DefaultCooldown != 15*time.Minute || gov.MaxCooldown != time.Hour || gov.StaleCacheTTL != 2*time.Hour {
+		t.Fatalf("CoinGecko governance cooldowns = default:%s max:%s stale:%s, want 15m/1h/2h", gov.DefaultCooldown, gov.MaxCooldown, gov.StaleCacheTTL)
+	}
+	if !gov.BackfillEnabled || gov.BackfillBootDelay != 20*time.Minute || gov.BackfillRequestsPerMinute != 2 {
+		t.Fatalf("CoinGecko governance backfill = enabled:%t boot:%s rpm:%d, want true/20m/2", gov.BackfillEnabled, gov.BackfillBootDelay, gov.BackfillRequestsPerMinute)
+	}
+	if gov.ListingCoinIDCacheTTL != 24*time.Hour || gov.ListingMarketSnapshotCacheTTL != time.Hour {
+		t.Fatalf("CoinGecko governance listing ttl = coin:%s market:%s, want 24h/1h", gov.ListingCoinIDCacheTTL, gov.ListingMarketSnapshotCacheTTL)
 	}
 	if cfg.Runtime.Collection.PerPlatformConcurrency <= 0 {
 		t.Fatalf("collection per_platform_concurrency must be configured, got %d", cfg.Runtime.Collection.PerPlatformConcurrency)
@@ -434,7 +450,7 @@ func TestCommittedRuntimeAlignsCoinGeckoCadence(t *testing.T) {
 	if cfg.Runtime.ListingAgent.Candidate.HistoricalListingGracePeriod != 48*time.Hour {
 		t.Fatalf("committed historical_listing_grace_period = %s, want 48h", cfg.Runtime.ListingAgent.Candidate.HistoricalListingGracePeriod)
 	}
-	for _, needle := range []string{"collection:", "per_platform_concurrency:", "per_platform_rate_per_sec:", "historical_listing_grace_period:"} {
+	for _, needle := range []string{"collection:", "per_platform_concurrency:", "per_platform_rate_per_sec:", "historical_listing_grace_period:", "governance:", "stale_cache_ttl:"} {
 		if !strings.Contains(text, needle) {
 			t.Fatalf("edgex-ops-intelligence.yaml should explicitly declare %q", needle)
 		}

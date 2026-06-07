@@ -293,6 +293,57 @@ func TestCoinGeckoCollectorRateLimitedReturnsError(t *testing.T) {
 	}
 }
 
+func TestCoinGeckoCollectorServesStaleCacheOnRateLimit(t *testing.T) {
+	requests := 0
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requests++
+		if requests == 1 {
+			_, _ = w.Write([]byte(fakeDerivativesPayload))
+			return
+		}
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"status":{"error_code":429}}`))
+	}))
+	defer srv.Close()
+
+	cfg := config.Default()
+	cfg.Platforms = []string{"binance"}
+	cfg.Runtime.CoinGecko.Enabled = true
+	cfg.Runtime.CoinGecko.BaseURL = srv.URL
+	cfg.Runtime.CoinGecko.CacheTTL = time.Nanosecond
+	cfg.Runtime.CoinGecko.Governance.StaleCacheTTL = time.Hour
+	cfg.Runtime.CoinGecko.ExchangeID = map[string]string{"binance": "binance_futures"}
+	cfg.Runtime.CoinGecko.MarketName = map[string]string{"binance": "Binance (Futures)"}
+	store := NewStore(cfg)
+	client, err := coingecko.New(coingecko.Config{BaseURL: srv.URL, RequestTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	mapping := coingecko.NewMapping(cfg.Runtime.CoinGecko.ExchangeID, cfg.Runtime.CoinGecko.MarketName)
+	col := NewCoinGeckoCollector(cfg.Runtime.CoinGecko, store, client, mapping)
+
+	if err := col.CollectOnce(context.Background()); err != nil {
+		t.Fatalf("initial CollectOnce: %v", err)
+	}
+	time.Sleep(time.Millisecond)
+	if err := col.CollectOnce(context.Background()); err != nil {
+		t.Fatalf("second CollectOnce should serve stale cache after 429: %v", err)
+	}
+
+	status := store.CollectionStatus()
+	cg, ok := status["coingecko"].(map[string]any)
+	if !ok {
+		t.Fatalf("coingecko governance status missing: %+v", status)
+	}
+	if cg["cache_state"] != "stale_cache" {
+		t.Fatalf("cache_state = %v, want stale_cache", cg["cache_state"])
+	}
+	top := store.Top30("perp", "binance")
+	if top["status"] != domain.StatusStale {
+		t.Fatalf("top30 status = %v, want stale after stale-cache collection", top["status"])
+	}
+}
+
 func TestCoinGeckoCollectorIgnoresUnknownMarkets(t *testing.T) {
 	col, store, srv := newTestCoinGeckoCollector(t)
 	defer srv.Close()
@@ -471,6 +522,47 @@ func TestBackfillVolumeHistoryClampsDaysRange(t *testing.T) {
 	defer srv.Close()
 	if err := col.BackfillVolumeHistory(context.Background(), 365); err != nil {
 		t.Fatalf("BackfillVolumeHistory with overflow days should not error: %v", err)
+	}
+}
+
+func TestBackfillVolumeHistoryStopsCurrentRunOnRateLimit(t *testing.T) {
+	withZeroPace(t)
+	day0 := time.Date(2026, 5, 15, 0, 0, 0, 0, time.UTC)
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/coins/bitcoin/market_chart/range":
+			_, _ = w.Write([]byte(fmt.Sprintf(`{"prices":[[%d,60000]],"market_caps":[],"total_volumes":[]}`, day0.UnixMilli())))
+		case "/exchanges/binance_futures/volume_chart":
+			w.WriteHeader(http.StatusTooManyRequests)
+			_, _ = w.Write([]byte(`{"status":{"error_code":429}}`))
+		default:
+			w.WriteHeader(http.StatusBadRequest)
+		}
+	}))
+	defer srv.Close()
+
+	cfg := config.Default()
+	cfg.Platforms = []string{"binance"}
+	cfg.Runtime.CoinGecko.Enabled = true
+	cfg.Runtime.CoinGecko.BaseURL = srv.URL
+	cfg.Runtime.CoinGecko.ExchangeID = map[string]string{"binance": "binance_futures"}
+	cfg.Runtime.CoinGecko.MarketName = map[string]string{"binance": "Binance (Futures)"}
+	store := NewStore(cfg)
+	client, err := coingecko.New(coingecko.Config{BaseURL: srv.URL, RequestTimeout: time.Second})
+	if err != nil {
+		t.Fatalf("client: %v", err)
+	}
+	mapping := coingecko.NewMapping(cfg.Runtime.CoinGecko.ExchangeID, cfg.Runtime.CoinGecko.MarketName)
+	col := NewCoinGeckoCollector(cfg.Runtime.CoinGecko, store, client, mapping)
+
+	err = col.BackfillVolumeHistory(context.Background(), 7)
+	if !coingecko.IsRateLimited(err) {
+		t.Fatalf("BackfillVolumeHistory err = %v, want rate-limited", err)
+	}
+	status := store.CollectionStatus()
+	cg, ok := status["coingecko"].(map[string]any)
+	if !ok || cg["cache_state"] != "backfill_rate_limited" {
+		t.Fatalf("coingecko status = %+v, want backfill_rate_limited", status["coingecko"])
 	}
 }
 

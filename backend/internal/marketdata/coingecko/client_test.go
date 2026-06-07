@@ -3,6 +3,7 @@ package coingecko
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -138,6 +139,7 @@ func TestFetchDerivativesSendsAPIKeyHeader(t *testing.T) {
 
 func TestFetchDerivativesRateLimitSurfaces429(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "42")
 		w.WriteHeader(http.StatusTooManyRequests)
 		_, _ = w.Write([]byte(`{"status":{"error_code":429}}`))
 	}))
@@ -150,6 +152,19 @@ func TestFetchDerivativesRateLimitSurfaces429(t *testing.T) {
 	}
 	if !IsRateLimited(err) {
 		t.Fatalf("IsRateLimited should be true, got err=%v", err)
+	}
+	var rateLimited *RateLimitedError
+	if !errors.As(err, &rateLimited) {
+		t.Fatalf("err type = %T, want *RateLimitedError", err)
+	}
+	if rateLimited.Endpoint == "" || !strings.HasSuffix(rateLimited.Endpoint, "/derivatives?include_tickers=unexpired") {
+		t.Fatalf("endpoint = %q", rateLimited.Endpoint)
+	}
+	if rateLimited.RetryAfterRaw != "42" {
+		t.Fatalf("retry-after raw = %q, want 42", rateLimited.RetryAfterRaw)
+	}
+	if rateLimited.RetryAfter != 42*time.Second {
+		t.Fatalf("retry-after = %s, want 42s", rateLimited.RetryAfter)
 	}
 }
 

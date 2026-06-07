@@ -127,8 +127,20 @@ Runtime:
     api_key_env: COINGECKO_DEMO_API_KEY
     proxy: "http://host.docker.internal:7897"
     pull_interval: 5m
-    cache_ttl: 0s
+    cache_ttl: 10m
     request_timeout: 30s
+    governance:
+      enabled: true
+      requests_per_minute: 4
+      burst: 1
+      default_cooldown: 15m
+      max_cooldown: 1h
+      stale_cache_ttl: 2h
+      backfill_enabled: true
+      backfill_boot_delay: 20m
+      backfill_requests_per_minute: 2
+      listing_coin_id_cache_ttl: 24h
+      listing_market_snapshot_cache_ttl: 1h
     exchange_id:
       edgeX: edgex
       binance: binance_futures

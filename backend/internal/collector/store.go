@@ -66,6 +66,7 @@ type Store struct {
 	funding map[string]domain.PlatformFundingRate
 
 	cgLastPullTS time.Time
+	cgGovernance map[string]any
 }
 
 type RunSummary struct {
@@ -88,6 +89,7 @@ func NewStore(cfg config.Config) *Store {
 		top30ByPlatform:         map[string][]domain.Top30Row{},
 		top30BackfillSkipCounts: map[string]map[string]int{},
 		funding:                 map[string]domain.PlatformFundingRate{},
+		cgGovernance:            map[string]any{},
 	}
 	initial := append([]domain.SymbolSub(nil), cfg.Symbols...)
 	s.liveSymbols.Store(&initial)
@@ -280,7 +282,7 @@ func (s *Store) hydrateCoinGeckoPlatformVolumes(rows []domain.PlatformVolumeAggr
 			normalized[i].DataSource = row.DataSource
 		}
 		s.cgPlatformVolumes[row.Platform] = row
-		if row.SnapshotTS.After(s.cgLastPullTS) {
+		if row.Status == domain.StatusComplete && row.SnapshotTS.After(s.cgLastPullTS) {
 			s.cgLastPullTS = row.SnapshotTS
 		}
 	}
@@ -520,6 +522,9 @@ func (s *Store) OpsIntelligenceMeta() map[string]any {
 		}
 		if !lastPull.IsZero() {
 			meta["last_pull_ts"] = lastPull
+		}
+		if governance := s.Snapshot().CoinGeckoGovernance; len(governance) > 0 {
+			meta["governance"] = governance
 		}
 		out["data_sources"] = map[string]any{"coingecko": meta}
 	}
@@ -1151,9 +1156,34 @@ func (s *Store) Top30(surface, platform string) map[string]any {
 		"surface":     surface,
 		"platform":    platform,
 		"snapshot_ts": latestTop30TS(out),
-		"status":      domain.StatusComplete,
+		"status":      top30RowsStatus(out),
 		"rows":        out,
 	}
+}
+
+func top30RowsStatus(rows []domain.Top30Row) string {
+	if len(rows) == 0 {
+		return domain.StatusUnsupported
+	}
+	seenStatus := false
+	complete := 0
+	for _, row := range rows {
+		if row.Status == "" {
+			complete++
+			continue
+		}
+		seenStatus = true
+		if row.Status == domain.StatusComplete {
+			complete++
+		}
+	}
+	if complete == len(rows) {
+		return domain.StatusComplete
+	}
+	if !seenStatus {
+		return domain.StatusComplete
+	}
+	return domain.StatusStale
 }
 
 func (s *Store) displayPlatformSnapshotLocked(platform, symbol string) (domain.PlatformSnapshot, bool) {
@@ -1201,7 +1231,11 @@ func isDisplayableSnapshot(row domain.PlatformSnapshot) bool {
 
 func (s *Store) CollectionStatus() map[string]any {
 	snap := s.Snapshot()
-	return map[string]any{"last_run": snap.Run, "rows": snap.Status}
+	out := map[string]any{"last_run": snap.Run, "rows": snap.Status}
+	if len(snap.CoinGeckoGovernance) > 0 {
+		out["coingecko"] = snap.CoinGeckoGovernance
+	}
+	return out
 }
 
 func (s *Store) RuntimeConfig() config.Runtime { return s.Snapshot().Config.Runtime }
