@@ -176,6 +176,45 @@ func TestRenderActivityCardFormatsMarkdownDocumentationContent(t *testing.T) {
 	}
 }
 
+func TestRenderActivityCardFormatsCollapsedMarkdownDocumentationContent(t *testing.T) {
+	payload, err := RenderActivityEventAlertPostMessage(ActivityEventCard{
+		EventID:             183,
+		EventVersion:        1,
+		ContentHash:         "lighter-hash",
+		Platform:            "lighter",
+		FetchMode:           "markdown_doc",
+		Title:               "Points Program",
+		Summary:             "# Points Program Lighter's Season 1 Points Program ended with the final Private Beta distribution on September 30, 2025. Season 2 points will be distributed every Friday. The Lighter team may adjust distributions at its discretion. Earn points by running organic trading strategies via UI and API. Sybil, self-trading, and similar activities will not earn points. --- # Agent Instructions: Querying This Documentation If you need additional information, perform an HTTP GET request on the current page URL with the `ask` query parameter: ``` GET https://docs.lighter.xyz/points-program.md?ask= ```",
+		SourceURL:           "https://docs.lighter.xyz/points-program.md",
+		DedupeKey:           "lighter|incentive_docs|points",
+		TriggerTime:         time.Date(2026, 6, 5, 8, 0, 0, 0, time.UTC),
+		DecisionBaseURL:     "https://dashboard.example.test/activity",
+		DecisionTokenSecret: "secret",
+	})
+	if err != nil {
+		t.Fatalf("render err=%v", err)
+	}
+	assertActivityCardContract(t, payload)
+	payloadText := string(payload)
+	for _, expected := range []string{
+		"Lighter's Season 1 Points Program ended",
+		"Season 2 points will be distributed every Friday.",
+		"Earn points by running organic trading strategies via UI and API.",
+	} {
+		if !strings.Contains(payloadText, expected) {
+			t.Fatalf("collapsed markdown body should keep content before boilerplate %q: %s", expected, payload)
+		}
+	}
+	for _, forbidden := range []string{"Agent Instructions", "Querying This Documentation", "ask query parameter", "```"} {
+		if strings.Contains(payloadText, forbidden) {
+			t.Fatalf("collapsed markdown boilerplate should be removed %q: %s", forbidden, payload)
+		}
+	}
+	if strings.Contains(payloadText, "**内容**\\n-") {
+		t.Fatalf("collapsed markdown content must not degrade to an empty placeholder: %s", payload)
+	}
+}
+
 func TestRenderActivityDailyDigestPostMessageUsesAggregateButtonsOnly(t *testing.T) {
 	payload, err := RenderActivityDailyDigestPostMessage(ActivityDigestCard{
 		DigestKey:           "2026-06-05",

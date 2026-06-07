@@ -332,6 +332,9 @@ func normalizeActivityContentLineBreaks(raw string) string {
 	for _, br := range []string{"<br>", "<br/>", "<br />", "<BR>", "<BR/>", "<BR />"} {
 		text = strings.ReplaceAll(text, br, "\n")
 	}
+	for _, rule := range []string{" --- ", " *** ", " ___ "} {
+		text = strings.ReplaceAll(text, rule, "\n---\n")
+	}
 	return html.UnescapeString(text)
 }
 
@@ -355,15 +358,35 @@ func formatMarkdownActivityContent(raw, title string) string {
 
 func truncateMarkdownAgentInstructions(lines []string) []string {
 	for i, line := range lines {
-		lower := strings.ToLower(strings.TrimSpace(line))
-		if strings.Contains(lower, "agent instructions") ||
-			strings.Contains(lower, "querying this documentation") ||
-			strings.Contains(lower, "ask query parameter") ||
-			strings.Contains(lower, "?ask=<question>") {
-			return lines[:i]
+		idx := markdownBoilerplateIndex(line)
+		if idx >= 0 {
+			prefix := strings.TrimSpace(line[:idx])
+			if prefix == "" || strings.Trim(prefix, "# \t") == "" {
+				return lines[:i]
+			}
+			out := append([]string{}, lines[:i]...)
+			out = append(out, prefix)
+			return out
 		}
 	}
 	return lines
+}
+
+func markdownBoilerplateIndex(line string) int {
+	lower := strings.ToLower(line)
+	best := -1
+	for _, marker := range []string{
+		"agent instructions",
+		"querying this documentation",
+		"ask query parameter",
+		"?ask=<question>",
+	} {
+		idx := strings.Index(lower, marker)
+		if idx >= 0 && (best == -1 || idx < best) {
+			best = idx
+		}
+	}
+	return best
 }
 
 func removeLeadingMarkdownTitle(lines []string, title string) []string {
@@ -375,13 +398,37 @@ func removeLeadingMarkdownTitle(lines []string, title string) []string {
 		if strings.TrimSpace(line) == "" {
 			continue
 		}
-		heading := strings.TrimSpace(strings.TrimLeft(strings.TrimSpace(line), "#"))
-		if strings.EqualFold(heading, title) {
-			return lines[i+1:]
+		trimmed := strings.TrimSpace(line)
+		if !strings.HasPrefix(trimmed, "#") {
+			return lines
 		}
-		return lines
+		heading := strings.TrimSpace(strings.TrimLeft(trimmed, "#"))
+		remainder, matched := trimTitlePrefixFold(heading, title)
+		if !matched {
+			return lines
+		}
+		out := append([]string{}, lines[:i]...)
+		if remainder != "" {
+			out = append(out, remainder)
+		}
+		out = append(out, lines[i+1:]...)
+		return out
 	}
 	return lines
+}
+
+func trimTitlePrefixFold(line, title string) (string, bool) {
+	line = strings.TrimSpace(line)
+	title = strings.TrimSpace(title)
+	lowerLine := strings.ToLower(line)
+	lowerTitle := strings.ToLower(title)
+	if lowerLine == lowerTitle {
+		return "", true
+	}
+	if strings.HasPrefix(lowerLine, lowerTitle+" ") {
+		return strings.TrimSpace(line[len(title):]), true
+	}
+	return "", false
 }
 
 func stripMarkdownNoiseLines(lines []string) []string {
