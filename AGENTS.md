@@ -75,6 +75,7 @@ the indexed feature contracts, runbooks, upstream PRDs, or code.
 
 - Backend tests: `cd backend && make test`
 - Backend smoke: `cd backend && make smoke-api PORT=18080 SYMBOL=BTC-USDT`
+- Role=all startup smoke: `cd backend && make smoke-all-startup PORT=18080`
 - Live adapter smoke: `cd backend && make smoke-adapters SYMBOL=BTC-USDT`
 - Listing smoke: `cd backend && make smoke-listing`
 - Activity smoke: `cd backend && make smoke-activity`
@@ -97,6 +98,10 @@ the indexed feature contracts, runbooks, upstream PRDs, or code.
 - The historical local Docker database may be `edgex_dashboard`, while compose
   defaults to `edgex_ops_intelligence`. Verify the real DB with MySQL before
   recreating backend; otherwise startup fails with `Unknown database`.
+- For `--role=all`, `/api/health` should become reachable before MySQL
+  latest-snapshot restore, Lighter WS, and the first collector cycle finish.
+  Use `/api/health | jq '.deps.startup'` and `/api/readiness | jq
+  '.checks.startup'` to distinguish liveness from readiness.
 - Treat Docker health, `/api/readiness`, backend logs, and DB evidence together.
   For Activity delivery, verify `t_activity_delivery_outbox` plus
   `t_activity_delivery_attempt` (`http_status=200` and Lark `code=0`), not only

@@ -18,6 +18,7 @@
 - **跨平台资金费率独立 Tab + APR 副线 + diverging bar** — `funding-rate.md`
 - **流动性 Watchlist 多 symbol 垂直堆叠 + 每图 line/bar 切换** — `liquidity-watchlist.md`
 - **9 家原生 adapter + Lighter WS 走可选代理**（解决容器内 GFW 阻断）— `native-exchange-proxy.md`
+- **CoinGecko rate-limit governance**（有限预算、429 cooldown、stale cache、backfill yield、Listing enrichment TTL cache）— `coingecko-rate-limit-governance.md`
 - **Listing Agent Top30 hot-gap Lark 推送**（CoinGecko Top30 → outbox → 飞书群）— `listing-agent-top30-hot-gap-push.md`
 
 下方原始章节作为历史记录保留，方便审阅当时的设计决策与 review 修正，但 `unsupported` 字段标注**不再是当前生产状态**——以上方表格 + 链接的新文档为准。
@@ -70,7 +71,8 @@
 - depth tiers；
 - slippage buckets；
 - refresh interval；
-- volume discounts。
+- volume discounts；
+- `data_sources.coingecko.governance`，用于观测 CoinGecko finite-budget governance 的 `state`、`cache_state`、cooldown 与 last endpoint 等状态；详见 `coingecko-rate-limit-governance.md`。
 
 **当前状态**
 
