@@ -9,14 +9,28 @@ import (
 
 type ProducerStore interface {
 	ListOutboxCandidateEvents(ctx context.Context, limit int) ([]ActivityEvent, error)
+	ListOutboxCandidateEventsBySource(ctx context.Context, platform, sourceGroup string, limit int) ([]ActivityEvent, error)
 	InsertActivityOutbox(ctx context.Context, row DeliveryOutbox) error
+}
+
+type SourceDeliveryPolicy struct {
+	Platform        string
+	SourceGroup     string
+	Enabled         bool
+	TargetChannel   string
+	WebhookURL      string
+	MaxPerTick      int
+	SendSpacing     time.Duration
+	AutoPushEnabled bool
 }
 
 type ProducerConfig struct {
 	WebhookURL          string
+	WebhookURLByChannel map[string]string
 	DecisionTokenSecret string
 	DashboardBaseURL    string
 	MaxPerTick          int
+	SourcePolicies      []SourceDeliveryPolicy
 	Now                 func() time.Time
 }
 
@@ -37,13 +51,17 @@ func ProduceOutbox(ctx context.Context, store ProducerStore, cfg ProducerConfig)
 	if limit <= 0 {
 		limit = 10
 	}
-	events, err := store.ListOutboxCandidateEvents(ctx, limit)
+	events, err := listOutboxCandidates(ctx, store, cfg, limit)
 	if err != nil {
 		return ProducerResult{}, err
 	}
 	now := cfg.Now().UTC()
 	res := ProducerResult{Candidates: len(events)}
 	for _, ev := range events {
+		policy := sourceDeliveryPolicyFor(cfg, ev)
+		if !policy.Enabled {
+			continue
+		}
 		eventType := DeliveryEventEventAlert
 		if ev.NeedsHumanReview && ev.ReviewStatus != ReviewApproved {
 			eventType = DeliveryEventReviewRequired
@@ -90,16 +108,22 @@ func ProduceOutbox(ctx context.Context, store ProducerStore, cfg ProducerConfig)
 			if err != nil {
 				return res, err
 			}
-			if strings.TrimSpace(cfg.WebhookURL) == "" {
+			if strings.TrimSpace(webhookURLForPolicy(cfg, policy)) == "" {
 				status = DeliveryStatusDisabledNoWebhook
 				res.DisabledNoWebhook++
 			}
 		}
 		nextAttempt := now
+		targetChannel := strings.TrimSpace(policy.TargetChannel)
+		if targetChannel == "" {
+			targetChannel = DeliveryChannelLarkActivity
+		}
 		row := DeliveryOutbox{
 			EventType:     eventType,
+			EventID:       ev.ID,
+			EventVersion:  ev.EventVersion,
 			DedupeKey:     BuildOutboxDedupeKey(eventType, ev.ID, ev.EventVersion, ""),
-			TargetChannel: DeliveryChannelLarkActivity,
+			TargetChannel: targetChannel,
 			Status:        status,
 			AttemptCount:  0,
 			MaxAttempts:   5,
@@ -114,6 +138,75 @@ func ProduceOutbox(ctx context.Context, store ProducerStore, cfg ProducerConfig)
 		res.OutboxRows++
 	}
 	return res, nil
+}
+
+func listOutboxCandidates(ctx context.Context, store ProducerStore, cfg ProducerConfig, defaultLimit int) ([]ActivityEvent, error) {
+	policies := enabledSourceDeliveryPolicies(cfg)
+	if len(policies) == 0 {
+		return store.ListOutboxCandidateEvents(ctx, defaultLimit)
+	}
+	out := []ActivityEvent{}
+	seen := map[int64]bool{}
+	for _, policy := range policies {
+		limit := policy.MaxPerTick
+		if limit <= 0 {
+			limit = defaultLimit
+		}
+		events, err := store.ListOutboxCandidateEventsBySource(ctx, policy.Platform, policy.SourceGroup, limit)
+		if err != nil {
+			return nil, err
+		}
+		for _, ev := range events {
+			if seen[ev.ID] {
+				continue
+			}
+			seen[ev.ID] = true
+			out = append(out, ev)
+		}
+	}
+	return out, nil
+}
+
+func enabledSourceDeliveryPolicies(cfg ProducerConfig) []SourceDeliveryPolicy {
+	out := []SourceDeliveryPolicy{}
+	for _, policy := range cfg.SourcePolicies {
+		if !policy.Enabled {
+			continue
+		}
+		if strings.TrimSpace(policy.Platform) == "" || strings.TrimSpace(policy.SourceGroup) == "" {
+			continue
+		}
+		out = append(out, policy)
+	}
+	return out
+}
+
+func sourceDeliveryPolicyFor(cfg ProducerConfig, ev ActivityEvent) SourceDeliveryPolicy {
+	for _, policy := range cfg.SourcePolicies {
+		if strings.EqualFold(strings.TrimSpace(policy.Platform), strings.TrimSpace(ev.Platform)) && strings.TrimSpace(policy.SourceGroup) == strings.TrimSpace(ev.SourceGroup) {
+			if strings.TrimSpace(policy.TargetChannel) == "" {
+				policy.TargetChannel = DeliveryChannelLarkActivity
+			}
+			return policy
+		}
+	}
+	return SourceDeliveryPolicy{Enabled: true, Platform: ev.Platform, SourceGroup: ev.SourceGroup, TargetChannel: DeliveryChannelLarkActivity}
+}
+
+func webhookURLForPolicy(cfg ProducerConfig, policy SourceDeliveryPolicy) string {
+	if strings.TrimSpace(policy.WebhookURL) != "" {
+		return policy.WebhookURL
+	}
+	channel := strings.TrimSpace(policy.TargetChannel)
+	if channel != "" && cfg.WebhookURLByChannel != nil {
+		if got := strings.TrimSpace(cfg.WebhookURLByChannel[channel]); got != "" {
+			return got
+		}
+	}
+	if channel != "" && channel != DeliveryChannelLarkActivity {
+		return ""
+	}
+	return cfg.WebhookURL
 }
 
 func fetchModeFromSourceContext(ev ActivityEvent) string {

@@ -17,6 +17,23 @@ func (f *fakeProducerStore) ListOutboxCandidateEvents(ctx context.Context, limit
 	return f.events, f.listErr
 }
 
+func (f *fakeProducerStore) ListOutboxCandidateEventsBySource(ctx context.Context, platform, sourceGroup string, limit int) ([]ActivityEvent, error) {
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	out := make([]ActivityEvent, 0, len(f.events))
+	for _, ev := range f.events {
+		if ev.Platform != platform || ev.SourceGroup != sourceGroup {
+			continue
+		}
+		out = append(out, ev)
+		if limit > 0 && len(out) >= limit {
+			break
+		}
+	}
+	return out, nil
+}
+
 func (f *fakeProducerStore) InsertActivityOutbox(ctx context.Context, row DeliveryOutbox) error {
 	f.outbox = append(f.outbox, row)
 	return nil
@@ -59,6 +76,60 @@ func TestProduceOutboxCreatesAlertAndReviewCardsInCollectOnly(t *testing.T) {
 	}
 	if len(store.outbox[0].PayloadJSON) == 0 || len(store.outbox[1].PayloadJSON) == 0 {
 		t.Fatalf("collect-only rows should keep previewable card payloads")
+	}
+	if store.outbox[0].EventID != 1 || store.outbox[0].EventVersion != 2 || store.outbox[0].TargetChannel != DeliveryChannelLarkActivity {
+		t.Fatalf("alert outbox should keep event metadata/channel: %+v", store.outbox[0])
+	}
+}
+
+func TestProduceOutboxBatchesCandidatesBySourcePolicy(t *testing.T) {
+	store := &fakeProducerStore{events: []ActivityEvent{
+		{
+			ID: 1, Platform: "binance", SourceGroup: "cms_article_detail", Title: "Binance Launchpool",
+			ContentHash: "hash-1", DedupeKey: "binance|cms_article_detail|1", EventVersion: 1,
+			AutoPushAllowed: true, ReviewStatus: ReviewPending,
+		},
+		{
+			ID: 2, Platform: "okx", SourceGroup: "help_announcement", Title: "OKX Campaign",
+			ContentHash: "hash-2", DedupeKey: "okx|help_announcement|2", EventVersion: 1,
+			AutoPushAllowed: true, ReviewStatus: ReviewPending,
+		},
+	}}
+	res, err := ProduceOutbox(context.Background(), store, ProducerConfig{
+		WebhookURL:          "https://example.invalid/default",
+		DecisionTokenSecret: "secret",
+		MaxPerTick:          10,
+		SourcePolicies: []SourceDeliveryPolicy{
+			{Platform: "binance", SourceGroup: "cms_article_detail", Enabled: true, AutoPushEnabled: true, TargetChannel: DeliveryChannelLarkActivity, MaxPerTick: 1},
+		},
+	})
+	if err != nil {
+		t.Fatalf("ProduceOutbox err=%v", err)
+	}
+	if res.OutboxRows != 1 || len(store.outbox) != 1 || store.outbox[0].EventID != 1 {
+		t.Fatalf("source policy should only produce matching source: result=%+v outbox=%+v", res, store.outbox)
+	}
+}
+
+func TestProduceOutboxUsesSourceChannelWebhookPolicy(t *testing.T) {
+	store := &fakeProducerStore{events: []ActivityEvent{{
+		ID: 3, Platform: "gate", SourceGroup: "launchpool_project_list", Title: "Gate Launchpool",
+		ContentHash: "hash-3", DedupeKey: "gate|launchpool_project_list|3", EventVersion: 2,
+		AutoPushAllowed: true, ReviewStatus: ReviewPending,
+	}}}
+	res, err := ProduceOutbox(context.Background(), store, ProducerConfig{
+		DecisionTokenSecret: "secret",
+		MaxPerTick:          10,
+		SourcePolicies: []SourceDeliveryPolicy{{
+			Platform: "gate", SourceGroup: "launchpool_project_list", Enabled: true, AutoPushEnabled: true,
+			TargetChannel: "lark_activity_gate", WebhookURL: "https://example.invalid/gate", MaxPerTick: 10,
+		}},
+	})
+	if err != nil {
+		t.Fatalf("ProduceOutbox err=%v", err)
+	}
+	if res.OutboxRows != 1 || res.DisabledNoWebhook != 0 || store.outbox[0].TargetChannel != "lark_activity_gate" || store.outbox[0].Status != DeliveryStatusPending {
+		t.Fatalf("source webhook/channel not honored: result=%+v outbox=%+v", res, store.outbox)
 	}
 }
 

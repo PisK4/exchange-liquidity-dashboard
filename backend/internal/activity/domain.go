@@ -240,6 +240,8 @@ type SourceState struct {
 type DeliveryOutbox struct {
 	ID            int64
 	EventType     string
+	EventID       int64
+	EventVersion  int
 	DedupeKey     string
 	TargetChannel string
 	Status        string

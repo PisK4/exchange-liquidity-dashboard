@@ -12,6 +12,8 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+const DeliveryChannelLarkActivityDefault = "lark_activity"
+
 type Runtime struct {
 	CollectionInterval    time.Duration               `json:"collection_interval"`
 	HTTPTimeout           time.Duration               `json:"http_timeout"`
@@ -62,12 +64,26 @@ type Runtime struct {
 type ActivityAgentConfig struct {
 	Enabled             bool                         `json:"enabled"`
 	DefaultPollInterval time.Duration                `json:"default_poll_interval"`
+	Scheduler           ActivitySchedulerConfig      `json:"scheduler"`
+	Collection          ActivityCollectionConfig     `json:"collection"`
 	WorkerLeaseTTL      time.Duration                `json:"worker_lease_ttl"`
 	SourceProxy         string                       `json:"source_proxy,omitempty"`
 	DecisionToken       ActivityDecisionTokenConfig  `json:"decision_token"`
 	HighValueRules      ActivityHighValueRulesConfig `json:"high_value_rules"`
 	Delivery            ActivityDeliveryConfig       `json:"delivery"`
 	Sources             []ActivitySourceConfig       `json:"sources"`
+}
+
+type ActivitySchedulerConfig struct {
+	IngestionInterval time.Duration `json:"ingestion_interval"`
+	ProducerInterval  time.Duration `json:"producer_interval"`
+	DeliveryInterval  time.Duration `json:"delivery_interval"`
+}
+
+type ActivityCollectionConfig struct {
+	DefaultPollInterval time.Duration `json:"default_poll_interval"`
+	DefaultTimeout      time.Duration `json:"default_timeout"`
+	SourceProxy         string        `json:"source_proxy,omitempty"`
 }
 
 type ActivityDecisionTokenConfig struct {
@@ -95,21 +111,41 @@ type ActivityDeliveryConfig struct {
 }
 
 type ActivitySourceConfig struct {
-	Platform               string        `json:"platform"`
-	SourceGroup            string        `json:"source_group"`
-	SourceType             string        `json:"source_type,omitempty"`
-	SourceURL              string        `json:"source_url,omitempty"`
-	FetchMode              string        `json:"fetch_mode"`
-	PollInterval           time.Duration `json:"poll_interval"`
-	Enabled                bool          `json:"enabled"`
-	AutoPushEnabled        bool          `json:"auto_push_enabled"`
-	RequiresProxy          bool          `json:"requires_proxy,omitempty"`
-	RequiresBrowserContext bool          `json:"requires_browser_context,omitempty"`
-	RequiresLogin          bool          `json:"requires_login,omitempty"`
-	Personalized           bool          `json:"personalized,omitempty"`
-	Locale                 string        `json:"locale,omitempty"`
-	ProxyRegion            string        `json:"proxy_region,omitempty"`
-	InterfaceName          string        `json:"interface_name,omitempty"`
+	Platform               string                         `json:"platform"`
+	SourceGroup            string                         `json:"source_group"`
+	SourceType             string                         `json:"source_type,omitempty"`
+	SourceURL              string                         `json:"source_url,omitempty"`
+	FetchMode              string                         `json:"fetch_mode"`
+	PollInterval           time.Duration                  `json:"poll_interval"`
+	Enabled                bool                           `json:"enabled"`
+	AutoPushEnabled        bool                           `json:"auto_push_enabled"`
+	RequiresProxy          bool                           `json:"requires_proxy,omitempty"`
+	RequiresBrowserContext bool                           `json:"requires_browser_context,omitempty"`
+	RequiresLogin          bool                           `json:"requires_login,omitempty"`
+	Personalized           bool                           `json:"personalized,omitempty"`
+	Locale                 string                         `json:"locale,omitempty"`
+	ProxyRegion            string                         `json:"proxy_region,omitempty"`
+	InterfaceName          string                         `json:"interface_name,omitempty"`
+	Collection             ActivitySourceCollectionConfig `json:"collection,omitempty"`
+	Delivery               ActivitySourceDeliveryConfig   `json:"delivery,omitempty"`
+}
+
+type ActivitySourceCollectionConfig struct {
+	Enabled      *bool         `json:"enabled,omitempty"`
+	PollInterval time.Duration `json:"poll_interval"`
+	FetchMode    string        `json:"fetch_mode,omitempty"`
+	SourceURL    string        `json:"source_url,omitempty"`
+	Timeout      time.Duration `json:"timeout,omitempty"`
+	Proxy        string        `json:"proxy,omitempty"`
+}
+
+type ActivitySourceDeliveryConfig struct {
+	Enabled         *bool         `json:"enabled,omitempty"`
+	AutoPushEnabled *bool         `json:"auto_push_enabled,omitempty"`
+	TargetChannel   string        `json:"target_channel,omitempty"`
+	WebhookURLEnv   string        `json:"webhook_url_env,omitempty"`
+	MaxPerTick      int           `json:"max_per_tick,omitempty"`
+	SendSpacing     time.Duration `json:"send_spacing,omitempty"`
 }
 
 // ListingAgentConfig is the runtime root for the Listing Agent P1
@@ -755,7 +791,15 @@ func defaultActivityAgentConfig() ActivityAgentConfig {
 	return ActivityAgentConfig{
 		Enabled:             true,
 		DefaultPollInterval: time.Hour,
-		WorkerLeaseTTL:      2 * time.Minute,
+		Scheduler: ActivitySchedulerConfig{
+			IngestionInterval: 5 * time.Minute,
+			ProducerInterval:  time.Minute,
+			DeliveryInterval:  30 * time.Second,
+		},
+		Collection: ActivityCollectionConfig{
+			DefaultPollInterval: time.Hour,
+		},
+		WorkerLeaseTTL: 2 * time.Minute,
 		DecisionToken: ActivityDecisionTokenConfig{
 			SecretEnv: "ACTIVITY_DECISION_TOKEN_SECRET",
 			TTL:       30 * 24 * time.Hour,
@@ -778,20 +822,20 @@ func defaultActivityAgentConfig() ActivityAgentConfig {
 			Enabled:                   true,
 			WebhookURLEnv:             "ACTIVITY_LARK_WEBHOOK_URL",
 			CollectOnlyWithoutWebhook: true,
-			MaxPerTick:                10,
-			SendSpacing:               30 * time.Second,
+			MaxPerTick:                20,
+			SendSpacing:               2 * time.Second,
 			SourceHealthCooldown:      time.Hour,
 			EventUpdateCooldown:       time.Hour,
 		},
 		Sources: []ActivitySourceConfig{
-			{Platform: "binance", SourceGroup: "cms_article_list", FetchMode: "http_direct", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true},
-			{Platform: "okx", SourceGroup: "help_announcement", FetchMode: "http_direct", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true},
-			{Platform: "bingx", SourceGroup: "openapi_notice", FetchMode: "http_direct_json", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true},
-			{Platform: "gate", SourceGroup: "launchpool_project_list", FetchMode: "utls_proxy_json", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
-			{Platform: "mexc", SourceGroup: "latest_events", FetchMode: "utls_proxy_html", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
-			{Platform: "bybit", SourceGroup: "announcements_ssr", FetchMode: "utls_html", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
-			{Platform: "bitget", SourceGroup: "support_ongoing_section", FetchMode: "utls_html", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
-			{Platform: "hyperliquid", SourceGroup: "cloudfront_entries", FetchMode: "http_direct_json", PollInterval: 10 * time.Minute, Enabled: true, AutoPushEnabled: true},
+			{Platform: "binance", SourceGroup: "cms_article_list", FetchMode: "http_direct", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true},
+			{Platform: "okx", SourceGroup: "help_announcement", FetchMode: "http_direct", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true},
+			{Platform: "bingx", SourceGroup: "openapi_notice", FetchMode: "http_direct_json", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true},
+			{Platform: "gate", SourceGroup: "launchpool_project_list", FetchMode: "utls_proxy_json", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
+			{Platform: "mexc", SourceGroup: "latest_events", FetchMode: "utls_proxy_html", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
+			{Platform: "bybit", SourceGroup: "announcements_ssr", FetchMode: "utls_html", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
+			{Platform: "bitget", SourceGroup: "support_ongoing_section", FetchMode: "utls_html", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
+			{Platform: "hyperliquid", SourceGroup: "cloudfront_entries", FetchMode: "http_direct_json", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true},
 			{Platform: "lighter", SourceGroup: "incentive_docs", FetchMode: "markdown_doc", PollInterval: 24 * time.Hour, Enabled: true, AutoPushEnabled: true},
 		},
 	}
@@ -1072,12 +1116,26 @@ type runtimeFile struct {
 type activityAgentFile struct {
 	Enabled             *bool                       `yaml:"enabled"`
 	DefaultPollInterval string                      `yaml:"default_poll_interval"`
+	Scheduler           *activitySchedulerFile      `yaml:"scheduler"`
+	Collection          *activityCollectionFile     `yaml:"collection"`
 	WorkerLeaseTTL      string                      `yaml:"worker_lease_ttl"`
 	SourceProxy         string                      `yaml:"source_proxy"`
 	DecisionToken       *activityDecisionTokenFile  `yaml:"decision_token"`
 	HighValueRules      *activityHighValueRulesFile `yaml:"high_value_rules"`
 	Delivery            *activityDeliveryFile       `yaml:"delivery"`
 	Sources             []activitySourceFile        `yaml:"sources"`
+}
+
+type activitySchedulerFile struct {
+	IngestionInterval string `yaml:"ingestion_interval"`
+	ProducerInterval  string `yaml:"producer_interval"`
+	DeliveryInterval  string `yaml:"delivery_interval"`
+}
+
+type activityCollectionFile struct {
+	DefaultPollInterval string `yaml:"default_poll_interval"`
+	DefaultTimeout      string `yaml:"default_timeout"`
+	SourceProxy         string `yaml:"source_proxy"`
 }
 
 type activityDecisionTokenFile struct {
@@ -1105,21 +1163,41 @@ type activityDeliveryFile struct {
 }
 
 type activitySourceFile struct {
-	Platform               string `yaml:"platform"`
-	SourceGroup            string `yaml:"source_group"`
-	SourceType             string `yaml:"source_type"`
-	SourceURL              string `yaml:"source_url"`
-	FetchMode              string `yaml:"fetch_mode"`
-	PollInterval           string `yaml:"poll_interval"`
-	Enabled                *bool  `yaml:"enabled"`
-	AutoPushEnabled        *bool  `yaml:"auto_push_enabled"`
-	RequiresProxy          *bool  `yaml:"requires_proxy"`
-	RequiresBrowserContext *bool  `yaml:"requires_browser_context"`
-	RequiresLogin          *bool  `yaml:"requires_login"`
-	Personalized           *bool  `yaml:"personalized"`
-	Locale                 string `yaml:"locale"`
-	ProxyRegion            string `yaml:"proxy_region"`
-	InterfaceName          string `yaml:"interface_name"`
+	Platform               string                        `yaml:"platform"`
+	SourceGroup            string                        `yaml:"source_group"`
+	SourceType             string                        `yaml:"source_type"`
+	SourceURL              string                        `yaml:"source_url"`
+	FetchMode              string                        `yaml:"fetch_mode"`
+	PollInterval           string                        `yaml:"poll_interval"`
+	Enabled                *bool                         `yaml:"enabled"`
+	AutoPushEnabled        *bool                         `yaml:"auto_push_enabled"`
+	RequiresProxy          *bool                         `yaml:"requires_proxy"`
+	RequiresBrowserContext *bool                         `yaml:"requires_browser_context"`
+	RequiresLogin          *bool                         `yaml:"requires_login"`
+	Personalized           *bool                         `yaml:"personalized"`
+	Locale                 string                        `yaml:"locale"`
+	ProxyRegion            string                        `yaml:"proxy_region"`
+	InterfaceName          string                        `yaml:"interface_name"`
+	Collection             *activitySourceCollectionFile `yaml:"collection"`
+	Delivery               *activitySourceDeliveryFile   `yaml:"delivery"`
+}
+
+type activitySourceCollectionFile struct {
+	Enabled      *bool  `yaml:"enabled"`
+	PollInterval string `yaml:"poll_interval"`
+	FetchMode    string `yaml:"fetch_mode"`
+	SourceURL    string `yaml:"source_url"`
+	Timeout      string `yaml:"timeout"`
+	Proxy        string `yaml:"proxy"`
+}
+
+type activitySourceDeliveryFile struct {
+	Enabled         *bool  `yaml:"enabled"`
+	AutoPushEnabled *bool  `yaml:"auto_push_enabled"`
+	TargetChannel   string `yaml:"target_channel"`
+	WebhookURLEnv   string `yaml:"webhook_url_env"`
+	MaxPerTick      *int   `yaml:"max_per_tick"`
+	SendSpacing     string `yaml:"send_spacing"`
 }
 
 type listingAgentFile struct {
@@ -1680,6 +1758,23 @@ func applyActivityAgentFile(base ActivityAgentConfig, file activityAgentFile) (A
 			return ActivityAgentConfig{}, fmt.Errorf("activity_agent.default_poll_interval: %w", err)
 		}
 		base.DefaultPollInterval = d
+		if file.Collection == nil || file.Collection.DefaultPollInterval == "" {
+			base.Collection.DefaultPollInterval = d
+		}
+	}
+	if file.Scheduler != nil {
+		scheduler, err := applyActivitySchedulerFile(base.Scheduler, *file.Scheduler)
+		if err != nil {
+			return ActivityAgentConfig{}, err
+		}
+		base.Scheduler = scheduler
+	}
+	if file.Collection != nil {
+		collection, err := applyActivityCollectionFile(base.Collection, *file.Collection)
+		if err != nil {
+			return ActivityAgentConfig{}, err
+		}
+		base.Collection = collection
 	}
 	if file.WorkerLeaseTTL != "" {
 		d, err := time.ParseDuration(file.WorkerLeaseTTL)
@@ -1725,11 +1820,61 @@ func applyActivityAgentFile(base ActivityAgentConfig, file activityAgentFile) (A
 		base.Delivery = delivery
 	}
 	if len(file.Sources) > 0 {
-		sources, err := applyActivitySourcesFile(file.Sources, base.DefaultPollInterval)
+		fallbackInterval := base.Collection.DefaultPollInterval
+		if fallbackInterval <= 0 {
+			fallbackInterval = base.DefaultPollInterval
+		}
+		sources, err := applyActivitySourcesFile(file.Sources, fallbackInterval)
 		if err != nil {
 			return ActivityAgentConfig{}, err
 		}
 		base.Sources = sources
+	}
+	return base, nil
+}
+
+func applyActivitySchedulerFile(base ActivitySchedulerConfig, file activitySchedulerFile) (ActivitySchedulerConfig, error) {
+	if file.IngestionInterval != "" {
+		d, err := time.ParseDuration(file.IngestionInterval)
+		if err != nil {
+			return ActivitySchedulerConfig{}, fmt.Errorf("activity_agent.scheduler.ingestion_interval: %w", err)
+		}
+		base.IngestionInterval = d
+	}
+	if file.ProducerInterval != "" {
+		d, err := time.ParseDuration(file.ProducerInterval)
+		if err != nil {
+			return ActivitySchedulerConfig{}, fmt.Errorf("activity_agent.scheduler.producer_interval: %w", err)
+		}
+		base.ProducerInterval = d
+	}
+	if file.DeliveryInterval != "" {
+		d, err := time.ParseDuration(file.DeliveryInterval)
+		if err != nil {
+			return ActivitySchedulerConfig{}, fmt.Errorf("activity_agent.scheduler.delivery_interval: %w", err)
+		}
+		base.DeliveryInterval = d
+	}
+	return base, nil
+}
+
+func applyActivityCollectionFile(base ActivityCollectionConfig, file activityCollectionFile) (ActivityCollectionConfig, error) {
+	if file.DefaultPollInterval != "" {
+		d, err := time.ParseDuration(file.DefaultPollInterval)
+		if err != nil {
+			return ActivityCollectionConfig{}, fmt.Errorf("activity_agent.collection.default_poll_interval: %w", err)
+		}
+		base.DefaultPollInterval = d
+	}
+	if file.DefaultTimeout != "" {
+		d, err := time.ParseDuration(file.DefaultTimeout)
+		if err != nil {
+			return ActivityCollectionConfig{}, fmt.Errorf("activity_agent.collection.default_timeout: %w", err)
+		}
+		base.DefaultTimeout = d
+	}
+	if file.SourceProxy != "" {
+		base.SourceProxy = file.SourceProxy
 	}
 	return base, nil
 }
@@ -1796,18 +1941,29 @@ func applyActivitySourcesFile(files []activitySourceFile, fallbackInterval time.
 			ProxyRegion:     file.ProxyRegion,
 			InterfaceName:   file.InterfaceName,
 		}
+		src.Collection = ActivitySourceCollectionConfig{
+			PollInterval: src.PollInterval,
+			FetchMode:    src.FetchMode,
+			SourceURL:    src.SourceURL,
+		}
+		src.Delivery = ActivitySourceDeliveryConfig{
+			TargetChannel: DeliveryChannelLarkActivityDefault,
+		}
 		if file.PollInterval != "" {
 			d, err := time.ParseDuration(file.PollInterval)
 			if err != nil {
 				return nil, fmt.Errorf("activity_agent.sources[%s].poll_interval: %w", file.Platform, err)
 			}
 			src.PollInterval = d
+			src.Collection.PollInterval = d
 		}
 		if file.Enabled != nil {
 			src.Enabled = *file.Enabled
+			src.Collection.Enabled = file.Enabled
 		}
 		if file.AutoPushEnabled != nil {
 			src.AutoPushEnabled = *file.AutoPushEnabled
+			src.Delivery.AutoPushEnabled = file.AutoPushEnabled
 		}
 		if file.RequiresProxy != nil {
 			src.RequiresProxy = *file.RequiresProxy
@@ -1820,6 +1976,63 @@ func applyActivitySourcesFile(files []activitySourceFile, fallbackInterval time.
 		}
 		if file.Personalized != nil {
 			src.Personalized = *file.Personalized
+		}
+		if file.Collection != nil {
+			if file.Collection.Enabled != nil {
+				src.Enabled = *file.Collection.Enabled
+				src.Collection.Enabled = file.Collection.Enabled
+			}
+			if file.Collection.PollInterval != "" {
+				d, err := time.ParseDuration(file.Collection.PollInterval)
+				if err != nil {
+					return nil, fmt.Errorf("activity_agent.sources[%s].collection.poll_interval: %w", file.Platform, err)
+				}
+				src.PollInterval = d
+				src.Collection.PollInterval = d
+			}
+			if file.Collection.FetchMode != "" {
+				src.FetchMode = file.Collection.FetchMode
+				src.Collection.FetchMode = file.Collection.FetchMode
+			}
+			if file.Collection.SourceURL != "" {
+				src.SourceURL = file.Collection.SourceURL
+				src.Collection.SourceURL = file.Collection.SourceURL
+			}
+			if file.Collection.Timeout != "" {
+				d, err := time.ParseDuration(file.Collection.Timeout)
+				if err != nil {
+					return nil, fmt.Errorf("activity_agent.sources[%s].collection.timeout: %w", file.Platform, err)
+				}
+				src.Collection.Timeout = d
+			}
+			if file.Collection.Proxy != "" {
+				src.Collection.Proxy = file.Collection.Proxy
+			}
+		}
+		if file.Delivery != nil {
+			if file.Delivery.Enabled != nil {
+				src.Delivery.Enabled = file.Delivery.Enabled
+			}
+			if file.Delivery.AutoPushEnabled != nil {
+				src.AutoPushEnabled = *file.Delivery.AutoPushEnabled
+				src.Delivery.AutoPushEnabled = file.Delivery.AutoPushEnabled
+			}
+			if file.Delivery.TargetChannel != "" {
+				src.Delivery.TargetChannel = file.Delivery.TargetChannel
+			}
+			if file.Delivery.WebhookURLEnv != "" {
+				src.Delivery.WebhookURLEnv = file.Delivery.WebhookURLEnv
+			}
+			if file.Delivery.MaxPerTick != nil {
+				src.Delivery.MaxPerTick = *file.Delivery.MaxPerTick
+			}
+			if file.Delivery.SendSpacing != "" {
+				d, err := time.ParseDuration(file.Delivery.SendSpacing)
+				if err != nil {
+					return nil, fmt.Errorf("activity_agent.sources[%s].delivery.send_spacing: %w", file.Platform, err)
+				}
+				src.Delivery.SendSpacing = d
+			}
 		}
 		out = append(out, src)
 	}

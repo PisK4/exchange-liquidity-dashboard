@@ -19,12 +19,13 @@ type DeliveryStore interface {
 }
 
 type DeliveryDeps struct {
-	WebhookURL   string
-	Client       *http.Client
-	Now          func() time.Time
-	BatchSize    int
-	RetryBackoff func(attempt int) time.Duration
-	SendSpacing  time.Duration
+	WebhookURL          string
+	WebhookURLByChannel map[string]string
+	Client              *http.Client
+	Now                 func() time.Time
+	BatchSize           int
+	RetryBackoff        func(attempt int) time.Duration
+	SendSpacing         time.Duration
 }
 
 type DeliveryResult struct {
@@ -57,7 +58,8 @@ func DrainDueOutbox(ctx context.Context, store DeliveryStore, deps DeliveryDeps)
 	}
 	res := DeliveryResult{}
 	for _, row := range rows {
-		if strings.TrimSpace(deps.WebhookURL) == "" {
+		webhookURL := webhookURLForOutboxRow(deps, row)
+		if strings.TrimSpace(webhookURL) == "" {
 			if err := store.MarkActivityOutboxDisabledNoWebhook(ctx, row.ID, now); err != nil {
 				return res, err
 			}
@@ -65,7 +67,7 @@ func DrainDueOutbox(ctx context.Context, store DeliveryStore, deps DeliveryDeps)
 			continue
 		}
 		attempt := row.AttemptCount + 1
-		body, sendErr := postActivityLarkWebhook(ctx, deps.Client, deps.WebhookURL, row.PayloadJSON)
+		body, sendErr := postActivityLarkWebhook(ctx, deps.Client, webhookURL, row.PayloadJSON)
 		status := DeliveryStatusSent
 		var httpStatus *int
 		errMsg := ""
@@ -111,6 +113,19 @@ func DrainDueOutbox(ctx context.Context, store DeliveryStore, deps DeliveryDeps)
 		}
 	}
 	return res, nil
+}
+
+func webhookURLForOutboxRow(deps DeliveryDeps, row DeliveryOutbox) string {
+	channel := strings.TrimSpace(row.TargetChannel)
+	if channel != "" && deps.WebhookURLByChannel != nil {
+		if got := strings.TrimSpace(deps.WebhookURLByChannel[channel]); got != "" {
+			return got
+		}
+	}
+	if channel != "" && channel != DeliveryChannelLarkActivity {
+		return ""
+	}
+	return deps.WebhookURL
 }
 
 func defaultRetryBackoff(attempt int) time.Duration {

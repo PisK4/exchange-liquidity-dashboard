@@ -15,6 +15,12 @@ func TestDefaultActivityAgentSeedsNinePlatformSources(t *testing.T) {
 	if aa.DefaultPollInterval != time.Hour {
 		t.Fatalf("default poll interval=%s want 1h", aa.DefaultPollInterval)
 	}
+	if aa.Collection.DefaultPollInterval != time.Hour {
+		t.Fatalf("default collection poll interval=%s want 1h", aa.Collection.DefaultPollInterval)
+	}
+	if aa.Scheduler.IngestionInterval != 5*time.Minute || aa.Scheduler.ProducerInterval != time.Minute || aa.Scheduler.DeliveryInterval != 30*time.Second {
+		t.Fatalf("scheduler defaults=%+v", aa.Scheduler)
+	}
 	if aa.WorkerLeaseTTL != 2*time.Minute {
 		t.Fatalf("lease ttl=%s want 2m", aa.WorkerLeaseTTL)
 	}
@@ -35,6 +41,9 @@ func TestDefaultActivityAgentSeedsNinePlatformSources(t *testing.T) {
 	}
 	if aa.Delivery.WebhookURLEnv != "ACTIVITY_LARK_WEBHOOK_URL" {
 		t.Fatalf("activity webhook env=%q", aa.Delivery.WebhookURLEnv)
+	}
+	if aa.Delivery.MaxPerTick != 20 || aa.Delivery.SendSpacing != 2*time.Second {
+		t.Fatalf("activity delivery defaults=%+v", aa.Delivery)
 	}
 }
 
@@ -94,5 +103,78 @@ Runtime:
 	}
 	if len(aa.Sources) != 1 || aa.Sources[0].Platform != "binance" || aa.Sources[0].AutoPushEnabled {
 		t.Fatalf("sources=%+v", aa.Sources)
+	}
+}
+
+func TestLoadActivityAgentNestedSchedulerCollectionAndDelivery(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), "endpoints: {}\n")
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), "platforms: [edgeX]\nsymbols: []\n")
+	mustWrite(t, filepath.Join(dir, "instrument_catalog.yaml"), "schema_version: 1\nplatforms: {}\n")
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
+Runtime:
+  activity_agent:
+    enabled: true
+    scheduler:
+      ingestion_interval: 4m
+      producer_interval: 45s
+      delivery_interval: 15s
+    collection:
+      default_poll_interval: 1h
+      default_timeout: 20s
+      source_proxy: http://127.0.0.1:7897
+    delivery:
+      enabled: true
+      webhook_url_env: TEST_ACTIVITY_WEBHOOK
+      max_per_tick: 9
+      send_spacing: 3s
+    sources:
+      - platform: gate
+        source_group: launchpool_project_list
+        requires_proxy: true
+        collection:
+          enabled: true
+          fetch_mode: utls_proxy_json
+          poll_interval: 1h
+          source_url: https://gate.example/launchpool
+          timeout: 25s
+          proxy: http://127.0.0.1:7899
+        delivery:
+          enabled: true
+          auto_push_enabled: false
+          target_channel: lark_activity_gate
+          webhook_url_env: TEST_ACTIVITY_GATE_WEBHOOK
+          max_per_tick: 2
+          send_spacing: 1s
+`)
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load err=%v", err)
+	}
+	aa := cfg.Runtime.ActivityAgent
+	if aa.Scheduler.IngestionInterval != 4*time.Minute || aa.Scheduler.ProducerInterval != 45*time.Second || aa.Scheduler.DeliveryInterval != 15*time.Second {
+		t.Fatalf("scheduler=%+v", aa.Scheduler)
+	}
+	if aa.Collection.DefaultPollInterval != time.Hour || aa.Collection.DefaultTimeout != 20*time.Second || aa.Collection.SourceProxy != "http://127.0.0.1:7897" {
+		t.Fatalf("collection=%+v", aa.Collection)
+	}
+	if aa.Delivery.MaxPerTick != 9 || aa.Delivery.SendSpacing != 3*time.Second {
+		t.Fatalf("delivery=%+v", aa.Delivery)
+	}
+	if len(aa.Sources) != 1 {
+		t.Fatalf("sources len=%d", len(aa.Sources))
+	}
+	src := aa.Sources[0]
+	if src.Platform != "gate" || src.SourceGroup != "launchpool_project_list" || !src.Enabled || src.AutoPushEnabled {
+		t.Fatalf("source basics=%+v", src)
+	}
+	if src.FetchMode != "utls_proxy_json" || src.PollInterval != time.Hour || src.SourceURL != "https://gate.example/launchpool" {
+		t.Fatalf("source collection mirror=%+v", src)
+	}
+	if src.Collection.Timeout != 25*time.Second || src.Collection.Proxy != "http://127.0.0.1:7899" {
+		t.Fatalf("source collection=%+v", src.Collection)
+	}
+	if src.Delivery.TargetChannel != "lark_activity_gate" || src.Delivery.WebhookURLEnv != "TEST_ACTIVITY_GATE_WEBHOOK" || src.Delivery.MaxPerTick != 2 || src.Delivery.SendSpacing != time.Second {
+		t.Fatalf("source delivery=%+v", src.Delivery)
 	}
 }

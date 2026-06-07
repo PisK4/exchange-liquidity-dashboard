@@ -417,6 +417,17 @@ Runtime:
   activity_agent:
     enabled: true
     default_poll_interval: 1h
+    scheduler:
+      # Ingestion wakes up frequently, but each source still obeys its
+      # own collection.poll_interval below. Producer/delivery run faster
+      # so approved events do not wait for the next hourly collection tick.
+      ingestion_interval: 5m
+      producer_interval: 1m
+      delivery_interval: 30s
+    collection:
+      default_poll_interval: 1h
+      default_timeout: 15s
+      source_proxy: ""
     worker_lease_ttl: 2m
     source_proxy: ""
     decision_token:
@@ -433,66 +444,115 @@ Runtime:
       collect_only_without_webhook: true
       proxy: "http://host.docker.internal:7897"
       dashboard_base_url: "http://127.0.0.1:3001/activity"
-      max_per_tick: 10
-      send_spacing: 30s
+      max_per_tick: 20
+      send_spacing: 2s
       source_health_cooldown: 1h
       event_update_cooldown: 1h
     sources:
+      # Binance is currently observed as fetch_error in local Docker; keep
+      # collection enabled and defer upstream fetch root-cause investigation.
       - platform: binance
         source_group: cms_article_list
-        fetch_mode: http_direct
-        poll_interval: 10m
-        enabled: true
-        auto_push_enabled: true
+        collection:
+          enabled: true
+          fetch_mode: http_direct
+          poll_interval: 1h
+        delivery:
+          enabled: true
+          auto_push_enabled: true
+          target_channel: lark_activity
+          max_per_tick: 3
       - platform: okx
         source_group: help_announcement
-        fetch_mode: http_direct
-        poll_interval: 10m
-        enabled: true
-        auto_push_enabled: true
+        collection:
+          enabled: true
+          fetch_mode: http_direct
+          poll_interval: 1h
+        delivery:
+          enabled: true
+          auto_push_enabled: true
+          target_channel: lark_activity
+          max_per_tick: 3
+      # BingX is currently observed as fetch_error in local Docker; keep
+      # collection enabled and defer upstream fetch root-cause investigation.
       - platform: bingx
         source_group: openapi_notice
-        fetch_mode: http_direct_json
-        poll_interval: 10m
-        enabled: true
-        auto_push_enabled: true
+        collection:
+          enabled: true
+          fetch_mode: http_direct_json
+          poll_interval: 1h
+        delivery:
+          enabled: true
+          auto_push_enabled: true
+          target_channel: lark_activity
+          max_per_tick: 3
       - platform: gate
         source_group: launchpool_project_list
-        fetch_mode: utls_proxy_json
-        poll_interval: 10m
-        enabled: true
-        auto_push_enabled: true
+        collection:
+          enabled: true
+          fetch_mode: utls_proxy_json
+          poll_interval: 1h
+        delivery:
+          enabled: true
+          auto_push_enabled: true
+          target_channel: lark_activity
+          max_per_tick: 3
         requires_proxy: true
       - platform: mexc
         source_group: latest_events
-        fetch_mode: utls_proxy_html
-        poll_interval: 10m
-        enabled: true
-        auto_push_enabled: true
+        collection:
+          enabled: true
+          fetch_mode: utls_proxy_html
+          poll_interval: 1h
+        delivery:
+          enabled: true
+          auto_push_enabled: true
+          target_channel: lark_activity
+          max_per_tick: 3
         requires_proxy: true
       - platform: bybit
         source_group: announcements_ssr
-        fetch_mode: utls_html
-        poll_interval: 10m
-        enabled: true
-        auto_push_enabled: true
+        collection:
+          enabled: true
+          fetch_mode: utls_html
+          poll_interval: 1h
+        delivery:
+          enabled: true
+          auto_push_enabled: true
+          target_channel: lark_activity
+          max_per_tick: 3
         requires_browser_context: true
       - platform: bitget
         source_group: support_ongoing_section
-        fetch_mode: utls_html
-        poll_interval: 10m
-        enabled: true
-        auto_push_enabled: true
+        collection:
+          enabled: true
+          fetch_mode: utls_html
+          poll_interval: 1h
+        delivery:
+          enabled: true
+          auto_push_enabled: true
+          target_channel: lark_activity
+          max_per_tick: 3
         requires_browser_context: true
       - platform: hyperliquid
         source_group: cloudfront_entries
-        fetch_mode: http_direct_json
-        poll_interval: 10m
-        enabled: true
-        auto_push_enabled: true
+        collection:
+          enabled: true
+          fetch_mode: http_direct_json
+          poll_interval: 1h
+        delivery:
+          enabled: true
+          auto_push_enabled: true
+          target_channel: lark_activity
+          max_per_tick: 3
       - platform: lighter
         source_group: incentive_docs
-        fetch_mode: markdown_doc
-        poll_interval: 24h
-        enabled: true
-        auto_push_enabled: true
+        collection:
+          enabled: true
+          fetch_mode: markdown_doc
+          poll_interval: 24h
+        delivery:
+          enabled: true
+          auto_push_enabled: true
+          target_channel: lark_activity
+          max_per_tick: 1

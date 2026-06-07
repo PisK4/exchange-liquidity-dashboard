@@ -348,6 +348,8 @@ func activityDeliveryToWire(d activity.DeliveryOutbox) map[string]any {
 	return map[string]any{
 		"id":              d.ID,
 		"event_type":      d.EventType,
+		"event_id":        d.EventID,
+		"event_version":   d.EventVersion,
 		"dedupe_key":      d.DedupeKey,
 		"target_channel":  d.TargetChannel,
 		"status":          d.Status,

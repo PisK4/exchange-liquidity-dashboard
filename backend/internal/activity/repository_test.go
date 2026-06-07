@@ -235,6 +235,40 @@ func TestRepositoryListOutboxCandidateEventsSkipsAlreadyProducedAndHydratesConte
 	}
 }
 
+func TestRepositoryListOutboxCandidateEventsBySourceFiltersPlatformAndGroup(t *testing.T) {
+	now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newActivityRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "raw_evidence_id", "platform", "source_group", "source_external_id", "source_url", "title", "activity_type",
+		"content_text", "reward_pool_text", "start_time", "end_time", "publish_time", "raw_time_text",
+		"content_hash", "dedupe_key", "needs_human_review", "auto_push_allowed", "event_status",
+		"review_status", "ops_decision_action", "ops_decision_stale", "event_version", "parser_version",
+		"parser_warnings_json", "rich_fields_summary_json", "created_at", "updated_at",
+	}).AddRow(
+		int64(43), int64(10), "gate", "launchpool_project_list", "gate-abc", "https://gate.example/abc", "Gate Launchpool ABC", "launchpool",
+		"Stake to earn ABC", "100,000 USDT", nil, nil, now, "",
+		"hash-gate", "gate|launchpool_project_list|abc", 0, 1, EventStatusActive,
+		ReviewPending, "", 0, 1, "activity-parser-v1",
+		[]byte(`[]`), []byte(`{"reward":"100,000 USDT"}`), now, now,
+	)
+	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_event e")).
+		WithArgs(EventStatusActive, ReviewRejected, ReviewApproved, "gate", "launchpool_project_list", 2).
+		WillReturnRows(rows)
+
+	events, err := repo.ListOutboxCandidateEventsBySource(context.Background(), "gate", "launchpool_project_list", 2)
+	if err != nil {
+		t.Fatalf("ListOutboxCandidateEventsBySource err=%v", err)
+	}
+	if len(events) != 1 || events[0].Platform != "gate" || events[0].SourceGroup != "launchpool_project_list" {
+		t.Fatalf("events=%+v", events)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestRepositoryGetActivityEventReturnsRawEvidencePreview(t *testing.T) {
 	now := time.Date(2026, 6, 5, 12, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newActivityRepoWithMock(t, now)

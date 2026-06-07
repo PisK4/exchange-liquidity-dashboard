@@ -267,8 +267,7 @@ func main() {
 			}
 			startupState.MarkWorker("activity", startup.StateRunning, nil)
 			go func() {
-				interval := cfg.Runtime.ActivityAgent.DefaultPollInterval
-				if err := engine.Run(ctx, interval, log.Printf); err != nil {
+				if err := engine.Run(ctx, buildActivityEngineSchedule(cfg), log.Printf); err != nil {
 					startupState.MarkWorker("activity", startup.StateFailed, err)
 					log.Printf("activity engine stopped: %v", err)
 				}
@@ -584,15 +583,22 @@ func resolveMySQLDSN(flagValue string, cfg config.Config) string {
 
 func buildActivityEngineConfig(cfg config.Config) activity.EngineConfig {
 	aa := cfg.Runtime.ActivityAgent
-	activityHTTPFetcher := activityfetcher.NewHTTPFetcher(buildActivityHTTPClient(cfg), cfg.Runtime.HTTPTimeout)
+	fetchTimeout := cfg.Runtime.HTTPTimeout
+	if aa.Collection.DefaultTimeout > 0 {
+		fetchTimeout = aa.Collection.DefaultTimeout
+	}
+	activityHTTPFetcher := activityfetcher.NewHTTPFetcher(buildActivityHTTPClient(cfg), fetchTimeout)
 	return activity.EngineConfig{
 		Enabled:             aa.Enabled,
 		WorkerLeaseTTL:      aa.WorkerLeaseTTL,
+		Schedule:            buildActivityEngineSchedule(cfg),
 		WebhookURL:          resolveActivityWebhookURL(cfg),
+		WebhookURLByChannel: buildActivityWebhookURLs(cfg),
 		DecisionTokenSecret: os.Getenv(aa.DecisionToken.SecretEnv),
 		DashboardBaseURL:    aa.Delivery.DashboardBaseURL,
 		MaxPerTick:          aa.Delivery.MaxPerTick,
 		SendSpacing:         aa.Delivery.SendSpacing,
+		SourceDelivery:      buildActivitySourceDeliveryPolicies(cfg),
 		Sources:             buildActivitySources(cfg),
 		Fetch: func(ctx context.Context, req activity.FetchRequest) (activity.FetchResult, error) {
 			got, err := activityHTTPFetcher.Fetch(ctx, activityfetcher.Request{
@@ -622,12 +628,27 @@ func buildActivityEngineConfig(cfg config.Config) activity.EngineConfig {
 	}
 }
 
+func buildActivityEngineSchedule(cfg config.Config) activity.EngineSchedule {
+	aa := cfg.Runtime.ActivityAgent
+	return activity.EngineSchedule{
+		IngestionInterval: aa.Scheduler.IngestionInterval,
+		ProducerInterval:  aa.Scheduler.ProducerInterval,
+		DeliveryInterval:  aa.Scheduler.DeliveryInterval,
+	}
+}
+
 func buildActivityHTTPClient(cfg config.Config) *http.Client {
 	timeout := cfg.Runtime.HTTPTimeout
+	if cfg.Runtime.ActivityAgent.Collection.DefaultTimeout > 0 {
+		timeout = cfg.Runtime.ActivityAgent.Collection.DefaultTimeout
+	}
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
-	proxyURL := strings.TrimSpace(cfg.Runtime.ActivityAgent.SourceProxy)
+	proxyURL := strings.TrimSpace(cfg.Runtime.ActivityAgent.Collection.SourceProxy)
+	if proxyURL == "" {
+		proxyURL = strings.TrimSpace(cfg.Runtime.ActivityAgent.SourceProxy)
+	}
 	if proxyURL == "" {
 		proxyURL = strings.TrimSpace(cfg.Runtime.ExchangeProxy)
 	}
@@ -659,15 +680,29 @@ func buildActivitySources(cfg config.Config) []activity.SourceConfig {
 	for _, src := range cfg.Runtime.ActivityAgent.Sources {
 		sourceURL := strings.TrimSpace(src.SourceURL)
 		if sourceURL == "" {
+			sourceURL = strings.TrimSpace(src.Collection.SourceURL)
+		}
+		if sourceURL == "" {
 			sourceURL = defaultActivitySourceURL(src.Platform, src.SourceGroup)
+		}
+		fetchMode := strings.TrimSpace(src.FetchMode)
+		if fetchMode == "" {
+			fetchMode = strings.TrimSpace(src.Collection.FetchMode)
+		}
+		pollInterval := src.PollInterval
+		if pollInterval <= 0 {
+			pollInterval = src.Collection.PollInterval
+		}
+		if pollInterval <= 0 {
+			pollInterval = cfg.Runtime.ActivityAgent.Collection.DefaultPollInterval
 		}
 		out = append(out, activity.SourceConfig{
 			Platform:               src.Platform,
 			SourceGroup:            src.SourceGroup,
 			SourceType:             src.SourceType,
 			SourceURL:              sourceURL,
-			FetchMode:              src.FetchMode,
-			PollInterval:           src.PollInterval,
+			FetchMode:              fetchMode,
+			PollInterval:           pollInterval,
 			Enabled:                src.Enabled,
 			AutoPushEnabled:        src.AutoPushEnabled,
 			RequiresProxy:          src.RequiresProxy,
@@ -676,6 +711,64 @@ func buildActivitySources(cfg config.Config) []activity.SourceConfig {
 			Personalized:           src.Personalized,
 			Headers:                defaultActivityHeaders(src.Platform),
 		})
+	}
+	return out
+}
+
+func buildActivitySourceDeliveryPolicies(cfg config.Config) []activity.SourceDeliveryPolicy {
+	defaultChannel := activity.DeliveryChannelLarkActivity
+	out := make([]activity.SourceDeliveryPolicy, 0, len(cfg.Runtime.ActivityAgent.Sources))
+	for _, src := range cfg.Runtime.ActivityAgent.Sources {
+		enabled := cfg.Runtime.ActivityAgent.Delivery.Enabled
+		if src.Delivery.Enabled != nil {
+			enabled = *src.Delivery.Enabled
+		}
+		autoPush := src.AutoPushEnabled
+		if src.Delivery.AutoPushEnabled != nil {
+			autoPush = *src.Delivery.AutoPushEnabled
+		}
+		channel := strings.TrimSpace(src.Delivery.TargetChannel)
+		if channel == "" {
+			channel = defaultChannel
+		}
+		webhookURL := ""
+		if envName := strings.TrimSpace(src.Delivery.WebhookURLEnv); envName != "" {
+			webhookURL = strings.TrimSpace(os.Getenv(envName))
+		}
+		maxPerTick := src.Delivery.MaxPerTick
+		if maxPerTick <= 0 {
+			maxPerTick = cfg.Runtime.ActivityAgent.Delivery.MaxPerTick
+		}
+		out = append(out, activity.SourceDeliveryPolicy{
+			Platform:        src.Platform,
+			SourceGroup:     src.SourceGroup,
+			Enabled:         enabled,
+			TargetChannel:   channel,
+			WebhookURL:      webhookURL,
+			MaxPerTick:      maxPerTick,
+			SendSpacing:     src.Delivery.SendSpacing,
+			AutoPushEnabled: autoPush,
+		})
+	}
+	return out
+}
+
+func buildActivityWebhookURLs(cfg config.Config) map[string]string {
+	defaultWebhook := resolveActivityWebhookURL(cfg)
+	out := map[string]string{}
+	if defaultWebhook != "" {
+		out[activity.DeliveryChannelLarkActivity] = defaultWebhook
+	}
+	for _, src := range cfg.Runtime.ActivityAgent.Sources {
+		channel := strings.TrimSpace(src.Delivery.TargetChannel)
+		if channel == "" {
+			channel = activity.DeliveryChannelLarkActivity
+		}
+		if envName := strings.TrimSpace(src.Delivery.WebhookURLEnv); envName != "" {
+			if webhookURL := strings.TrimSpace(os.Getenv(envName)); webhookURL != "" {
+				out[channel] = webhookURL
+			}
+		}
 	}
 	return out
 }

@@ -510,7 +510,7 @@ func (r *Repository) ListActivityDeliveries(ctx context.Context, filter Delivery
 		return nil, "", errors.New("activity repository: no db attached")
 	}
 	limit := clampLimit(filter.Limit, 50, 200)
-	query := `SELECT id, event_type, dedupe_key, target_channel, status, attempt_count, max_attempts,
+	query := `SELECT id, event_type, event_id, event_version, dedupe_key, target_channel, status, attempt_count, max_attempts,
 	                 next_attempt_at, payload_json, COALESCE(last_error,''), sent_at, created_at, updated_at
 	            FROM t_activity_delivery_outbox`
 	where := []string{}
@@ -535,19 +535,9 @@ func (r *Repository) ListActivityDeliveries(ctx context.Context, filter Delivery
 	defer rows.Close()
 	out := []DeliveryOutbox{}
 	for rows.Next() {
-		var d DeliveryOutbox
-		var next, sent sql.NullTime
-		if err := rows.Scan(&d.ID, &d.EventType, &d.DedupeKey, &d.TargetChannel, &d.Status, &d.AttemptCount, &d.MaxAttempts,
-			&next, &d.PayloadJSON, &d.LastError, &sent, &d.CreatedAt, &d.UpdatedAt); err != nil {
+		d, err := scanDeliveryOutboxRow(rows)
+		if err != nil {
 			return nil, "", err
-		}
-		if next.Valid {
-			t := next.Time.UTC()
-			d.NextAttemptAt = &t
-		}
-		if sent.Valid {
-			t := sent.Time.UTC()
-			d.SentAt = &t
 		}
 		out = append(out, d)
 	}
@@ -555,11 +545,19 @@ func (r *Repository) ListActivityDeliveries(ctx context.Context, filter Delivery
 }
 
 func (r *Repository) ListOutboxCandidateEvents(ctx context.Context, limit int) ([]ActivityEvent, error) {
+	return r.listOutboxCandidateEvents(ctx, "", "", limit)
+}
+
+func (r *Repository) ListOutboxCandidateEventsBySource(ctx context.Context, platform, sourceGroup string, limit int) ([]ActivityEvent, error) {
+	return r.listOutboxCandidateEvents(ctx, platform, sourceGroup, limit)
+}
+
+func (r *Repository) listOutboxCandidateEvents(ctx context.Context, platform, sourceGroup string, limit int) ([]ActivityEvent, error) {
 	if r.db == nil {
 		return nil, errors.New("activity repository: no db attached")
 	}
 	limit = clampLimit(limit, 10, 200)
-	rows, err := r.db.QueryContext(ctx, `SELECT e.id, COALESCE(e.raw_evidence_id,0), e.platform, e.source_group, COALESCE(e.source_external_id,''), COALESCE(e.source_url,''), e.title, e.activity_type,
+	query := `SELECT e.id, COALESCE(e.raw_evidence_id,0), e.platform, e.source_group, COALESCE(e.source_external_id,''), COALESCE(e.source_url,''), e.title, e.activity_type,
 	                 COALESCE(e.content_text,''), COALESCE(e.reward_pool_text,''), e.start_time, e.end_time, e.publish_time, COALESCE(e.raw_time_text,''),
 	                 e.content_hash, e.dedupe_key, e.needs_human_review, e.auto_push_allowed, e.event_status,
 	                 e.review_status, COALESCE(e.ops_decision_action,''), e.ops_decision_stale,
@@ -567,7 +565,19 @@ func (r *Repository) ListOutboxCandidateEvents(ctx context.Context, limit int) (
 	            FROM t_activity_event e
 	           WHERE e.event_status = ?
 	             AND e.review_status <> ?
-	             AND (e.auto_push_allowed = 1 OR e.review_status = ? OR e.needs_human_review = 1)
+	             AND (e.auto_push_allowed = 1 OR e.review_status = ? OR e.needs_human_review = 1)`
+	args := []any{EventStatusActive, ReviewRejected, ReviewApproved}
+	if strings.TrimSpace(platform) != "" {
+		query += `
+	             AND e.platform = ?`
+		args = append(args, strings.ToLower(strings.TrimSpace(platform)))
+	}
+	if strings.TrimSpace(sourceGroup) != "" {
+		query += `
+	             AND e.source_group = ?`
+		args = append(args, strings.TrimSpace(sourceGroup))
+	}
+	query += `
 	             AND NOT EXISTS (
 	               SELECT 1
 	                 FROM t_activity_delivery_outbox o
@@ -578,8 +588,9 @@ func (r *Repository) ListOutboxCandidateEvents(ctx context.Context, limit int) (
 	                END
 	             )
 	           ORDER BY e.updated_at DESC, e.id DESC
-	           LIMIT ?`,
-		EventStatusActive, ReviewRejected, ReviewApproved, limit)
+	           LIMIT ?`
+	args = append(args, limit)
+	rows, err := r.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -613,14 +624,16 @@ func (r *Repository) InsertActivityOutbox(ctx context.Context, row DeliveryOutbo
 	}
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO t_activity_delivery_outbox
-		   (event_type, dedupe_key, target_channel, status, attempt_count, max_attempts, next_attempt_at, payload_json, last_error, sent_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		   (event_type, event_id, event_version, dedupe_key, target_channel, status, attempt_count, max_attempts, next_attempt_at, payload_json, last_error, sent_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
+		   event_id = COALESCE(VALUES(event_id), event_id),
+		   event_version = COALESCE(VALUES(event_version), event_version),
 		   payload_json = IF(status = 'sent', payload_json, VALUES(payload_json)),
 		   status = IF(status IN ('sent','pending','retry'), status, VALUES(status)),
 		   next_attempt_at = IF(status = 'sent', next_attempt_at, VALUES(next_attempt_at)),
 		   updated_at = IF(status = 'sent', updated_at, VALUES(updated_at))`,
-		row.EventType, row.DedupeKey, row.TargetChannel, row.Status, row.AttemptCount, row.MaxAttempts,
+		row.EventType, nullInt64(row.EventID), nullInt(row.EventVersion), row.DedupeKey, row.TargetChannel, row.Status, row.AttemptCount, row.MaxAttempts,
 		row.NextAttemptAt, row.PayloadJSON, nullString(row.LastError), row.SentAt, row.CreatedAt, row.UpdatedAt,
 	)
 	return err
@@ -631,7 +644,7 @@ func (r *Repository) LoadDueActivityOutbox(ctx context.Context, now time.Time, l
 		return nil, errors.New("activity repository: no db attached")
 	}
 	limit = clampLimit(limit, 50, 200)
-	rows, err := r.db.QueryContext(ctx, `SELECT id, event_type, dedupe_key, target_channel, status, attempt_count, max_attempts,
+	rows, err := r.db.QueryContext(ctx, `SELECT id, event_type, event_id, event_version, dedupe_key, target_channel, status, attempt_count, max_attempts,
 	                 next_attempt_at, payload_json, COALESCE(last_error,''), sent_at, created_at, updated_at
 	            FROM t_activity_delivery_outbox
 	           WHERE status IN (?, ?, ?)
@@ -832,9 +845,16 @@ func (r *Repository) loadEventSymbols(ctx context.Context, eventID int64) ([]Act
 func scanDeliveryOutboxRow(rows *sql.Rows) (DeliveryOutbox, error) {
 	var d DeliveryOutbox
 	var next, sent sql.NullTime
-	if err := rows.Scan(&d.ID, &d.EventType, &d.DedupeKey, &d.TargetChannel, &d.Status, &d.AttemptCount, &d.MaxAttempts,
+	var eventID, eventVersion sql.NullInt64
+	if err := rows.Scan(&d.ID, &d.EventType, &eventID, &eventVersion, &d.DedupeKey, &d.TargetChannel, &d.Status, &d.AttemptCount, &d.MaxAttempts,
 		&next, &d.PayloadJSON, &d.LastError, &sent, &d.CreatedAt, &d.UpdatedAt); err != nil {
 		return DeliveryOutbox{}, err
+	}
+	if eventID.Valid {
+		d.EventID = eventID.Int64
+	}
+	if eventVersion.Valid {
+		d.EventVersion = int(eventVersion.Int64)
 	}
 	if next.Valid {
 		t := next.Time.UTC()
@@ -869,6 +889,13 @@ func nullInt64(v int64) sql.NullInt64 {
 		return sql.NullInt64{}
 	}
 	return sql.NullInt64{Int64: v, Valid: true}
+}
+
+func nullInt(v int) sql.NullInt64 {
+	if v == 0 {
+		return sql.NullInt64{}
+	}
+	return sql.NullInt64{Int64: int64(v), Valid: true}
 }
 
 func boolInt(v bool) int {

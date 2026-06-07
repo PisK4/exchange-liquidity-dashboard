@@ -63,6 +63,51 @@ func TestDrainDueOutboxMarksSentOn2xx(t *testing.T) {
 	}
 }
 
+func TestDrainDueOutboxRoutesByTargetChannel(t *testing.T) {
+	var defaultHits, gateHits int
+	defaultSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defaultHits++
+		_, _ = w.Write([]byte(`{"code":0}`))
+	}))
+	defer defaultSrv.Close()
+	gateSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gateHits++
+		_, _ = w.Write([]byte(`{"code":0}`))
+	}))
+	defer gateSrv.Close()
+
+	store := &fakeDeliveryStore{rows: []DeliveryOutbox{
+		{ID: 10, TargetChannel: DeliveryChannelLarkActivity, PayloadJSON: []byte(`{"msg_type":"interactive"}`), Status: DeliveryStatusPending, MaxAttempts: 3},
+		{ID: 11, TargetChannel: "lark_activity_gate", PayloadJSON: []byte(`{"msg_type":"interactive"}`), Status: DeliveryStatusPending, MaxAttempts: 3},
+	}}
+	res, err := DrainDueOutbox(context.Background(), store, DeliveryDeps{
+		WebhookURL: defaultSrv.URL,
+		WebhookURLByChannel: map[string]string{
+			"lark_activity_gate": gateSrv.URL,
+		},
+		Client: defaultSrv.Client(),
+	})
+	if err != nil {
+		t.Fatalf("DrainDueOutbox err=%v", err)
+	}
+	if res.Sent != 2 || defaultHits != 1 || gateHits != 1 {
+		t.Fatalf("res=%+v defaultHits=%d gateHits=%d", res, defaultHits, gateHits)
+	}
+}
+
+func TestDrainDueOutboxDisablesUnknownChannelWithoutWebhook(t *testing.T) {
+	store := &fakeDeliveryStore{rows: []DeliveryOutbox{{
+		ID: 12, TargetChannel: "lark_activity_gate", PayloadJSON: []byte(`{"msg_type":"interactive"}`), Status: DeliveryStatusPending,
+	}}}
+	res, err := DrainDueOutbox(context.Background(), store, DeliveryDeps{WebhookURL: "https://example.invalid/default"})
+	if err != nil {
+		t.Fatalf("DrainDueOutbox err=%v", err)
+	}
+	if res.Disabled != 1 || len(store.disabled) != 1 || store.disabled[0] != 12 {
+		t.Fatalf("res=%+v disabled=%+v", res, store.disabled)
+	}
+}
+
 func TestDrainDueOutboxRetriesAndFailsAtMaxAttempts(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad card", http.StatusBadRequest)
