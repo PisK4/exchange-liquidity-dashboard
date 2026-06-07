@@ -41,6 +41,48 @@ Backend roles are selected by `--role`:
 | `activity` | Activity Agent worker | Yes | Activity run-once / worker isolation. |
 | `all` | API + collector + Listing Agent + Activity Agent | Listing/Activity need MySQL | Docker/production default. |
 
+### 1.1 Deployment config and scoped proxy boundaries
+
+`deploy/docker-compose.yaml` starts the backend with `--role=all`, so a single
+deployment may run Liquidity, Listing, and Activity workers together. Operator
+secrets belong in `deploy/.env`, Nacos, or a private config-dir; never paste
+production webhook URLs, callback secrets, or DSNs into tracked config files.
+
+Current env indirections:
+
+| Setting | Runtime field that reads it |
+|---|---|
+| `COINGECKO_DEMO_API_KEY` | `Runtime.coingecko.api_key_env` |
+| `LARK_LISTING_CALLBACK_SECRET` | `Runtime.listing_agent.decision_card.callback.secret_env` |
+| `ACTIVITY_LARK_WEBHOOK_URL` | `Runtime.activity_agent.delivery.webhook_url_env` |
+| `ACTIVITY_DECISION_TOKEN_SECRET` | `Runtime.activity_agent.decision_token.secret_env` |
+| `LARK_LISTING_TOP30_WEBHOOK_URL` | Only when a private config sets `Runtime.listing_agent.delivery.top30_webhook_url_env` to this name. The tracked config currently routes Listing cards through `Alert.Webhooks.*`. |
+
+Scoped proxy fields are intentionally YAML/config-dir driven:
+
+| Chain | Runtime field |
+|---|---|
+| Native exchange REST, Lighter WS, and Activity source fallback | `Runtime.exchange_proxy` |
+| CoinGecko derivatives ingestion | `Runtime.coingecko.proxy` |
+| Per-provider WebSocket clients | `Runtime.ws_providers.*.proxy` |
+| Listing Lark delivery | `Runtime.listing_agent.delivery.proxy` |
+| Activity source fetches | `Runtime.activity_agent.source_proxy` |
+| Activity Lark delivery | `Runtime.activity_agent.delivery.proxy` |
+
+For local Docker on macOS, a private config-dir can point these scoped fields at
+`http://host.docker.internal:7897`. In production, leave each scoped proxy blank
+when the host can reach exchanges, CoinGecko, and `open.larksuite.com` directly.
+Do not replace these fields with process-wide `HTTP_PROXY` / `HTTPS_PROXY`: that
+would mix unrelated exchange, CoinGecko, Activity, and Lark egress paths and can
+pollute latency or source-health diagnostics. `HTTP_PROXY` / `HTTPS_PROXY` in
+`deploy/.env` are reserved for code paths that do not consult the runtime config.
+
+Dashboard links embedded in Lark cards are also config-dir values, not automatic
+env overrides. Set `Runtime.listing_agent.delivery.dashboard_base_url` and
+`Runtime.activity_agent.delivery.dashboard_base_url` in the selected runtime
+config so buttons point at the public Ops Intelligence host in production and at
+the local web port during local validation.
+
 ## 2. Health and Readiness Probes
 
 Two distinct endpoints with deliberately different semantics:

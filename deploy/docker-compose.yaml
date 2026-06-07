@@ -53,6 +53,13 @@ services:
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
       NO_PROXY: ${NO_PROXY:-}
+      # Module-scoped secrets/env indirections. Dashboard base URLs and
+      # scoped proxy fields still come from the selected config-dir/YAML;
+      # see deploy/.env.production.template and backend/docs/runbook.md.
+      COINGECKO_DEMO_API_KEY: ${COINGECKO_DEMO_API_KEY:-}
+      LARK_LISTING_TOP30_WEBHOOK_URL: ${LARK_LISTING_TOP30_WEBHOOK_URL:-}
+      LARK_LISTING_CALLBACK_SECRET: ${LARK_LISTING_CALLBACK_SECRET:-}
+      ACTIVITY_LARK_WEBHOOK_URL: ${ACTIVITY_LARK_WEBHOOK_URL:-}
       ACTIVITY_DECISION_TOKEN_SECRET: ${ACTIVITY_DECISION_TOKEN_SECRET:-local-activity-decision-token-secret}
     ports:
       - "${BACKEND_PUBLISH_HOST:-127.0.0.1}:${BACKEND_PUBLISH_PORT:-8080}:8080"
