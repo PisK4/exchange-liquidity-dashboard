@@ -144,6 +144,10 @@ func buildAnnouncementSource(poll config.ListingSourcePollConfig, deps HTTPDeps)
 		src.SourceURL = BitgetAnnouncementsURL
 		src.Fetch = FetchBitgetAnnouncements(deps, BitgetAnnouncementsURL)
 		src.Parse = announcement.ParseBitgetAnnouncement
+	case "hyperliquid":
+		src.SourceURL = HyperliquidEntriesURL
+		src.Fetch = FetchHyperliquidAnnouncements(deps, HyperliquidEntriesURL)
+		src.Parse = announcement.ParseHyperliquidAnnouncement
 	default:
 		return listing.AnnouncementSource{}, fmt.Errorf("listing: no announcement fetcher registered for platform=%q", poll.Platform)
 	}

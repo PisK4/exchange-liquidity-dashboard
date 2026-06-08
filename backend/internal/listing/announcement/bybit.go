@@ -34,6 +34,7 @@ func ParseBybitAnnouncement(raw json.RawMessage) (ParsedAnnouncement, error) {
 		Language:        p.Language,
 		Description:     p.Description,
 		ParseConfidence: confidence,
+		SignalSubtype:   subtype,
 		RawPayloadJSON:  append(json.RawMessage(nil), raw...),
 		RawPayloadHash:  computeHash(raw),
 	}

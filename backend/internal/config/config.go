@@ -909,6 +909,7 @@ func defaultListingAgentConfig() ListingAgentConfig {
 					{Platform: "bybit", PollInterval: 3 * time.Minute, Enabled: true},
 					{Platform: "bitget", PollInterval: 3 * time.Minute, Enabled: true},
 					{Platform: "binance", PollInterval: 5 * time.Minute, Enabled: true},
+					{Platform: "hyperliquid", PollInterval: 3 * time.Minute, Enabled: true},
 				},
 			},
 		},

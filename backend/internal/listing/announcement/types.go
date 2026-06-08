@@ -28,6 +28,7 @@ type ParsedAnnouncement struct {
 	PublishedAt     *time.Time
 	UpdatedAt       *time.Time
 	ParseConfidence string
+	SignalSubtype   string
 	RawPayloadJSON  json.RawMessage
 	RawPayloadHash  string
 	Symbols         []ParsedAnnouncementSymbol
@@ -43,6 +44,7 @@ type ParsedAnnouncementSymbol struct {
 	InstrumentKind  string
 	SignalSubtype   string
 	ListingTimeTS   *time.Time
+	SourceModule    string
 }
 
 // Parse-confidence labels.
@@ -62,6 +64,17 @@ const (
 	SubtypeSpotListing = "spot_listing_announcement"
 	SubtypeIrrelevant  = "irrelevant_announcement"
 	SubtypeParseFailed = "parse_failed"
+)
+
+// Parser skip reason labels surfaced by AnnouncementPollResult. They
+// distinguish "source is quiet" from "parser rejected every row" without
+// changing the candidate-generation gates.
+const (
+	SkipReasonAuditOnlySpot      = "audit_only_spot"
+	SkipReasonPreMarket          = "pre_market"
+	SkipReasonRejectedIrrelevant = "rejected_irrelevant"
+	SkipReasonPerpNoSymbol       = "perp_no_symbol"
+	SkipReasonAuditOnly          = "audit_only"
 )
 
 // SchemaDriftError is returned by parsers when the upstream schema no
@@ -146,8 +159,36 @@ func classifyTitle(title string) (string, string, bool) {
 		return SubtypeSpotListing, ConfidenceAuditOnly, false
 	case strings.Contains(t, "pre-market") || strings.Contains(t, "pre market"):
 		return SubtypePreMarket, ConfidenceAuditOnly, false
-	case strings.Contains(t, "perpetual contract") || strings.Contains(t, "perp contract") || strings.Contains(t, "perpetual"):
+	case looksPerpListingTitle(t):
 		return SubtypePerpListing, ConfidenceHigh, true
 	}
 	return SubtypeIrrelevant, ConfidenceRejected, false
+}
+
+func looksPerpListingTitle(lowerTitle string) bool {
+	if strings.Contains(lowerTitle, "perpetual contract") || strings.Contains(lowerTitle, "perp contract") || strings.Contains(lowerTitle, "perpetual") {
+		return true
+	}
+	listingIntent := strings.Contains(lowerTitle, "listing") || strings.Contains(lowerTitle, "listed") || strings.Contains(lowerTitle, "will list") || strings.Contains(lowerTitle, "launch")
+	if !listingIntent {
+		return false
+	}
+	return strings.Contains(lowerTitle, "futures") || strings.Contains(lowerTitle, "usdt-m") || strings.Contains(lowerTitle, "usdt-margined") || strings.Contains(lowerTitle, "contract trading") || strings.Contains(lowerTitle, "linear contract")
+}
+
+// SkipReason returns a stable parser-observability label for parsed
+// announcements that emitted no child symbols.
+func (p ParsedAnnouncement) SkipReason() string {
+	switch p.SignalSubtype {
+	case SubtypeSpotListing:
+		return SkipReasonAuditOnlySpot
+	case SubtypePreMarket:
+		return SkipReasonPreMarket
+	case SubtypeIrrelevant:
+		return SkipReasonRejectedIrrelevant
+	}
+	if p.ParseConfidence == ConfidenceHigh || p.ParseConfidence == ConfidenceMedium {
+		return SkipReasonPerpNoSymbol
+	}
+	return SkipReasonAuditOnly
 }

@@ -45,6 +45,7 @@ func newBybitSpotIrrelevant() announcement.ParsedAnnouncement {
 		AnnouncementID:  "ann-spot-XYZ",
 		Title:           "XYZ Spot Trading Pair Launch",
 		ParseConfidence: announcement.ConfidenceAuditOnly,
+		SignalSubtype:   announcement.SubtypeSpotListing,
 		RawPayloadJSON:  json.RawMessage(`{"id":"ann-spot-XYZ"}`),
 		RawPayloadHash:  "hash-spot",
 		PublishedAt:     &published,
@@ -233,6 +234,12 @@ func TestRunAnnouncementPollSkipsIrrelevantAnnouncements(t *testing.T) {
 	}
 	if res.SignalsEmitted != 0 {
 		t.Errorf("SignalsEmitted = %d, want 0 for spot/pre-market announcement", res.SignalsEmitted)
+	}
+	if res.ParseSkips != 1 {
+		t.Errorf("ParseSkips = %d, want 1", res.ParseSkips)
+	}
+	if res.ParseSkipReasons[announcement.SkipReasonAuditOnlySpot] != 1 {
+		t.Errorf("ParseSkipReasons = %+v, want audit_only_spot=1", res.ParseSkipReasons)
 	}
 	if res.Announcements != 1 {
 		t.Errorf("Announcements = %d, want 1 (parent still persisted for audit)", res.Announcements)

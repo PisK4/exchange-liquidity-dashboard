@@ -31,12 +31,24 @@ type AnnouncementSource struct {
 // audit-only (spot, pre-market, irrelevant) so operators can spot a
 // CMS feed that suddenly emits zero perp announcements.
 type AnnouncementPollResult struct {
-	Platform       string
-	Baseline       bool
-	Fetched        int
-	Announcements  int
-	SignalsEmitted int
-	ParseSkips     int
+	Platform         string
+	Baseline         bool
+	Fetched          int
+	Announcements    int
+	SignalsEmitted   int
+	ParseSkips       int
+	ParseSkipReasons map[string]int
+}
+
+func (r *AnnouncementPollResult) recordParseSkip(reason string) {
+	r.ParseSkips++
+	if r.ParseSkipReasons == nil {
+		r.ParseSkipReasons = make(map[string]int)
+	}
+	if reason == "" {
+		reason = announcement.SkipReasonAuditOnly
+	}
+	r.ParseSkipReasons[reason]++
 }
 
 // AnnouncementPollDeps wires the clock; the production poller passes
@@ -150,7 +162,7 @@ func RunAnnouncementPoll(ctx context.Context, repo *Repository, src Announcement
 			continue
 		}
 		if len(parsed.Symbols) == 0 {
-			res.ParseSkips++
+			res.recordParseSkip(parsed.SkipReason())
 			continue
 		}
 

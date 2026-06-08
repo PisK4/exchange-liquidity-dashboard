@@ -39,6 +39,9 @@ func TestBuildDecisionCardEventPrepareListingShowsAllButtons(t *testing.T) {
 	if ev.RiskPlanID != 101 {
 		t.Errorf("RiskPlanID = %d, want 101", ev.RiskPlanID)
 	}
+	if ev.MarketSurface != "perp" {
+		t.Errorf("MarketSurface = %q, want perp", ev.MarketSurface)
+	}
 	if ev.DedupeKey != "listing_decision|7|2026-05-30" {
 		t.Errorf("DedupeKey = %q", ev.DedupeKey)
 	}
@@ -93,6 +96,21 @@ func TestBuildDecisionCardEventAnnouncementPendingAPIShowsAllButtons(t *testing.
 		if !want[a.Action] {
 			t.Errorf("unexpected action %q on announcement_pending_api card", a.Action)
 		}
+	}
+}
+
+func TestDecisionHeaderTextUsesMarketSurface(t *testing.T) {
+	spot := decisionHeaderText(DecisionCardEvent{CanonicalSymbol: "PUMP", MarketSurface: "spot"})
+	if spot != "🚨 New Spot Listing Detected · PUMP" {
+		t.Fatalf("spot header = %q", spot)
+	}
+	perp := decisionHeaderText(DecisionCardEvent{CanonicalSymbol: "NIL", MarketSurface: "perp"})
+	if perp != "🚨 New Perp Listing Detected · NIL" {
+		t.Fatalf("perp header = %q", perp)
+	}
+	legacy := decisionHeaderText(DecisionCardEvent{CanonicalSymbol: "ABC"})
+	if legacy != "🚨 New Perp Listing Detected · ABC" {
+		t.Fatalf("legacy header = %q", legacy)
 	}
 }
 

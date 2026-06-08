@@ -18,7 +18,7 @@ const BitgetAnnouncementsURL = "https://api.bitget.com/api/v2/public/annoucement
 
 // FetchBitgetAnnouncements builds the AnnouncementSource.Fetch
 // closure for Bitget's v2 public announcements API. The closure
-// GETs /api/v2/public/annoucements?annType=coin_listings&language=en_US,
+// GETs /api/v2/public/annoucements?annType=coin_listings&language=en_US&limit=20,
 // unwraps the code/data envelope, and reshapes each entry into the
 // flat record the existing ParseBitgetAnnouncement parser expects.
 //
@@ -39,7 +39,7 @@ func FetchBitgetAnnouncements(deps HTTPDeps, baseURL string) func(ctx context.Co
 	}
 	url := baseURL
 	if !strings.Contains(url, "?") {
-		url += "?annType=coin_listings&language=en_US&limit=10"
+		url += "?annType=coin_listings&language=en_US&limit=20"
 	} else {
 		if !strings.Contains(url, "annType=") {
 			url += "&annType=coin_listings"
@@ -48,7 +48,7 @@ func FetchBitgetAnnouncements(deps HTTPDeps, baseURL string) func(ctx context.Co
 			url += "&language=en_US"
 		}
 		if !strings.Contains(url, "limit=") {
-			url += "&limit=10"
+			url += "&limit=20"
 		}
 	}
 	return func(ctx context.Context) ([]json.RawMessage, error) {

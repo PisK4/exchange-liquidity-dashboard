@@ -31,6 +31,7 @@ func ParseBitgetAnnouncement(raw json.RawMessage) (ParsedAnnouncement, error) {
 		Category:        p.Category,
 		Language:        p.Language,
 		ParseConfidence: confidence,
+		SignalSubtype:   subtype,
 		RawPayloadJSON:  append(json.RawMessage(nil), raw...),
 		RawPayloadHash:  computeHash(raw),
 	}

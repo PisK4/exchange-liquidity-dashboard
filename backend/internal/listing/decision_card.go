@@ -96,6 +96,7 @@ type DecisionCardEvent struct {
 	RiskPlanID         int64                `json:"risk_plan_id"`
 	CanonicalSymbol    string               `json:"canonical_symbol"`
 	DisplaySymbol      string               `json:"display_symbol"`
+	MarketSurface      string               `json:"market_surface"`
 	EvidenceKind       string               `json:"evidence_kind"`
 	Recommendation     string               `json:"recommendation"`
 	ConfidenceLevel    string               `json:"confidence_level"`
@@ -131,6 +132,7 @@ func BuildDecisionCardEvent(c Candidate, plan RiskPlan, triggerTime time.Time) D
 		RiskPlanID:      plan.ID,
 		CanonicalSymbol: c.CanonicalSymbol,
 		DisplaySymbol:   c.DisplaySymbol,
+		MarketSurface:   c.MarketSurface,
 		EvidenceKind:    c.EvidenceKind,
 		Recommendation:  c.Recommendation,
 		ConfidenceLevel: c.ConfidenceLevel,
@@ -256,6 +258,14 @@ func decisionHeaderTemplate(rec string) string {
 // recommendation label lives in the body.
 func decisionHeaderText(ev DecisionCardEvent) string {
 	prefix := "🚨 New Perp Listing Detected"
+	switch strings.ToLower(strings.TrimSpace(ev.MarketSurface)) {
+	case "spot":
+		prefix = "🚨 New Spot Listing Detected"
+	case "", "perp":
+		prefix = "🚨 New Perp Listing Detected"
+	default:
+		prefix = "🚨 New Listing Detected"
+	}
 	sym := strings.TrimSpace(ev.CanonicalSymbol)
 	if sym == "" {
 		sym = strings.TrimSpace(ev.DisplaySymbol)

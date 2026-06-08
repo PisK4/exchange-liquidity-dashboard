@@ -73,6 +73,87 @@ func TestParseBitgetAnnouncementSingleSymbol(t *testing.T) {
 	}
 }
 
+func TestParseHyperliquidAnnouncementPerpSingleSymbol(t *testing.T) {
+	raw := []byte(`{"hash":"h1","title":"New listing: NIL-USD perps","createdAt":"2026-05-30T10:00:00Z","sourceUrl":"https://hyperliquid.gitbook.io/hyperliquid-docs/for-developers/api/info-endpoint"}`)
+	got, err := ParseHyperliquidAnnouncement(raw)
+	if err != nil {
+		t.Fatalf("Parse err = %v", err)
+	}
+	if got.Platform != "hyperliquid" || got.AnnouncementID != "h1" {
+		t.Fatalf("unexpected announcement = %+v", got)
+	}
+	if got.ParseConfidence != ConfidenceHigh || got.SignalSubtype != SubtypePerpListing {
+		t.Fatalf("unexpected parse classification: confidence=%q subtype=%q", got.ParseConfidence, got.SignalSubtype)
+	}
+	if len(got.Symbols) != 1 {
+		t.Fatalf("symbols len = %d, want 1 (%+v)", len(got.Symbols), got.Symbols)
+	}
+	s := got.Symbols[0]
+	if s.CanonicalSymbol != "NIL" || s.DisplaySymbol != "NIL-USD (perp)" || s.MarketSurface != "perp" {
+		t.Fatalf("unexpected symbol = %+v", s)
+	}
+	if s.SignalSubtype != SubtypePerpListing || s.SourceModule != "hyperliquid_entries" {
+		t.Fatalf("unexpected symbol metadata = %+v", s)
+	}
+	if s.ListingTimeTS == nil {
+		t.Fatalf("listing time should be copied from createdAt")
+	}
+}
+
+func TestParseHyperliquidAnnouncementPerpMultiSymbol(t *testing.T) {
+	raw := []byte(`{"id":"hl-multi","title":"New listing: HYPER-USD, ZORA-USD, and INIT-USDC perps","createdAt":"2026-05-30T10:00:00Z"}`)
+	got, err := ParseHyperliquidAnnouncement(raw)
+	if err != nil {
+		t.Fatalf("Parse err = %v", err)
+	}
+	if len(got.Symbols) != 3 {
+		t.Fatalf("symbols len = %d, want 3 (%+v)", len(got.Symbols), got.Symbols)
+	}
+	want := []string{"HYPER-USD (perp)", "ZORA-USD (perp)", "INIT-USDC (perp)"}
+	for i, sym := range got.Symbols {
+		if sym.DisplaySymbol != want[i] {
+			t.Fatalf("symbol[%d] = %+v, want display %q", i, sym, want[i])
+		}
+	}
+}
+
+func TestParseHyperliquidAnnouncementSpotAddedAndEnabled(t *testing.T) {
+	added := []byte(`{"id":"spot-added","title":"Added spot PUMP","createdAt":"2026-05-30T10:00:00Z"}`)
+	got, err := ParseHyperliquidAnnouncement(added)
+	if err != nil {
+		t.Fatalf("Parse added spot err = %v", err)
+	}
+	if got.ParseConfidence != ConfidenceMedium || got.SignalSubtype != SubtypeSpotListing {
+		t.Fatalf("unexpected added spot classification: %+v", got)
+	}
+	if len(got.Symbols) != 1 || got.Symbols[0].CanonicalSymbol != "PUMP" || got.Symbols[0].MarketSurface != "spot" {
+		t.Fatalf("unexpected added spot symbols = %+v", got.Symbols)
+	}
+
+	enabled := []byte(`{"id":"spot-enabled","title":"Enabled spot BTC","createdAt":"2026-05-30T10:00:00Z","sourceModule":"activity_agent"}`)
+	got, err = ParseHyperliquidAnnouncement(enabled)
+	if err != nil {
+		t.Fatalf("Parse enabled spot err = %v", err)
+	}
+	if len(got.Symbols) != 1 || got.Symbols[0].CanonicalSymbol != "BTC" || got.Symbols[0].SourceModule != "activity_agent" {
+		t.Fatalf("unexpected enabled spot symbols = %+v", got.Symbols)
+	}
+}
+
+func TestParseHyperliquidAnnouncementDelistingAuditOnly(t *testing.T) {
+	raw := []byte(`{"id":"delist-1","title":"Validator vote to delist MYRO perps","category":"delisting","createdAt":"2026-05-30T10:00:00Z"}`)
+	got, err := ParseHyperliquidAnnouncement(raw)
+	if err != nil {
+		t.Fatalf("Parse err = %v", err)
+	}
+	if got.ParseConfidence != ConfidenceAuditOnly || got.SignalSubtype != SubtypeIrrelevant {
+		t.Fatalf("delisting must be audit_only/irrelevant, got confidence=%q subtype=%q", got.ParseConfidence, got.SignalSubtype)
+	}
+	if len(got.Symbols) != 0 {
+		t.Fatalf("delisting must not emit listing symbols, got %+v", got.Symbols)
+	}
+}
+
 func TestParseBinanceCMSSchemaDrift(t *testing.T) {
 	raw := []byte(`{"unexpected":true}`)
 	_, err := ParseBinanceCMSAnnouncement(raw)

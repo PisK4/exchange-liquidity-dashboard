@@ -85,6 +85,31 @@ func TestAnnouncementOnlyForcesPreAssessment(t *testing.T) {
 	}
 }
 
+func TestSpotAnnouncementOnlyStaysRecordOnly(t *testing.T) {
+	got := ScoreCandidate(ScoreInput{
+		Platforms:     []string{"binance"},
+		EvidenceKind:  EvidenceAnnouncementPendingAPI,
+		MarketSurface: "spot",
+	})
+	if got.Recommendation != RecommendationRecordOnly {
+		t.Fatalf("spot announcement-only recommendation = %q, want record_only", got.Recommendation)
+	}
+}
+
+func TestSpotDualEvidenceCanWatchButNotPrepareListing(t *testing.T) {
+	got := ScoreCandidate(ScoreInput{
+		Platforms:     []string{"binance", "hyperliquid"},
+		EvidenceKind:  EvidenceAnnouncementAndAPI,
+		MarketSurface: "spot",
+	})
+	if got.Recommendation != RecommendationWatch {
+		t.Fatalf("spot dual-evidence recommendation = %q, want watch", got.Recommendation)
+	}
+	if got.BusinessScore == nil || *got.BusinessScore != 90 {
+		t.Fatalf("spot score should preserve platform-tier score, got %v", got.BusinessScore)
+	}
+}
+
 func TestEdgexListedForcesNoAction(t *testing.T) {
 	got := ScoreCandidate(ScoreInput{
 		Platforms:    []string{"binance", "bybit"},

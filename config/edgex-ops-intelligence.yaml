@@ -273,6 +273,8 @@ Runtime:
             poll_interval: 3m
           - platform: binance
             poll_interval: 5m
+          - platform: hyperliquid
+            poll_interval: 3m
     listed_universe_refresh:
       enabled: true
       interval: 15m

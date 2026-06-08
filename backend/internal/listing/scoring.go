@@ -31,8 +31,10 @@ type ScoreResult struct {
 // listed override.
 //
 //   - edgeX listed  => no_action / already_listed regardless of score.
-//   - announcement-only evidence => recommendation forced to
+//   - announcement-only perp evidence => recommendation forced to
 //     pre_assessment; the numeric score still reflects platform tier.
+//   - spot candidates stay low-risk (record_only / watch) until ops
+//     explicitly opts spot into the prepare-listing workflow.
 //   - otherwise the score is determined by the combined platform tier,
 //     and the recommendation follows the §23.5 PRD mapping.
 func ScoreCandidate(in ScoreInput) ScoreResult {
@@ -49,7 +51,12 @@ func ScoreCandidate(in ScoreInput) ScoreResult {
 	platforms := normalisePlatforms(in.Platforms)
 	score, recommendation := scoreAndRecommend(platforms)
 
-	if in.EvidenceKind == EvidenceAnnouncementPendingAPI {
+	if strings.EqualFold(in.MarketSurface, "spot") {
+		recommendation = RecommendationRecordOnly
+		if in.EvidenceKind == EvidenceAnnouncementAndAPI || len(platforms) >= 2 {
+			recommendation = RecommendationWatch
+		}
+	} else if in.EvidenceKind == EvidenceAnnouncementPendingAPI {
 		recommendation = RecommendationPreAssessment
 	}
 

@@ -54,6 +54,9 @@ func TestFetchBitgetAnnouncementsReshapesV2Envelope(t *testing.T) {
 	if !strings.Contains(gotQuery, "annType=coin_listings") || !strings.Contains(gotQuery, "language=en_US") {
 		t.Fatalf("query must request coin_listings + en_US, got %q", gotQuery)
 	}
+	if !strings.Contains(gotQuery, "limit=20") {
+		t.Fatalf("query must request a wider recent-listing window, got %q", gotQuery)
+	}
 	if len(got) != 2 {
 		t.Fatalf("want 2 rows, got %d", len(got))
 	}

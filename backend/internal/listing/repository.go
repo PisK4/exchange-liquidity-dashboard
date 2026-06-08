@@ -375,6 +375,9 @@ func buildAnnouncementPayload(announcementID int64, externalID string, sym annSy
 	if sym.ListingTimeTS != nil {
 		payload["listing_time_ts"] = sym.ListingTimeTS.UTC().Format(time.RFC3339)
 	}
+	if sym.SourceModule != "" {
+		payload["source_module"] = sym.SourceModule
+	}
 	b, _ := json.Marshal(payload)
 	return b
 }

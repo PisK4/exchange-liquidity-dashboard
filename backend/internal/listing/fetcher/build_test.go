@@ -18,8 +18,8 @@ func TestBuildListingSourcesAssemblesFullDefaultRoster(t *testing.T) {
 	if len(got.Instrument) != 15 {
 		t.Fatalf("want 15 instrument sources, got %d", len(got.Instrument))
 	}
-	if len(got.Announcement) != 3 {
-		t.Fatalf("want 3 announcement sources, got %d", len(got.Announcement))
+	if len(got.Announcement) != 4 {
+		t.Fatalf("want 4 announcement sources, got %d", len(got.Announcement))
 	}
 	wantInstr := map[string][]string{
 		"binance":     {"usdm_futures"},
@@ -55,7 +55,7 @@ func TestBuildListingSourcesAssemblesFullDefaultRoster(t *testing.T) {
 			t.Fatalf("%s/%s missing source key/url", src.Platform, src.MarketType)
 		}
 	}
-	wantAnn := map[string]bool{"bybit": true, "bitget": true, "binance": true}
+	wantAnn := map[string]bool{"bybit": true, "bitget": true, "binance": true, "hyperliquid": true}
 	for _, src := range got.Announcement {
 		if !wantAnn[src.Platform] {
 			t.Fatalf("unexpected announcement source %s", src.Platform)
@@ -76,7 +76,7 @@ func TestBuildListingSourcesSkipsDisabledSubsystems(t *testing.T) {
 	if len(got.Instrument) != 0 {
 		t.Fatalf("instrument subsystem disabled but got %d sources", len(got.Instrument))
 	}
-	if len(got.Announcement) != 3 {
+	if len(got.Announcement) != 4 {
 		t.Fatalf("announcement subsystem must still be enabled, got %d", len(got.Announcement))
 	}
 }
@@ -92,8 +92,8 @@ func TestBuildListingSourcesSkipsDisabledPolls(t *testing.T) {
 	if len(got.Instrument) != 14 {
 		t.Fatalf("want 14 instrument sources after disabling one, got %d", len(got.Instrument))
 	}
-	if len(got.Announcement) != 2 {
-		t.Fatalf("want 2 announcement sources after disable, got %d", len(got.Announcement))
+	if len(got.Announcement) != 3 {
+		t.Fatalf("want 3 announcement sources after disable, got %d", len(got.Announcement))
 	}
 }
 

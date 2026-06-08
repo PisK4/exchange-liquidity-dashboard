@@ -45,6 +45,7 @@ func ParseBinanceCMSAnnouncement(raw json.RawMessage) (ParsedAnnouncement, error
 		Description:     p.Body,
 		Language:        p.Language,
 		ParseConfidence: confidence,
+		SignalSubtype:   subtype,
 		RawPayloadJSON:  append(json.RawMessage(nil), raw...),
 		RawPayloadHash:  computeHash(raw),
 	}
