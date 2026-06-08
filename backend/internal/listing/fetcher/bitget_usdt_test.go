@@ -2,10 +2,13 @@ package fetcher
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 func TestFetchBitgetUSDTFuturesDecodesDataEnvelope(t *testing.T) {
@@ -17,8 +20,8 @@ func TestFetchBitgetUSDTFuturesDecodesDataEnvelope(t *testing.T) {
 			"code":"00000",
 			"msg":"success",
 			"data":[
-				{"symbol":"ABCUSDT","baseCoin":"ABC","quoteCoin":"USDT","symbolStatus":"normal","openTime":"1893456000000","isRwa":false},
-				{"symbol":"TSLAUSDT","baseCoin":"TSLA","quoteCoin":"USDT","symbolStatus":"normal","openTime":"1893456000000","isRwa":true}
+				{"symbol":"ABCUSDT","baseCoin":"ABC","quoteCoin":"USDT","symbolStatus":"normal","openTime":"1893456000000","isRwa":"NO"},
+				{"symbol":"TSLAUSDT","baseCoin":"TSLA","quoteCoin":"USDT","symbolStatus":"normal","openTime":"1893456000000","isRwa":"YES"}
 			]
 		}`))
 	}))
@@ -57,5 +60,22 @@ func TestFetchBitgetUSDTFuturesSurfacesNonZeroCode(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "40404") {
 		t.Fatalf("error must include code, got %v", err)
+	}
+}
+
+func TestFetchBitgetUSDTFuturesAllNormalizeFailuresSurfaceSchemaDrift(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"code":"00000","data":[{"baseCoin":"BAD","quoteCoin":"USDT","symbolStatus":"normal"}]}`))
+	}))
+	defer srv.Close()
+
+	fetch := FetchBitgetUSDTFutures(HTTPDeps{Client: srv.Client()}, srv.URL)
+	_, err := fetch(context.Background())
+	if err == nil {
+		t.Fatalf("expected schema drift when every raw row fails normalization")
+	}
+	var drift *instrument.SchemaDriftError
+	if !errors.As(err, &drift) {
+		t.Fatalf("expected SchemaDriftError, got %T %v", err, err)
 	}
 }

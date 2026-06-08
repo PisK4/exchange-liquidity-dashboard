@@ -50,12 +50,19 @@ func FetchBitgetUSDTFutures(deps HTTPDeps, baseURL string) func(ctx context.Cont
 			return nil, fmt.Errorf("bitget usdt-futures: code=%s msg=%q", envelope.Code, envelope.Msg)
 		}
 		out := make([]instrument.NormalizedInstrument, 0, len(envelope.Data))
+		var normalizeErrs []string
 		for _, row := range envelope.Data {
 			n, err := instrument.NormalizeBitgetUSDTFutures(row)
 			if err != nil {
+				if len(normalizeErrs) < 3 {
+					normalizeErrs = append(normalizeErrs, err.Error())
+				}
 				continue
 			}
 			out = append(out, n)
+		}
+		if len(envelope.Data) > 0 && len(out) == 0 {
+			return nil, &instrument.SchemaDriftError{Platform: "bitget", Message: fmt.Sprintf("all %d usdt-futures rows failed normalization: %s", len(envelope.Data), strings.Join(normalizeErrs, "; "))}
 		}
 		return out, nil
 	}

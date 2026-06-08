@@ -74,8 +74,22 @@ func TestBitgetUSDTFuturesNormalizerActive(t *testing.T) {
 	}
 }
 
+func TestBitgetUSDTFuturesNormalizerAcceptsStringIsRWA(t *testing.T) {
+	raw := []byte(`{"symbol":"ABCUSDT","baseCoin":"ABC","quoteCoin":"USDT","symbolStatus":"normal","openTime":"","launchTime":"1893456000000","isRwa":"NO"}`)
+	got, err := NormalizeBitgetUSDTFutures(raw)
+	if err != nil {
+		t.Fatalf("Normalize err = %v", err)
+	}
+	if got.InstrumentKind != "canonical" {
+		t.Fatalf("isRwa=NO must stay canonical, got %+v", got)
+	}
+	if got.ListingTimeTS == nil || got.ListingTimeFieldName != "launchTime" {
+		t.Fatalf("launchTime fallback not applied: %+v", got)
+	}
+}
+
 func TestBitgetUSDTFuturesRWAIsNotCanonical(t *testing.T) {
-	raw := []byte(`{"symbol":"TSLAUSDT","baseCoin":"TSLA","quoteCoin":"USDT","symbolStatus":"normal","openTime":"1893456000000","isRwa":true}`)
+	raw := []byte(`{"symbol":"TSLAUSDT","baseCoin":"TSLA","quoteCoin":"USDT","symbolStatus":"normal","openTime":"1893456000000","isRwa":"YES"}`)
 	got, err := NormalizeBitgetUSDTFutures(raw)
 	if err != nil {
 		t.Fatalf("Normalize err = %v", err)

@@ -178,6 +178,65 @@ func TestRunInstrumentPollWarmEmitsNewSymbolForFreshInstrument(t *testing.T) {
 	}
 }
 
+func TestRunInstrumentPollBybitLinearFuturesBaselineEmitsNewSymbol(t *testing.T) {
+	now := time.Date(2026, 6, 8, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM t_listing_instrument_snapshot")).
+		WithArgs("bybit", "linear_futures").
+		WillReturnRows(sqlmock.NewRows([]string{"present"}).AddRow(int64(1)))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, platform, market_type, api_symbol")).
+		WithArgs("bybit", "linear_futures", "NEWUSDT").
+		WillReturnRows(sqlmock.NewRows(instSnapshotCols))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_signal_observation")).
+		WillReturnResult(sqlmock.NewResult(201, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_instrument_snapshot")).
+		WillReturnResult(sqlmock.NewResult(21, 1))
+
+	src := InstrumentSource{
+		Platform:   "bybit",
+		MarketType: "linear_futures",
+		SourceKey:  "bybit/linear",
+		SourceURL:  "https://api.bybit.com/v5/market/instruments-info",
+		Fetch: func(ctx context.Context) ([]instrument.NormalizedInstrument, error) {
+			return []instrument.NormalizedInstrument{{
+				Platform:         "bybit",
+				MarketType:       "linear_futures",
+				APISymbol:        "NEWUSDT",
+				CanonicalSymbol:  "NEW",
+				BaseAsset:        "NEW",
+				QuoteAsset:       "USDT",
+				SettleAsset:      "USDT",
+				MarketSurface:    "perp",
+				InstrumentKind:   "canonical",
+				ContractType:     "LinearPerpetual",
+				StatusRaw:        "PreLaunch",
+				StatusNormalized: "pre_listing",
+				StatusFieldName:  "status",
+				RawJSON:          json.RawMessage(`{"symbol":"NEWUSDT"}`),
+				StableHash:       "hash-new-bybit",
+			}}, nil
+		},
+	}
+	res, err := RunInstrumentPoll(context.Background(), repo, src, InstrumentPollDeps{Now: func() time.Time { return now }})
+	if err != nil {
+		t.Fatalf("RunInstrumentPoll err = %v", err)
+	}
+	if res.Baseline {
+		t.Fatalf("bybit linear_futures should be warm when snapshots exist")
+	}
+	if res.SignalsEmitted != 1 || res.DiffSubtypes["new_symbol"] != 1 {
+		t.Fatalf("want one new_symbol signal, got %+v", res)
+	}
+	if res.SnapshotsUpserted != 1 {
+		t.Fatalf("SnapshotsUpserted = %d, want 1", res.SnapshotsUpserted)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 // TestRunInstrumentPollSurfacesFetchError verifies that a Fetch
 // failure bubbles up so the source-health wrapper (Phase 1.3) can
 // account for it; the driver itself MUST NOT touch the snapshot table

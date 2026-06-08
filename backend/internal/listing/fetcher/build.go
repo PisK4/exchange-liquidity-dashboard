@@ -78,6 +78,11 @@ func buildInstrumentSource(poll config.ListingSourcePollConfig, deps HTTPDeps) (
 		src.SourceURL = BinanceUSDMExchangeInfoURL
 		src.Fetch = FetchBinanceUSDM(deps, BinanceUSDMExchangeInfoURL)
 	case "bybit/linear":
+		// Bybit's config/source-health key remains bybit/linear for
+		// compatibility, but the normalized snapshot table stores this
+		// surface as linear_futures. Keep the poll baseline key aligned
+		// with snapshots so warm-path instrument_diff can fire.
+		src.MarketType = "linear_futures"
 		src.SourceURL = BybitLinearInstrumentsURL
 		src.Fetch = FetchBybitLinear(deps, BybitLinearInstrumentsURL)
 	case "okx/swap":

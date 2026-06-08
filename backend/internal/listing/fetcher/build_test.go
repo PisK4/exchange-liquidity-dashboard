@@ -23,7 +23,7 @@ func TestBuildListingSourcesAssemblesFullDefaultRoster(t *testing.T) {
 	}
 	wantInstr := map[string][]string{
 		"binance":     {"usdm_futures"},
-		"bybit":       {"linear"},
+		"bybit":       {"linear_futures"},
 		"okx":         {"swap"},
 		"bitget":      {"usdt_futures"},
 		"mexc":        {"contract"},
@@ -53,6 +53,9 @@ func TestBuildListingSourcesAssemblesFullDefaultRoster(t *testing.T) {
 		}
 		if src.SourceKey == "" || src.SourceURL == "" {
 			t.Fatalf("%s/%s missing source key/url", src.Platform, src.MarketType)
+		}
+		if src.Platform == "bybit" && src.SourceKey != "bybit/linear" {
+			t.Fatalf("bybit source key must stay backward-compatible, got %q", src.SourceKey)
 		}
 	}
 	wantAnn := map[string]bool{"bybit": true, "bitget": true, "binance": true, "hyperliquid": true}
