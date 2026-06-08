@@ -40,9 +40,12 @@ the indexed feature contracts, runbooks, upstream PRDs, or code.
    not production confidence.
 6. **Keep metric invariants.** MEXC `0.4` and Gate `0.5` discounts apply only
    to volume/share, never to depth, spread, or slippage.
-7. **Keep live-data invariants.** EdgeX Perp V1 BTC/ETH/SOL and Lighter
-   BTC/ETH/SOL must use real data paths; Lighter 2% depth comes from the WS
-   local book, not a REST fallback marked complete.
+7. **Keep live-data invariants.** EdgeX Perp V1 BTC/ETH/SOL, EdgeX Perp V2
+   BTC/ETH/SOL, and Lighter BTC/ETH/SOL must use real data paths. EdgeX Perp
+   V2 depth should surface as `collector=ws_orderbook` and
+   `depth_source=ws_local_book` when its WS local book is healthy; REST depth is
+   only an explicit bounded fallback. Lighter 2% depth comes from the WS local
+   book, not a REST fallback marked complete.
 8. **Keep module boundaries explicit.** Do not mix Liquidity, Listing, and
    Activity semantics unless the shared contract/data flow is documented.
 9. **Contract docs must be trackable.** If `docs/feat/*.md` is referenced as an
@@ -57,7 +60,7 @@ the indexed feature contracts, runbooks, upstream PRDs, or code.
 |---|---|---|
 | System naming / module boundaries | `../../architecture/方案设计/EdgeX运营/README.md` | `README.md`, this file |
 | Liquidity metrics / API / UI | `docs/feat/README.md` | `../../architecture/方案设计/EdgeX运营/需求梳理/README.md`, `13-*统计口径闭环.md` |
-| Exchange adapters / depth / slippage / proxy | `docs/feat/adapter-four-tier-depth.md`, `docs/feat/native-exchange-proxy.md` | `../../architecture/方案设计/EdgeX运营/盘口数据精炼/README.md` and the relevant platform doc |
+| Exchange adapters / depth / slippage / proxy | `docs/feat/adapter-four-tier-depth.md`, `docs/feat/native-exchange-proxy.md`, `docs/feat/edgex-perps-v2-liquidity-adapter.md` | `../../architecture/方案设计/EdgeX运营/盘口数据精炼/README.md` and the relevant platform doc |
 | Top30 / share / history | `backend/docs/top30-strategy.md` | `docs/feat/top30-share-history-backfill.md`, `docs/feat/liquidity-24h-share-cg-fallback.md` |
 | Listing Agent / Lark / callbacks | `docs/feat/listing-agent-*.md` | `../../architecture/方案设计/EdgeX运营/Listing/README.md` |
 | Activity Agent / campaign sources | `../../architecture/方案设计/EdgeX运营/活动/README.md` | `../../architecture/方案设计/EdgeX运营/活动/运营活动-agent-通用数据模型与-source-health.md`, `backend/internal/activity/*` |

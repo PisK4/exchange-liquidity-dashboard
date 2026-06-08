@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -487,6 +488,7 @@ func (a RESTAdapter) fetchEdgeXOrderBook(ctx context.Context, sub domain.SymbolS
 		if wsErr == nil {
 			return bids, asks, "edgeX-perp-v2-ws-depth-200", domain.SourceWSLocalBook, a.EdgeXPerpV2.SourceEndpoint(), nil
 		}
+		log.Printf("edgeX perp v2 ws fallback to REST: display_symbol=%s contract_id=%s market_surface=%s lineage=%s reason=%v", sub.DisplaySymbol, contractID, sub.MarketSurface, sub.Lineage, wsErr)
 	}
 	bids, asks, err := a.fetchEdgeX(ctx, sub)
 	if err != nil {

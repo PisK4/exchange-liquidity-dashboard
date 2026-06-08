@@ -313,7 +313,7 @@ Diagnosis order:
 
    ```
    curl -fsS http://127.0.0.1:8080/api/collection-status \
-     | jq '.rows[] | select(.platform=="edgeX" and .market_surface=="perp_v2") | {collector, display_platform, market_surface, lineage, contract_id, source_endpoint, status, error}'
+     | jq '.rows[] | select(.platform=="edgeX" and .market_surface=="perp_v2") | {collector, display_platform, market_surface, lineage, contract_id, depth_source, source_id, source_endpoint, status, error}'
    ```
 
    `collector=ws_orderbook`, `depth_source=ws_local_book`, and
@@ -350,15 +350,20 @@ Diagnosis order:
    keys must include `market_surface` / `lineage` or an equivalent surface
    discriminator.
 
-5. If WS V2 is enabled later, diagnose it separately from REST. The V2 WS host
+5. Diagnose the active WS local-book path separately from REST. The V2 WS host
    uses a V1 path by design:
 
    ```text
    wss://edgex-quote-prod-v2.edgex.exchange/api/v1/public/ws
    ```
 
-   WS failures may fall back to REST lower-bound snapshots, but must not mark
-   incomplete depth as strict-complete.
+   If V2 rows keep reporting `rest_orderbook` / `rest_snapshot` while
+   `Runtime.ws_providers.edgeX_perp_v2.enabled=true` and the WS endpoint is
+   reachable, treat it as a WS local-book regression. Check the V2 WS parser
+   for real `quote-event.content` frames, sequence gaps, `stale_after`, proxy
+   connectivity, and `edgeX perp v2 ws fallback to REST` logs before accepting
+   REST as the steady state. WS failures may fall back to REST lower-bound
+   snapshots, but must not mark incomplete depth as strict-complete.
 
 ### 3.8 CoinGecko reports HTTP 429 rate limit
 

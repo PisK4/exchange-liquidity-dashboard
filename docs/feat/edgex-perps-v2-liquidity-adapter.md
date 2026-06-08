@@ -2,8 +2,8 @@
 
 ## Status
 
-Implementation contract for adding EdgeX Perps V2 as a surface-aware Liquidity
-Dashboard data path. This contract complements the upstream research note at
+Current implementation contract for the active EdgeX Perps V2 surface-aware
+Liquidity Dashboard data path. This contract complements the upstream research note at
 `../../architecture/方案设计/EdgeX运营/盘口数据精炼/EdgeX-Perps-V2-盘口深度采集方案.md`.
 
 ## Goals
@@ -66,10 +66,19 @@ The legacy `edgex_*` KPI fields may remain during migration, but their meaning
 must be documented as either the primary EdgeX surface or an aggregate EdgeX
 view. They must not silently switch between V1 and V2.
 
-## V2 REST MVP
+## REST metadata and fallback path
 
-Use REST first for the production MVP. Pilot symbols are BTCUSDC, ETHUSDC, and
-SOLUSDC unless a later contract names a different pilot set.
+Pilot symbols are BTCUSDC, ETHUSDC, and SOLUSDC unless a later contract names a
+different pilot set. Current V2 orderbook depth prefers the WebSocket local
+book when healthy; REST remains the bounded fallback for startup, stale,
+sequence-gap, or upstream WS failure cases.
+
+Current V2 orderbook source priority:
+
+| Priority | Collector | Depth source | Source ID | Meaning |
+|---|---|---|---|---|
+| 1 | `ws_orderbook` | `ws_local_book` | `edgeX-perp-v2-ws-depth-200` | Healthy V2 local book from WebSocket. |
+| 2 | `rest_orderbook` | `rest_snapshot` | `edgeX-perp-v2-rest-depth-200` | Explicit bounded REST fallback; never fabricated completeness. |
 
 | Need | V2 source |
 |---|---|
@@ -80,7 +89,7 @@ SOLUSDC unless a later contract names a different pilot set.
 Depth responses use `data[0].bids` / `data[0].asks`. Ticker responses should
 prefer `value` as quote-notional USD/USDC volume; `size` is base volume.
 
-REST source metadata:
+REST fallback source metadata:
 
 ```text
 depth_source = rest_snapshot
@@ -162,6 +171,11 @@ Expected subscriptions:
 {"type":"subscribe","channel":"depth.30000001.200"}
 ```
 
+Real depth frames are delivered as `quote-event` messages whose `dataType` and
+`data` fields are nested under `content`. The parser must support both this
+`quote-event.content` wrapper and the legacy top-level `dataType` / `data`
+shape so tests and local replay fixtures remain compatible.
+
 WS depth source metadata:
 
 ```text
@@ -193,7 +207,9 @@ Runbook and collection status should make these states diagnosable:
 - V2 row missing.
 - V1/V2 surface collision.
 - V2 history stuck in `insufficient_history` too long.
-- V2 WS stale, sequence reset, REST fallback, or rebuild loop.
+- V2 WS stale, sequence reset, REST fallback, parser regression, or rebuild
+  loop. REST fallback logs should include the `edgeX perp v2 ws fallback to
+  REST` prefix and the concrete snapshot failure reason.
 
 Alerts attributed to V2 must include `platform=edgeX`, `display_platform=edgeX
 V2`, `market_surface=perp_v2`, `lineage=edgeX-perp-v2`, `depth_status`,

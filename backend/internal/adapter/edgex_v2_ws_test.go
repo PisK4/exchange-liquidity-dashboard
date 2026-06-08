@@ -29,6 +29,41 @@ func TestEdgeXPerpV2WSProviderSnapshotUpdateAndDelete(t *testing.T) {
 	}
 }
 
+func TestEdgeXPerpV2WSProviderHandlesQuoteEventContentWrapper(t *testing.T) {
+	provider := NewEdgeXPerpV2WSProvider("", time.Minute)
+	for _, ack := range [][]byte{
+		[]byte(`{"sid":"abc","type":"connected"}`),
+		[]byte(`{"type":"subscribed","channel":"depth.30000001.200","request":"{\"type\":\"subscribe\",\"channel\":\"depth.30000001.200\"}"}`),
+	} {
+		if err := provider.handleMessage(ack); err != nil {
+			t.Fatalf("ack err=%v", err)
+		}
+	}
+	if _, _, _, err := provider.Snapshot("30000001"); err == nil || !strings.Contains(err.Error(), "not ready") {
+		t.Fatalf("ack messages should not create a ready book, got %v", err)
+	}
+
+	snapshot := []byte(`{"type":"quote-event","channel":"depth.30000001.200","content":{"channel":"depth.30000001.200","dataType":"Snapshot","data":[{"startVersion":"366178379","endVersion":"366178399","level":200,"contractId":"30000001","contractName":"BTCUSDC","bids":[{"price":"62780.1","size":"1.5"},{"price":"62779.0","size":"2.0"}],"asks":[{"price":"62785.2","size":"2.449"},{"price":"62786.5","size":"2.120"}]}]}}`)
+	if err := provider.handleMessage(snapshot); err != nil {
+		t.Fatalf("wrapped snapshot err=%v", err)
+	}
+	update := []byte(`{"type":"quote-event","channel":"depth.30000001.200","content":{"channel":"depth.30000001.200","dataType":"changed","data":[{"startVersion":"366178400","endVersion":"366178401","level":200,"contractId":"30000001","contractName":"BTCUSDC","bids":[{"price":"62780.1","size":"0"},{"price":"62781.0","size":"3.25"}],"asks":[{"price":"62786.5","size":"0"},{"price":"62787.0","size":"4.5"}]}]}}`)
+	if err := provider.handleMessage(update); err != nil {
+		t.Fatalf("wrapped update err=%v", err)
+	}
+
+	bids, asks, _, err := provider.Snapshot("30000001")
+	if err != nil {
+		t.Fatalf("Snapshot err=%v", err)
+	}
+	if len(bids) != 2 || bids[0].Price != 62781.0 || bids[0].Size != 3.25 || bids[1].Price != 62779.0 {
+		t.Fatalf("unexpected wrapped bids after update/delete: %+v", bids)
+	}
+	if len(asks) != 2 || asks[0].Price != 62785.2 || asks[1].Price != 62787.0 || asks[1].Size != 4.5 {
+		t.Fatalf("unexpected wrapped asks after update/delete: %+v", asks)
+	}
+}
+
 func TestEdgeXPerpV2WSProviderDetectsVersionGapAndRebuildsOnSnapshot(t *testing.T) {
 	provider := NewEdgeXPerpV2WSProvider("", time.Minute)
 	if err := provider.handleMessage([]byte(`{"channel":"depth.30000001.200","dataType":"Snapshot","data":[{"contractId":"30000001","startVersion":"10","endVersion":"10","bids":[{"price":"100","size":"1"}],"asks":[{"price":"101","size":"1"}]}]}`)); err != nil {

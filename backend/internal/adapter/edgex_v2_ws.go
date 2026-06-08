@@ -52,6 +52,7 @@ type edgeXPerpV2WSMessage struct {
 	Timestamp int64           `json:"timestamp"`
 	TS        int64           `json:"ts"`
 	Data      json.RawMessage `json:"data"`
+	Content   json.RawMessage `json:"content"`
 }
 
 type edgeXPerpV2WSDepth struct {
@@ -200,6 +201,7 @@ func (p *EdgeXPerpV2WSProvider) handleMessage(data []byte) error {
 	if err := json.Unmarshal(data, &msg); err != nil {
 		return nil
 	}
+	msg = edgeXPerpV2NormalizeWSMessage(msg)
 	contractID, ok := edgeXPerpV2ContractIDFromChannel(msg.Channel)
 	if !ok {
 		return nil
@@ -223,6 +225,40 @@ func (p *EdgeXPerpV2WSProvider) handleMessage(data []byte) error {
 		}
 	}
 	return nil
+}
+
+func edgeXPerpV2NormalizeWSMessage(msg edgeXPerpV2WSMessage) edgeXPerpV2WSMessage {
+	if !edgeXPerpV2RawHasValue(msg.Content) {
+		return msg
+	}
+	var content edgeXPerpV2WSMessage
+	if err := json.Unmarshal(msg.Content, &content); err != nil {
+		return msg
+	}
+	if content.Type != "" {
+		msg.Type = content.Type
+	}
+	if content.Channel != "" {
+		msg.Channel = content.Channel
+	}
+	if content.DataType != "" {
+		msg.DataType = content.DataType
+	}
+	if content.Timestamp != 0 {
+		msg.Timestamp = content.Timestamp
+	}
+	if content.TS != 0 {
+		msg.TS = content.TS
+	}
+	if edgeXPerpV2RawHasValue(content.Data) {
+		msg.Data = content.Data
+	}
+	return msg
+}
+
+func edgeXPerpV2RawHasValue(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	return trimmed != "" && trimmed != "null"
 }
 
 func (p *EdgeXPerpV2WSProvider) applyEdgeXPerpV2Snapshot(contractID string, depth edgeXPerpV2WSDepth, ts int64, fallbackTS int64) {

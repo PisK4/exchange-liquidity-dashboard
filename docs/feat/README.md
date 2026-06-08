@@ -27,7 +27,11 @@ between upstream product/design docs and code.
   surfaced as `unsupported`, `error`, `stale`, or `insufficient_history`.
 - MEXC `0.4` and Gate `0.5` discounts apply only to volume/share metrics, not
   depth, spread, or slippage.
-- EdgeX Perp V1 BTC/ETH/SOL and Lighter BTC/ETH/SOL are live-data invariants.
+- EdgeX Perp V1 BTC/ETH/SOL, EdgeX Perp V2 BTC/ETH/SOL, and Lighter
+  BTC/ETH/SOL are live-data invariants. Healthy EdgeX Perp V2 orderbook depth
+  must surface as `collector=ws_orderbook` / `depth_source=ws_local_book`; REST
+  `rest_orderbook` / `rest_snapshot` is an explicit bounded fallback, not a
+  fabricated complete source.
 - CoinGecko is a finite-budget external source: all backend CoinGecko calls use
   the shared process-local governance contract and must degrade via cooldown,
   stale cache, or explicit errors instead of retry storms.
