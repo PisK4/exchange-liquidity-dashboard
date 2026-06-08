@@ -475,7 +475,66 @@ For Docker/Compose E2E, run the web check with the Compose port:
 cd web && PLAYWRIGHT_BASE_URL=http://127.0.0.1:3001 npm run test:e2e
 ```
 
-## 5.1 Listing Agent checks
+## 5.1 Activity Agent checks
+
+Activity ingestion wakes on the scheduler interval, but each source obeys its
+own poll interval. The tracked default Activity poll interval is 30 minutes for
+all configured sources, including Lighter. Confirm the effective runtime state
+from MySQL rather than guessing from the config file baked into a Docker image:
+
+```
+docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -e \
+  "SELECT platform, source_group, source_status, last_http_status,
+          COALESCE(last_error_kind,'') AS last_error_kind,
+          poll_interval_seconds,
+          JSON_UNQUOTE(JSON_EXTRACT(source_context_json,'$.attempt_count')) AS attempt_count,
+          JSON_UNQUOTE(JSON_EXTRACT(source_context_json,'$.elapsed_ms')) AS elapsed_ms,
+          JSON_UNQUOTE(JSON_EXTRACT(source_context_json,'$.proxy_used')) AS proxy_used,
+          TIMESTAMPDIFF(MINUTE,last_checked_at,UTC_TIMESTAMP()) AS checked_min_ago
+     FROM t_activity_source_state
+    ORDER BY platform, source_group;"
+```
+
+Expected healthy shape:
+
+- `source_status=ok` and `last_http_status=200` for reachable sources.
+- `poll_interval_seconds=1800` for the default 30 minute cadence.
+- `source_context_json` carries fetch diagnostics such as `attempt_count`,
+  `elapsed_ms`, `proxy_used`, `source_url`, and `fetch_mode`. Fetch failures
+  also set `last_error_message` so Binance/BingX-style intermittent network
+  issues can be separated from parser or delivery failures.
+
+The ingestion path intentionally suppresses repeated raw/event writes when a
+successful 2xx fetch returns the same `content_hash` as the previous successful
+sample. In that case the worker updates `t_activity_source_state` only and the
+run summary increments `UnchangedSources`; it does not insert a new
+`t_activity_raw_evidence` row, parse the payload, or upsert
+`t_activity_event`. Non-2xx responses are still persisted as raw evidence for
+diagnostics even when the content hash is unchanged.
+
+Useful log filter:
+
+```
+docker logs --since=10m deploy-backend-1 2>&1 \
+  | rg -i "activity|fetch_error|parser_error|delivery.*failed|panic|fatal"
+```
+
+Useful delivery backlog check:
+
+```
+docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -e \
+  "SELECT target_channel, status, COUNT(*) AS cnt
+     FROM t_activity_delivery_outbox
+    GROUP BY target_channel,status
+    ORDER BY target_channel,status;"
+```
+
+Only `sent` rows means delivery has no pending/retry backlog. Pending or retry
+rows should be diagnosed together with `t_activity_delivery_attempt`, backend
+logs, and the Lark webhook response body; a webhook 200 alone is not enough
+evidence that delivery succeeded end-to-end.
+
+## 5.2 Listing Agent checks
 
 Use these checks when `/api/listing/*`, Top30 hot-gap cards, divergence cards,
 liquidity alerts, or decision callbacks are suspected:

@@ -12,11 +12,11 @@ func TestDefaultActivityAgentSeedsNinePlatformSources(t *testing.T) {
 	if !aa.Enabled {
 		t.Fatalf("default activity_agent.enabled=false")
 	}
-	if aa.DefaultPollInterval != time.Hour {
-		t.Fatalf("default poll interval=%s want 1h", aa.DefaultPollInterval)
+	if aa.DefaultPollInterval != 30*time.Minute {
+		t.Fatalf("default poll interval=%s want 30m", aa.DefaultPollInterval)
 	}
-	if aa.Collection.DefaultPollInterval != time.Hour {
-		t.Fatalf("default collection poll interval=%s want 1h", aa.Collection.DefaultPollInterval)
+	if aa.Collection.DefaultPollInterval != 30*time.Minute {
+		t.Fatalf("default collection poll interval=%s want 30m", aa.Collection.DefaultPollInterval)
 	}
 	if aa.Scheduler.IngestionInterval != 5*time.Minute || aa.Scheduler.ProducerInterval != time.Minute || aa.Scheduler.DeliveryInterval != 30*time.Second {
 		t.Fatalf("scheduler defaults=%+v", aa.Scheduler)
@@ -30,7 +30,7 @@ func TestDefaultActivityAgentSeedsNinePlatformSources(t *testing.T) {
 	seen := map[string]bool{}
 	for _, src := range aa.Sources {
 		seen[src.Platform] = true
-		if !src.Enabled || !src.AutoPushEnabled || src.PollInterval <= 0 {
+		if !src.Enabled || !src.AutoPushEnabled || src.PollInterval != 30*time.Minute {
 			t.Fatalf("bad default source %+v", src)
 		}
 	}

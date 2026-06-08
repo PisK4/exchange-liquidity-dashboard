@@ -110,7 +110,7 @@ func TestRepositoryLoadActivitySourceState(t *testing.T) {
 			int64(9), "gate", "launchpool_project_list", "announcement_api", "https://gate.example/launchpool",
 			"gate|launchpool_project_list|utls_proxy_json", "utls_proxy_json", "api_json",
 			1, 600, 1, 1, 0, 0, 0, SourceStatusDegraded, 429, "http_429",
-			"schema-hash", "content-hash", 3, 4, []byte(`{"region":"sg"}`), disabledUntil, checkedAt, successAt, now,
+			"schema-hash", "content-hash", 3, 4, []byte(`{"last_error_message":"EOF","attempt_count":3,"proxy_used":true}`), disabledUntil, checkedAt, successAt, now,
 		))
 	state, ok, err := repo.LoadActivitySourceState(context.Background(), "gate|launchpool_project_list|utls_proxy_json")
 	if err != nil {
@@ -130,6 +130,13 @@ func TestRepositoryLoadActivitySourceState(t *testing.T) {
 	}
 	if state.LastSuccessAt == nil || !state.LastSuccessAt.Equal(successAt) {
 		t.Fatalf("LastSuccessAt=%v want %s", state.LastSuccessAt, successAt)
+	}
+	var sourceContext map[string]any
+	if err := json.Unmarshal(state.SourceContextJSON, &sourceContext); err != nil {
+		t.Fatalf("SourceContextJSON err=%v json=%s", err, state.SourceContextJSON)
+	}
+	if sourceContext["last_error_message"] != "EOF" || sourceContext["attempt_count"] != float64(3) || sourceContext["proxy_used"] != true {
+		t.Fatalf("sourceContext=%+v", sourceContext)
 	}
 
 	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_source_state")).

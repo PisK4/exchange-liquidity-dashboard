@@ -422,7 +422,7 @@ Runtime:
   # Operations Activity Radar.
   activity_agent:
     enabled: true
-    default_poll_interval: 1h
+    default_poll_interval: 30m
     scheduler:
       # Ingestion wakes up frequently, but each source still obeys its
       # own collection.poll_interval below. Producer/delivery run faster
@@ -431,7 +431,7 @@ Runtime:
       producer_interval: 1m
       delivery_interval: 30s
     collection:
-      default_poll_interval: 1h
+      default_poll_interval: 30m
       default_timeout: 15s
       source_proxy: ""
     worker_lease_ttl: 2m
@@ -462,7 +462,7 @@ Runtime:
         collection:
           enabled: true
           fetch_mode: http_direct
-          poll_interval: 1h
+          poll_interval: 30m
         delivery:
           enabled: true
           auto_push_enabled: true
@@ -473,7 +473,7 @@ Runtime:
         collection:
           enabled: true
           fetch_mode: http_direct
-          poll_interval: 1h
+          poll_interval: 30m
         delivery:
           enabled: true
           auto_push_enabled: true
@@ -486,7 +486,7 @@ Runtime:
         collection:
           enabled: true
           fetch_mode: http_direct_json
-          poll_interval: 1h
+          poll_interval: 30m
         delivery:
           enabled: true
           auto_push_enabled: true
@@ -497,7 +497,7 @@ Runtime:
         collection:
           enabled: true
           fetch_mode: utls_proxy_json
-          poll_interval: 1h
+          poll_interval: 30m
         delivery:
           enabled: true
           auto_push_enabled: true
@@ -509,7 +509,7 @@ Runtime:
         collection:
           enabled: true
           fetch_mode: utls_proxy_html
-          poll_interval: 1h
+          poll_interval: 30m
         delivery:
           enabled: true
           auto_push_enabled: true
@@ -521,7 +521,7 @@ Runtime:
         collection:
           enabled: true
           fetch_mode: utls_html
-          poll_interval: 1h
+          poll_interval: 30m
         delivery:
           enabled: true
           auto_push_enabled: true
@@ -533,7 +533,7 @@ Runtime:
         collection:
           enabled: true
           fetch_mode: utls_html
-          poll_interval: 1h
+          poll_interval: 30m
         delivery:
           enabled: true
           auto_push_enabled: true
@@ -545,7 +545,7 @@ Runtime:
         collection:
           enabled: true
           fetch_mode: http_direct_json
-          poll_interval: 1h
+          poll_interval: 30m
         delivery:
           enabled: true
           auto_push_enabled: true
@@ -556,7 +556,7 @@ Runtime:
         collection:
           enabled: true
           fetch_mode: markdown_doc
-          poll_interval: 24h
+          poll_interval: 30m
         delivery:
           enabled: true
           auto_push_enabled: true

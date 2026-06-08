@@ -633,7 +633,11 @@ func buildActivityEngineConfig(cfg config.Config) activity.EngineConfig {
 	if aa.Collection.DefaultTimeout > 0 {
 		fetchTimeout = aa.Collection.DefaultTimeout
 	}
-	activityHTTPFetcher := activityfetcher.NewHTTPFetcher(buildActivityHTTPClient(cfg), fetchTimeout)
+	activityHTTPFetcher := activityfetcher.NewHTTPFetcher(
+		buildActivityHTTPClient(cfg),
+		fetchTimeout,
+		activityfetcher.WithProxyUsed(activitySourceProxyURL(cfg) != ""),
+	)
 	return activity.EngineConfig{
 		Enabled:             aa.Enabled,
 		WorkerLeaseTTL:      aa.WorkerLeaseTTL,
@@ -658,16 +662,19 @@ func buildActivityEngineConfig(cfg config.Config) activity.EngineConfig {
 				return activity.FetchResult{}, err
 			}
 			return activity.FetchResult{
-				Platform:    got.Platform,
-				SourceGroup: got.SourceGroup,
-				SourceURL:   got.SourceURL,
-				FetchMode:   got.FetchMode,
-				Payload:     got.Payload,
-				PayloadHash: got.PayloadHash,
-				ContentHash: got.ContentHash,
-				HTTPStatus:  got.HTTPStatus,
-				ContentType: got.ContentType,
-				FetchedAt:   got.FetchedAt,
+				Platform:     got.Platform,
+				SourceGroup:  got.SourceGroup,
+				SourceURL:    got.SourceURL,
+				FetchMode:    got.FetchMode,
+				Payload:      got.Payload,
+				PayloadHash:  got.PayloadHash,
+				ContentHash:  got.ContentHash,
+				HTTPStatus:   got.HTTPStatus,
+				ContentType:  got.ContentType,
+				FetchedAt:    got.FetchedAt,
+				ElapsedMS:    got.ElapsedMS,
+				AttemptCount: got.AttemptCount,
+				ProxyUsed:    got.ProxyUsed,
 			}, nil
 		},
 		Parse: dispatchActivityParser,
@@ -691,6 +698,10 @@ func buildActivityHTTPClient(cfg config.Config) *http.Client {
 	if timeout <= 0 {
 		timeout = 15 * time.Second
 	}
+	return buildHTTPClientWithProxy(timeout, activitySourceProxyURL(cfg))
+}
+
+func activitySourceProxyURL(cfg config.Config) string {
 	proxyURL := strings.TrimSpace(cfg.Runtime.ActivityAgent.Collection.SourceProxy)
 	if proxyURL == "" {
 		proxyURL = strings.TrimSpace(cfg.Runtime.ActivityAgent.SourceProxy)
@@ -698,7 +709,7 @@ func buildActivityHTTPClient(cfg config.Config) *http.Client {
 	if proxyURL == "" {
 		proxyURL = strings.TrimSpace(cfg.Runtime.ExchangeProxy)
 	}
-	return buildHTTPClientWithProxy(timeout, proxyURL)
+	return proxyURL
 }
 
 func buildActivityDeliveryHTTPClient(cfg config.Config) *http.Client {

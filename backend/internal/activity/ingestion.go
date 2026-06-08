@@ -34,16 +34,47 @@ type FetchRequest struct {
 }
 
 type FetchResult struct {
-	Platform    string
-	SourceGroup string
-	SourceURL   string
-	FetchMode   string
-	Payload     []byte
-	PayloadHash string
-	ContentHash string
-	HTTPStatus  int
-	ContentType string
-	FetchedAt   time.Time
+	Platform     string
+	SourceGroup  string
+	SourceURL    string
+	FetchMode    string
+	Payload      []byte
+	PayloadHash  string
+	ContentHash  string
+	HTTPStatus   int
+	ContentType  string
+	FetchedAt    time.Time
+	ElapsedMS    int64
+	AttemptCount int
+	ProxyUsed    bool
+}
+
+type FetchMetadata struct {
+	SourceURL        string
+	FetchMode        string
+	ElapsedMS        int64
+	AttemptCount     int
+	ProxyUsed        bool
+	LastErrorMessage string
+}
+
+type FetchError struct {
+	Err      error
+	Metadata FetchMetadata
+}
+
+func (e *FetchError) Error() string {
+	if e == nil || e.Err == nil {
+		return ""
+	}
+	return e.Err.Error()
+}
+
+func (e *FetchError) Unwrap() error {
+	if e == nil {
+		return nil
+	}
+	return e.Err
 }
 
 type RawDocument struct {
@@ -74,16 +105,17 @@ type IngestionDeps struct {
 }
 
 type IngestionResult struct {
-	Sources        int
-	Fetched        int
-	RawEvidence    int
-	Events         int
-	SourceErrors   int
-	ParserErrors   int
-	SkippedSources int
+	Sources          int
+	Fetched          int
+	RawEvidence      int
+	Events           int
+	SourceErrors     int
+	ParserErrors     int
+	SkippedSources   int
+	UnchangedSources int
 }
 
-const defaultActivitySourcePollInterval = time.Hour
+const defaultActivitySourcePollInterval = 30 * time.Minute
 
 type ActivitySourcePollDecision struct {
 	ShouldPoll bool
@@ -161,6 +193,7 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 		if err != nil {
 			res.SourceErrors++
 			state := buildSourceState(src, now, nil, SourceStatusDegraded, classifyError(err), 0, "")
+			state.SourceContextJSON = fetchErrorSourceContext(src, err)
 			if upErr := store.UpsertActivitySourceState(ctx, state); upErr != nil {
 				return res, upErr
 			}
@@ -175,11 +208,19 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 		if contentHash == "" {
 			contentHash = payloadHash
 		}
-		meta, _ := json.Marshal(map[string]any{
-			"http_status":  fetched.HTTPStatus,
-			"content_type": fetched.ContentType,
-			"payload_hash": payloadHash,
-		})
+		httpStatus := fetched.HTTPStatus
+		if httpStatus >= 200 && httpStatus < 300 && hasState && strings.TrimSpace(state.LastContentHash) != "" && state.LastContentHash == contentHash {
+			res.UnchangedSources++
+			state := buildSourceState(src, now, &httpStatus, SourceStatusOK, "", 0, contentHash)
+			state.SourceContextJSON = fetchResultSourceContext(src, fetched)
+			successAt := now
+			state.LastSuccessAt = &successAt
+			if err := store.UpsertActivitySourceState(ctx, state); err != nil {
+				return res, err
+			}
+			continue
+		}
+		meta, _ := json.Marshal(fetchResultRawMeta(src, fetched, payloadHash))
 		rawID, err := store.UpsertRawEvidence(ctx, RawEvidence{
 			SourceKey:    sourceKey,
 			Platform:     src.Platform,
@@ -196,10 +237,10 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 			return res, err
 		}
 		res.RawEvidence++
-		httpStatus := fetched.HTTPStatus
 		if httpStatus < 200 || httpStatus >= 300 {
 			res.SourceErrors++
 			state := buildSourceState(src, now, &httpStatus, SourceStatusDegraded, fmt.Sprintf("http_%d", httpStatus), 1, contentHash)
+			state.SourceContextJSON = fetchResultSourceContext(src, fetched)
 			if err := store.UpsertActivitySourceState(ctx, state); err != nil {
 				return res, err
 			}
@@ -217,6 +258,7 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 		if err != nil {
 			res.ParserErrors++
 			state := buildSourceState(src, now, &httpStatus, SourceStatusDegraded, "parser_error", 1, contentHash)
+			state.SourceContextJSON = fetchResultSourceContext(src, fetched)
 			if upErr := store.UpsertActivitySourceState(ctx, state); upErr != nil {
 				return res, upErr
 			}
@@ -253,6 +295,7 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 			res.Events++
 		}
 		state = buildSourceState(src, now, &httpStatus, SourceStatusOK, "", 1, contentHash)
+		state.SourceContextJSON = fetchResultSourceContext(src, fetched)
 		state.EventCount = len(events)
 		successAt := now
 		state.LastSuccessAt = &successAt
@@ -348,4 +391,74 @@ func classifyError(err error) string {
 
 func hashBytes(payload []byte) string {
 	return PrepareRawEvidencePayload(string(payload), MaxRawPayloadBytes).Hash
+}
+
+func fetchResultRawMeta(src SourceConfig, fetched FetchResult, payloadHash string) map[string]any {
+	meta := fetchResultMeta(src, fetched)
+	meta["http_status"] = fetched.HTTPStatus
+	meta["content_type"] = fetched.ContentType
+	meta["payload_hash"] = payloadHash
+	return meta
+}
+
+func fetchResultSourceContext(src SourceConfig, fetched FetchResult) json.RawMessage {
+	encoded, _ := json.Marshal(fetchResultMeta(src, fetched))
+	return json.RawMessage(encoded)
+}
+
+func fetchResultMeta(src SourceConfig, fetched FetchResult) map[string]any {
+	return map[string]any{
+		"source_url":    firstNonEmptyString(fetched.SourceURL, src.SourceURL),
+		"fetch_mode":    firstNonEmptyString(fetched.FetchMode, src.FetchMode),
+		"elapsed_ms":    fetched.ElapsedMS,
+		"attempt_count": normalizeAttemptCount(fetched.AttemptCount),
+		"proxy_used":    fetched.ProxyUsed,
+	}
+}
+
+func fetchErrorSourceContext(src SourceConfig, err error) json.RawMessage {
+	metadata := FetchMetadata{
+		SourceURL:        src.SourceURL,
+		FetchMode:        src.FetchMode,
+		AttemptCount:     1,
+		LastErrorMessage: "",
+	}
+	if err != nil {
+		metadata.LastErrorMessage = err.Error()
+	}
+	var fetchErr *FetchError
+	if errors.As(err, &fetchErr) {
+		metadata = fetchErr.Metadata
+		metadata.SourceURL = firstNonEmptyString(metadata.SourceURL, src.SourceURL)
+		metadata.FetchMode = firstNonEmptyString(metadata.FetchMode, src.FetchMode)
+		metadata.AttemptCount = normalizeAttemptCount(metadata.AttemptCount)
+		if metadata.LastErrorMessage == "" && fetchErr.Err != nil {
+			metadata.LastErrorMessage = fetchErr.Err.Error()
+		}
+	}
+	encoded, _ := json.Marshal(map[string]any{
+		"source_url":         metadata.SourceURL,
+		"fetch_mode":         metadata.FetchMode,
+		"elapsed_ms":         metadata.ElapsedMS,
+		"attempt_count":      normalizeAttemptCount(metadata.AttemptCount),
+		"proxy_used":         metadata.ProxyUsed,
+		"last_error_message": metadata.LastErrorMessage,
+	})
+	return json.RawMessage(encoded)
+}
+
+func normalizeAttemptCount(attempts int) int {
+	if attempts <= 0 {
+		return 1
+	}
+	return attempts
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }

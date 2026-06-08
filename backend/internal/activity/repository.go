@@ -77,7 +77,7 @@ func (r *Repository) UpsertActivitySourceState(ctx context.Context, s SourceStat
 		s.SourceStatus = SourceStatusOK
 	}
 	if s.PollIntervalSeconds <= 0 {
-		s.PollIntervalSeconds = 3600
+		s.PollIntervalSeconds = 1800
 	}
 	sourceContext := s.SourceContextJSON
 	if len(sourceContext) == 0 {

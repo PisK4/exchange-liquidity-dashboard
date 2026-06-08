@@ -809,14 +809,14 @@ func Default() Config {
 func defaultActivityAgentConfig() ActivityAgentConfig {
 	return ActivityAgentConfig{
 		Enabled:             true,
-		DefaultPollInterval: time.Hour,
+		DefaultPollInterval: 30 * time.Minute,
 		Scheduler: ActivitySchedulerConfig{
 			IngestionInterval: 5 * time.Minute,
 			ProducerInterval:  time.Minute,
 			DeliveryInterval:  30 * time.Second,
 		},
 		Collection: ActivityCollectionConfig{
-			DefaultPollInterval: time.Hour,
+			DefaultPollInterval: 30 * time.Minute,
 		},
 		WorkerLeaseTTL: 2 * time.Minute,
 		DecisionToken: ActivityDecisionTokenConfig{
@@ -847,15 +847,15 @@ func defaultActivityAgentConfig() ActivityAgentConfig {
 			EventUpdateCooldown:       time.Hour,
 		},
 		Sources: []ActivitySourceConfig{
-			{Platform: "binance", SourceGroup: "cms_article_list", FetchMode: "http_direct", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true},
-			{Platform: "okx", SourceGroup: "help_announcement", FetchMode: "http_direct", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true},
-			{Platform: "bingx", SourceGroup: "openapi_notice", FetchMode: "http_direct_json", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true},
-			{Platform: "gate", SourceGroup: "launchpool_project_list", FetchMode: "utls_proxy_json", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
-			{Platform: "mexc", SourceGroup: "latest_events", FetchMode: "utls_proxy_html", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
-			{Platform: "bybit", SourceGroup: "announcements_ssr", FetchMode: "utls_html", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
-			{Platform: "bitget", SourceGroup: "support_ongoing_section", FetchMode: "utls_html", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
-			{Platform: "hyperliquid", SourceGroup: "cloudfront_entries", FetchMode: "http_direct_json", PollInterval: time.Hour, Enabled: true, AutoPushEnabled: true},
-			{Platform: "lighter", SourceGroup: "incentive_docs", FetchMode: "markdown_doc", PollInterval: 24 * time.Hour, Enabled: true, AutoPushEnabled: true},
+			{Platform: "binance", SourceGroup: "cms_article_list", FetchMode: "http_direct", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true},
+			{Platform: "okx", SourceGroup: "help_announcement", FetchMode: "http_direct", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true},
+			{Platform: "bingx", SourceGroup: "openapi_notice", FetchMode: "http_direct_json", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true},
+			{Platform: "gate", SourceGroup: "launchpool_project_list", FetchMode: "utls_proxy_json", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
+			{Platform: "mexc", SourceGroup: "latest_events", FetchMode: "utls_proxy_html", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
+			{Platform: "bybit", SourceGroup: "announcements_ssr", FetchMode: "utls_html", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
+			{Platform: "bitget", SourceGroup: "support_ongoing_section", FetchMode: "utls_html", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
+			{Platform: "hyperliquid", SourceGroup: "cloudfront_entries", FetchMode: "http_direct_json", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true},
+			{Platform: "lighter", SourceGroup: "incentive_docs", FetchMode: "markdown_doc", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true},
 		},
 	}
 }

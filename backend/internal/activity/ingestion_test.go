@@ -115,7 +115,7 @@ func TestIngestSourcesFetchesRawEvidenceParsesAndPersistsEvents(t *testing.T) {
 	if err != nil {
 		t.Fatalf("IngestSources err=%v", err)
 	}
-	if res.Sources != 1 || res.Fetched != 1 || res.RawEvidence != 1 || res.Events != 1 {
+	if res.Sources != 1 || res.Fetched != 1 || res.RawEvidence != 1 || res.Events != 1 || res.UnchangedSources != 0 {
 		t.Fatalf("result=%+v", res)
 	}
 	if fetchCalls != 1 || parseCalls != 1 {
@@ -133,5 +133,179 @@ func TestIngestSourcesFetchesRawEvidenceParsesAndPersistsEvents(t *testing.T) {
 	if store.sourceStates[0].LastHTTPStatus == nil || *store.sourceStates[0].LastHTTPStatus != 200 {
 		b, _ := json.Marshal(store.sourceStates[0])
 		t.Fatalf("source state http status missing: %s", b)
+	}
+}
+
+func TestIngestSourcesSkipsRawEvidenceAndEventsWhenContentUnchanged(t *testing.T) {
+	now := time.Date(2026, 6, 6, 9, 0, 0, 0, time.UTC)
+	src := SourceConfig{
+		Platform:        "binance",
+		SourceGroup:     "cms_article_list",
+		SourceURL:       "https://binance.example/list",
+		FetchMode:       "http_direct",
+		Enabled:         true,
+		AutoPushEnabled: true,
+		PollInterval:    30 * time.Minute,
+	}
+	store := &fakeIngestionStore{existingStates: map[string]SourceState{
+		BuildSourceKey(src.Platform, src.SourceGroup, src.FetchMode): {LastContentHash: "same-content-hash"},
+	}}
+	parseCalls := 0
+
+	res, err := IngestSources(context.Background(), store, IngestionDeps{
+		Sources: []SourceConfig{src},
+		Fetch: func(ctx context.Context, req FetchRequest) (FetchResult, error) {
+			return FetchResult{
+				Platform:     req.Platform,
+				SourceGroup:  req.SourceGroup,
+				SourceURL:    req.URL,
+				FetchMode:    req.FetchMode,
+				Payload:      []byte(`{"title":"same"}`),
+				PayloadHash:  "same-payload-hash",
+				ContentHash:  "same-content-hash",
+				HTTPStatus:   200,
+				ContentType:  "application/json",
+				FetchedAt:    now,
+				ElapsedMS:    23,
+				AttemptCount: 2,
+				ProxyUsed:    true,
+			}, nil
+		},
+		Parse: func(ctx context.Context, doc RawDocument) ([]ActivityEvent, error) {
+			parseCalls++
+			return nil, nil
+		},
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("IngestSources err=%v", err)
+	}
+	if res.Sources != 1 || res.Fetched != 1 || res.RawEvidence != 0 || res.Events != 0 || res.UnchangedSources != 1 {
+		t.Fatalf("result=%+v", res)
+	}
+	if parseCalls != 0 || len(store.rawEvidence) != 0 || len(store.events) != 0 {
+		t.Fatalf("parseCalls=%d raw=%+v events=%+v", parseCalls, store.rawEvidence, store.events)
+	}
+	if len(store.sourceStates) != 1 || store.sourceStates[0].SourceStatus != SourceStatusOK || store.sourceStates[0].SampleCount != 0 {
+		t.Fatalf("sourceStates=%+v", store.sourceStates)
+	}
+	if store.sourceStates[0].LastSuccessAt == nil {
+		t.Fatalf("LastSuccessAt not set: %+v", store.sourceStates[0])
+	}
+	var sourceContext map[string]any
+	if err := json.Unmarshal(store.sourceStates[0].SourceContextJSON, &sourceContext); err != nil {
+		t.Fatalf("source_context_json err=%v json=%s", err, store.sourceStates[0].SourceContextJSON)
+	}
+	if sourceContext["attempt_count"] != float64(2) || sourceContext["proxy_used"] != true || sourceContext["elapsed_ms"] != float64(23) {
+		t.Fatalf("source_context_json=%+v", sourceContext)
+	}
+}
+
+func TestIngestSourcesPersistsWhenExistingContentChanges(t *testing.T) {
+	now := time.Date(2026, 6, 6, 9, 15, 0, 0, time.UTC)
+	src := SourceConfig{
+		Platform:        "gate",
+		SourceGroup:     "launchpool_project_list",
+		SourceURL:       "https://gate.example/list",
+		FetchMode:       "utls_proxy_json",
+		Enabled:         true,
+		AutoPushEnabled: true,
+		PollInterval:    30 * time.Minute,
+	}
+	store := &fakeIngestionStore{existingStates: map[string]SourceState{
+		BuildSourceKey(src.Platform, src.SourceGroup, src.FetchMode): {LastContentHash: "old-content-hash"},
+	}}
+
+	res, err := IngestSources(context.Background(), store, IngestionDeps{
+		Sources: []SourceConfig{src},
+		Fetch: func(ctx context.Context, req FetchRequest) (FetchResult, error) {
+			return FetchResult{
+				Platform:    req.Platform,
+				SourceGroup: req.SourceGroup,
+				SourceURL:   req.URL,
+				FetchMode:   req.FetchMode,
+				Payload:     []byte(`{"id":"new","title":"New launchpool"}`),
+				ContentHash: "new-content-hash",
+				HTTPStatus:  200,
+				FetchedAt:   now,
+			}, nil
+		},
+		Parse: func(ctx context.Context, doc RawDocument) ([]ActivityEvent, error) {
+			return []ActivityEvent{{
+				Platform:         doc.Platform,
+				SourceGroup:      doc.SourceGroup,
+				SourceExternalID: "new",
+				Title:            "New launchpool",
+				ActivityType:     "launchpool",
+				ContentHash:      "new-content-hash",
+			}}, nil
+		},
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("IngestSources err=%v", err)
+	}
+	if res.RawEvidence != 1 || res.Events != 1 || res.UnchangedSources != 0 {
+		t.Fatalf("result=%+v", res)
+	}
+	if len(store.rawEvidence) != 1 || len(store.events) != 1 {
+		t.Fatalf("raw=%+v events=%+v", store.rawEvidence, store.events)
+	}
+}
+
+func TestIngestSourcesKeepsRawEvidenceForNon2xxEvenWhenContentUnchanged(t *testing.T) {
+	now := time.Date(2026, 6, 6, 9, 30, 0, 0, time.UTC)
+	src := SourceConfig{
+		Platform:        "bingx",
+		SourceGroup:     "openapi_notice",
+		SourceURL:       "https://bingx.example/notices",
+		FetchMode:       "http_direct_json",
+		Enabled:         true,
+		AutoPushEnabled: true,
+		PollInterval:    30 * time.Minute,
+	}
+	store := &fakeIngestionStore{existingStates: map[string]SourceState{
+		BuildSourceKey(src.Platform, src.SourceGroup, src.FetchMode): {LastContentHash: "same-content-hash"},
+	}}
+	parseCalls := 0
+
+	res, err := IngestSources(context.Background(), store, IngestionDeps{
+		Sources: []SourceConfig{src},
+		Fetch: func(ctx context.Context, req FetchRequest) (FetchResult, error) {
+			return FetchResult{
+				Platform:     req.Platform,
+				SourceGroup:  req.SourceGroup,
+				SourceURL:    req.URL,
+				FetchMode:    req.FetchMode,
+				Payload:      []byte(`service unavailable`),
+				PayloadHash:  "same-payload-hash",
+				ContentHash:  "same-content-hash",
+				HTTPStatus:   503,
+				ContentType:  "text/plain",
+				FetchedAt:    now,
+				AttemptCount: 3,
+			}, nil
+		},
+		Parse: func(ctx context.Context, doc RawDocument) ([]ActivityEvent, error) {
+			parseCalls++
+			return nil, nil
+		},
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("IngestSources err=%v", err)
+	}
+	if res.RawEvidence != 1 || res.SourceErrors != 1 || res.UnchangedSources != 0 {
+		t.Fatalf("result=%+v", res)
+	}
+	if parseCalls != 0 || len(store.rawEvidence) != 1 || len(store.events) != 0 {
+		t.Fatalf("parseCalls=%d raw=%+v events=%+v", parseCalls, store.rawEvidence, store.events)
+	}
+	var meta map[string]any
+	if err := json.Unmarshal(store.rawEvidence[0].ResponseMeta, &meta); err != nil {
+		t.Fatalf("raw meta err=%v json=%s", err, store.rawEvidence[0].ResponseMeta)
+	}
+	if meta["http_status"] != float64(503) || meta["attempt_count"] != float64(3) || meta["source_url"] != src.SourceURL {
+		t.Fatalf("raw meta=%+v", meta)
 	}
 }
