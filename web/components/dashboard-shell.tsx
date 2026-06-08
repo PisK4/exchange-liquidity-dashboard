@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { DashboardControls, PillGroup } from '@/components/dashboard-controls';
-import { PlatformCell, platformDisplayName } from '@/components/platform-cell';
+import { isSelfPlatform, platformDisplayLabel, platformRowKey } from '@/components/platform-cell';
 import { ShareTrendChart, type ShareTrendPoint } from '@/components/share-trend-chart';
 import { StatusBadge } from '@/components/status-badge';
 import { StatusEmptyState } from '@/components/status-empty-state';
@@ -10,7 +10,7 @@ import { SymbolBlock } from '@/components/symbol-block';
 import { Top30DivergenceView } from '@/components/top30-divergence-view';
 import { WatchlistToolbar } from '@/components/watchlist-toolbar';
 import { resolveSymbolContext, type SymbolContext } from '@/components/lib/symbol-context';
-import { money, moneyAuto, pct, ratio, type OpsIntelligenceMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30DivergenceSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
+import { money, moneyAuto, pct, ratio, type ListedSurfaceDetail, type OpsIntelligenceMeta, type DepthTierMetrics, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow, type QualitySnapshot, type ShareSnapshot, type Top30DivergenceSnapshot, type Top30Row, type Top30Snapshot } from '@/lib/api/client';
 import { normalizeSymbol } from '@/lib/watchlist';
 
 type Query = Record<string, string | undefined>;
@@ -30,7 +30,7 @@ type DashboardData = {
 
 // mergeQualityIntoLiquidity overlays per-row worst_slippage_bp +
 // verdict from the quality endpoint onto the liquidity snapshot.
-// The merge is keyed by `platform`; rows missing from either side
+// The merge is keyed by surface-aware row identity; rows missing from either side
 // degrade gracefully (slippage stays null → card shows the empty
 // state). Returns null if `liq` is null since the liquidity side
 // owns the KPI block QualityCard needs (spread / share live there,
@@ -42,11 +42,11 @@ function mergeQualityIntoLiquidity(
   if (!liq) return null;
   if (!qual) return liq;
   const qualByPlatform = new Map<string, QualitySnapshot['rows'][number]>();
-  for (const row of qual.rows) qualByPlatform.set(row.platform, row);
+  for (const row of qual.rows) qualByPlatform.set(platformRowKey(row), row);
   return {
     ...liq,
     rows: liq.rows.map(lrow => {
-      const qrow = qualByPlatform.get(lrow.platform);
+      const qrow = qualByPlatform.get(platformRowKey(lrow));
       if (!qrow) return lrow;
       return {
         ...lrow,
@@ -101,7 +101,10 @@ function snapshotTime(data: DashboardData, tab: string) {
 
 export function tierSeries(rows: PlatformRow[], side: 'bid_usd' | 'ask_usd' | 'total_usd') {
   return rows.map(row => ({
-    label: row.platform,
+    key: platformRowKey(row),
+    label: platformDisplayLabel(row),
+    colorKey: row.platform,
+    isSelf: isSelfPlatform(row),
     values: tierLabels.map(tier => {
       const depth = row.depth_by_tier?.[tier];
       return depthDisplayAvailable(row, tier) && typeof depth?.[side] === 'number' ? depth[side] : undefined;
@@ -452,7 +455,7 @@ function ShareTab({ data, query }: { data: ShareSnapshot; query: Query }) {
     return bv - av;
   });
   const rawDenominator = rawRows.reduce((sum, row) => sum + (row.raw_volume_usd ?? 0), 0);
-  const edgexRaw = rawRows.find(row => row.platform === 'edgeX')?.raw_volume_usd;
+  const edgexRaw = rawRows.find(row => isSelfPlatform(row))?.raw_volume_usd;
   const edgexRawShare = rawDenominator > 0 && typeof edgexRaw === 'number' ? edgexRaw / rawDenominator * 100 : undefined;
   return (
     <div className="page-content active">
@@ -473,19 +476,22 @@ function ShareTab({ data, query }: { data: ShareSnapshot; query: Query }) {
               edgeX 自身也计入分母。
             </p>
           </div>
-          <div className="table-wrap"><table className="tbl"><thead><tr><th>#</th><th>平台</th><th className="num">成交量 (USD)</th><th className="num">在分母中占比</th><th>占比可视化</th></tr></thead><tbody>{rawRows.map((row, index) => {
+          <div className="table-wrap"><table className="tbl"><thead><tr><th>#</th><th>平台</th><th>统计范围</th><th className="num">成交量 (USD)</th><th className="num">在分母中占比</th><th>占比可视化</th></tr></thead><tbody>{rawRows.map((row, index) => {
             const share = typeof row.raw_volume_usd === 'number' && rawDenominator > 0
               ? row.raw_volume_usd / rawDenominator * 100
               : undefined;
+            const label = platformDisplayLabel(row);
+            const self = isSelfPlatform(row);
             return (
-              <tr key={row.platform}>
+              <tr key={platformRowKey(row)}>
                 <td>{index + 1}</td>
-                <td><span className={row.platform === 'edgeX' ? 'platform-self' : undefined}>{platformDisplayName(row.platform)}</span></td>
+                <td><span className={self ? 'platform-self' : undefined}>{label}</span></td>
+                <td><span className="muted">{row.aggregation_scope === 'platform_all_surfaces' ? '全 perp surface 聚合' : row.market_surface ?? '—'}</span></td>
                 <td className="num"><b>{moneyAuto(row.raw_volume_usd)}</b></td>
                 <td className="num">{pct(share)}</td>
                 <td>
-                  <div className="share-ratio-track" data-testid="share-ratio-bar" aria-label={`${row.platform} denominator share ${pct(share)}`}>
-                    <div className="share-ratio-fill" style={{ width: `${Math.min(Math.max(share ?? 0, 0) * 1.5, 100)}%`, background: row.platform === 'edgeX' ? edgexAccent : '#5794f2' }} />
+                  <div className="share-ratio-track" data-testid="share-ratio-bar" aria-label={`${label} denominator share ${pct(share)}`}>
+                    <div className="share-ratio-fill" style={{ width: `${Math.min(Math.max(share ?? 0, 0) * 1.5, 100)}%`, background: self ? edgexAccent : '#5794f2' }} />
                   </div>
                 </td>
               </tr>
@@ -514,11 +520,29 @@ function isResolvedStatus(status: string | undefined): boolean {
   return !status || status === 'complete';
 }
 
+function surfaceLabel(surface: ListedSurfaceDetail) {
+  return surface.display_platform || surface.market_surface || surface.lineage || surface.platform || 'edgeX';
+}
+
+function ListedSurfaceBadges({ surfaces }: { surfaces?: ListedSurfaceDetail[] }) {
+  if (!surfaces?.length) return null;
+  return (
+    <span className="surface-badge-list" aria-label="edgeX listed surfaces">
+      {surfaces.map(surface => {
+        const key = `${surface.platform ?? 'edgeX'}::${surface.market_surface ?? ''}::${surface.lineage ?? ''}::${surface.contract_id ?? ''}`;
+        return <span className="badge b-ok" key={key}>{surfaceLabel(surface)}</span>;
+      })}
+    </span>
+  );
+}
+
 function renderListedCell(row: Top30Row) {
   if (row.edgex_listed_status && !isResolvedStatus(row.edgex_listed_status)) {
     return <StatusBadge status={row.edgex_listed_status} />;
   }
-  return row.edgex_listed ? '是' : '否';
+  if (!row.edgex_listed) return '否';
+  if (!row.edgex_listed_surfaces?.length) return '是';
+  return <ListedSurfaceBadges surfaces={row.edgex_listed_surfaces} />;
 }
 
 function renderCoverageCell(row: Top30Row) {

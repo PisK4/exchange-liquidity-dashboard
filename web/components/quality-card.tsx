@@ -1,6 +1,7 @@
 'use client';
 
 import { BarChart } from '@/components/chart-primitives';
+import { isSelfPlatform } from '@/components/platform-cell';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { bp, pct, usdLabel, type LiquiditySnapshot } from '@/lib/api/client';
 import { FUNDING_SIGN_CONVENTION_TOOLTIP, formatFundingDelta, formatFundingPeriodTag, formatFundingRate8h } from '@/lib/funding-format';
@@ -88,7 +89,7 @@ export function QualityCard({
 
   const kpis = snapshot.kpis;
   const rows = snapshot.rows ?? [];
-  const edgeRow = rows.find(r => r.platform === 'edgeX');
+  const edgeRow = rows.find(r => isSelfPlatform(r));
   const edgeSlippage = edgeRow?.worst_slippage_bp?.[bucket];
   const edgeSlippageUSD = slippageUSD(bucket, edgeSlippage);
   const edgeSpreadUSD = spreadUSD(edgeRow?.mid_price, kpis?.edgex_spread_bp);
@@ -104,7 +105,7 @@ export function QualityCard({
   // comparison. This is the same approach the V1 detail BarChart uses
   // when it sorts by bp ascending.
   const competitorSlippages = rows
-    .filter(r => r.platform !== 'edgeX')
+    .filter(r => !isSelfPlatform(r))
     .map(r => r.worst_slippage_bp?.[bucket])
     .filter((v): v is number => typeof v === 'number' && Number.isFinite(v))
     .sort((a, b) => a - b);

@@ -1,6 +1,6 @@
 'use client';
 
-import { PlatformCell } from '@/components/platform-cell';
+import { isSelfPlatform, PlatformCell, platformRowKey } from '@/components/platform-cell';
 import { formatFundingRate8h } from '@/lib/funding-format';
 import type { FrontendURLLookup, PlatformRow } from '@/lib/api/client';
 
@@ -59,7 +59,8 @@ export function FundingDivergeBar({
       {ordered.map(row => {
         const rate = row.funding?.rate_8h;
         const isUsable = typeof rate === 'number' && Number.isFinite(rate);
-        const isEdgex = row.platform === 'edgeX';
+        const rowKey = platformRowKey(row);
+        const isEdgex = isSelfPlatform(row);
         const rowClass = [
           'funding-diverge-row',
           isEdgex ? 'is-edgex' : '',
@@ -81,12 +82,22 @@ export function FundingDivergeBar({
             : 'muted';
         return (
           <div
-            key={row.platform}
+            key={rowKey}
             className={rowClass}
-            data-testid={`funding-diverge-row-${row.platform}`}
+            data-testid={`funding-diverge-row-${rowKey}`}
           >
             <span className="funding-diverge-label">
-              <PlatformCell platform={row.platform} displaySymbol={displaySymbol} lookup={lookup} />
+              <PlatformCell
+                platform={row.platform}
+                displaySymbol={displaySymbol}
+                lookup={lookup}
+                displayPlatform={row.display_platform}
+                isEdgex={row.is_edgex}
+                marketSurface={row.market_surface}
+                lineage={row.lineage}
+                venueSymbol={row.venue_symbol}
+                contractId={row.contract_id}
+              />
             </span>
             <div className="funding-diverge-track">
               <div className="funding-diverge-zero" />

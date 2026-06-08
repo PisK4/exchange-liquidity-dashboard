@@ -22,32 +22,39 @@ type SmallMultiplesBarChartProps = {
   series: Series[];
 };
 
+type PanelRow = { label: string; value: number; colorKey?: string; isSelf?: boolean };
+type DepthDataset = ChartConfiguration<'bar', number[], string>['data']['datasets'][number] & {
+  selfFlags?: boolean[];
+};
+
 function buildPanelConfig(
-  rows: Array<{ label: string; value: number }>,
+  rows: PanelRow[],
 ): ChartConfiguration<'bar', number[], string> {
   const sorted = [...rows].sort((a, b) => b.value - a.value);
+  const dataset: DepthDataset = {
+    label: '深度',
+    data: sorted.map(r => r.value),
+    selfFlags: sorted.map(r => r.isSelf === true),
+    backgroundColor: sorted.map(r => {
+      const c = colorFor(r.colorKey ?? r.label);
+      const self = r.isSelf === true;
+      return self ? c : rgba(c, 0.45);
+    }),
+    borderColor: sorted.map(r => {
+      const c = colorFor(r.colorKey ?? r.label);
+      const self = r.isSelf === true;
+      return self ? '#ffffff' : rgba(c, 0.85);
+    }),
+    borderWidth: sorted.map(r => (r.isSelf === true ? 1.5 : 0.6)),
+    borderRadius: 2,
+    barPercentage: 0.82,
+    categoryPercentage: 0.92,
+  };
   return {
     type: 'bar',
     data: {
       labels: sorted.map(r => r.label),
-      datasets: [
-        {
-          label: '深度',
-          data: sorted.map(r => r.value),
-          backgroundColor: sorted.map(r => {
-            const c = colorFor(r.label);
-            return r.label === 'edgeX' ? c : rgba(c, 0.45);
-          }),
-          borderColor: sorted.map(r => {
-            const c = colorFor(r.label);
-            return r.label === 'edgeX' ? '#ffffff' : rgba(c, 0.85);
-          }),
-          borderWidth: sorted.map(r => (r.label === 'edgeX' ? 1.5 : 0.6)),
-          borderRadius: 2,
-          barPercentage: 0.82,
-          categoryPercentage: 0.92,
-        },
-      ],
+      datasets: [dataset],
     },
     options: {
       indexAxis: 'y',
@@ -99,9 +106,8 @@ const valueLabelPlugin = {
     meta.data.forEach((bar, idx) => {
       const raw = chart.data.datasets[0].data[idx];
       if (typeof raw !== 'number' || !Number.isFinite(raw)) return;
-      const label = chart.data.labels?.[idx] as string | undefined;
-      const isEdgeX = label === 'edgeX';
-      ctx.fillStyle = isEdgeX ? '#ffffff' : '#c5cad3';
+      const isSelf = (chart.data.datasets[0] as DepthDataset).selfFlags?.[idx] === true;
+      ctx.fillStyle = isSelf ? '#ffffff' : '#c5cad3';
       const { x, y } = bar.tooltipPosition(false);
       ctx.fillText(`  ${moneyAuto(raw)}`, x, y);
     });
@@ -114,7 +120,7 @@ function PanelChart({
   rows,
 }: {
   ariaLabel: string;
-  rows: Array<{ label: string; value: number }>;
+  rows: PanelRow[];
 }) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const chartRef = useRef<Chart<'bar', number[], string> | null>(null);
@@ -148,9 +154,13 @@ export function SmallMultiplesBarChart({
   series,
 }: SmallMultiplesBarChartProps) {
   const panels = tierLabels.map((_tier, tierIdx) => {
-    const rows = series
-      .map(s => ({ label: s.label, value: s.values[tierIdx] }))
-      .filter((r): r is { label: string; value: number } => typeof r.value === 'number' && Number.isFinite(r.value));
+    const rows: PanelRow[] = [];
+    for (const s of series) {
+      const value = s.values[tierIdx];
+      if (typeof value === 'number' && Number.isFinite(value)) {
+        rows.push({ label: s.label, value, colorKey: s.colorKey, isSelf: s.isSelf });
+      }
+    }
     const maxValue = rows.reduce((acc, r) => (r.value > acc ? r.value : acc), 0);
     return {
       title: displayLabels[tierIdx] ?? `tier ${tierIdx}`,

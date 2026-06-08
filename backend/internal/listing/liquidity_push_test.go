@@ -3,6 +3,7 @@ package listing
 import (
 	"context"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -24,6 +25,53 @@ func liquidityCfg() config.LiquidityAlertConfig {
 		PollInterval:     5 * time.Minute,
 		MaxPerTick:       5,
 	}
+}
+
+func newLiquidityDepthRows() *sqlmock.Rows {
+	return sqlmock.NewRows([]string{
+		"platform", "platform_group", "display_platform", "is_edgex",
+		"display_symbol", "canonical_symbol", "venue_symbol",
+		"market_surface", "instrument_kind", "lineage",
+		"contract_id", "base_asset", "quote_asset",
+		"depth_source", "source_id", "source_endpoint",
+		"snapshot_ts", "bid_usd", "ask_usd", "total_usd",
+	})
+}
+
+func addLiquidityDepthRow(rows *sqlmock.Rows, platform, displaySymbol string, snapshotTS time.Time, bid, ask, total float64) *sqlmock.Rows {
+	platformGroup := platform
+	displayPlatform := platform
+	isEdgeX := 0
+	marketSurface := "perp"
+	lineage := platform + "-perp"
+	contractID := ""
+	baseAsset := strings.TrimSpace(displaySymbol)
+	if i := strings.IndexAny(baseAsset, "-( /"); i > 0 {
+		baseAsset = baseAsset[:i]
+	}
+	if strings.EqualFold(platform, "edgex") || strings.EqualFold(platform, "edgeX") {
+		platformGroup = "edgeX"
+		displayPlatform = "edgeX V2"
+		isEdgeX = 1
+		marketSurface = "perp_v2"
+		lineage = "edgeX-perp-v2"
+		contractID = "30000001"
+	}
+	return rows.AddRow(
+		platform, platformGroup, displayPlatform, isEdgeX,
+		displaySymbol, strings.ToUpper(baseAsset), strings.TrimSuffix(displaySymbol, " (perp)"),
+		marketSurface, "perp", lineage,
+		contractID, strings.ToUpper(baseAsset), "USDT",
+		domainSourceForTest(platform), platform+"-depth-source", "https://example.invalid/"+platform,
+		snapshotTS, bid, ask, total,
+	)
+}
+
+func domainSourceForTest(platform string) string {
+	if strings.EqualFold(platform, "edgex") || strings.EqualFold(platform, "edgeX") {
+		return "ws_local_book"
+	}
+	return "rest_snapshot"
 }
 
 func TestProduceLiquidityAlertPushDisabled(t *testing.T) {
@@ -82,9 +130,7 @@ func TestProduceLiquidityAlertPushNoSnapshot(t *testing.T) {
 	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
 
 	mock.ExpectQuery(`FROM t_orderbook_snapshot`).
-		WillReturnRows(sqlmock.NewRows([]string{
-			"platform", "display_symbol", "snapshot_ts", "bid_usd", "ask_usd", "total_usd",
-		}))
+		WillReturnRows(newLiquidityDepthRows())
 
 	res, err := ProduceLiquidityAlertPush(context.Background(), repo, LiquidityAlertDeps{
 		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
@@ -112,15 +158,13 @@ func TestProduceLiquidityAlertPushFirstTrigger(t *testing.T) {
 	// 1) Depth matrix: BTC with 4 competitors + edgeX lagging.
 	//    edgeX 2.4M / competitor median 6.0M = 0.4 ratio (< 0.5 → lag).
 	//    edgeX is NOT the last (mexc lower) → no worst_depth.
-	rows := sqlmock.NewRows([]string{
-		"platform", "display_symbol", "snapshot_ts", "bid_usd", "ask_usd", "total_usd",
-	}).
-		AddRow("edgex", "BTC-USDT (perp)", snapshotTS, 1.2e6, 1.2e6, 2.4e6).
-		AddRow("binance", "BTC-USDT (perp)", snapshotTS, 4.0e6, 4.5e6, 8.5e6).
-		AddRow("okx", "BTC-USDT (perp)", snapshotTS, 3.5e6, 3.6e6, 7.1e6).
-		AddRow("bybit", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6).
-		AddRow("bitget", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6).
-		AddRow("mexc", "BTC-USDT (perp)", snapshotTS, 0.5e6, 0.5e6, 1.0e6)
+	rows := newLiquidityDepthRows()
+	addLiquidityDepthRow(rows, "edgex", "BTC-USDT (perp)", snapshotTS, 1.2e6, 1.2e6, 2.4e6)
+	addLiquidityDepthRow(rows, "binance", "BTC-USDT (perp)", snapshotTS, 4.0e6, 4.5e6, 8.5e6)
+	addLiquidityDepthRow(rows, "okx", "BTC-USDT (perp)", snapshotTS, 3.5e6, 3.6e6, 7.1e6)
+	addLiquidityDepthRow(rows, "bybit", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6)
+	addLiquidityDepthRow(rows, "bitget", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6)
+	addLiquidityDepthRow(rows, "mexc", "BTC-USDT (perp)", snapshotTS, 0.5e6, 0.5e6, 1.0e6)
 	mock.ExpectQuery(`FROM t_orderbook_snapshot`).WillReturnRows(rows)
 
 	// 2) ListActiveAlertStates: nothing active yet.
@@ -175,15 +219,13 @@ func TestProduceLiquidityAlertPushSilentWhenWithinCooldown(t *testing.T) {
 	defer cleanup()
 	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
 
-	rows := sqlmock.NewRows([]string{
-		"platform", "display_symbol", "snapshot_ts", "bid_usd", "ask_usd", "total_usd",
-	}).
-		AddRow("edgex", "BTC-USDT (perp)", snapshotTS, 1.2e6, 1.2e6, 2.4e6).
-		AddRow("binance", "BTC-USDT (perp)", snapshotTS, 4.0e6, 4.5e6, 8.5e6).
-		AddRow("okx", "BTC-USDT (perp)", snapshotTS, 3.5e6, 3.6e6, 7.1e6).
-		AddRow("bybit", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6).
-		AddRow("bitget", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6).
-		AddRow("mexc", "BTC-USDT (perp)", snapshotTS, 0.5e6, 0.5e6, 1.0e6)
+	rows := newLiquidityDepthRows()
+	addLiquidityDepthRow(rows, "edgex", "BTC-USDT (perp)", snapshotTS, 1.2e6, 1.2e6, 2.4e6)
+	addLiquidityDepthRow(rows, "binance", "BTC-USDT (perp)", snapshotTS, 4.0e6, 4.5e6, 8.5e6)
+	addLiquidityDepthRow(rows, "okx", "BTC-USDT (perp)", snapshotTS, 3.5e6, 3.6e6, 7.1e6)
+	addLiquidityDepthRow(rows, "bybit", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6)
+	addLiquidityDepthRow(rows, "bitget", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6)
+	addLiquidityDepthRow(rows, "mexc", "BTC-USDT (perp)", snapshotTS, 0.5e6, 0.5e6, 1.0e6)
 	mock.ExpectQuery(`FROM t_orderbook_snapshot`).WillReturnRows(rows)
 
 	// ListActiveAlertStates: one active row, last pushed 1h ago (well
@@ -257,15 +299,13 @@ func TestProduceLiquidityAlertPushIdempotentOnDedupeConflict(t *testing.T) {
 
 	// Same depth matrix as TestProduceLiquidityAlertPushFirstTrigger:
 	// BTC with edgeX 2.4M vs competitor median 6.0M → lag fires.
-	rows := sqlmock.NewRows([]string{
-		"platform", "display_symbol", "snapshot_ts", "bid_usd", "ask_usd", "total_usd",
-	}).
-		AddRow("edgex", "BTC-USDT (perp)", snapshotTS, 1.2e6, 1.2e6, 2.4e6).
-		AddRow("binance", "BTC-USDT (perp)", snapshotTS, 4.0e6, 4.5e6, 8.5e6).
-		AddRow("okx", "BTC-USDT (perp)", snapshotTS, 3.5e6, 3.6e6, 7.1e6).
-		AddRow("bybit", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6).
-		AddRow("bitget", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6).
-		AddRow("mexc", "BTC-USDT (perp)", snapshotTS, 0.5e6, 0.5e6, 1.0e6)
+	rows := newLiquidityDepthRows()
+	addLiquidityDepthRow(rows, "edgex", "BTC-USDT (perp)", snapshotTS, 1.2e6, 1.2e6, 2.4e6)
+	addLiquidityDepthRow(rows, "binance", "BTC-USDT (perp)", snapshotTS, 4.0e6, 4.5e6, 8.5e6)
+	addLiquidityDepthRow(rows, "okx", "BTC-USDT (perp)", snapshotTS, 3.5e6, 3.6e6, 7.1e6)
+	addLiquidityDepthRow(rows, "bybit", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6)
+	addLiquidityDepthRow(rows, "bitget", "BTC-USDT (perp)", snapshotTS, 3.0e6, 3.0e6, 6.0e6)
+	addLiquidityDepthRow(rows, "mexc", "BTC-USDT (perp)", snapshotTS, 0.5e6, 0.5e6, 1.0e6)
 	mock.ExpectQuery(`FROM t_orderbook_snapshot`).WillReturnRows(rows)
 
 	mock.ExpectQuery(`FROM t_listing_alert_state\s+WHERE alert_kind IN`).

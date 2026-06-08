@@ -38,13 +38,27 @@ const (
 // MUST be filtered upstream so Compute can assume every row is a
 // real, successful observation.
 type PlatformDepthRow struct {
-	Platform      string
-	DisplaySymbol string
-	Tier          string // e.g. "0.001"
-	DepthUSD      float64
-	BidUSD        float64
-	AskUSD        float64
-	SnapshotTS    time.Time
+	Platform        string
+	PlatformGroup   string
+	DisplayPlatform string
+	IsEdgeX         bool
+	DisplaySymbol   string
+	CanonicalSymbol string
+	VenueSymbol     string
+	MarketSurface   string
+	InstrumentKind  string
+	Lineage         string
+	ContractID      string
+	BaseAsset       string
+	QuoteAsset      string
+	DepthSource     string
+	SourceID        string
+	SourceEndpoint  string
+	Tier            string // e.g. "0.001"
+	DepthUSD        float64
+	BidUSD          float64
+	AskUSD          float64
+	SnapshotTS      time.Time
 }
 
 // AlertCandidate is the Compute output. One canonical may produce
@@ -69,12 +83,27 @@ type AlertCandidate struct {
 // into the Lark card. Sorted by depth DESC so the card naturally
 // reads top→bottom from strongest to weakest.
 type AlertPlatformRow struct {
-	Platform   string
-	DepthUSD   float64
-	Rank       int // 1-based
-	IsEdgex    bool
-	IsMedian   bool
-	SnapshotTS time.Time
+	Platform        string
+	PlatformGroup   string
+	DisplayPlatform string
+	IsEdgeX         bool
+	DisplaySymbol   string
+	CanonicalSymbol string
+	VenueSymbol     string
+	MarketSurface   string
+	InstrumentKind  string
+	Lineage         string
+	ContractID      string
+	BaseAsset       string
+	QuoteAsset      string
+	DepthSource     string
+	SourceID        string
+	SourceEndpoint  string
+	DepthUSD        float64
+	Rank            int // 1-based
+	IsEdgex         bool
+	IsMedian        bool
+	SnapshotTS      time.Time
 }
 
 // CanonicalResolver folds (platform, displaySymbol) into a canonical

@@ -688,6 +688,9 @@ func applyCatalogOverlay(subs []domain.SymbolSub, cat Catalog) {
 		if !ok {
 			continue
 		}
+		if !catalogEntryMatchesSub(subs[i], entry) {
+			continue
+		}
 		if entry.APISymbol != "" {
 			subs[i].APISymbol = entry.APISymbol
 		}
@@ -721,6 +724,22 @@ func applyCatalogOverlay(subs []domain.SymbolSub, cat Catalog) {
 			subs[i].Lineage = entry.Lineage
 		}
 	}
+}
+
+func catalogEntryMatchesSub(sub domain.SymbolSub, entry CatalogSymbol) bool {
+	if sub.Lineage == "" {
+		return true
+	}
+	if entry.MarketSurface != "" && sub.MarketSurface != "" && entry.MarketSurface != sub.MarketSurface {
+		return false
+	}
+	if entry.InstrumentKind != "" && sub.InstrumentKind != "" && entry.InstrumentKind != sub.InstrumentKind {
+		return false
+	}
+	if entry.Lineage != "" && sub.Lineage != "" && entry.Lineage != sub.Lineage {
+		return false
+	}
+	return true
 }
 
 // Default returns a minimal Config seed with platforms/symbols listed but no
@@ -1079,6 +1098,14 @@ type symbolYAML struct {
 	BaseAsset      string              `yaml:"base_asset"`
 	QuoteAsset     string              `yaml:"quote_asset"`
 	SettleAsset    string              `yaml:"settle_asset"`
+	Platforms      []string            `yaml:"platforms"`
+	APISymbol      string              `yaml:"api_symbol"`
+	ContractID     string              `yaml:"contract_id"`
+	SourceEndpoint string              `yaml:"source_endpoint"`
+	APILevelCap    int                 `yaml:"api_level_cap"`
+	CatalogStatus  string              `yaml:"catalog_status"`
+	FrontendURL    string              `yaml:"frontend_url"`
+	URLVerified    bool                `yaml:"url_verified"`
 	Aliases        map[string][]string `yaml:"aliases"`
 }
 
@@ -2758,7 +2785,15 @@ func expandSymbols(symbols []symbolYAML, platforms []string, endpoints map[strin
 			displayName = domain.DefaultDisplayName(symbol.Canonical)
 		}
 		category := valueOr(symbol.AssetCategory, domain.AssetCategoryCrypto)
-		for _, platform := range platforms {
+		symbolPlatforms := platforms
+		if len(symbol.Platforms) > 0 {
+			symbolPlatforms = symbol.Platforms
+		}
+		for _, platform := range symbolPlatforms {
+			sourceEndpoint := endpoints[platform]
+			if symbol.SourceEndpoint != "" {
+				sourceEndpoint = symbol.SourceEndpoint
+			}
 			subs = append(subs, domain.SymbolSub{
 				DisplaySymbol:  symbol.DisplaySymbol,
 				DisplayName:    displayName,
@@ -2768,10 +2803,16 @@ func expandSymbols(symbols []symbolYAML, platforms []string, endpoints map[strin
 				InstrumentKind: valueOr(symbol.InstrumentKind, "canonical"),
 				Lineage:        symbol.Lineage,
 				Platform:       platform,
+				APISymbol:      symbol.APISymbol,
+				ContractID:     symbol.ContractID,
 				BaseAsset:      base,
 				QuoteAsset:     quote,
 				SettleAsset:    settle,
-				SourceEndpoint: endpoints[platform],
+				SourceEndpoint: sourceEndpoint,
+				APILevelCap:    symbol.APILevelCap,
+				CatalogStatus:  symbol.CatalogStatus,
+				FrontendURL:    symbol.FrontendURL,
+				URLVerified:    symbol.URLVerified,
 			})
 		}
 	}

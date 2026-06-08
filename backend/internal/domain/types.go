@@ -38,6 +38,7 @@ const (
 	FreshnessDelayed = "delayed"
 
 	SourceRawOrderbook        = "raw_orderbook"
+	SourceRestSnapshot        = "rest_snapshot"
 	SourceAggregatedOrderbook = "aggregated_orderbook"
 	SourceWSLocalBook         = "ws_local_book"
 	SourceWSLimitedDepth      = "ws_limited_depth"
@@ -89,6 +90,132 @@ func DefaultDisplayName(canonical string) string {
 	return canonical + "-USD"
 }
 
+func PlatformGroup(platform string) string {
+	if platform == "edgeX" {
+		return "edgeX"
+	}
+	return platform
+}
+
+func IsEdgeXPlatform(platform string) bool { return platform == "edgeX" }
+
+func DisplayPlatform(platform, marketSurface, lineage string) string {
+	if platform != "edgeX" {
+		return platform
+	}
+	surface := strings.ToLower(strings.TrimSpace(marketSurface))
+	line := strings.ToLower(strings.TrimSpace(lineage))
+	switch {
+	case surface == "perp_v2" || strings.Contains(line, "perp-v2"):
+		return "edgeX V2"
+	case surface == "perp_v1" || strings.Contains(line, "perp-v1"):
+		return "edgeX V1"
+	case surface == "spot" || strings.Contains(line, "spot"):
+		return "edgeX Spot"
+	default:
+		return "edgeX"
+	}
+}
+
+func VenueSymbol(sub SymbolSub) string {
+	if sub.APISymbol != "" {
+		return sub.APISymbol
+	}
+	return sub.DisplaySymbol
+}
+
+func ApplyOrderBookSurfaceMeta(row *OrderBookSnapshot, sub SymbolSub) {
+	if row == nil {
+		return
+	}
+	row.PlatformGroup = PlatformGroup(sub.Platform)
+	row.DisplayPlatform = DisplayPlatform(sub.Platform, sub.MarketSurface, sub.Lineage)
+	row.IsEdgeX = IsEdgeXPlatform(sub.Platform)
+	row.CanonicalSymbol = sub.Canonical
+	row.VenueSymbol = VenueSymbol(sub)
+	row.MarketSurface = sub.MarketSurface
+	row.InstrumentKind = sub.InstrumentKind
+	row.Lineage = sub.Lineage
+	row.ContractID = sub.ContractID
+	row.BaseAsset = sub.BaseAsset
+	row.QuoteAsset = sub.QuoteAsset
+	if row.Platform == "" {
+		row.Platform = sub.Platform
+	}
+	if row.DisplaySymbol == "" {
+		row.DisplaySymbol = sub.DisplaySymbol
+	}
+}
+
+func ApplyPlatformSurfaceMeta(row *PlatformSnapshot, sub SymbolSub) {
+	if row == nil {
+		return
+	}
+	row.PlatformGroup = PlatformGroup(sub.Platform)
+	row.DisplayPlatform = DisplayPlatform(sub.Platform, sub.MarketSurface, sub.Lineage)
+	row.IsEdgeX = IsEdgeXPlatform(sub.Platform)
+	row.CanonicalSymbol = sub.Canonical
+	row.VenueSymbol = VenueSymbol(sub)
+	row.MarketSurface = sub.MarketSurface
+	row.InstrumentKind = sub.InstrumentKind
+	row.Lineage = sub.Lineage
+	row.ContractID = sub.ContractID
+	row.BaseAsset = sub.BaseAsset
+	row.QuoteAsset = sub.QuoteAsset
+	if row.Platform == "" {
+		row.Platform = sub.Platform
+	}
+	if row.DisplaySymbol == "" {
+		row.DisplaySymbol = sub.DisplaySymbol
+	}
+}
+
+func ApplyVolumeSurfaceMeta(row *VolumeSnapshot, sub SymbolSub) {
+	if row == nil {
+		return
+	}
+	row.PlatformGroup = PlatformGroup(sub.Platform)
+	row.DisplayPlatform = DisplayPlatform(sub.Platform, sub.MarketSurface, sub.Lineage)
+	row.IsEdgeX = IsEdgeXPlatform(sub.Platform)
+	row.CanonicalSymbol = sub.Canonical
+	row.VenueSymbol = VenueSymbol(sub)
+	row.MarketSurface = sub.MarketSurface
+	row.InstrumentKind = sub.InstrumentKind
+	row.Lineage = sub.Lineage
+	row.ContractID = sub.ContractID
+	row.BaseAsset = sub.BaseAsset
+	row.QuoteAsset = sub.QuoteAsset
+	if row.Platform == "" {
+		row.Platform = sub.Platform
+	}
+	if row.DisplaySymbol == "" {
+		row.DisplaySymbol = sub.DisplaySymbol
+	}
+}
+
+func ApplyCollectionStatusSurfaceMeta(row *CollectionStatus, sub SymbolSub) {
+	if row == nil {
+		return
+	}
+	row.PlatformGroup = PlatformGroup(sub.Platform)
+	row.DisplayPlatform = DisplayPlatform(sub.Platform, sub.MarketSurface, sub.Lineage)
+	row.IsEdgeX = IsEdgeXPlatform(sub.Platform)
+	row.CanonicalSymbol = sub.Canonical
+	row.VenueSymbol = VenueSymbol(sub)
+	row.MarketSurface = sub.MarketSurface
+	row.InstrumentKind = sub.InstrumentKind
+	row.Lineage = sub.Lineage
+	row.ContractID = sub.ContractID
+	row.BaseAsset = sub.BaseAsset
+	row.QuoteAsset = sub.QuoteAsset
+	if row.Platform == "" {
+		row.Platform = sub.Platform
+	}
+	if row.DisplaySymbol == "" {
+		row.DisplaySymbol = sub.DisplaySymbol
+	}
+}
+
 type Level struct {
 	Price float64 `json:"price"`
 	Size  float64 `json:"size"`
@@ -113,7 +240,18 @@ type BookView struct {
 
 type OrderBookSnapshot struct {
 	Platform           string              `json:"platform"`
+	PlatformGroup      string              `json:"platform_group,omitempty"`
+	DisplayPlatform    string              `json:"display_platform,omitempty"`
+	IsEdgeX            bool                `json:"is_edgex,omitempty"`
 	DisplaySymbol      string              `json:"display_symbol"`
+	CanonicalSymbol    string              `json:"canonical_symbol,omitempty"`
+	VenueSymbol        string              `json:"venue_symbol,omitempty"`
+	MarketSurface      string              `json:"market_surface,omitempty"`
+	InstrumentKind     string              `json:"instrument_kind,omitempty"`
+	Lineage            string              `json:"lineage,omitempty"`
+	ContractID         string              `json:"contract_id,omitempty"`
+	BaseAsset          string              `json:"base_asset,omitempty"`
+	QuoteAsset         string              `json:"quote_asset,omitempty"`
 	SourceEndpoint     string              `json:"source_endpoint"`
 	SnapshotTS         time.Time           `json:"snapshot_ts"`
 	Bids               []Level             `json:"bids,omitempty"`
@@ -161,7 +299,18 @@ type DepthMetrics = TierDepthMetrics
 
 type PlatformSnapshot struct {
 	Platform             string                  `json:"platform"`
+	PlatformGroup        string                  `json:"platform_group,omitempty"`
+	DisplayPlatform      string                  `json:"display_platform,omitempty"`
+	IsEdgeX              bool                    `json:"is_edgex,omitempty"`
 	DisplaySymbol        string                  `json:"display_symbol"`
+	CanonicalSymbol      string                  `json:"canonical_symbol,omitempty"`
+	VenueSymbol          string                  `json:"venue_symbol,omitempty"`
+	MarketSurface        string                  `json:"market_surface,omitempty"`
+	InstrumentKind       string                  `json:"instrument_kind,omitempty"`
+	Lineage              string                  `json:"lineage,omitempty"`
+	ContractID           string                  `json:"contract_id,omitempty"`
+	BaseAsset            string                  `json:"base_asset,omitempty"`
+	QuoteAsset           string                  `json:"quote_asset,omitempty"`
 	SnapshotTS           time.Time               `json:"snapshot_ts"`
 	SourceEndpoint       string                  `json:"source_endpoint"`
 	DepthStatus          string                  `json:"depth_status"`
@@ -227,16 +376,21 @@ type PlatformSnapshot struct {
 // PlatformSnapshot.SnapshotTS because the funding poll runs on its own
 // 5min cron while the depth collector runs faster.
 type PlatformFundingRate struct {
-	Platform       string     `json:"platform"`
-	DisplaySymbol  string     `json:"display_symbol,omitempty"`
-	Rate8h         *float64   `json:"rate_8h,omitempty"`
-	RateNative     *float64   `json:"rate_native,omitempty"`
-	PeriodHours    int        `json:"period_hours,omitempty"`
-	Status         string     `json:"status"`
-	Source         string     `json:"source,omitempty"`
-	SourceEndpoint string     `json:"source_endpoint,omitempty"`
-	SnapshotTS     *time.Time `json:"snapshot_ts,omitempty"`
-	VsMedian8h     *float64   `json:"vs_median_8h,omitempty"`
+	Platform        string     `json:"platform"`
+	PlatformGroup   string     `json:"platform_group,omitempty"`
+	DisplayPlatform string     `json:"display_platform,omitempty"`
+	IsEdgeX         bool       `json:"is_edgex,omitempty"`
+	MarketSurface   string     `json:"market_surface,omitempty"`
+	Lineage         string     `json:"lineage,omitempty"`
+	DisplaySymbol   string     `json:"display_symbol,omitempty"`
+	Rate8h          *float64   `json:"rate_8h,omitempty"`
+	RateNative      *float64   `json:"rate_native,omitempty"`
+	PeriodHours     int        `json:"period_hours,omitempty"`
+	Status          string     `json:"status"`
+	Source          string     `json:"source,omitempty"`
+	SourceEndpoint  string     `json:"source_endpoint,omitempty"`
+	SnapshotTS      *time.Time `json:"snapshot_ts,omitempty"`
+	VsMedian8h      *float64   `json:"vs_median_8h,omitempty"`
 	// RankPositive / RankNegative carry the platform's position
 	// within the same-sign cohort. Positive funding (longs pay) and
 	// negative funding (shorts pay) are economically opposite states,
@@ -263,35 +417,65 @@ type PlatformFundingRate struct {
 }
 
 type VolumeSnapshot struct {
-	Platform       string    `json:"platform"`
-	DisplaySymbol  string    `json:"display_symbol,omitempty"`
-	SnapshotTS     time.Time `json:"snapshot_ts"`
-	SourceEndpoint string    `json:"source_endpoint"`
-	Volume24HUSD   float64   `json:"volume_24h_usd"`
-	Status         string    `json:"status"`
-	Error          string    `json:"error,omitempty"`
+	Platform        string    `json:"platform"`
+	PlatformGroup   string    `json:"platform_group,omitempty"`
+	DisplayPlatform string    `json:"display_platform,omitempty"`
+	IsEdgeX         bool      `json:"is_edgex,omitempty"`
+	DisplaySymbol   string    `json:"display_symbol,omitempty"`
+	CanonicalSymbol string    `json:"canonical_symbol,omitempty"`
+	VenueSymbol     string    `json:"venue_symbol,omitempty"`
+	MarketSurface   string    `json:"market_surface,omitempty"`
+	InstrumentKind  string    `json:"instrument_kind,omitempty"`
+	Lineage         string    `json:"lineage,omitempty"`
+	ContractID      string    `json:"contract_id,omitempty"`
+	BaseAsset       string    `json:"base_asset,omitempty"`
+	QuoteAsset      string    `json:"quote_asset,omitempty"`
+	SnapshotTS      time.Time `json:"snapshot_ts"`
+	SourceEndpoint  string    `json:"source_endpoint"`
+	Volume24HUSD    float64   `json:"volume_24h_usd"`
+	Status          string    `json:"status"`
+	Error           string    `json:"error,omitempty"`
+}
+
+type ListedSurfaceDetail struct {
+	Platform        string `json:"platform"`
+	PlatformGroup   string `json:"platform_group,omitempty"`
+	DisplayPlatform string `json:"display_platform,omitempty"`
+	IsEdgeX         bool   `json:"is_edgex,omitempty"`
+	DisplaySymbol   string `json:"display_symbol,omitempty"`
+	CanonicalSymbol string `json:"canonical_symbol,omitempty"`
+	VenueSymbol     string `json:"venue_symbol,omitempty"`
+	MarketSurface   string `json:"market_surface,omitempty"`
+	InstrumentKind  string `json:"instrument_kind,omitempty"`
+	Lineage         string `json:"lineage,omitempty"`
+	ContractID      string `json:"contract_id,omitempty"`
+	BaseAsset       string `json:"base_asset,omitempty"`
+	QuoteAsset      string `json:"quote_asset,omitempty"`
+	SourceEndpoint  string `json:"source_endpoint,omitempty"`
+	Status          string `json:"status,omitempty"`
 }
 
 type Top30Row struct {
-	Rank           int       `json:"rank"`
-	Platform       string    `json:"platform"`
-	Symbol         string    `json:"symbol"`
-	Volume24HUSD   float64   `json:"volume_24h_usd"`
-	Volume7DUSD    *float64  `json:"volume_7d_usd,omitempty"`
-	Delta7DPct     *float64  `json:"delta_7d_pct,omitempty"`
-	Volume7DStatus string    `json:"volume_7d_status"`
-	Delta7DStatus  string    `json:"delta_7d_status"`
-	EdgexListed    bool      `json:"edgex_listed"`
-	ListedStatus   string    `json:"edgex_listed_status,omitempty"`
-	CoverageCount  int       `json:"competitor_top30_coverage"`
-	CoverageStatus string    `json:"competitor_top30_coverage_status,omitempty"`
-	Action         string    `json:"suggested_action,omitempty"`
-	ActionStatus   string    `json:"suggested_action_status,omitempty"`
-	SnapshotTS     time.Time `json:"snapshot_ts"`
-	SourceEndpoint string    `json:"source_endpoint"`
-	Status         string    `json:"status"`
-	DataSource     string    `json:"data_source,omitempty"`
-	Error          string    `json:"error,omitempty"`
+	Rank                int                   `json:"rank"`
+	Platform            string                `json:"platform"`
+	Symbol              string                `json:"symbol"`
+	Volume24HUSD        float64               `json:"volume_24h_usd"`
+	Volume7DUSD         *float64              `json:"volume_7d_usd,omitempty"`
+	Delta7DPct          *float64              `json:"delta_7d_pct,omitempty"`
+	Volume7DStatus      string                `json:"volume_7d_status"`
+	Delta7DStatus       string                `json:"delta_7d_status"`
+	EdgexListed         bool                  `json:"edgex_listed"`
+	EdgexListedSurfaces []ListedSurfaceDetail `json:"edgex_listed_surfaces,omitempty"`
+	ListedStatus        string                `json:"edgex_listed_status,omitempty"`
+	CoverageCount       int                   `json:"competitor_top30_coverage"`
+	CoverageStatus      string                `json:"competitor_top30_coverage_status,omitempty"`
+	Action              string                `json:"suggested_action,omitempty"`
+	ActionStatus        string                `json:"suggested_action_status,omitempty"`
+	SnapshotTS          time.Time             `json:"snapshot_ts"`
+	SourceEndpoint      string                `json:"source_endpoint"`
+	Status              string                `json:"status"`
+	DataSource          string                `json:"data_source,omitempty"`
+	Error               string                `json:"error,omitempty"`
 }
 
 // Top30 divergence venue categories. The dashboard groups every Top30
@@ -330,19 +514,20 @@ type Top30AggregateRow struct {
 // legitimate #1). RankDelta is the absolute difference, only set when both
 // ranks exist; the renderer uses nil to know whether to show a Δ column.
 type Top30DivergenceRow struct {
-	Symbol            string   `json:"symbol"`
-	CEXRank           *int     `json:"cex_rank,omitempty"`
-	DEXRank           *int     `json:"dex_rank,omitempty"`
-	CEXAdjustedVolUSD *float64 `json:"cex_adjusted_volume_24h_usd,omitempty"`
-	DEXAdjustedVolUSD *float64 `json:"dex_adjusted_volume_24h_usd,omitempty"`
-	CEXRawVolUSD      *float64 `json:"cex_raw_volume_24h_usd,omitempty"`
-	DEXRawVolUSD      *float64 `json:"dex_raw_volume_24h_usd,omitempty"`
-	CEXPlatformCount  int      `json:"cex_platform_count"`
-	DEXPlatformCount  int      `json:"dex_platform_count"`
-	RankDelta         *int     `json:"rank_delta,omitempty"`
-	Category          string   `json:"category"`
-	EdgexListed       bool     `json:"edgex_listed"`
-	EdgexListedStatus string   `json:"edgex_listed_status,omitempty"`
+	Symbol              string                `json:"symbol"`
+	CEXRank             *int                  `json:"cex_rank,omitempty"`
+	DEXRank             *int                  `json:"dex_rank,omitempty"`
+	CEXAdjustedVolUSD   *float64              `json:"cex_adjusted_volume_24h_usd,omitempty"`
+	DEXAdjustedVolUSD   *float64              `json:"dex_adjusted_volume_24h_usd,omitempty"`
+	CEXRawVolUSD        *float64              `json:"cex_raw_volume_24h_usd,omitempty"`
+	DEXRawVolUSD        *float64              `json:"dex_raw_volume_24h_usd,omitempty"`
+	CEXPlatformCount    int                   `json:"cex_platform_count"`
+	DEXPlatformCount    int                   `json:"dex_platform_count"`
+	RankDelta           *int                  `json:"rank_delta,omitempty"`
+	Category            string                `json:"category"`
+	EdgexListed         bool                  `json:"edgex_listed"`
+	EdgexListedSurfaces []ListedSurfaceDetail `json:"edgex_listed_surfaces,omitempty"`
+	EdgexListedStatus   string                `json:"edgex_listed_status,omitempty"`
 }
 
 // Top30DivergenceKPI is the headline strip the Top30 divergence view
@@ -416,14 +601,25 @@ type DerivativesPlatformMeta struct {
 }
 
 type CollectionStatus struct {
-	Platform       string    `json:"platform"`
-	DisplaySymbol  string    `json:"display_symbol,omitempty"`
-	Collector      string    `json:"collector"`
-	SourceEndpoint string    `json:"source_endpoint"`
-	Status         string    `json:"status"`
-	Error          string    `json:"error,omitempty"`
-	SnapshotTS     time.Time `json:"snapshot_ts"`
-	LatencyMS      int64     `json:"latency_ms"`
+	Platform        string    `json:"platform"`
+	PlatformGroup   string    `json:"platform_group,omitempty"`
+	DisplayPlatform string    `json:"display_platform,omitempty"`
+	IsEdgeX         bool      `json:"is_edgex,omitempty"`
+	DisplaySymbol   string    `json:"display_symbol,omitempty"`
+	CanonicalSymbol string    `json:"canonical_symbol,omitempty"`
+	VenueSymbol     string    `json:"venue_symbol,omitempty"`
+	MarketSurface   string    `json:"market_surface,omitempty"`
+	InstrumentKind  string    `json:"instrument_kind,omitempty"`
+	Lineage         string    `json:"lineage,omitempty"`
+	ContractID      string    `json:"contract_id,omitempty"`
+	BaseAsset       string    `json:"base_asset,omitempty"`
+	QuoteAsset      string    `json:"quote_asset,omitempty"`
+	Collector       string    `json:"collector"`
+	SourceEndpoint  string    `json:"source_endpoint"`
+	Status          string    `json:"status"`
+	Error           string    `json:"error,omitempty"`
+	SnapshotTS      time.Time `json:"snapshot_ts"`
+	LatencyMS       int64     `json:"latency_ms"`
 }
 
 func NormalizePlatformSnapshot(row *PlatformSnapshot) {

@@ -7,7 +7,10 @@ import { colorFor, rgba } from '@/components/chart-colors';
 import { moneyAuto } from '@/lib/api/client';
 
 export type Series = {
+  key?: string;
   label: string;
+  colorKey?: string;
+  isSelf?: boolean;
   values: Array<number | undefined>;
   statuses?: Array<string | undefined>;
   sources?: Array<string | undefined>;
@@ -92,8 +95,8 @@ export function LineChart({ ariaLabel, labels, series, unit = 'USD', compact = f
       data: {
         labels,
         datasets: series.map(item => {
-          const color = colorFor(item.label);
-          const isSelf = item.label === 'edgeX';
+          const color = colorFor(item.colorKey ?? item.label);
+          const isSelf = item.isSelf === true;
           if (isSelf) {
             return {
               label: item.label,

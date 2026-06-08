@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { displayTierLabel, tierLabels, tierSeries } from '@/components/dashboard-shell';
 import { LineChart } from '@/components/line-chart';
+import { isSelfPlatform } from '@/components/platform-cell';
 import { SmallMultiplesBarChart } from '@/components/small-multiples-bar-chart';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { bp, moneyAuto, pct, ratio, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow } from '@/lib/api/client';
@@ -119,7 +120,7 @@ export function SymbolBlock({
   }
 
   const rows = snapshot.rows ?? [];
-  const edgeRow = rows.find(row => row.platform === 'edgeX');
+  const edgeRow = rows.find(row => isSelfPlatform(row));
   const edgeDepth = edgeRow?.depth_by_tier?.[tier]?.total_usd;
   const edgeRatio = edgeRow?.vs_median_by_tier?.[tier];
   const kpis = snapshot.kpis;

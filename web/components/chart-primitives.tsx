@@ -2,7 +2,10 @@ import { colorFor } from '@/components/chart-colors';
 import { platformDisplayName } from '@/components/platform-cell';
 
 type BarChartRow = {
+  key?: string;
   label: string;
+  displayLabel?: string;
+  isSelf?: boolean;
   value?: number;
   status?: string;
   color?: string;
@@ -28,7 +31,8 @@ export function BarChart({
       {orderedRows.map(row => {
         const value = row.value;
         const width = typeof value === 'number' ? Math.max(2, (Math.abs(value) / max) * (signed ? 50 : 100)) : 0;
-        const isSelf = row.label === 'edgeX';
+        const isSelf = row.isSelf === true;
+        const label = row.displayLabel ?? platformDisplayName(row.label);
         const fillColor = row.color ?? colorFor(row.label);
         const signedStyle = signed
           ? value !== undefined && value < 0
@@ -36,8 +40,8 @@ export function BarChart({
             : { left: '50%', width: `${width}%`, background: fillColor }
           : { width: `${width}%`, background: fillColor };
         return (
-          <div className={`bar-row ${signed ? 'signed' : ''}`} key={row.label}>
-            <span className={isSelf ? 'platform-self' : ''}>{platformDisplayName(row.label)}</span>
+          <div className={`bar-row ${signed ? 'signed' : ''}`} key={row.key ?? row.label}>
+            <span className={isSelf ? 'platform-self' : ''}>{label}</span>
             <div className={`bar-track ${signed ? 'signed' : ''}`}>
               {signed ? <span className="bar-zero" aria-hidden="true" /> : null}
               <div className="bar-fill" data-testid={signed ? 'signed-bar' : undefined} style={signedStyle} />

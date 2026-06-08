@@ -21,6 +21,7 @@ export type QualityKPIs = Schema<'QualityKPIs'>;
 export type QualitySnapshot = Schema<'QualitySnapshot'>;
 export type ShareRow = Schema<'ShareRow'>;
 export type ShareSnapshot = Schema<'ShareSnapshot'>;
+export type ListedSurfaceDetail = Schema<'ListedSurfaceDetail'>;
 export type Top30Row = Schema<'Top30Row'>;
 export type Top30Snapshot = Schema<'Top30Snapshot'>;
 export type Top30AggregateRow = Schema<'Top30AggregateRow'>;

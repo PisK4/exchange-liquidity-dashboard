@@ -31,9 +31,13 @@ func NewCollector(cfg config.Config, store *Store) *Collector {
 }
 
 func NewCollectorWithLighter(cfg config.Config, store *Store, lighter adapter.LighterBookProvider) *Collector {
+	return NewCollectorWithLiveBooks(cfg, store, lighter, nil)
+}
+
+func NewCollectorWithLiveBooks(cfg config.Config, store *Store, lighter adapter.LighterBookProvider, edgeXPerpV2 adapter.EdgeXPerpV2BookProvider) *Collector {
 	adapters := map[string]adapter.ExchangeAdapter{}
 	for _, p := range cfg.Platforms {
-		adapters[p] = adapter.NewWithLighterProxyAndRateLimit(p, cfg.Runtime.HTTPTimeout, lighter, cfg.Runtime.ExchangeProxy, cfg.Runtime.Collection.RatePerSecFor(p))
+		adapters[p] = adapter.NewWithLiveBooksProxyAndRateLimit(p, cfg.Runtime.HTTPTimeout, lighter, edgeXPerpV2, cfg.Runtime.ExchangeProxy, cfg.Runtime.Collection.RatePerSecFor(p))
 	}
 	return &Collector{
 		cfg:         cfg,
@@ -120,39 +124,15 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 				if r := recover(); r != nil {
 					mu.Lock()
 					failed++
-					statuses = append(statuses, domain.CollectionStatus{
-						Platform:       sub.Platform,
-						DisplaySymbol:  sub.DisplaySymbol,
-						Collector:      "rest_orderbook",
-						SourceEndpoint: sub.SourceEndpoint,
-						Status:         domain.StatusError,
-						Error:          fmt.Sprintf("collector panic: %v", r),
-						SnapshotTS:     time.Now().UTC(),
-					})
+					statuses = append(statuses, collectionStatusFromSub(sub, "rest_orderbook", sub.SourceEndpoint, domain.StatusError, fmt.Sprintf("collector panic: %v", r), time.Now().UTC(), 0))
 					mu.Unlock()
 				}
 			}()
 			if c.shouldSkipForCooldown(sub) {
 				now := time.Now().UTC()
 				mu.Lock()
-				statuses = append(statuses, domain.CollectionStatus{
-					Platform:       sub.Platform,
-					DisplaySymbol:  sub.DisplaySymbol,
-					Collector:      "rest_orderbook",
-					SourceEndpoint: sub.SourceEndpoint,
-					Status:         domain.StatusUnsupported,
-					Error:          "skipped: pair in cooldown after consecutive failures",
-					SnapshotTS:     now,
-				})
-				statuses = append(statuses, domain.CollectionStatus{
-					Platform:       sub.Platform,
-					DisplaySymbol:  sub.DisplaySymbol,
-					Collector:      "rest_ticker",
-					SourceEndpoint: sub.SourceEndpoint,
-					Status:         domain.StatusUnsupported,
-					Error:          "skipped: pair in cooldown after consecutive failures",
-					SnapshotTS:     now,
-				})
+				statuses = append(statuses, collectionStatusFromSub(sub, "rest_orderbook", sub.SourceEndpoint, domain.StatusUnsupported, "skipped: pair in cooldown after consecutive failures", now, 0))
+				statuses = append(statuses, collectionStatusFromSub(sub, "rest_ticker", sub.SourceEndpoint, domain.StatusUnsupported, "skipped: pair in cooldown after consecutive failures", now, 0))
 				mu.Unlock()
 				return nil
 			}
@@ -175,7 +155,7 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 				mu.Unlock()
 			}
 			mu.Lock()
-			statuses = append(statuses, domain.CollectionStatus{Platform: sub.Platform, DisplaySymbol: sub.DisplaySymbol, Collector: "rest_orderbook", SourceEndpoint: sub.SourceEndpoint, Status: status, Error: book.Error, SnapshotTS: book.SnapshotTS, LatencyMS: time.Since(begin).Milliseconds()})
+			statuses = append(statuses, collectionStatusFromSub(sub, collectionOrderbookCollector(book), book.SourceEndpoint, status, book.Error, book.SnapshotTS, time.Since(begin).Milliseconds()))
 			mu.Unlock()
 			c.store.SavePlatformSnapshot(platformFromBook(book, c.cfg.Runtime))
 
@@ -196,7 +176,7 @@ func (c *Collector) CollectOnce(ctx context.Context) error {
 				mu.Unlock()
 			}
 			mu.Lock()
-			statuses = append(statuses, domain.CollectionStatus{Platform: sub.Platform, DisplaySymbol: sub.DisplaySymbol, Collector: "rest_ticker", SourceEndpoint: sub.SourceEndpoint, Status: vstatus, Error: vol.Error, SnapshotTS: vol.SnapshotTS, LatencyMS: time.Since(begin).Milliseconds()})
+			statuses = append(statuses, collectionStatusFromSub(sub, "rest_ticker", vol.SourceEndpoint, vstatus, vol.Error, vol.SnapshotTS, time.Since(begin).Milliseconds()))
 			mu.Unlock()
 			c.store.SaveVolume(vol)
 
@@ -243,6 +223,34 @@ func releasePlatformSlot(sem chan struct{}) {
 	}
 }
 
+func collectionStatusFromSub(sub domain.SymbolSub, collector, sourceEndpoint, status, errMsg string, snapshotTS time.Time, latencyMS int64) domain.CollectionStatus {
+	if sourceEndpoint == "" {
+		sourceEndpoint = sub.SourceEndpoint
+	}
+	if snapshotTS.IsZero() {
+		snapshotTS = time.Now().UTC()
+	}
+	row := domain.CollectionStatus{
+		Platform:       sub.Platform,
+		DisplaySymbol:  sub.DisplaySymbol,
+		Collector:      collector,
+		SourceEndpoint: sourceEndpoint,
+		Status:         status,
+		Error:          errMsg,
+		SnapshotTS:     snapshotTS,
+		LatencyMS:      latencyMS,
+	}
+	domain.ApplyCollectionStatusSurfaceMeta(&row, sub)
+	return row
+}
+
+func collectionOrderbookCollector(book domain.OrderBookSnapshot) string {
+	if book.DepthSource == domain.SourceWSLocalBook || book.DepthSource == domain.SourceWSLimitedDepth {
+		return "ws_orderbook"
+	}
+	return "rest_orderbook"
+}
+
 func collectionTaskTimeout(httpTimeout time.Duration) time.Duration {
 	if httpTimeout <= 0 {
 		httpTimeout = 5 * time.Second
@@ -252,6 +260,17 @@ func collectionTaskTimeout(httpTimeout time.Duration) time.Duration {
 
 func platformFromBook(book domain.OrderBookSnapshot, runtime config.Runtime) domain.PlatformSnapshot {
 	row := domain.PlatformSnapshot{Platform: book.Platform, DisplaySymbol: book.DisplaySymbol, SnapshotTS: book.SnapshotTS, SourceEndpoint: book.SourceEndpoint, DepthStatus: book.DepthStatus, PartialReason: book.PartialReason, Error: book.Error, DepthByTier: map[string]domain.DepthMetrics{}, BuySlippageBP: map[string]float64{}, SellSlippageBP: map[string]float64{}}
+	row.PlatformGroup = book.PlatformGroup
+	row.DisplayPlatform = book.DisplayPlatform
+	row.IsEdgeX = book.IsEdgeX
+	row.CanonicalSymbol = book.CanonicalSymbol
+	row.VenueSymbol = book.VenueSymbol
+	row.MarketSurface = book.MarketSurface
+	row.InstrumentKind = book.InstrumentKind
+	row.Lineage = book.Lineage
+	row.ContractID = book.ContractID
+	row.BaseAsset = book.BaseAsset
+	row.QuoteAsset = book.QuoteAsset
 	if len(book.Bids) == 0 || len(book.Asks) == 0 {
 		return row
 	}

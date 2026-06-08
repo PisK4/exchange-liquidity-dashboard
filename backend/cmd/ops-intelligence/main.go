@@ -114,6 +114,7 @@ func main() {
 		startLatestSnapshotLoad(ctx, startupState, store)
 	}
 	var lighterProvider *adapter.LighterWSProvider
+	var edgeXPerpV2Provider *adapter.EdgeXPerpV2WSProvider
 	if roleStartsLiveProviders(*role) {
 		lighterProvider = adapter.NewLighterWSProviderWithProxy(cfg.Runtime.LighterWSURL, cfg.Runtime.LighterStaleAfter, cfg.Runtime.ExchangeProxy)
 		lighterMarketIDs := lighterMarketIDsFromConfig(cfg)
@@ -124,10 +125,23 @@ func main() {
 		} else {
 			monitorLighterStartup(ctx, startupState, lighterProvider, lighterMarketIDs)
 		}
+
+		edgeXContractIDs := edgeXPerpV2ContractIDsFromConfig(cfg)
+		if wsCfg, ok := edgeXPerpV2WSConfig(cfg); ok && len(edgeXContractIDs) > 0 {
+			proxy := wsCfg.Proxy
+			if proxy == "" {
+				proxy = cfg.Runtime.ExchangeProxy
+			}
+			edgeXPerpV2Provider = adapter.NewEdgeXPerpV2WSProviderWithProxy(wsCfg.URL, wsCfg.StaleAfter, proxy)
+			go edgeXPerpV2Provider.Run(ctx, edgeXContractIDs)
+			log.Printf("edgeX perp v2 ws provider started (contracts=%d, url=%s)", len(edgeXContractIDs), edgeXPerpV2Provider.SourceEndpoint())
+		} else if len(edgeXContractIDs) > 0 {
+			log.Printf("edgeX perp v2 ws provider disabled; REST depth fallback remains active (contracts=%d)", len(edgeXContractIDs))
+		}
 	}
 
 	if *role == "collector" || *role == "all" {
-		c := collector.NewCollectorWithLighter(cfg, store, lighterProvider)
+		c := collector.NewCollectorWithLiveBooks(cfg, store, lighterProvider, edgeXPerpV2Provider)
 		backfiller := collector.NewSymbolBackfiller(cfg, store, lighterProvider)
 		var top30bf *collector.Top30Backfiller
 		if !*runOnce {
@@ -417,6 +431,38 @@ func roleRequiresMySQL(role string) bool {
 
 func roleStartsLiveProviders(role string) bool {
 	return role == "collector" || role == "all"
+}
+
+func edgeXPerpV2WSConfig(cfg config.Config) (config.WSProviderConfig, bool) {
+	for _, key := range []string{"edgeX_perp_v2", "edgeXPerpV2", "edgeX"} {
+		wsCfg, ok := cfg.Runtime.WSProviders[key]
+		if ok && wsCfg.Enabled {
+			return wsCfg, true
+		}
+	}
+	return config.WSProviderConfig{}, false
+}
+
+func edgeXPerpV2ContractIDsFromConfig(cfg config.Config) []string {
+	seen := map[string]struct{}{}
+	out := []string{}
+	for _, sub := range cfg.Symbols {
+		if sub.Platform != "edgeX" || sub.ContractID == "" {
+			continue
+		}
+		marketSurface := strings.ToLower(strings.TrimSpace(sub.MarketSurface))
+		lineage := strings.ToLower(strings.TrimSpace(sub.Lineage))
+		if marketSurface != "perp_v2" && !strings.Contains(lineage, "perp-v2") {
+			continue
+		}
+		id := strings.TrimSpace(sub.ContractID)
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 func shouldLoadLatestSynchronously(role string, runOnce bool) bool {

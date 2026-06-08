@@ -26,6 +26,7 @@ type Query = Record<string, string | undefined> & {
   symbol: string;
   window: string;
   platform: string;
+  surface?: string;
 };
 
 type DashboardData = {
@@ -60,12 +61,13 @@ type DashboardData = {
 
 function buildPaths(query: Query) {
   const symbolParam = encodeURIComponent(query.symbol);
+  const surfaceParam = encodeURIComponent(query.surface ?? 'perp');
   return {
     meta: '/api/ops-intelligence/meta',
     liquidity: `/api/snapshot/liquidity?symbol=${symbolParam}`,
     quality: `/api/snapshot/quality?symbol=${symbolParam}`,
     share: `/api/snapshot/share?window=${query.window}`,
-    top30: `/api/snapshot/top30?surface=perp&platform=${query.platform}`,
+    top30: `/api/snapshot/top30?surface=${surfaceParam}&platform=${query.platform}`,
     top30Divergence: '/api/snapshot/top30/divergence',
   };
 }

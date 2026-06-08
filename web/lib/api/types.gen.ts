@@ -1165,7 +1165,18 @@ export interface components {
         };
         PlatformRow: {
             platform: string;
+            platform_group?: string;
+            display_platform?: string;
+            is_edgex?: boolean;
             display_symbol: string;
+            canonical_symbol?: string;
+            venue_symbol?: string;
+            market_surface?: string;
+            instrument_kind?: string;
+            lineage?: string;
+            contract_id?: string;
+            base_asset?: string;
+            quote_asset?: string;
             /** Format: date-time */
             snapshot_ts: string;
             source_endpoint: string;
@@ -1196,6 +1207,11 @@ export interface components {
         };
         PlatformFundingRate: {
             platform: string;
+            platform_group?: string;
+            display_platform?: string;
+            is_edgex?: boolean;
+            market_surface?: string;
+            lineage?: string;
             display_symbol?: string;
             rate_8h?: number | null;
             rate_native?: number | null;
@@ -1260,6 +1276,13 @@ export interface components {
         ShareRow: {
             rank?: number;
             platform: string;
+            platform_group?: string;
+            display_platform?: string;
+            is_edgex?: boolean;
+            market_surface?: string;
+            instrument_kind?: string;
+            lineage?: string;
+            aggregation_scope?: string;
             raw_volume_usd?: number;
             adjusted_volume_usd?: number;
             adjusted_volume_24h_usd?: number;
@@ -1298,6 +1321,23 @@ export interface components {
             history?: components["schemas"]["ShareHistory"];
             trend?: components["schemas"]["ShareTrend"];
         };
+        ListedSurfaceDetail: {
+            platform?: string;
+            platform_group?: string;
+            display_platform?: string;
+            is_edgex?: boolean;
+            display_symbol?: string;
+            canonical_symbol?: string;
+            venue_symbol?: string;
+            market_surface?: string;
+            instrument_kind?: string;
+            lineage?: string;
+            contract_id?: string;
+            base_asset?: string;
+            quote_asset?: string;
+            source_endpoint?: string;
+            status?: string;
+        };
         Top30Row: {
             rank: number;
             platform: string;
@@ -1308,6 +1348,7 @@ export interface components {
             volume_7d_status?: components["schemas"]["ApiStatus"];
             delta_7d_status?: components["schemas"]["ApiStatus"];
             edgex_listed?: boolean;
+            edgex_listed_surfaces?: components["schemas"]["ListedSurfaceDetail"][];
             edgex_listed_status?: components["schemas"]["ApiStatus"];
             competitor_top30_coverage?: number;
             competitor_top30_coverage_status?: components["schemas"]["ApiStatus"];
@@ -1350,6 +1391,7 @@ export interface components {
             /** @enum {string} */
             category: "cex_only" | "dex_only" | "cex_heavy" | "dex_heavy" | "aligned";
             edgex_listed: boolean;
+            edgex_listed_surfaces?: components["schemas"]["ListedSurfaceDetail"][];
             edgex_listed_status?: components["schemas"]["ApiStatus"];
         };
         Top30DivergenceKPI: {
@@ -1382,11 +1424,25 @@ export interface components {
         };
         CollectionStatusRow: {
             platform?: string;
+            platform_group?: string;
+            display_platform?: string;
+            is_edgex?: boolean;
             display_symbol?: string;
+            canonical_symbol?: string;
+            venue_symbol?: string;
+            market_surface?: string;
+            instrument_kind?: string;
+            lineage?: string;
+            contract_id?: string;
+            base_asset?: string;
+            quote_asset?: string;
+            collector?: string;
+            source_endpoint?: string;
             status?: components["schemas"]["ApiStatus"];
             error?: string;
             /** Format: date-time */
             snapshot_ts?: string;
+            latency_ms?: number;
         } & {
             [key: string]: unknown;
         };

@@ -60,6 +60,54 @@ symbols:
     asset_category: crypto
     market_surface: perp
     instrument_kind: canonical
+  - display_symbol: BTC-USDT (perp)
+    display_name: BTC-USD
+    canonical: BTC
+    asset_category: crypto
+    market_surface: perp_v2
+    instrument_kind: canonical
+    lineage: edgeX-perp-v2
+    base_asset: BTC
+    quote_asset: USDC
+    settle_asset: USDC
+    platforms: [edgeX]
+    api_symbol: BTCUSDC
+    contract_id: "30000001"
+    source_endpoint: https://edgex-prod-v2.edgex.exchange/api/v2/public/quote
+    api_level_cap: 200
+    catalog_status: TRADING
+  - display_symbol: ETH-USDT (perp)
+    display_name: ETH-USD
+    canonical: ETH
+    asset_category: crypto
+    market_surface: perp_v2
+    instrument_kind: canonical
+    lineage: edgeX-perp-v2
+    base_asset: ETH
+    quote_asset: USDC
+    settle_asset: USDC
+    platforms: [edgeX]
+    api_symbol: ETHUSDC
+    contract_id: "30000002"
+    source_endpoint: https://edgex-prod-v2.edgex.exchange/api/v2/public/quote
+    api_level_cap: 200
+    catalog_status: TRADING
+  - display_symbol: SOL-USDT (perp)
+    display_name: SOL-USD
+    canonical: SOL
+    asset_category: crypto
+    market_surface: perp_v2
+    instrument_kind: canonical
+    lineage: edgeX-perp-v2
+    base_asset: SOL
+    quote_asset: USDC
+    settle_asset: USDC
+    platforms: [edgeX]
+    api_symbol: SOLUSDC
+    contract_id: "30000003"
+    source_endpoint: https://edgex-prod-v2.edgex.exchange/api/v2/public/quote
+    api_level_cap: 200
+    catalog_status: TRADING
   - display_symbol: BNB-USDT (perp)
     display_name: BNB-USD
     canonical: BNB

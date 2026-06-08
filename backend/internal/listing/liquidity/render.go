@@ -230,8 +230,36 @@ func formatPlatformLine(row AlertPlatformRow) string {
 	} else if row.IsMedian {
 		suffix = " ← 中位数"
 	}
-	return fmt.Sprintf("%s **%s** · 深度 $%s · #%d%s",
-		bullet, row.Platform, humanUSD(row.DepthUSD), row.Rank, suffix)
+	meta := liquidityPlatformMeta(row)
+	if meta != "" {
+		meta = " · " + meta
+	}
+	return fmt.Sprintf("%s **%s** · 深度 $%s · #%d%s%s",
+		bullet, liquidityPlatformLabel(row), humanUSD(row.DepthUSD), row.Rank, suffix, meta)
+}
+
+func liquidityPlatformLabel(row AlertPlatformRow) string {
+	if label := strings.TrimSpace(row.DisplayPlatform); label != "" {
+		return label
+	}
+	return row.Platform
+}
+
+func liquidityPlatformMeta(row AlertPlatformRow) string {
+	parts := []string{}
+	if row.MarketSurface != "" {
+		parts = append(parts, row.MarketSurface)
+	}
+	if row.DepthSource != "" {
+		parts = append(parts, row.DepthSource)
+	}
+	if row.SourceID != "" {
+		parts = append(parts, row.SourceID)
+	}
+	if row.ContractID != "" && row.IsEdgex {
+		parts = append(parts, "contract "+row.ContractID)
+	}
+	return strings.Join(parts, " / ")
 }
 
 func buildLiquidityActionRow(card CardPayload) map[string]any {

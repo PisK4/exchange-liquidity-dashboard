@@ -36,6 +36,26 @@ func (p fakeLighterBookProvider) Snapshot(marketID int) ([]domain.Level, []domai
 	return p.bids, p.asks, time.Now().UTC(), p.err
 }
 
+type fakeEdgeXPerpV2BookProvider struct {
+	bids     []domain.Level
+	asks     []domain.Level
+	err      error
+	endpoint string
+	calls    int
+}
+
+func (p *fakeEdgeXPerpV2BookProvider) Snapshot(contractID string) ([]domain.Level, []domain.Level, time.Time, error) {
+	p.calls++
+	return p.bids, p.asks, time.Now().UTC(), p.err
+}
+
+func (p *fakeEdgeXPerpV2BookProvider) SourceEndpoint() string {
+	if p.endpoint == "" {
+		return defaultEdgeXPerpV2WSURL
+	}
+	return p.endpoint
+}
+
 func TestFetchOrderBookEmptyAPISymbolReturnsUnsupported(t *testing.T) {
 	requestCount := 0
 	adapter := RESTAdapter{
@@ -145,6 +165,222 @@ func TestFetchEdgeXMissingTickerValueErrors(t *testing.T) {
 	}
 	if !strings.Contains(vol.Error, "empty edgex ticker value") {
 		t.Fatalf("Error = %q, want empty edgex ticker value", vol.Error)
+	}
+}
+
+func TestFetchEdgeXPerpV2UsesV2DepthEndpointAndSurfaceMeta(t *testing.T) {
+	var requestedURL string
+	adapter := RESTAdapter{
+		Platform: "edgeX",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requestedURL = req.URL.String()
+			return jsonResponse(`{"data":[{"bids":[{"price":"99","size":"1"}],"asks":[{"price":"101","size":"2"}]}]}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	book, err := adapter.FetchOrderBook(context.Background(), domain.SymbolSub{
+		Platform:       "edgeX",
+		Canonical:      "BTC",
+		DisplaySymbol:  "BTC-USDT (perp)",
+		APISymbol:      "BTCUSDC",
+		MarketSurface:  "perp_v2",
+		InstrumentKind: "perp",
+		Lineage:        "edgeX-perp-v2",
+		ContractID:     "30000001",
+		BaseAsset:      "BTC",
+		QuoteAsset:     "USDC",
+	})
+	if err != nil {
+		t.Fatalf("FetchOrderBook returned error: %v", err)
+	}
+	if !strings.Contains(requestedURL, "edgex-prod-v2.edgex.exchange/api/v2/public/quote/getDepth") {
+		t.Fatalf("requested URL = %q, want V2 depth endpoint", requestedURL)
+	}
+	if !strings.Contains(requestedURL, "contractId=30000001") {
+		t.Fatalf("requested URL = %q, want V2 contract id", requestedURL)
+	}
+	if book.SourceID != "edgeX-perp-v2-rest-depth-200" {
+		t.Fatalf("SourceID = %q, want V2 rest source id", book.SourceID)
+	}
+	if book.DepthSource != domain.SourceRestSnapshot {
+		t.Fatalf("DepthSource = %q, want rest_snapshot", book.DepthSource)
+	}
+	if book.DisplayPlatform != "edgeX V2" || book.MarketSurface != "perp_v2" || book.ContractID != "30000001" || book.QuoteAsset != "USDC" {
+		t.Fatalf("surface meta not propagated: %+v", book)
+	}
+}
+
+func TestFetchEdgeXPerpV2UsesWSLocalBookWhenReady(t *testing.T) {
+	requestCount := 0
+	provider := &fakeEdgeXPerpV2BookProvider{
+		bids:     []domain.Level{{Price: 100, Size: 1}},
+		asks:     []domain.Level{{Price: 101, Size: 2}},
+		endpoint: "wss://example.invalid/edgeX-v2/ws",
+	}
+	adapter := RESTAdapter{
+		Platform: "edgeX",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requestCount++
+			return nil, errors.New("REST depth should not be called when V2 WS book is ready")
+		})},
+		MaxAttempts: 1,
+		EdgeXPerpV2: provider,
+	}
+
+	book, err := adapter.FetchOrderBook(context.Background(), domain.SymbolSub{
+		Platform:       "edgeX",
+		Canonical:      "BTC",
+		DisplaySymbol:  "BTC-USDT (perp)",
+		APISymbol:      "BTCUSDC",
+		MarketSurface:  "perp_v2",
+		InstrumentKind: "perp",
+		Lineage:        "edgeX-perp-v2",
+		ContractID:     "30000001",
+		BaseAsset:      "BTC",
+		QuoteAsset:     "USDC",
+	})
+	if err != nil {
+		t.Fatalf("FetchOrderBook returned error: %v", err)
+	}
+	if requestCount != 0 {
+		t.Fatalf("expected no REST requests, got %d", requestCount)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("provider Snapshot calls = %d, want 1", provider.calls)
+	}
+	if book.SourceID != "edgeX-perp-v2-ws-depth-200" {
+		t.Fatalf("SourceID = %q, want V2 WS source id", book.SourceID)
+	}
+	if book.DepthSource != domain.SourceWSLocalBook {
+		t.Fatalf("DepthSource = %q, want ws_local_book", book.DepthSource)
+	}
+	if book.SourceEndpoint != "wss://example.invalid/edgeX-v2/ws" {
+		t.Fatalf("SourceEndpoint = %q", book.SourceEndpoint)
+	}
+	if len(book.Bids) != 1 || book.Bids[0].Price != 100 || len(book.Asks) != 1 || book.Asks[0].Price != 101 {
+		t.Fatalf("unexpected WS book levels: %+v/%+v", book.Bids, book.Asks)
+	}
+	if book.DisplayPlatform != "edgeX V2" || book.MarketSurface != "perp_v2" || book.ContractID != "30000001" {
+		t.Fatalf("surface meta not propagated: %+v", book)
+	}
+}
+
+func TestFetchEdgeXPerpV2FallsBackToRESTWhenWSNotReady(t *testing.T) {
+	var requestedURL string
+	provider := &fakeEdgeXPerpV2BookProvider{err: errors.New("ws book not ready")}
+	adapter := RESTAdapter{
+		Platform: "edgeX",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requestedURL = req.URL.String()
+			return jsonResponse(`{"data":[{"bids":[{"price":"99","size":"1"}],"asks":[{"price":"101","size":"2"}]}]}`), nil
+		})},
+		MaxAttempts: 1,
+		EdgeXPerpV2: provider,
+	}
+
+	book, err := adapter.FetchOrderBook(context.Background(), domain.SymbolSub{
+		Platform:       "edgeX",
+		Canonical:      "BTC",
+		DisplaySymbol:  "BTC-USDT (perp)",
+		APISymbol:      "BTCUSDC",
+		MarketSurface:  "perp_v2",
+		InstrumentKind: "perp",
+		Lineage:        "edgeX-perp-v2",
+		ContractID:     "30000001",
+		BaseAsset:      "BTC",
+		QuoteAsset:     "USDC",
+	})
+	if err != nil {
+		t.Fatalf("FetchOrderBook returned error: %v", err)
+	}
+	if provider.calls != 1 {
+		t.Fatalf("provider Snapshot calls = %d, want 1", provider.calls)
+	}
+	if !strings.Contains(requestedURL, "edgex-prod-v2.edgex.exchange/api/v2/public/quote/getDepth") {
+		t.Fatalf("requested URL = %q, want V2 REST fallback endpoint", requestedURL)
+	}
+	if book.SourceID != "edgeX-perp-v2-rest-depth-200" || book.DepthSource != domain.SourceRestSnapshot {
+		t.Fatalf("unexpected fallback source: source_id=%q depth_source=%q", book.SourceID, book.DepthSource)
+	}
+}
+
+func TestFetchEdgeXPerpV1DoesNotUsePerpV2WSProvider(t *testing.T) {
+	var requestedURL string
+	provider := &fakeEdgeXPerpV2BookProvider{
+		bids: []domain.Level{{Price: 100, Size: 1}},
+		asks: []domain.Level{{Price: 101, Size: 2}},
+	}
+	adapter := RESTAdapter{
+		Platform: "edgeX",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requestedURL = req.URL.String()
+			return jsonResponse(`{"data":[{"bids":[{"price":"98","size":"1"}],"asks":[{"price":"102","size":"2"}]}]}`), nil
+		})},
+		MaxAttempts: 1,
+		EdgeXPerpV2: provider,
+	}
+
+	book, err := adapter.FetchOrderBook(context.Background(), domain.SymbolSub{
+		Platform:       "edgeX",
+		Canonical:      "BTC",
+		DisplaySymbol:  "BTC-USDT (perp)",
+		APISymbol:      "BTCUSD",
+		MarketSurface:  "perp_v1",
+		InstrumentKind: "perp",
+		Lineage:        "edgeX-perp-v1",
+		ContractID:     "10000001",
+		BaseAsset:      "BTC",
+		QuoteAsset:     "USDT",
+	})
+	if err != nil {
+		t.Fatalf("FetchOrderBook returned error: %v", err)
+	}
+	if provider.calls != 0 {
+		t.Fatalf("V1 should not use V2 provider, calls=%d", provider.calls)
+	}
+	if !strings.Contains(requestedURL, "pro.edgex.exchange/api/v1/public/quote/getDepth") {
+		t.Fatalf("requested URL = %q, want V1 REST endpoint", requestedURL)
+	}
+	if book.DepthSource == domain.SourceWSLocalBook {
+		t.Fatalf("V1 must not be attributed to V2 WS source: %+v", book)
+	}
+}
+
+func TestFetchEdgeXPerpV2TickerUsesV2EndpointAndSurfaceMeta(t *testing.T) {
+	var requestedURL string
+	adapter := RESTAdapter{
+		Platform: "edgeX",
+		Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			requestedURL = req.URL.String()
+			return jsonResponse(`{"data":[{"value":"12345.67"}]}`), nil
+		})},
+		MaxAttempts: 1,
+	}
+
+	vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+		Platform:       "edgeX",
+		Canonical:      "ETH",
+		DisplaySymbol:  "ETH-USDT (perp)",
+		APISymbol:      "ETHUSDC",
+		MarketSurface:  "perp_v2",
+		InstrumentKind: "perp",
+		Lineage:        "edgeX-perp-v2",
+		ContractID:     "30000002",
+		BaseAsset:      "ETH",
+		QuoteAsset:     "USDC",
+	})
+	if err != nil {
+		t.Fatalf("FetchTicker returned error: %v", err)
+	}
+	if !strings.Contains(requestedURL, "edgex-prod-v2.edgex.exchange/api/v2/public/quote/getTicker") {
+		t.Fatalf("requested URL = %q, want V2 ticker endpoint", requestedURL)
+	}
+	if vol.Status != domain.StatusComplete || vol.Volume24HUSD != 12345.67 {
+		t.Fatalf("unexpected volume row: %+v", vol)
+	}
+	if vol.DisplayPlatform != "edgeX V2" || vol.MarketSurface != "perp_v2" || vol.ContractID != "30000002" || vol.QuoteAsset != "USDC" {
+		t.Fatalf("surface meta not propagated: %+v", vol)
 	}
 }
 

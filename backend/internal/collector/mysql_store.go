@@ -15,15 +15,15 @@ import (
 )
 
 const initSchemaSQL = `
-CREATE TABLE IF NOT EXISTS t_symbol_mapping (id BIGINT AUTO_INCREMENT PRIMARY KEY, display_symbol VARCHAR(96) NOT NULL, canonical VARCHAR(32) NOT NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, platform VARCHAR(32) NOT NULL, api_symbol VARCHAR(96) NOT NULL, source_endpoint VARCHAR(255) NOT NULL);
-CREATE TABLE IF NOT EXISTS t_orderbook_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, tier VARCHAR(16) NOT NULL DEFAULT '', bid_usd DECIMAL(28,8), ask_usd DECIMAL(28,8), total_usd DECIMAL(28,8), depth_status VARCHAR(32) NOT NULL, partial_reason VARCHAR(128), depth_source VARCHAR(32), source_id VARCHAR(64), levels_returned INT, bid_levels_returned INT, ask_levels_returned INT, api_level_cap INT, farthest_bid_pct DECIMAL(18,8), farthest_ask_pct DECIMAL(18,8), farthest_distance_pct DECIMAL(18,8), source_endpoint VARCHAR(255), aggregation_params_json JSON, strict_complete TINYINT(1) NOT NULL DEFAULT 0, display_available TINYINT(1) NOT NULL DEFAULT 0, policy_acceptance VARCHAR(32), physical_limit TINYINT(1) NOT NULL DEFAULT 0, unofficial_ui_endpoint TINYINT(1) NOT NULL DEFAULT 0, error_message TEXT, depth_json JSON, buy_slippage_json JSON, sell_slippage_json JSON);
-CREATE TABLE IF NOT EXISTS t_book_quality_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, spread_bp DECIMAL(18,8), imbalance_pct DECIMAL(18,8));
-CREATE TABLE IF NOT EXISTS t_symbol_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), error_message TEXT);
+CREATE TABLE IF NOT EXISTS t_symbol_mapping (id BIGINT AUTO_INCREMENT PRIMARY KEY, display_symbol VARCHAR(96) NOT NULL, canonical VARCHAR(32) NOT NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, lineage VARCHAR(64) NOT NULL DEFAULT '', platform VARCHAR(32) NOT NULL, api_symbol VARCHAR(96) NOT NULL, contract_id VARCHAR(96) NOT NULL DEFAULT '', base_asset VARCHAR(64) NOT NULL DEFAULT '', quote_asset VARCHAR(64) NOT NULL DEFAULT '', source_endpoint VARCHAR(255) NOT NULL, UNIQUE KEY uk_symbol_mapping_identity (platform, display_symbol, market_surface, instrument_kind, lineage, api_symbol, contract_id));
+CREATE TABLE IF NOT EXISTS t_orderbook_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, platform_group VARCHAR(32), display_platform VARCHAR(64), is_edgex TINYINT(1) NOT NULL DEFAULT 0, display_symbol VARCHAR(96) NOT NULL, canonical_symbol VARCHAR(64), venue_symbol VARCHAR(96), market_surface VARCHAR(32), instrument_kind VARCHAR(32), lineage VARCHAR(64), contract_id VARCHAR(96), base_asset VARCHAR(64), quote_asset VARCHAR(64), snapshot_ts TIMESTAMP NOT NULL, tier VARCHAR(16) NOT NULL DEFAULT '', bid_usd DECIMAL(28,8), ask_usd DECIMAL(28,8), total_usd DECIMAL(28,8), depth_status VARCHAR(32) NOT NULL, partial_reason VARCHAR(128), depth_source VARCHAR(32), source_id VARCHAR(64), levels_returned INT, bid_levels_returned INT, ask_levels_returned INT, api_level_cap INT, farthest_bid_pct DECIMAL(18,8), farthest_ask_pct DECIMAL(18,8), farthest_distance_pct DECIMAL(18,8), source_endpoint VARCHAR(255), aggregation_params_json JSON, strict_complete TINYINT(1) NOT NULL DEFAULT 0, display_available TINYINT(1) NOT NULL DEFAULT 0, policy_acceptance VARCHAR(32), physical_limit TINYINT(1) NOT NULL DEFAULT 0, unofficial_ui_endpoint TINYINT(1) NOT NULL DEFAULT 0, error_message TEXT, depth_json JSON, buy_slippage_json JSON, sell_slippage_json JSON);
+CREATE TABLE IF NOT EXISTS t_book_quality_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, platform_group VARCHAR(32), display_platform VARCHAR(64), is_edgex TINYINT(1) NOT NULL DEFAULT 0, display_symbol VARCHAR(96) NOT NULL, canonical_symbol VARCHAR(64), venue_symbol VARCHAR(96), market_surface VARCHAR(32), instrument_kind VARCHAR(32), lineage VARCHAR(64), contract_id VARCHAR(96), base_asset VARCHAR(64), quote_asset VARCHAR(64), snapshot_ts TIMESTAMP NOT NULL, spread_bp DECIMAL(18,8), imbalance_pct DECIMAL(18,8));
+CREATE TABLE IF NOT EXISTS t_symbol_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, platform_group VARCHAR(32), display_platform VARCHAR(64), is_edgex TINYINT(1) NOT NULL DEFAULT 0, display_symbol VARCHAR(96) NOT NULL, canonical_symbol VARCHAR(64), venue_symbol VARCHAR(96), market_surface VARCHAR(32), instrument_kind VARCHAR(32), lineage VARCHAR(64), contract_id VARCHAR(96), base_asset VARCHAR(64), quote_asset VARCHAR(64), snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), error_message TEXT);
 CREATE TABLE IF NOT EXISTS t_top30_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, symbol VARCHAR(96) NOT NULL, rank_no INT NOT NULL, volume_24h_usd DECIMAL(28,8), volume_7d_usd DECIMAL(28,8) NULL, delta_7d_pct DECIMAL(10,4) NULL, coverage_count INT NULL, edgex_listed TINYINT(1) NULL, suggested_action VARCHAR(64) NULL, data_source VARCHAR(32) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NULL, status VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, UNIQUE KEY uk_top30_platform_symbol_ts (platform, symbol, snapshot_ts));
 CREATE TABLE IF NOT EXISTS t_daily_volume_aggregate (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), day DATE NOT NULL, volume_usd DECIMAL(28,8), status VARCHAR(32) NOT NULL, data_source VARCHAR(32) NOT NULL DEFAULT 'native', source_endpoint VARCHAR(255) NULL, snapshot_ts TIMESTAMP NULL, UNIQUE KEY uk_day_platform_symbol_source (day, platform, display_symbol, data_source));
 CREATE TABLE IF NOT EXISTS t_coingecko_platform_volume_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, snapshot_ts TIMESTAMP NOT NULL, volume_24h_usd DECIMAL(28,2), open_interest_usd DECIMAL(28,2), data_source VARCHAR(32) NOT NULL DEFAULT 'coingecko', source_endpoint VARCHAR(255) NOT NULL, status VARCHAR(32) NOT NULL, INDEX idx_cg_platform_ts (platform, snapshot_ts));
 CREATE TABLE IF NOT EXISTS t_collection_run (id BIGINT AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, started_at TIMESTAMP NOT NULL, completed_at TIMESTAMP, success_count INT, failed_count INT);
-CREATE TABLE IF NOT EXISTS t_collection_status (id BIGINT AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, platform VARCHAR(32) NOT NULL, display_symbol VARCHAR(96), collector VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), status VARCHAR(32) NOT NULL, error_message TEXT, snapshot_ts TIMESTAMP NOT NULL, latency_ms BIGINT NOT NULL DEFAULT 0);
+CREATE TABLE IF NOT EXISTS t_collection_status (id BIGINT AUTO_INCREMENT PRIMARY KEY, run_id VARCHAR(64) NOT NULL, platform VARCHAR(32) NOT NULL, platform_group VARCHAR(32), display_platform VARCHAR(64), is_edgex TINYINT(1) NOT NULL DEFAULT 0, display_symbol VARCHAR(96), canonical_symbol VARCHAR(64), venue_symbol VARCHAR(96), market_surface VARCHAR(32), instrument_kind VARCHAR(32), lineage VARCHAR(64), contract_id VARCHAR(96), base_asset VARCHAR(64), quote_asset VARCHAR(64), collector VARCHAR(32) NOT NULL, source_endpoint VARCHAR(255), status VARCHAR(32) NOT NULL, error_message TEXT, snapshot_ts TIMESTAMP NOT NULL, latency_ms BIGINT NOT NULL DEFAULT 0);
 CREATE TABLE IF NOT EXISTS t_listing_instrument_snapshot (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, market_type VARCHAR(32) NOT NULL, api_symbol VARCHAR(96) NOT NULL, api_market_id VARCHAR(96) NULL, display_symbol VARCHAR(128) NULL, canonical_symbol VARCHAR(64) NULL, base_asset VARCHAR(64) NULL, quote_asset VARCHAR(64) NULL, settle_asset VARCHAR(64) NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, contract_type VARCHAR(64) NULL, status_raw VARCHAR(64) NULL, status_normalized VARCHAR(32) NOT NULL, status_field_name VARCHAR(64) NULL, listing_time_ts TIMESTAMP NULL, listing_time_field_name VARCHAR(64) NULL, delist_flag TINYINT(1) NOT NULL DEFAULT 0, first_seen_at TIMESTAMP NOT NULL, previous_seen_at TIMESTAMP NULL, last_seen_at TIMESTAMP NOT NULL, raw_json JSON NOT NULL, raw_json_hash VARCHAR(64) NOT NULL, normalizer_version VARCHAR(32) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_instrument (platform, market_type, api_symbol), KEY idx_listing_instrument_symbol (canonical_symbol, market_surface, instrument_kind), KEY idx_listing_instrument_status (platform, market_type, status_normalized, last_seen_at), KEY idx_listing_instrument_listing_time (listing_time_ts));
 CREATE TABLE IF NOT EXISTS t_listing_announcement (id BIGINT AUTO_INCREMENT PRIMARY KEY, platform VARCHAR(32) NOT NULL, announcement_id VARCHAR(191) NOT NULL, announcement_url VARCHAR(512) NULL, title TEXT NOT NULL, description TEXT NULL, category VARCHAR(128) NULL, tags_json JSON NULL, language VARCHAR(32) NULL, published_at TIMESTAMP NULL, source_updated_at TIMESTAMP NULL, parsed_market_type VARCHAR(32) NULL, effective_listing_time TIMESTAMP NULL, parse_confidence VARCHAR(16) NOT NULL, raw_payload_json JSON NOT NULL, raw_payload_hash VARCHAR(64) NOT NULL, parser_version VARCHAR(32) NOT NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_announcement (platform, announcement_id), KEY idx_listing_announcement_published (platform, published_at), KEY idx_listing_announcement_hash (raw_payload_hash));
 CREATE TABLE IF NOT EXISTS t_listing_announcement_symbol (id BIGINT AUTO_INCREMENT PRIMARY KEY, announcement_id BIGINT NOT NULL, canonical_symbol VARCHAR(64) NOT NULL, display_symbol VARCHAR(128) NULL, market_surface VARCHAR(32) NOT NULL, instrument_kind VARCHAR(32) NOT NULL, signal_subtype VARCHAR(64) NOT NULL, listing_time_ts TIMESTAMP NULL, created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE KEY uk_listing_announcement_symbol (announcement_id, canonical_symbol, market_surface, instrument_kind), KEY idx_listing_announcement_symbol_symbol (canonical_symbol, market_surface, instrument_kind));
@@ -250,13 +250,13 @@ func (s *Store) persistSymbolMappingsLocked(ctx context.Context, tx *sql.Tx) err
 	if _, err := tx.ExecContext(ctx, `DELETE FROM t_symbol_mapping`); err != nil {
 		return err
 	}
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO t_symbol_mapping (display_symbol, canonical, market_surface, instrument_kind, platform, api_symbol, source_endpoint) VALUES (?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO t_symbol_mapping (display_symbol, canonical, market_surface, instrument_kind, lineage, platform, api_symbol, contract_id, base_asset, quote_asset, source_endpoint) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, sub := range s.cfg.Symbols {
-		if _, err := stmt.ExecContext(ctx, sub.DisplaySymbol, sub.Canonical, sub.MarketSurface, sub.InstrumentKind, sub.Platform, sub.APISymbol, sub.SourceEndpoint); err != nil {
+		if _, err := stmt.ExecContext(ctx, sub.DisplaySymbol, sub.Canonical, sub.MarketSurface, sub.InstrumentKind, sub.Lineage, sub.Platform, sub.APISymbol, sub.ContractID, sub.BaseAsset, sub.QuoteAsset, sub.SourceEndpoint); err != nil {
 			return err
 		}
 	}
@@ -271,12 +271,12 @@ func (s *Store) persistPlatformSnapshot(ctx context.Context, row domain.Platform
 	rows := platformSnapshotOrderbookRows(row)
 	for _, tier := range sortedOrderbookTiers(rows) {
 		dbRow := rows[tier]
-		_, err := db.ExecContext(ctx, `INSERT INTO t_orderbook_snapshot (platform, display_symbol, snapshot_ts, tier, bid_usd, ask_usd, total_usd, depth_status, partial_reason, depth_source, source_id, levels_returned, bid_levels_returned, ask_levels_returned, api_level_cap, farthest_bid_pct, farthest_ask_pct, farthest_distance_pct, source_endpoint, aggregation_params_json, strict_complete, display_available, policy_acceptance, physical_limit, unofficial_ui_endpoint, error_message, depth_json, buy_slippage_json, sell_slippage_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, dbRow.Platform, dbRow.DisplaySymbol, dbRow.SnapshotTS, dbRow.Tier, dbRow.BidUSD, dbRow.AskUSD, dbRow.TotalUSD, dbRow.DepthStatus, nullString(dbRow.PartialReason), nullString(dbRow.DepthSource), nullString(dbRow.SourceID), nullInt(dbRow.LevelsReturned), nullInt(dbRow.BidLevelsReturned), nullInt(dbRow.AskLevelsReturned), nullInt(dbRow.APILevelCap), nullFloat(dbRow.FarthestBidPct), nullFloat(dbRow.FarthestAskPct), nullFloat(dbRow.FarthestDistancePct), dbRow.SourceEndpoint, dbRow.AggregationParamsJSON, boolToInt(dbRow.StrictComplete), boolToInt(dbRow.DisplayAvailable), nullString(dbRow.PolicyAcceptance), boolToInt(dbRow.PhysicalLimit), boolToInt(dbRow.UnofficialUIEndpoint), nullString(dbRow.Error), dbRow.DepthJSON, dbRow.BuySlippageJSON, dbRow.SellSlippageJSON)
+		_, err := db.ExecContext(ctx, `INSERT INTO t_orderbook_snapshot (platform, platform_group, display_platform, is_edgex, display_symbol, canonical_symbol, venue_symbol, market_surface, instrument_kind, lineage, contract_id, base_asset, quote_asset, snapshot_ts, tier, bid_usd, ask_usd, total_usd, depth_status, partial_reason, depth_source, source_id, levels_returned, bid_levels_returned, ask_levels_returned, api_level_cap, farthest_bid_pct, farthest_ask_pct, farthest_distance_pct, source_endpoint, aggregation_params_json, strict_complete, display_available, policy_acceptance, physical_limit, unofficial_ui_endpoint, error_message, depth_json, buy_slippage_json, sell_slippage_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, dbRow.Platform, nullString(dbRow.PlatformGroup), nullString(dbRow.DisplayPlatform), boolToInt(dbRow.IsEdgeX), dbRow.DisplaySymbol, nullString(dbRow.CanonicalSymbol), nullString(dbRow.VenueSymbol), nullString(dbRow.MarketSurface), nullString(dbRow.InstrumentKind), nullString(dbRow.Lineage), nullString(dbRow.ContractID), nullString(dbRow.BaseAsset), nullString(dbRow.QuoteAsset), dbRow.SnapshotTS, dbRow.Tier, dbRow.BidUSD, dbRow.AskUSD, dbRow.TotalUSD, dbRow.DepthStatus, nullString(dbRow.PartialReason), nullString(dbRow.DepthSource), nullString(dbRow.SourceID), nullInt(dbRow.LevelsReturned), nullInt(dbRow.BidLevelsReturned), nullInt(dbRow.AskLevelsReturned), nullInt(dbRow.APILevelCap), nullFloat(dbRow.FarthestBidPct), nullFloat(dbRow.FarthestAskPct), nullFloat(dbRow.FarthestDistancePct), dbRow.SourceEndpoint, dbRow.AggregationParamsJSON, boolToInt(dbRow.StrictComplete), boolToInt(dbRow.DisplayAvailable), nullString(dbRow.PolicyAcceptance), boolToInt(dbRow.PhysicalLimit), boolToInt(dbRow.UnofficialUIEndpoint), nullString(dbRow.Error), dbRow.DepthJSON, dbRow.BuySlippageJSON, dbRow.SellSlippageJSON)
 		if err != nil {
 			return err
 		}
 	}
-	_, err := db.ExecContext(ctx, `INSERT INTO t_book_quality_snapshot (platform, display_symbol, snapshot_ts, spread_bp, imbalance_pct) VALUES (?, ?, ?, ?, ?)`, row.Platform, row.DisplaySymbol, row.SnapshotTS, row.SpreadBP, row.Imbalance)
+	_, err := db.ExecContext(ctx, `INSERT INTO t_book_quality_snapshot (platform, platform_group, display_platform, is_edgex, display_symbol, canonical_symbol, venue_symbol, market_surface, instrument_kind, lineage, contract_id, base_asset, quote_asset, snapshot_ts, spread_bp, imbalance_pct) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, row.Platform, nullString(row.PlatformGroup), nullString(row.DisplayPlatform), boolToInt(row.IsEdgeX), row.DisplaySymbol, nullString(row.CanonicalSymbol), nullString(row.VenueSymbol), nullString(row.MarketSurface), nullString(row.InstrumentKind), nullString(row.Lineage), nullString(row.ContractID), nullString(row.BaseAsset), nullString(row.QuoteAsset), row.SnapshotTS, row.SpreadBP, row.Imbalance)
 	return err
 }
 
@@ -285,7 +285,7 @@ func (s *Store) persistVolume(ctx context.Context, row domain.VolumeSnapshot) er
 	if db == nil {
 		return nil
 	}
-	_, err := db.ExecContext(ctx, `INSERT INTO t_symbol_volume_snapshot (platform, display_symbol, snapshot_ts, volume_24h_usd, status, source_endpoint, error_message) VALUES (?, ?, ?, ?, ?, ?, ?)`, row.Platform, row.DisplaySymbol, row.SnapshotTS, row.Volume24HUSD, row.Status, row.SourceEndpoint, nullString(row.Error))
+	_, err := db.ExecContext(ctx, `INSERT INTO t_symbol_volume_snapshot (platform, platform_group, display_platform, is_edgex, display_symbol, canonical_symbol, venue_symbol, market_surface, instrument_kind, lineage, contract_id, base_asset, quote_asset, snapshot_ts, volume_24h_usd, status, source_endpoint, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, row.Platform, nullString(row.PlatformGroup), nullString(row.DisplayPlatform), boolToInt(row.IsEdgeX), row.DisplaySymbol, nullString(row.CanonicalSymbol), nullString(row.VenueSymbol), nullString(row.MarketSurface), nullString(row.InstrumentKind), nullString(row.Lineage), nullString(row.ContractID), nullString(row.BaseAsset), nullString(row.QuoteAsset), row.SnapshotTS, row.Volume24HUSD, row.Status, row.SourceEndpoint, nullString(row.Error))
 	return err
 }
 
@@ -567,13 +567,13 @@ func (s *Store) persistStatus(ctx context.Context, rows []domain.CollectionStatu
 	if _, err := tx.ExecContext(ctx, `INSERT INTO t_collection_run (run_id, started_at, completed_at, success_count, failed_count) VALUES (?, ?, ?, ?, ?)`, run.RunID, run.StartedAt, run.CompletedAt, run.Success, run.Failed); err != nil {
 		return err
 	}
-	stmt, err := tx.PrepareContext(ctx, `INSERT INTO t_collection_status (run_id, platform, display_symbol, collector, source_endpoint, status, error_message, snapshot_ts, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+	stmt, err := tx.PrepareContext(ctx, `INSERT INTO t_collection_status (run_id, platform, platform_group, display_platform, is_edgex, display_symbol, canonical_symbol, venue_symbol, market_surface, instrument_kind, lineage, contract_id, base_asset, quote_asset, collector, source_endpoint, status, error_message, snapshot_ts, latency_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
 	if err != nil {
 		return err
 	}
 	defer stmt.Close()
 	for _, row := range rows {
-		if _, err := stmt.ExecContext(ctx, run.RunID, row.Platform, row.DisplaySymbol, row.Collector, row.SourceEndpoint, row.Status, nullString(row.Error), row.SnapshotTS, row.LatencyMS); err != nil {
+		if _, err := stmt.ExecContext(ctx, run.RunID, row.Platform, nullString(row.PlatformGroup), nullString(row.DisplayPlatform), boolToInt(row.IsEdgeX), row.DisplaySymbol, nullString(row.CanonicalSymbol), nullString(row.VenueSymbol), nullString(row.MarketSurface), nullString(row.InstrumentKind), nullString(row.Lineage), nullString(row.ContractID), nullString(row.BaseAsset), nullString(row.QuoteAsset), row.Collector, row.SourceEndpoint, row.Status, nullString(row.Error), row.SnapshotTS, row.LatencyMS); err != nil {
 			return err
 		}
 	}
@@ -614,7 +614,7 @@ func (s *Store) LoadLatestFromDB(ctx context.Context) error {
 	if db == nil {
 		return nil
 	}
-	rows, err := db.QueryContext(ctx, `SELECT s.platform, s.display_symbol, s.snapshot_ts, s.tier, COALESCE(s.bid_usd,0), COALESCE(s.ask_usd,0), COALESCE(s.total_usd,0), s.depth_status, COALESCE(s.partial_reason,''), COALESCE(s.depth_source,''), COALESCE(s.source_id,''), COALESCE(s.levels_returned,0), COALESCE(s.bid_levels_returned,0), COALESCE(s.ask_levels_returned,0), COALESCE(s.api_level_cap,0), COALESCE(s.farthest_bid_pct,0), COALESCE(s.farthest_ask_pct,0), COALESCE(s.farthest_distance_pct,0), COALESCE(s.source_endpoint,''), COALESCE(s.aggregation_params_json,'{}'), COALESCE(s.strict_complete,0), COALESCE(s.display_available,0), COALESCE(s.policy_acceptance,''), COALESCE(s.physical_limit,0), COALESCE(s.unofficial_ui_endpoint,0), COALESCE(s.error_message,''), COALESCE(s.depth_json,'{}'), COALESCE(s.buy_slippage_json,'{}'), COALESCE(s.sell_slippage_json,'{}') FROM t_orderbook_snapshot s JOIN (SELECT platform, display_symbol, MAX(snapshot_ts) AS snapshot_ts FROM t_orderbook_snapshot GROUP BY platform, display_symbol) latest ON latest.platform = s.platform AND latest.display_symbol = s.display_symbol AND latest.snapshot_ts = s.snapshot_ts`)
+	rows, err := db.QueryContext(ctx, `SELECT s.platform, COALESCE(s.platform_group,''), COALESCE(s.display_platform,''), COALESCE(s.is_edgex,0), s.display_symbol, COALESCE(s.canonical_symbol,''), COALESCE(s.venue_symbol,''), COALESCE(s.market_surface,''), COALESCE(s.instrument_kind,''), COALESCE(s.lineage,''), COALESCE(s.contract_id,''), COALESCE(s.base_asset,''), COALESCE(s.quote_asset,''), s.snapshot_ts, s.tier, COALESCE(s.bid_usd,0), COALESCE(s.ask_usd,0), COALESCE(s.total_usd,0), s.depth_status, COALESCE(s.partial_reason,''), COALESCE(s.depth_source,''), COALESCE(s.source_id,''), COALESCE(s.levels_returned,0), COALESCE(s.bid_levels_returned,0), COALESCE(s.ask_levels_returned,0), COALESCE(s.api_level_cap,0), COALESCE(s.farthest_bid_pct,0), COALESCE(s.farthest_ask_pct,0), COALESCE(s.farthest_distance_pct,0), COALESCE(s.source_endpoint,''), COALESCE(s.aggregation_params_json,'{}'), COALESCE(s.strict_complete,0), COALESCE(s.display_available,0), COALESCE(s.policy_acceptance,''), COALESCE(s.physical_limit,0), COALESCE(s.unofficial_ui_endpoint,0), COALESCE(s.error_message,''), COALESCE(s.depth_json,'{}'), COALESCE(s.buy_slippage_json,'{}'), COALESCE(s.sell_slippage_json,'{}') FROM t_orderbook_snapshot s JOIN (SELECT platform, display_symbol, COALESCE(market_surface,'') AS market_surface, COALESCE(instrument_kind,'') AS instrument_kind, COALESCE(lineage,'') AS lineage, COALESCE(venue_symbol,'') AS venue_symbol, COALESCE(contract_id,'') AS contract_id, MAX(snapshot_ts) AS snapshot_ts FROM t_orderbook_snapshot GROUP BY platform, display_symbol, COALESCE(market_surface,''), COALESCE(instrument_kind,''), COALESCE(lineage,''), COALESCE(venue_symbol,''), COALESCE(contract_id,'')) latest ON latest.platform = s.platform AND latest.display_symbol = s.display_symbol AND latest.market_surface = COALESCE(s.market_surface,'') AND latest.instrument_kind = COALESCE(s.instrument_kind,'') AND latest.lineage = COALESCE(s.lineage,'') AND latest.venue_symbol = COALESCE(s.venue_symbol,'') AND latest.contract_id = COALESCE(s.contract_id,'') AND latest.snapshot_ts = s.snapshot_ts`)
 	if err != nil {
 		return err
 	}
@@ -622,19 +622,31 @@ func (s *Store) LoadLatestFromDB(ctx context.Context) error {
 	loaded := map[string]domain.PlatformSnapshot{}
 	for rows.Next() {
 		var (
-			platform, displaySymbol, tier, status, reason, source, sourceID, sourceEndpoint, aggJSON, errMsg, depthJSON, buyJSON, sellJSON string
-			snapshotTS                                                                                                                     time.Time
-			depth                                                                                                                          domain.DepthMetrics
-			strictComplete, displayAvailable, physicalLimit, unofficialUIEndpoint                                                          int
+			platform, platformGroup, displayPlatform, displaySymbol, canonicalSymbol, venueSymbol, marketSurface, instrumentKind, lineage, contractID, baseAsset, quoteAsset string
+			tier, status, reason, source, sourceID, sourceEndpoint, aggJSON, errMsg, depthJSON, buyJSON, sellJSON                                                            string
+			snapshotTS                                                                                                                                                       time.Time
+			depth                                                                                                                                                            domain.DepthMetrics
+			isEdgeX, strictComplete, displayAvailable, physicalLimit, unofficialUIEndpoint                                                                                   int
 		)
-		if err := rows.Scan(&platform, &displaySymbol, &snapshotTS, &tier, &depth.BidUSD, &depth.AskUSD, &depth.TotalUSD, &status, &reason, &source, &sourceID, &depth.LevelsReturned, &depth.BidLevelsReturned, &depth.AskLevelsReturned, &depth.APILevelCap, &depth.FarthestBidPct, &depth.FarthestAskPct, &depth.FarthestDistancePct, &sourceEndpoint, &aggJSON, &strictComplete, &displayAvailable, &depth.PolicyAcceptance, &physicalLimit, &unofficialUIEndpoint, &errMsg, &depthJSON, &buyJSON, &sellJSON); err != nil {
+		if err := rows.Scan(&platform, &platformGroup, &displayPlatform, &isEdgeX, &displaySymbol, &canonicalSymbol, &venueSymbol, &marketSurface, &instrumentKind, &lineage, &contractID, &baseAsset, &quoteAsset, &snapshotTS, &tier, &depth.BidUSD, &depth.AskUSD, &depth.TotalUSD, &status, &reason, &source, &sourceID, &depth.LevelsReturned, &depth.BidLevelsReturned, &depth.AskLevelsReturned, &depth.APILevelCap, &depth.FarthestBidPct, &depth.FarthestAskPct, &depth.FarthestDistancePct, &sourceEndpoint, &aggJSON, &strictComplete, &displayAvailable, &depth.PolicyAcceptance, &physicalLimit, &unofficialUIEndpoint, &errMsg, &depthJSON, &buyJSON, &sellJSON); err != nil {
 			return err
 		}
-		k := key(platform, displaySymbol)
+		k := surfaceIdentityKey(platform, displaySymbol, marketSurface, instrumentKind, lineage, venueSymbol, contractID)
 		row := loaded[k]
 		if row.DepthByTier == nil {
 			row.Platform = platform
+			row.PlatformGroup = platformGroup
+			row.DisplayPlatform = displayPlatform
+			row.IsEdgeX = isEdgeX != 0
 			row.DisplaySymbol = displaySymbol
+			row.CanonicalSymbol = canonicalSymbol
+			row.VenueSymbol = venueSymbol
+			row.MarketSurface = marketSurface
+			row.InstrumentKind = instrumentKind
+			row.Lineage = lineage
+			row.ContractID = contractID
+			row.BaseAsset = baseAsset
+			row.QuoteAsset = quoteAsset
 			row.SnapshotTS = snapshotTS
 			row.SourceEndpoint = sourceEndpoint
 			row.DepthStatus = status
@@ -667,16 +679,18 @@ func (s *Store) LoadLatestFromDB(ctx context.Context) error {
 		row.DepthStatus, row.PartialReason = summarizeDepthStatus(row.DepthByTier, row.DepthStatus, row.PartialReason)
 		s.hydratePlatformSnapshot(row)
 	}
-	volRows, err := db.QueryContext(ctx, `SELECT platform, display_symbol, snapshot_ts, COALESCE(source_endpoint,''), volume_24h_usd, status, COALESCE(error_message,'') FROM t_symbol_volume_snapshot s WHERE id IN (SELECT MAX(id) FROM t_symbol_volume_snapshot GROUP BY platform, display_symbol)`)
+	volRows, err := db.QueryContext(ctx, `SELECT platform, COALESCE(platform_group,''), COALESCE(display_platform,''), COALESCE(is_edgex,0), display_symbol, COALESCE(canonical_symbol,''), COALESCE(venue_symbol,''), COALESCE(market_surface,''), COALESCE(instrument_kind,''), COALESCE(lineage,''), COALESCE(contract_id,''), COALESCE(base_asset,''), COALESCE(quote_asset,''), snapshot_ts, COALESCE(source_endpoint,''), volume_24h_usd, status, COALESCE(error_message,'') FROM t_symbol_volume_snapshot s WHERE id IN (SELECT MAX(id) FROM t_symbol_volume_snapshot GROUP BY platform, display_symbol, COALESCE(market_surface,''), COALESCE(instrument_kind,''), COALESCE(lineage,''), COALESCE(venue_symbol,''), COALESCE(contract_id,''))`)
 	if err != nil {
 		return err
 	}
 	defer volRows.Close()
 	for volRows.Next() {
 		var row domain.VolumeSnapshot
-		if err := volRows.Scan(&row.Platform, &row.DisplaySymbol, &row.SnapshotTS, &row.SourceEndpoint, &row.Volume24HUSD, &row.Status, &row.Error); err != nil {
+		var isEdgeX int
+		if err := volRows.Scan(&row.Platform, &row.PlatformGroup, &row.DisplayPlatform, &isEdgeX, &row.DisplaySymbol, &row.CanonicalSymbol, &row.VenueSymbol, &row.MarketSurface, &row.InstrumentKind, &row.Lineage, &row.ContractID, &row.BaseAsset, &row.QuoteAsset, &row.SnapshotTS, &row.SourceEndpoint, &row.Volume24HUSD, &row.Status, &row.Error); err != nil {
 			return err
 		}
+		row.IsEdgeX = isEdgeX != 0
 		s.hydrateVolume(row)
 	}
 	if err := s.loadCoinGeckoPlatformVolumes(ctx, db); err != nil {
@@ -792,7 +806,18 @@ func (s *Store) loadTop30(ctx context.Context, db *sql.DB) error {
 
 type orderbookDBRow struct {
 	Platform              string
+	PlatformGroup         string
+	DisplayPlatform       string
+	IsEdgeX               bool
 	DisplaySymbol         string
+	CanonicalSymbol       string
+	VenueSymbol           string
+	MarketSurface         string
+	InstrumentKind        string
+	Lineage               string
+	ContractID            string
+	BaseAsset             string
+	QuoteAsset            string
 	SnapshotTS            time.Time
 	Tier                  string
 	BidUSD                float64
@@ -832,7 +857,18 @@ func platformSnapshotOrderbookRows(row domain.PlatformSnapshot) map[string]order
 		domain.DeriveDepthMetricsDefaults(row.DepthStatus, &depth)
 		out[""] = orderbookDBRow{
 			Platform:              row.Platform,
+			PlatformGroup:         row.PlatformGroup,
+			DisplayPlatform:       row.DisplayPlatform,
+			IsEdgeX:               row.IsEdgeX,
 			DisplaySymbol:         row.DisplaySymbol,
+			CanonicalSymbol:       row.CanonicalSymbol,
+			VenueSymbol:           row.VenueSymbol,
+			MarketSurface:         row.MarketSurface,
+			InstrumentKind:        row.InstrumentKind,
+			Lineage:               row.Lineage,
+			ContractID:            row.ContractID,
+			BaseAsset:             row.BaseAsset,
+			QuoteAsset:            row.QuoteAsset,
 			SnapshotTS:            row.SnapshotTS,
 			DepthStatus:           row.DepthStatus,
 			PartialReason:         row.PartialReason,
@@ -866,7 +902,18 @@ func platformSnapshotOrderbookRows(row domain.PlatformSnapshot) map[string]order
 		}
 		out[tier] = orderbookDBRow{
 			Platform:              row.Platform,
+			PlatformGroup:         row.PlatformGroup,
+			DisplayPlatform:       row.DisplayPlatform,
+			IsEdgeX:               row.IsEdgeX,
 			DisplaySymbol:         row.DisplaySymbol,
+			CanonicalSymbol:       row.CanonicalSymbol,
+			VenueSymbol:           row.VenueSymbol,
+			MarketSurface:         row.MarketSurface,
+			InstrumentKind:        row.InstrumentKind,
+			Lineage:               row.Lineage,
+			ContractID:            row.ContractID,
+			BaseAsset:             row.BaseAsset,
+			QuoteAsset:            row.QuoteAsset,
 			SnapshotTS:            row.SnapshotTS,
 			Tier:                  tier,
 			BidUSD:                depth.BidUSD,

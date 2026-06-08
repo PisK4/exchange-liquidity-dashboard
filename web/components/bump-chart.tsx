@@ -26,6 +26,8 @@ type BumpChartProps = {
 
 type RankedSeries = {
   label: string;
+  colorKey?: string;
+  isSelf?: boolean;
   ranks: Array<number | null>;
   values: Array<number | undefined>;
 };
@@ -55,6 +57,8 @@ function buildRanks(tierLabels: string[], series: Series[]): RankedSeries[] {
 
   return series.map(s => ({
     label: s.label,
+    colorKey: s.colorKey,
+    isSelf: s.isSelf,
     ranks: ranksByLabel.get(s.label) ?? Array(tierLabels.length).fill(null),
     values: s.values,
   }));
@@ -70,10 +74,10 @@ const valueLabelPlugin = {
     ctx.textAlign = 'left';
     chart.data.datasets.forEach((dataset, datasetIdx) => {
       const meta = chart.getDatasetMeta(datasetIdx);
-      const isEdgeX = dataset.label === 'edgeX';
-      const usdValues = (dataset as unknown as { usdValues?: Array<number | undefined> }).usdValues ?? [];
+      const datasetWithMeta = dataset as unknown as { usdValues?: Array<number | undefined>; isSelf?: boolean };
+      const usdValues = datasetWithMeta.usdValues ?? [];
       meta.data.forEach((point, idx) => {
-        if (!isEdgeX) return;
+        if (datasetWithMeta.isSelf !== true) return;
         const usd = usdValues[idx];
         if (typeof usd !== 'number') return;
         const { x, y } = point.tooltipPosition(false);
@@ -102,12 +106,13 @@ export function BumpChart({ ariaLabel, tierLabels, displayLabels, series }: Bump
       data: {
         labels: displayLabels,
         datasets: ranked.map(item => {
-          const color = colorFor(item.label);
-          const isSelf = item.label === 'edgeX';
+          const color = colorFor(item.colorKey ?? item.label);
+          const isSelf = item.isSelf === true;
           return {
             label: item.label,
             data: item.ranks,
             usdValues: item.values,
+            isSelf,
             borderColor: isSelf ? color : rgba(color, 0.42),
             backgroundColor: rgba(color, isSelf ? 0.35 : 0.12),
             borderWidth: isSelf ? 5 : 1.5,

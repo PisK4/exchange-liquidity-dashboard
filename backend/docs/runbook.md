@@ -282,7 +282,85 @@ Diagnosis order:
    so a 100% share is the natural state and a `stale` reading is
    itself the alert.
 
-### 3.7 CoinGecko reports HTTP 429 rate limit
+### 3.7 EdgeX Perps V2 surface data is missing or stale
+
+EdgeX Perps V2 is a separate EdgeX market surface, not a fallback for Perps V1.
+When V2 rows are enabled, API/UI rows should expose enough metadata to diagnose
+the surface explicitly: `platform=edgeX`, `display_platform=edgeX V2`,
+`market_surface=perp_v2`, `lineage=edgeX-perp-v2`, `quote_asset=USDC`, and the
+V2 `contract_id`.
+
+Backend-only deployments remain schema-compatible with the legacy frontend
+because V2 fields are additive. However, enabling V2 symbols will add additional
+`platform=edgeX` rows. If the deployed frontend still assumes one EdgeX row per
+symbol, keep V2 symbol rows disabled in production config until that frontend is
+ready to render `display_platform` / `market_surface` explicitly.
+
+Diagnosis order:
+
+1. Confirm the row identity on the API surface:
+
+   ```
+   curl -fsS 'http://127.0.0.1:8080/api/snapshot/liquidity?symbol=BTC-USDT%20%28perp%29' \
+     | jq '.rows[] | select(.platform=="edgeX") | {display_platform, market_surface, lineage, quote_asset, contract_id, depth_status, partial_reason, depth_source, source_id, source_endpoint}'
+   ```
+
+   A V2 row must not reuse V1 `BTCUSD` / `10000001` identity. Expected pilot
+   values are `BTCUSDC` / `30000001` for BTC, `ETHUSDC` / `30000002` for ETH,
+   and `SOLUSDC` / `30000003` for SOL.
+
+2. Check collection status for V2-specific source errors:
+
+   ```
+   curl -fsS http://127.0.0.1:8080/api/collection-status \
+     | jq '.rows[] | select(.platform=="edgeX" and .market_surface=="perp_v2") | {collector, display_platform, market_surface, lineage, contract_id, source_endpoint, status, error}'
+   ```
+
+   `collector=ws_orderbook`, `depth_source=ws_local_book`, and
+   `source_id=edgeX-perp-v2-ws-depth-200` mean the V2 local book provider is
+   serving depth from WebSocket. `collector=rest_orderbook`,
+   `depth_source=rest_snapshot`, and `source_id=edgeX-perp-v2-rest-depth-200`
+   mean the collector used the bounded REST snapshot fallback.
+
+   V2 sources are:
+
+   ```text
+   wss://edgex-quote-prod-v2.edgex.exchange/api/v1/public/ws
+   https://edgex-prod-v2.edgex.exchange/api/v2/public/quote/getDepth?contractId={id}&level=200
+   https://edgex-prod-v2.edgex.exchange/api/v2/public/quote/getTicker?contractId={id}
+   ```
+
+   Runtime knobs live under `Runtime.ws_providers.edgeX_perp_v2`: `enabled`,
+   `url`, `proxy`, and `stale_after`. The WS provider falls back to REST when a
+   local book is not ready, stale, or detects a sequence gap. If both WS and REST
+   fail, collection status must carry the concrete upstream error.
+
+3. Interpret depth status honestly:
+
+   - `complete` means the returned book covers the requested tier on both sides.
+   - `partial` with `partial_reason=api_level_cap` means V2 REST / depth-200
+     did not reach the tier; this is expected for some 1% / 2% snapshots and
+     must be shown as a lower-bound, not a full book.
+   - `error` / `stale` must not be replaced by V1 data or CoinGecko orderbook
+     data. CoinGecko may help volume/share, never depth, spread, imbalance, or
+     slippage.
+
+4. If the row is missing entirely, check the surface-aware runtime identity
+   first. V1 and V2 must not share a plain `edgeX|BTC-USDT (perp)` storage key;
+   keys must include `market_surface` / `lineage` or an equivalent surface
+   discriminator.
+
+5. If WS V2 is enabled later, diagnose it separately from REST. The V2 WS host
+   uses a V1 path by design:
+
+   ```text
+   wss://edgex-quote-prod-v2.edgex.exchange/api/v1/public/ws
+   ```
+
+   WS failures may fall back to REST lower-bound snapshots, but must not mark
+   incomplete depth as strict-complete.
+
+### 3.8 CoinGecko reports HTTP 429 rate limit
 
 CoinGecko is governed as a finite-budget source. The fix is **not** to rely on
 adding `COINGECKO_DEMO_API_KEY` for more quota; the backend must remain safe

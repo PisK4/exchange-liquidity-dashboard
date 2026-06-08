@@ -41,12 +41,14 @@ func (s *Store) Top30Divergence() domain.Top30DivergenceSnapshot {
 
 	cfg := s.cfg.Runtime.Top30Divergence
 	rows := s.divergenceInputRowsLocked()
-	return divergence.Compute(rows, divergence.Config{
+	snapshot := divergence.Compute(rows, divergence.Config{
 		CEXPlatforms:         cfg.CEXPlatforms,
 		DEXPlatforms:         cfg.DEXPlatforms,
 		SignificantRankDelta: cfg.SignificantRankDelta,
 		Resolver:             s.cfg.CanonicalIndex,
 	})
+	s.enrichDivergenceListedSurfacesLocked(snapshot.Divergence)
+	return snapshot
 }
 
 // divergenceInputRowsLocked materialises the InputRow stream the

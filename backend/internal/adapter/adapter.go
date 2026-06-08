@@ -30,6 +30,7 @@ type RESTAdapter struct {
 	Client      *http.Client
 	MaxAttempts int
 	Lighter     LighterBookProvider
+	EdgeXPerpV2 EdgeXPerpV2BookProvider
 	limiter     *requestLimiter
 }
 
@@ -58,7 +59,15 @@ func NewWithLighterAndProxy(platform string, timeout time.Duration, lighter Ligh
 // NewWithLighterProxyAndRateLimit adds a per-adapter request limiter for the
 // live collection path while preserving the legacy proxy and Lighter wiring.
 func NewWithLighterProxyAndRateLimit(platform string, timeout time.Duration, lighter LighterBookProvider, proxy string, perSec int) ExchangeAdapter {
-	return RESTAdapter{Platform: platform, Client: newHTTPClient(timeout, proxy), MaxAttempts: 2, Lighter: lighter, limiter: newRequestLimiter(perSec)}
+	return NewWithLiveBooksProxyAndRateLimit(platform, timeout, lighter, nil, proxy, perSec)
+}
+
+// NewWithLiveBooksProxyAndRateLimit wires optional WS local-book providers
+// into the REST adapter. Providers are platform/surface gated at fetch time,
+// so passing the same provider set to every platform keeps collector wiring
+// simple without letting one venue's WS source leak into another venue.
+func NewWithLiveBooksProxyAndRateLimit(platform string, timeout time.Duration, lighter LighterBookProvider, edgeXPerpV2 EdgeXPerpV2BookProvider, proxy string, perSec int) ExchangeAdapter {
+	return RESTAdapter{Platform: platform, Client: newHTTPClient(timeout, proxy), MaxAttempts: 2, Lighter: lighter, EdgeXPerpV2: edgeXPerpV2, limiter: newRequestLimiter(perSec)}
 }
 
 func newHTTPClient(timeout time.Duration, proxy string) *http.Client {
@@ -95,6 +104,7 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 		SnapshotTS:     time.Now().UTC(),
 		APILevelCap:    cap,
 	}
+	domain.ApplyOrderBookSurfaceMeta(&book, sub)
 	if sub.APISymbol == "" {
 		book.DepthStatus = domain.StatusUnsupported
 		book.Error = "no catalog entry for (" + a.Platform + ", " + sub.Canonical + ")"
@@ -102,6 +112,9 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 	}
 	var bids, asks []domain.Level
 	var err error
+	sourceID := defaultSourceIDForSub(a.Platform, sub)
+	depthSource := defaultDepthSourceForSub(a.Platform, sub)
+	sourceEndpoint := sourceEndpointForSub(a.Platform, sub)
 	switch a.Platform {
 	case "binance":
 		bids, asks, err = a.fetchBinance(ctx, sub)
@@ -120,7 +133,7 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 	case "hyperliquid":
 		bids, asks, err = a.fetchHyperliquid(ctx, sub)
 	case "edgeX":
-		bids, asks, err = a.fetchEdgeX(ctx, sub)
+		bids, asks, sourceID, depthSource, sourceEndpoint, err = a.fetchEdgeXOrderBook(ctx, sub)
 	case "lighter":
 		bids, asks, err = a.fetchLighter(ctx, sub)
 	default:
@@ -138,7 +151,7 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 	}
 	book.Bids = bids
 	book.Asks = asks
-	book = finalizeBook(book, defaultSourceID(a.Platform), defaultDepthSource(a.Platform), sub.SourceEndpoint)
+	book = finalizeBook(book, sourceID, depthSource, sourceEndpoint)
 	switch a.Platform {
 	case "gate":
 		for _, interval := range []string{"10", "100"} {
@@ -165,6 +178,7 @@ func (a RESTAdapter) FetchOrderBook(ctx context.Context, sub domain.SymbolSub) (
 func (a RESTAdapter) FetchTicker(ctx context.Context, sub domain.SymbolSub) (domain.VolumeSnapshot, error) {
 	now := time.Now().UTC()
 	vol := domain.VolumeSnapshot{Platform: a.Platform, DisplaySymbol: sub.DisplaySymbol, SnapshotTS: now, SourceEndpoint: sub.SourceEndpoint, Status: domain.StatusUnsupported}
+	domain.ApplyVolumeSurfaceMeta(&vol, sub)
 	if sub.APISymbol == "" {
 		vol.Error = "no catalog entry for (" + a.Platform + ", " + sub.Canonical + ")"
 		return vol, nil
@@ -215,6 +229,7 @@ func (a RESTAdapter) FetchTicker(ctx context.Context, sub domain.SymbolSub) (dom
 		return vol, err
 	}
 	vol.Volume24HUSD = raw
+	vol.SourceEndpoint = sourceEndpointForSub(a.Platform, sub)
 	vol.Status = domain.StatusComplete
 	return vol, nil
 }
@@ -462,6 +477,24 @@ func (a RESTAdapter) fetchMEXC(ctx context.Context, sub domain.SymbolSub) ([]dom
 	return multiplySize(parseAnyLevels(resp.Data.Bids), sub.ContractSize), multiplySize(parseAnyLevels(resp.Data.Asks), sub.ContractSize), nil
 }
 
+func (a RESTAdapter) fetchEdgeXOrderBook(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, string, string, string, error) {
+	contractID, err := edgeXContractID(sub)
+	if err != nil {
+		return nil, nil, "", "", "", err
+	}
+	if isEdgeXPerpV2(sub) && a.EdgeXPerpV2 != nil {
+		bids, asks, _, wsErr := a.EdgeXPerpV2.Snapshot(contractID)
+		if wsErr == nil {
+			return bids, asks, "edgeX-perp-v2-ws-depth-200", domain.SourceWSLocalBook, a.EdgeXPerpV2.SourceEndpoint(), nil
+		}
+	}
+	bids, asks, err := a.fetchEdgeX(ctx, sub)
+	if err != nil {
+		return nil, nil, "", "", "", err
+	}
+	return bids, asks, defaultSourceIDForSub(a.Platform, sub), defaultDepthSourceForSub(a.Platform, sub), sourceEndpointForSub(a.Platform, sub), nil
+}
+
 func (a RESTAdapter) fetchEdgeX(ctx context.Context, sub domain.SymbolSub) ([]domain.Level, []domain.Level, error) {
 	contractID, err := edgeXContractID(sub)
 	if err != nil {
@@ -479,7 +512,7 @@ func (a RESTAdapter) fetchEdgeX(ctx context.Context, sub domain.SymbolSub) ([]do
 			} `json:"asks"`
 		} `json:"data"`
 	}
-	url := "https://pro.edgex.exchange/api/v1/public/quote/getDepth?level=200&contractId=" + contractID
+	url := edgeXDepthURL(sub, contractID)
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return nil, nil, err
 	}
@@ -782,7 +815,7 @@ func (a RESTAdapter) fetchEdgeXVolume(ctx context.Context, sub domain.SymbolSub)
 			Value any `json:"value"`
 		} `json:"data"`
 	}
-	url := "https://pro.edgex.exchange/api/v1/public/quote/getTicker?contractId=" + contractID
+	url := edgeXTickerURL(sub, contractID)
 	if err := a.fetchJSON(ctx, http.MethodGet, url, nil, &resp); err != nil {
 		return 0, err
 	}
@@ -797,6 +830,47 @@ func (a RESTAdapter) fetchEdgeXVolume(ctx context.Context, sub domain.SymbolSub)
 		return 0, errors.New("invalid edgex ticker value")
 	}
 	return value, nil
+}
+
+func isEdgeXPerpV2(sub domain.SymbolSub) bool {
+	surface := strings.ToLower(strings.TrimSpace(sub.MarketSurface))
+	lineage := strings.ToLower(strings.TrimSpace(sub.Lineage))
+	return surface == "perp_v2" || strings.Contains(lineage, "perp-v2")
+}
+
+func edgeXDepthURL(sub domain.SymbolSub, contractID string) string {
+	if isEdgeXPerpV2(sub) {
+		return "https://edgex-prod-v2.edgex.exchange/api/v2/public/quote/getDepth?contractId=" + contractID + "&level=200"
+	}
+	return "https://pro.edgex.exchange/api/v1/public/quote/getDepth?level=200&contractId=" + contractID
+}
+
+func edgeXTickerURL(sub domain.SymbolSub, contractID string) string {
+	if isEdgeXPerpV2(sub) {
+		return "https://edgex-prod-v2.edgex.exchange/api/v2/public/quote/getTicker?contractId=" + contractID
+	}
+	return "https://pro.edgex.exchange/api/v1/public/quote/getTicker?contractId=" + contractID
+}
+
+func sourceEndpointForSub(platform string, sub domain.SymbolSub) string {
+	if platform == "edgeX" && isEdgeXPerpV2(sub) {
+		return "https://edgex-prod-v2.edgex.exchange/api/v2/public/quote"
+	}
+	return sub.SourceEndpoint
+}
+
+func defaultSourceIDForSub(platform string, sub domain.SymbolSub) string {
+	if platform == "edgeX" && isEdgeXPerpV2(sub) {
+		return "edgeX-perp-v2-rest-depth-200"
+	}
+	return defaultSourceID(platform)
+}
+
+func defaultDepthSourceForSub(platform string, sub domain.SymbolSub) string {
+	if platform == "edgeX" && isEdgeXPerpV2(sub) {
+		return domain.SourceRestSnapshot
+	}
+	return defaultDepthSource(platform)
 }
 
 func (a RESTAdapter) fetchGateVolume(ctx context.Context, sub domain.SymbolSub) (float64, error) {

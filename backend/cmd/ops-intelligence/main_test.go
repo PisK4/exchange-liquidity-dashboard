@@ -60,6 +60,45 @@ func TestLighterMarketIDsFromConfigFallsBackToLegacyDefaults(t *testing.T) {
 	}
 }
 
+func TestEdgeXPerpV2ContractIDsFromConfigFiltersAndDedupes(t *testing.T) {
+	cfg := config.Config{Symbols: []domain.SymbolSub{
+		{Platform: "edgeX", MarketSurface: "perp_v2", ContractID: "30000001"},
+		{Platform: "edgeX", Lineage: "edgeX-perp-v2", ContractID: "30000002"},
+		{Platform: "edgeX", MarketSurface: "perp_v2", ContractID: "30000001"},
+		{Platform: "edgeX", MarketSurface: "perp_v1", ContractID: "10000001"},
+		{Platform: "binance", MarketSurface: "perp_v2", ContractID: "30000003"},
+		{Platform: "edgeX", MarketSurface: "perp_v2"},
+	}}
+	got := edgeXPerpV2ContractIDsFromConfig(cfg)
+	want := []string{"30000001", "30000002"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("edgeXPerpV2ContractIDsFromConfig = %v, want %v", got, want)
+	}
+}
+
+func TestEdgeXPerpV2WSConfigPrefersSpecificEnabledKey(t *testing.T) {
+	cfg := config.Config{Runtime: config.Runtime{WSProviders: map[string]config.WSProviderConfig{
+		"edgeX":         {Enabled: true, URL: "wss://generic.example/ws"},
+		"edgeX_perp_v2": {Enabled: true, URL: "wss://specific.example/ws", StaleAfter: 22 * time.Second},
+	}}}
+	got, ok := edgeXPerpV2WSConfig(cfg)
+	if !ok {
+		t.Fatalf("edgeXPerpV2WSConfig should be enabled")
+	}
+	if got.URL != "wss://specific.example/ws" || got.StaleAfter != 22*time.Second {
+		t.Fatalf("unexpected ws config: %+v", got)
+	}
+}
+
+func TestEdgeXPerpV2WSConfigDisabledWhenOnlyDisabled(t *testing.T) {
+	cfg := config.Config{Runtime: config.Runtime{WSProviders: map[string]config.WSProviderConfig{
+		"edgeX_perp_v2": {Enabled: false, URL: "wss://specific.example/ws"},
+	}}}
+	if got, ok := edgeXPerpV2WSConfig(cfg); ok || got.URL != "" {
+		t.Fatalf("disabled ws config should not be selected: %+v/%v", got, ok)
+	}
+}
+
 func TestActivityRoleRequiresMySQLAndStartsOnlyActivityWorker(t *testing.T) {
 	if !roleStartsActivity("activity") || !roleStartsActivity("all") {
 		t.Fatalf("activity worker should start for activity and all roles")

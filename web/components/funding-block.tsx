@@ -1,7 +1,7 @@
 'use client';
 
 import { FundingDivergeBar } from '@/components/funding-diverge-bar';
-import { PlatformCell } from '@/components/platform-cell';
+import { isSelfPlatform, PlatformCell, platformRowKey } from '@/components/platform-cell';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import {
   FUNDING_SIGN_CONVENTION_TOOLTIP,
@@ -91,7 +91,7 @@ export function FundingBlock({
 
   const rows = snapshot.rows ?? [];
   const kpis = snapshot.kpis;
-  const edgeRow = rows.find(row => row.platform === 'edgeX');
+  const edgeRow = rows.find(row => isSelfPlatform(row));
   const edgeFunding = edgeRow?.funding;
   const edgeRate8h = kpis?.edgex_funding_rate_8h;
   const edgePeriod = kpis?.edgex_funding_rate_period_hours ?? edgeFunding?.period_hours;
@@ -238,14 +238,20 @@ export function FundingBlock({
                   const isUsable = f && typeof f.rate_8h === 'number' && Number.isFinite(f.rate_8h);
                   const rateSignClass = rateSignColorClass(f?.rate_8h);
                   const vsMedianSignClass = rateSignColorClass(f?.vs_median_8h);
-                  const rowClass = row.platform === 'edgeX' ? 'r-edgex' : undefined;
+                  const rowClass = isSelfPlatform(row) ? 'r-edgex' : undefined;
                   return (
-                    <tr key={row.platform} className={rowClass}>
+                    <tr key={platformRowKey(row)} className={rowClass}>
                       <td>
                         <PlatformCell
                           platform={row.platform}
                           displaySymbol={snapshot.symbol ?? displayName}
                           lookup={lookup}
+                          displayPlatform={row.display_platform}
+                          isEdgex={row.is_edgex}
+                          marketSurface={row.market_surface}
+                          lineage={row.lineage}
+                          venueSymbol={row.venue_symbol}
+                          contractId={row.contract_id}
                         />
                       </td>
                       <td className={`num ${rateSignClass}`}>

@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { BarChart } from '@/components/chart-primitives';
-import { PlatformCell } from '@/components/platform-cell';
+import { isSelfPlatform, PlatformCell, platformDisplayLabel, platformRowKey } from '@/components/platform-cell';
 import { StatusEmptyState } from '@/components/status-empty-state';
 import { VerdictBadge } from '@/components/dashboard-shell';
 import { bp, money, usdLabel, type FrontendURLLookup, type LiquiditySnapshot, type PlatformRow } from '@/lib/api/client';
@@ -152,8 +152,8 @@ export function QualityBlock({
   }
 
   const rows = snapshot.rows ?? [];
-  const rowByPlatform = new Map(rows.map(row => [row.platform, row]));
-  const edgeRow = rows.find(r => r.platform === 'edgeX');
+  const rowByKey = new Map(rows.map(row => [platformRowKey(row), row]));
+  const edgeRow = rows.find(r => isSelfPlatform(r));
   const edgeSpreadBp = snapshot.kpis?.edgex_spread_bp;
   const edgeSpreadUSD = spreadUSD(edgeRow?.mid_price, edgeSpreadBp);
   const edgeSlippageBp = edgeRow?.worst_slippage_bp?.[bucket];
@@ -224,14 +224,17 @@ export function QualityBlock({
           </div>
           <BarChart
             rows={rows.map(row => ({
+              key: platformRowKey(row),
               label: row.platform,
+              displayLabel: platformDisplayLabel(row),
+              isSelf: isSelfPlatform(row),
               value: rowDisplayAvailable(row) ? row.spread_bp : undefined,
               status: row.depth_status,
-              color: row.platform === 'edgeX' ? edgexAccent : '#5794f2',
+              color: isSelfPlatform(row) ? edgexAccent : '#5794f2',
             }))}
             sort="asc"
             format={(value, row) => {
-              const target = rowByPlatform.get(row.label);
+              const target = row.key ? rowByKey.get(row.key) : undefined;
               const usd = target ? spreadUSD(target.mid_price, value) : undefined;
               return `${(value ?? 0).toFixed(2)} bp · ${usdLabel(usd)}`;
             }}
@@ -244,10 +247,13 @@ export function QualityBlock({
           </div>
           <BarChart
             rows={rows.map(row => ({
+              key: platformRowKey(row),
               label: row.platform,
+              displayLabel: platformDisplayLabel(row),
+              isSelf: isSelfPlatform(row),
               value: rowDisplayAvailable(row) ? row.worst_slippage_bp?.[bucket] : undefined,
               status: row.depth_status,
-              color: row.platform === 'edgeX' ? edgexAccent : '#73bf69',
+              color: isSelfPlatform(row) ? edgexAccent : '#73bf69',
             }))}
             sort="asc"
             format={value => `${(value ?? 0).toFixed(2)} bp · ${usdLabel(slippageUSD(bucket, value))}`}
@@ -261,10 +267,13 @@ export function QualityBlock({
           <BarChart
             signed
             rows={rows.map(row => ({
+              key: platformRowKey(row),
               label: row.platform,
+              displayLabel: platformDisplayLabel(row),
+              isSelf: isSelfPlatform(row),
               value: rowDisplayAvailable(row) ? row.imbalance_pct : undefined,
               status: row.depth_status,
-              color: row.platform === 'edgeX' ? edgexAccent : Math.abs(row.imbalance_pct ?? 0) > 30 ? '#f2495c' : '#5794f2',
+              color: isSelfPlatform(row) ? edgexAccent : Math.abs(row.imbalance_pct ?? 0) > 30 ? '#f2495c' : '#5794f2',
             }))}
             format={value => signedPct(value)}
           />
@@ -295,14 +304,20 @@ export function QualityBlock({
               <tbody>
                 {rows.map(row => (
                   <tr
-                    key={row.platform}
-                    className={row.platform === 'edgeX' ? 'r-edgex' : undefined}
+                    key={platformRowKey(row)}
+                    className={isSelfPlatform(row) ? 'r-edgex' : undefined}
                   >
                     <td>
                       <PlatformCell
                         platform={row.platform}
                         displaySymbol={snapshot.symbol ?? displayName}
                         lookup={lookup}
+                        displayPlatform={row.display_platform}
+                        isEdgex={row.is_edgex}
+                        marketSurface={row.market_surface}
+                        lineage={row.lineage}
+                        venueSymbol={row.venue_symbol}
+                        contractId={row.contract_id}
                       />
                     </td>
                     <td className={`num ${qualityThresholdClass(row.vs_median_spread_bp, 'spread')}`}>{bp(row.spread_bp)}</td>

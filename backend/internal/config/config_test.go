@@ -84,6 +84,108 @@ Catalog:
 	}
 }
 
+func TestLoadKeepsEdgeXPerpV2PilotSeparateFromPerpV1Catalog(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbols-dev.yaml"), `
+symbols:
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+    market_surface: perp
+    instrument_kind: canonical
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+    market_surface: perp_v2
+    instrument_kind: canonical
+    lineage: edgeX-perp-v2
+    base_asset: BTC
+    quote_asset: USDC
+    settle_asset: USDC
+    platforms: [edgeX]
+    api_symbol: BTCUSDC
+    contract_id: "30000001"
+    source_endpoint: https://edgex-prod-v2.edgex.exchange/api/v2/public/quote
+    api_level_cap: 200
+    catalog_status: TRADING
+platforms: [edgeX, binance]
+`)
+	mustWrite(t, filepath.Join(dir, "endpoints-dev.yaml"), `
+endpoints:
+  edgeX: https://pro.edgex.exchange/api/v1/public/quote
+  binance: https://fapi.binance.com/fapi/v1/depth
+`)
+	mustWrite(t, filepath.Join(dir, "catalog-dev.yaml"), `
+schema_version: 1
+generated_at: "2026-06-07T00:00:00Z"
+generated_by: test
+platforms:
+  edgeX:
+    BTC:
+      api_symbol: BTCUSD
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      contract_id: "10000001"
+      source_endpoint: https://pro.edgex.exchange/api/v1/public/quote
+      market_surface: perp
+      instrument_kind: canonical
+      catalog_status: TRADING
+  binance:
+    BTC:
+      api_symbol: BTCUSDT
+      base_asset: BTC
+      quote_asset: USDT
+      settle_asset: USDT
+      source_endpoint: https://fapi.binance.com/fapi/v1/depth
+      market_surface: perp
+      instrument_kind: canonical
+      catalog_status: TRADING
+`)
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
+Catalog:
+  ExchangeEndpointsFile: endpoints-dev.yaml
+  SymbolMappingFile: symbols-dev.yaml
+  InstrumentCatalogFile: catalog-dev.yaml
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if len(cfg.Symbols) != 3 {
+		t.Fatalf("expected 3 subscriptions (V1 edgeX/binance + V2 edgeX), got %d: %+v", len(cfg.Symbols), cfg.Symbols)
+	}
+
+	var edgeV1, edgeV2 *domain.SymbolSub
+	binanceV2Count := 0
+	for i := range cfg.Symbols {
+		sub := &cfg.Symbols[i]
+		if sub.Platform == "edgeX" && sub.Canonical == "BTC" && sub.MarketSurface == "perp" {
+			edgeV1 = sub
+		}
+		if sub.Platform == "edgeX" && sub.Canonical == "BTC" && sub.MarketSurface == "perp_v2" {
+			edgeV2 = sub
+		}
+		if sub.Platform == "binance" && sub.Canonical == "BTC" && sub.MarketSurface == "perp_v2" {
+			binanceV2Count++
+		}
+	}
+	if edgeV1 == nil || edgeV2 == nil {
+		t.Fatalf("missing edgeX V1/V2 rows: %+v", cfg.Symbols)
+	}
+	if binanceV2Count != 0 {
+		t.Fatalf("perp_v2 pilot row must not expand to binance, got %d rows", binanceV2Count)
+	}
+	if edgeV1.APISymbol != "BTCUSD" || edgeV1.ContractID != "10000001" || edgeV1.QuoteAsset != "USDT" {
+		t.Fatalf("V1 catalog overlay not applied correctly: %+v", edgeV1)
+	}
+	if edgeV2.APISymbol != "BTCUSDC" || edgeV2.ContractID != "30000001" || edgeV2.QuoteAsset != "USDC" || edgeV2.APILevelCap != 200 {
+		t.Fatalf("V2 pilot row was not preserved: %+v", edgeV2)
+	}
+	if edgeV2.SourceEndpoint != "https://edgex-prod-v2.edgex.exchange/api/v2/public/quote" {
+		t.Fatalf("V2 source endpoint = %q", edgeV2.SourceEndpoint)
+	}
+}
+
 func TestLoadReadsOpsIntelligenceConfig(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `

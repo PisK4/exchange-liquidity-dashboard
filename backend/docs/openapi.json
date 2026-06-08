@@ -676,6 +676,9 @@
           "snapshot_ts": {
             "type": "string",
             "format": "date-time"
+          },
+          "latency_ms": {
+            "type": "integer"
           }
         }
       },
@@ -932,7 +935,40 @@
           "platform": {
             "type": "string"
           },
+          "platform_group": {
+            "type": "string"
+          },
+          "display_platform": {
+            "type": "string"
+          },
+          "is_edgex": {
+            "type": "boolean"
+          },
           "display_symbol": {
+            "type": "string"
+          },
+          "canonical_symbol": {
+            "type": "string"
+          },
+          "venue_symbol": {
+            "type": "string"
+          },
+          "market_surface": {
+            "type": "string"
+          },
+          "instrument_kind": {
+            "type": "string"
+          },
+          "lineage": {
+            "type": "string"
+          },
+          "contract_id": {
+            "type": "string"
+          },
+          "base_asset": {
+            "type": "string"
+          },
+          "quote_asset": {
             "type": "string"
           },
           "snapshot_ts": {
@@ -1020,6 +1056,21 @@
         ],
         "properties": {
           "platform": {
+            "type": "string"
+          },
+          "platform_group": {
+            "type": "string"
+          },
+          "display_platform": {
+            "type": "string"
+          },
+          "is_edgex": {
+            "type": "boolean"
+          },
+          "market_surface": {
+            "type": "string"
+          },
+          "lineage": {
             "type": "string"
           },
           "display_symbol": {
@@ -1233,6 +1284,27 @@
           "platform": {
             "type": "string"
           },
+          "platform_group": {
+            "type": "string"
+          },
+          "display_platform": {
+            "type": "string"
+          },
+          "is_edgex": {
+            "type": "boolean"
+          },
+          "market_surface": {
+            "type": "string"
+          },
+          "instrument_kind": {
+            "type": "string"
+          },
+          "lineage": {
+            "type": "string"
+          },
+          "aggregation_scope": {
+            "type": "string"
+          },
           "raw_volume_usd": {
             "type": "number"
           },
@@ -1353,6 +1425,56 @@
           }
         }
       },
+      "ListedSurfaceDetail": {
+        "type": "object",
+        "properties": {
+          "platform": {
+            "type": "string"
+          },
+          "platform_group": {
+            "type": "string"
+          },
+          "display_platform": {
+            "type": "string"
+          },
+          "is_edgex": {
+            "type": "boolean"
+          },
+          "display_symbol": {
+            "type": "string"
+          },
+          "canonical_symbol": {
+            "type": "string"
+          },
+          "venue_symbol": {
+            "type": "string"
+          },
+          "market_surface": {
+            "type": "string"
+          },
+          "instrument_kind": {
+            "type": "string"
+          },
+          "lineage": {
+            "type": "string"
+          },
+          "contract_id": {
+            "type": "string"
+          },
+          "base_asset": {
+            "type": "string"
+          },
+          "quote_asset": {
+            "type": "string"
+          },
+          "source_endpoint": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        }
+      },
       "Top30Row": {
         "type": "object",
         "required": [
@@ -1387,6 +1509,12 @@
           },
           "edgex_listed": {
             "type": "boolean"
+          },
+          "edgex_listed_surfaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ListedSurfaceDetail"
+            }
           },
           "edgex_listed_status": {
             "$ref": "#/components/schemas/ApiStatus"
@@ -1544,6 +1672,12 @@
           "edgex_listed": {
             "type": "boolean"
           },
+          "edgex_listed_surfaces": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ListedSurfaceDetail"
+            }
+          },
           "edgex_listed_status": {
             "$ref": "#/components/schemas/ApiStatus"
           }
@@ -1664,7 +1798,46 @@
           "platform": {
             "type": "string"
           },
+          "platform_group": {
+            "type": "string"
+          },
+          "display_platform": {
+            "type": "string"
+          },
+          "is_edgex": {
+            "type": "boolean"
+          },
           "display_symbol": {
+            "type": "string"
+          },
+          "canonical_symbol": {
+            "type": "string"
+          },
+          "venue_symbol": {
+            "type": "string"
+          },
+          "market_surface": {
+            "type": "string"
+          },
+          "instrument_kind": {
+            "type": "string"
+          },
+          "lineage": {
+            "type": "string"
+          },
+          "contract_id": {
+            "type": "string"
+          },
+          "base_asset": {
+            "type": "string"
+          },
+          "quote_asset": {
+            "type": "string"
+          },
+          "collector": {
+            "type": "string"
+          },
+          "source_endpoint": {
             "type": "string"
           },
           "status": {

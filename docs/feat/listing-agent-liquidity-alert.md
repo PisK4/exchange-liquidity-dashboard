@@ -47,26 +47,49 @@ liquidity (pure pkg) 不依赖 repository / db / http
 
 ### 2.1 SQL 模板
 
-`LoadFreshDepthMatrix(ctx, now, staleAfter, tier)`：
+`LoadFreshDepthMatrix(ctx, now, staleAfter, tier)` 读取每个 surface-aware row
+的最新可展示深度。V1/V2/Spot 不能只靠 `(platform, display_symbol)` 去重，
+否则 `platform=edgeX` 的不同 surface 会互相覆盖。
 
 ```sql
-SELECT t.platform, t.display_symbol, t.tier,
-       t.bid_usd, t.ask_usd, t.total_usd,
-       t.depth_status, t.snapshot_ts
-  FROM t_orderbook_snapshot t
+SELECT s.platform,
+       COALESCE(s.platform_group, ''), COALESCE(s.display_platform, ''), COALESCE(s.is_edgex, 0),
+       s.display_symbol, COALESCE(s.canonical_symbol, ''), COALESCE(s.venue_symbol, ''),
+       COALESCE(s.market_surface, ''), COALESCE(s.instrument_kind, ''), COALESCE(s.lineage, ''),
+       COALESCE(s.contract_id, ''), COALESCE(s.base_asset, ''), COALESCE(s.quote_asset, ''),
+       COALESCE(s.depth_source, ''), COALESCE(s.source_id, ''), COALESCE(s.source_endpoint, ''),
+       s.snapshot_ts,
+       COALESCE(s.bid_usd, 0), COALESCE(s.ask_usd, 0), COALESCE(s.total_usd, 0)
+  FROM t_orderbook_snapshot s
   JOIN (
-    SELECT platform, display_symbol, tier, MAX(snapshot_ts) AS max_ts
+    SELECT platform, display_symbol,
+           COALESCE(market_surface, '') AS market_surface,
+           COALESCE(instrument_kind, '') AS instrument_kind,
+           COALESCE(lineage, '') AS lineage,
+           COALESCE(venue_symbol, '') AS venue_symbol,
+           COALESCE(contract_id, '') AS contract_id,
+           MAX(snapshot_ts) AS snapshot_ts
       FROM t_orderbook_snapshot
      WHERE tier = ?
        AND snapshot_ts >= ?              -- now - staleAfter
-     GROUP BY platform, display_symbol, tier
+       AND depth_status IN ('complete','partial','aggregated_orderbook','ws_limited_depth')
+     GROUP BY platform, display_symbol,
+              COALESCE(market_surface, ''), COALESCE(instrument_kind, ''),
+              COALESCE(lineage, ''), COALESCE(venue_symbol, ''), COALESCE(contract_id, '')
   ) latest
-    ON t.platform = latest.platform
-   AND t.display_symbol = latest.display_symbol
-   AND t.tier = latest.tier
-   AND t.snapshot_ts = latest.max_ts
- WHERE t.depth_status = 'success';
+    ON s.platform = latest.platform
+   AND s.display_symbol = latest.display_symbol
+   AND COALESCE(s.market_surface, '') = latest.market_surface
+   AND COALESCE(s.instrument_kind, '') = latest.instrument_kind
+   AND COALESCE(s.lineage, '') = latest.lineage
+   AND COALESCE(s.venue_symbol, '') = latest.venue_symbol
+   AND COALESCE(s.contract_id, '') = latest.contract_id
+   AND s.snapshot_ts = latest.snapshot_ts
+ WHERE s.tier = ?;
 ```
+
+`partial` 行会进入矩阵，因为告警需要比较“当前可展示的流动性下界”；
+`error` / `stale` / `unsupported` / `insufficient_history` 不进入矩阵。
 
 ### 2.2 canonical 折叠
 
@@ -76,23 +99,42 @@ SELECT t.platform, t.display_symbol, t.tier,
 - 先复用 `divergence.CanonicaliseSymbol(displaySymbol)` 把 raw form 剥到 base
 - 再用 `CanonicalIndex.Resolve(platform, base)` 做 alias-aware 反查
 - 最终矩阵：`map[canonical]map[platform]PlatformDepthRow`
+- 如果同一个 canonical 下同一 platform 存在多个 surface（例如 `edgeX V1` 与
+  `edgeX V2`），当前告警仍按平台级别比较，保留该 platform 深度最大的 surface，
+  并把该 surface 的 `display_platform` / `market_surface` / `depth_source` 等归因字段带入卡片。
 
 ### 2.3 PlatformDepthRow
 
 ```go
 type PlatformDepthRow struct {
-    Platform     string
-    DisplaySymbol string
-    Tier         string
-    DepthUSD     float64    // total_usd (双边合计)
-    BidUSD       float64
-    AskUSD       float64
-    SnapshotTS   time.Time
-    Status       string     // 'success' 才会保留下来
+    Platform        string
+    PlatformGroup   string
+    DisplayPlatform string
+    IsEdgeX         bool
+    DisplaySymbol   string
+    CanonicalSymbol string
+    VenueSymbol     string
+    MarketSurface   string
+    InstrumentKind  string
+    Lineage         string
+    ContractID      string
+    BaseAsset       string
+    QuoteAsset      string
+    DepthSource     string
+    SourceID        string
+    SourceEndpoint  string
+    Tier            string
+    DepthUSD        float64    // total_usd (双边合计)
+    BidUSD          float64
+    AskUSD          float64
+    SnapshotTS      time.Time
 }
 ```
 
-stale / error / unsupported / insufficient_history 的行在 SQL 层就被剔除，不进入矩阵。
+Lark 卡片的 `AllPlatforms` 会继承这些 surface/source 字段。对 EdgeX V2，
+卡片应能显示 `edgeX V2`、`perp_v2`、`edgeX-perp-v2`、`contract_id`、
+`depth_source`、`source_id` 与 `source_endpoint`，便于定位是 WS local book、
+REST fallback 还是上游错误导致告警。
 
 ---
 
@@ -281,7 +323,21 @@ UPDATE t_listing_alert_state
     "total_platforms": 9
   },
   "platforms": [
-    {"platform": "binance", "depth_usd": 8500000, "rank": 1},
+    {"platform": "binance", "display_platform": "binance", "depth_usd": 8500000, "rank": 1},
+    {
+      "platform": "edgeX",
+      "display_platform": "edgeX V2",
+      "platform_group": "edgeX",
+      "is_edgex": true,
+      "market_surface": "perp_v2",
+      "lineage": "edgeX-perp-v2",
+      "contract_id": "30000001",
+      "depth_source": "ws_local_book",
+      "source_id": "edgeX-perp-v2-ws-depth-200",
+      "source_endpoint": "wss://edgex-quote-prod-v2.edgex.exchange/api/v1/public/ws",
+      "depth_usd": 2400000,
+      "rank": 6
+    },
     ...
   ],
   "dashboard_url": "https://dashboard/liquidity?symbol=BTC&tier=0.001"

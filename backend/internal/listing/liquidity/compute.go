@@ -176,10 +176,25 @@ func buildPlatformRows(perPlatform map[string]PlatformDepthRow, median float64) 
 			continue
 		}
 		rows = append(rows, AlertPlatformRow{
-			Platform:   plat,
-			DepthUSD:   row.DepthUSD,
-			IsEdgex:    strings.EqualFold(plat, EdgexPlatform),
-			SnapshotTS: row.SnapshotTS,
+			Platform:        plat,
+			PlatformGroup:   row.PlatformGroup,
+			DisplayPlatform: row.DisplayPlatform,
+			IsEdgeX:         row.IsEdgeX,
+			DisplaySymbol:   row.DisplaySymbol,
+			CanonicalSymbol: row.CanonicalSymbol,
+			VenueSymbol:     row.VenueSymbol,
+			MarketSurface:   row.MarketSurface,
+			InstrumentKind:  row.InstrumentKind,
+			Lineage:         row.Lineage,
+			ContractID:      row.ContractID,
+			BaseAsset:       row.BaseAsset,
+			QuoteAsset:      row.QuoteAsset,
+			DepthSource:     row.DepthSource,
+			SourceID:        row.SourceID,
+			SourceEndpoint:  row.SourceEndpoint,
+			DepthUSD:        row.DepthUSD,
+			IsEdgex:         strings.EqualFold(plat, EdgexPlatform),
+			SnapshotTS:      row.SnapshotTS,
 		})
 	}
 	sort.SliceStable(rows, func(i, j int) bool {

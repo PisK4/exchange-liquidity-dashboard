@@ -197,6 +197,200 @@ func (s *Store) WatchCatalog(ctx context.Context, path string, interval time.Dur
 
 func key(platform, symbol string) string { return platform + "|" + symbol }
 
+func surfaceIdentityKey(platform, symbol, marketSurface, instrumentKind, lineage, venueSymbol, contractID string) string {
+	if marketSurface == "" && instrumentKind == "" && lineage == "" && venueSymbol == "" && contractID == "" {
+		return key(platform, symbol)
+	}
+	return strings.Join([]string{platform, symbol, marketSurface, instrumentKind, lineage, venueSymbol, contractID}, "|")
+}
+
+func platformSnapshotKey(row domain.PlatformSnapshot) string {
+	return surfaceIdentityKey(row.Platform, row.DisplaySymbol, row.MarketSurface, row.InstrumentKind, row.Lineage, row.VenueSymbol, row.ContractID)
+}
+
+func volumeSnapshotKey(row domain.VolumeSnapshot) string {
+	return surfaceIdentityKey(row.Platform, row.DisplaySymbol, row.MarketSurface, row.InstrumentKind, row.Lineage, row.VenueSymbol, row.ContractID)
+}
+
+func fundingSnapshotKey(row domain.PlatformFundingRate) string {
+	return surfaceIdentityKey(row.Platform, row.DisplaySymbol, row.MarketSurface, "", row.Lineage, "", "")
+}
+
+func symbolSubSnapshotKey(sub domain.SymbolSub) string {
+	return surfaceIdentityKey(sub.Platform, sub.DisplaySymbol, sub.MarketSurface, sub.InstrumentKind, sub.Lineage, domain.VenueSymbol(sub), sub.ContractID)
+}
+
+func listedSurfaceFromSub(sub domain.SymbolSub) domain.ListedSurfaceDetail {
+	return domain.ListedSurfaceDetail{
+		Platform:        sub.Platform,
+		PlatformGroup:   domain.PlatformGroup(sub.Platform),
+		DisplayPlatform: domain.DisplayPlatform(sub.Platform, sub.MarketSurface, sub.Lineage),
+		IsEdgeX:         domain.IsEdgeXPlatform(sub.Platform),
+		DisplaySymbol:   sub.DisplaySymbol,
+		CanonicalSymbol: sub.Canonical,
+		VenueSymbol:     domain.VenueSymbol(sub),
+		MarketSurface:   sub.MarketSurface,
+		InstrumentKind:  sub.InstrumentKind,
+		Lineage:         sub.Lineage,
+		ContractID:      sub.ContractID,
+		BaseAsset:       sub.BaseAsset,
+		QuoteAsset:      sub.QuoteAsset,
+		SourceEndpoint:  sub.SourceEndpoint,
+		Status:          sub.CatalogStatus,
+	}
+}
+
+func resolveTop30Base(resolver interface {
+	ResolveCanonical(platform, base string) string
+}, platform, symbol string) string {
+	base := strings.ToUpper(strings.TrimSpace(baseAssetFromSymbol(symbol)))
+	if base == "" {
+		return ""
+	}
+	if resolver == nil {
+		return base
+	}
+	resolved := strings.ToUpper(strings.TrimSpace(resolver.ResolveCanonical(platform, base)))
+	if resolved == "" {
+		return base
+	}
+	return resolved
+}
+
+func (s *Store) listedSurfacesForSymbolLocked(sourcePlatform, symbol string) []domain.ListedSurfaceDetail {
+	base := resolveTop30Base(s.cfg.CanonicalIndex, sourcePlatform, symbol)
+	if base == "" {
+		return nil
+	}
+	seen := map[string]struct{}{}
+	out := []domain.ListedSurfaceDetail{}
+	for _, sub := range s.symbolSnapshot() {
+		if sub.Platform != "edgeX" {
+			continue
+		}
+		canonical := strings.ToUpper(strings.TrimSpace(sub.Canonical))
+		if canonical == "" {
+			canonical = strings.ToUpper(strings.TrimSpace(sub.BaseAsset))
+		}
+		if canonical != base {
+			continue
+		}
+		k := symbolSubSnapshotKey(sub)
+		if _, ok := seen[k]; ok {
+			continue
+		}
+		seen[k] = struct{}{}
+		out = append(out, listedSurfaceFromSub(sub))
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		if out[i].MarketSurface != out[j].MarketSurface {
+			return out[i].MarketSurface < out[j].MarketSurface
+		}
+		if out[i].Lineage != out[j].Lineage {
+			return out[i].Lineage < out[j].Lineage
+		}
+		return out[i].ContractID < out[j].ContractID
+	})
+	return out
+}
+
+func (s *Store) enrichTop30ListedSurfacesLocked(sourcePlatform string, rows []domain.Top30Row) {
+	for i := range rows {
+		if rows[i].ListedStatus != domain.StatusComplete || !rows[i].EdgexListed {
+			rows[i].EdgexListedSurfaces = nil
+			continue
+		}
+		platform := sourcePlatform
+		if rows[i].Platform != "" {
+			platform = rows[i].Platform
+		}
+		rows[i].EdgexListedSurfaces = s.listedSurfacesForSymbolLocked(platform, rows[i].Symbol)
+	}
+}
+
+func (s *Store) enrichDivergenceListedSurfacesLocked(rows []domain.Top30DivergenceRow) {
+	for i := range rows {
+		if rows[i].EdgexListedStatus != domain.StatusComplete || !rows[i].EdgexListed {
+			rows[i].EdgexListedSurfaces = nil
+			continue
+		}
+		rows[i].EdgexListedSurfaces = s.listedSurfacesForSymbolLocked("edgeX", rows[i].Symbol)
+	}
+}
+
+func sharePlatformAggregateMeta(platform string) map[string]any {
+	return map[string]any{
+		"platform":          platform,
+		"platform_group":    domain.PlatformGroup(platform),
+		"display_platform":  domain.DisplayPlatform(platform, "perp_all", "platform-volume-aggregate"),
+		"is_edgex":          domain.IsEdgeXPlatform(platform),
+		"market_surface":    "perp_all",
+		"instrument_kind":   "aggregate",
+		"lineage":           "platform-volume-aggregate",
+		"aggregation_scope": "platform_all_surfaces",
+	}
+}
+
+func (s *Store) rowTargetsLocked(symbol string) []domain.SymbolSub {
+	targets := []domain.SymbolSub{}
+	allowed := map[string]bool{}
+	for _, platform := range s.cfg.Platforms {
+		allowed[platform] = true
+	}
+	for _, sub := range s.symbolSnapshot() {
+		if sub.DisplaySymbol == symbol && allowed[sub.Platform] {
+			targets = append(targets, sub)
+		}
+	}
+	if len(targets) > 0 {
+		return targets
+	}
+	for _, platform := range s.cfg.Platforms {
+		targets = append(targets, domain.SymbolSub{Platform: platform, DisplaySymbol: symbol})
+	}
+	return targets
+}
+
+func (s *Store) displaySnapshotByKeyLocked(k string) (domain.PlatformSnapshot, bool) {
+	latest, ok := s.platforms[k]
+	if !ok {
+		return domain.PlatformSnapshot{}, false
+	}
+	if latest.DepthStatus == domain.StatusComplete || s.cfg.Runtime.DisplayFallbackWindow <= 0 || latest.SnapshotTS.IsZero() {
+		return latest, true
+	}
+	cutoff := latest.SnapshotTS.Add(-s.cfg.Runtime.DisplayFallbackWindow)
+	history := s.platformHistory[k]
+	for i := len(history) - 1; i >= 0; i-- {
+		candidate := history[i]
+		if candidate.SnapshotTS.Before(cutoff) {
+			break
+		}
+		if candidate.DepthStatus != domain.StatusComplete {
+			continue
+		}
+		candidate.DataFreshness = domain.FreshnessDelayed
+		candidate.LastCollectionStatus = latest.DepthStatus
+		candidate.LastCollectionError = latest.Error
+		collectionTS := latest.SnapshotTS
+		candidate.LastCollectionTS = &collectionTS
+		return candidate, true
+	}
+	return latest, true
+}
+
+func (s *Store) displaySymbolSnapshotLocked(sub domain.SymbolSub) (domain.PlatformSnapshot, bool) {
+	k := symbolSubSnapshotKey(sub)
+	if row, ok := s.displaySnapshotByKeyLocked(k); ok {
+		return row, true
+	}
+	legacyKey := key(sub.Platform, sub.DisplaySymbol)
+	if legacyKey != k {
+		return s.displaySnapshotByKeyLocked(legacyKey)
+	}
+	return domain.PlatformSnapshot{}, false
+}
+
 func (s *Store) SavePlatformSnapshot(row domain.PlatformSnapshot) {
 	row = s.hydratePlatformSnapshot(row)
 	if err := s.persistPlatformSnapshot(context.Background(), row); err != nil {
@@ -214,7 +408,7 @@ func (s *Store) hydratePlatformSnapshot(row domain.PlatformSnapshot) domain.Plat
 }
 
 func (s *Store) savePlatformSnapshotLocked(row domain.PlatformSnapshot) {
-	k := key(row.Platform, row.DisplaySymbol)
+	k := platformSnapshotKey(row)
 	s.platforms[k] = row
 	history := append(s.platformHistory[k], row)
 	if window := s.cfg.Runtime.DisplayFallbackWindow; window > 0 && !row.SnapshotTS.IsZero() {
@@ -245,7 +439,7 @@ func (s *Store) SaveVolume(row domain.VolumeSnapshot) {
 
 func (s *Store) hydrateVolume(row domain.VolumeSnapshot) {
 	s.mu.Lock()
-	s.volumes[key(row.Platform, row.DisplaySymbol)] = row
+	s.volumes[volumeSnapshotKey(row)] = row
 	s.publishSnapshotLocked()
 	s.mu.Unlock()
 }
@@ -311,7 +505,7 @@ func (s *Store) SaveFundingRates(rows []domain.PlatformFundingRate) {
 		if row.Platform == "" || row.DisplaySymbol == "" {
 			continue
 		}
-		s.funding[key(row.Platform, row.DisplaySymbol)] = row
+		s.funding[fundingSnapshotKey(row)] = row
 	}
 	s.publishSnapshotLocked()
 }
@@ -412,6 +606,7 @@ func (s *Store) hydrateTop30(platform string, rows []domain.Top30Row) []domain.T
 	copy(dup, rows)
 	s.mu.Lock()
 	enrichTop30With7dWindowLocked(s, platform, dup)
+	s.enrichTop30ListedSurfacesLocked(platform, dup)
 	s.top30ByPlatform[platform] = dup
 	s.publishSnapshotLocked()
 	s.mu.Unlock()
@@ -660,11 +855,11 @@ func (s *Store) Liquidity(symbol string) map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rows := []domain.PlatformSnapshot{}
-	for _, p := range s.cfg.Platforms {
-		if row, ok := s.displayPlatformSnapshotLocked(p, symbol); ok {
+	for _, sub := range s.rowTargetsLocked(symbol) {
+		if row, ok := s.displaySymbolSnapshotLocked(sub); ok {
 			rows = append(rows, row)
 		} else {
-			rows = append(rows, missingPlatform(p, symbol))
+			rows = append(rows, missingSymbolSub(sub, symbol))
 		}
 	}
 	rows = s.attachFundingLocked(rows)
@@ -693,11 +888,11 @@ func (s *Store) Quality(symbol string) map[string]any {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rows := []domain.PlatformSnapshot{}
-	for _, p := range s.cfg.Platforms {
-		if row, ok := s.displayPlatformSnapshotLocked(p, symbol); ok {
+	for _, sub := range s.rowTargetsLocked(symbol) {
+		if row, ok := s.displaySymbolSnapshotLocked(sub); ok {
 			rows = append(rows, row)
 		} else {
-			rows = append(rows, missingPlatform(p, symbol))
+			rows = append(rows, missingSymbolSub(sub, symbol))
 		}
 	}
 	rows = s.attachFundingLocked(rows)
@@ -798,12 +993,10 @@ func (s *Store) share24hLocked() map[string]any {
 		if status == "" {
 			status = domain.StatusStale
 		}
-		row := map[string]any{
-			"platform":    p,
-			"discount":    discount(p),
-			"status":      status,
-			"data_source": sourceByPlatform[p],
-		}
+		row := sharePlatformAggregateMeta(p)
+		row["discount"] = discount(p)
+		row["status"] = status
+		row["data_source"] = sourceByPlatform[p]
 		if status == domain.StatusComplete {
 			share := 0.0
 			if denom > 0 {
@@ -900,14 +1093,12 @@ func (s *Store) shareHistoricalLocked(window string, days int) map[string]any {
 	rows := []map[string]any{}
 	for _, p := range s.cfg.Platforms {
 		status := statusByPlatform[p]
-		row := map[string]any{
-			"platform":    p,
-			"discount":    discount(p),
-			"status":      status,
-			"data_source": sourceByPlatform[p],
-			"days_seen":   daysCovered[p],
-			"days_window": days,
-		}
+		row := sharePlatformAggregateMeta(p)
+		row["discount"] = discount(p)
+		row["status"] = status
+		row["data_source"] = sourceByPlatform[p]
+		row["days_seen"] = daysCovered[p]
+		row["days_window"] = days
 		if status == domain.StatusComplete {
 			share := 0.0
 			if denom > 0 {
@@ -1151,6 +1342,7 @@ func (s *Store) Top30(surface, platform string) map[string]any {
 	// row landed still surface their newest values. The compute is read-
 	// only against dailySymbolVolumes which is held under the same RLock.
 	enrichTop30With7dWindowLocked(s, platform, out)
+	s.enrichTop30ListedSurfacesLocked(platform, out)
 	s.mu.RUnlock()
 	return map[string]any{
 		"surface":     surface,
@@ -1242,6 +1434,15 @@ func (s *Store) RuntimeConfig() config.Runtime { return s.Snapshot().Config.Runt
 
 func missingPlatform(platform, symbol string) domain.PlatformSnapshot {
 	return domain.PlatformSnapshot{Platform: platform, DisplaySymbol: symbol, SnapshotTS: time.Now().UTC(), DepthStatus: domain.StatusStale, Error: "no collection result yet", DepthByTier: map[string]domain.DepthMetrics{}, BuySlippageBP: map[string]float64{}, SellSlippageBP: map[string]float64{}}
+}
+
+func missingSymbolSub(sub domain.SymbolSub, symbol string) domain.PlatformSnapshot {
+	if sub.DisplaySymbol == "" {
+		sub.DisplaySymbol = symbol
+	}
+	row := missingPlatform(sub.Platform, sub.DisplaySymbol)
+	domain.ApplyPlatformSurfaceMeta(&row, sub)
+	return row
 }
 
 func latestTS(rows []domain.PlatformSnapshot) time.Time {

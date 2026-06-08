@@ -87,8 +87,8 @@ export function SqrtLineChart({ ariaLabel, labels, series, unit = 'USD' }: SqrtL
       data: {
         labels,
         datasets: series.map(item => {
-          const color = colorFor(item.label);
-          const isSelf = item.label === 'edgeX';
+          const color = colorFor(item.colorKey ?? item.label);
+          const isSelf = item.isSelf === true;
           return {
             label: item.label,
             data: item.values.map(sqrtTransform),

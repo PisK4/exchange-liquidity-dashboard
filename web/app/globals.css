@@ -252,6 +252,7 @@ table.tbl tr:hover td.col-ask { background-color: rgba(242,73,92,.13); }
 .badge.b-warn { color: var(--warn); border-color: rgba(242,204,12,.5); background: rgba(242,204,12,.12); }
 .badge.b-bad { color: var(--bad); border-color: rgba(242,73,92,.5); background: rgba(242,73,92,.12); }
 .badge.b-mute { color: var(--text-mute); border-color: var(--border); background: #242830; }
+.surface-badge-list { display: inline-flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; }
 .muted { color: var(--text-mute); }
 .error { color: var(--bad); }
 .platform-self { color: var(--accent); font-weight: 600; }

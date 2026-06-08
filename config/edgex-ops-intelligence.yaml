@@ -84,6 +84,12 @@ Runtime:
         rate_per_sec: 2
 
   ws_providers:
+    edgeX_perp_v2:
+      enabled: true
+      # Perps V2 quote WS uses the v2 host with the legacy /api/v1/public/ws path.
+      url: wss://edgex-quote-prod-v2.edgex.exchange/api/v1/public/ws
+      proxy: "http://host.docker.internal:7897"
+      stale_after: 15s
     bitget:
       enabled: true
       url: wss://stream.bitget.com/public/v1/stream

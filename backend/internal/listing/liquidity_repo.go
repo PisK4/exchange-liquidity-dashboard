@@ -47,19 +47,38 @@ func (r *Repository) LoadFreshDepthMatrix(
 	}
 	cutoff := now.Add(-staleAfter)
 	query := `
-SELECT s.platform, s.display_symbol, s.snapshot_ts,
+SELECT s.platform,
+       COALESCE(s.platform_group, ''), COALESCE(s.display_platform, ''), COALESCE(s.is_edgex, 0),
+       s.display_symbol, COALESCE(s.canonical_symbol, ''), COALESCE(s.venue_symbol, ''),
+       COALESCE(s.market_surface, ''), COALESCE(s.instrument_kind, ''), COALESCE(s.lineage, ''),
+       COALESCE(s.contract_id, ''), COALESCE(s.base_asset, ''), COALESCE(s.quote_asset, ''),
+       COALESCE(s.depth_source, ''), COALESCE(s.source_id, ''), COALESCE(s.source_endpoint, ''),
+       s.snapshot_ts,
        COALESCE(s.bid_usd, 0), COALESCE(s.ask_usd, 0), COALESCE(s.total_usd, 0)
   FROM t_orderbook_snapshot s
   JOIN (
-    SELECT platform, display_symbol, MAX(snapshot_ts) AS snapshot_ts
+    SELECT platform, display_symbol,
+           COALESCE(market_surface, '') AS market_surface,
+           COALESCE(instrument_kind, '') AS instrument_kind,
+           COALESCE(lineage, '') AS lineage,
+           COALESCE(venue_symbol, '') AS venue_symbol,
+           COALESCE(contract_id, '') AS contract_id,
+           MAX(snapshot_ts) AS snapshot_ts
       FROM t_orderbook_snapshot
      WHERE tier = ?
        AND snapshot_ts >= ?
        AND depth_status IN ('complete','partial','aggregated_orderbook','ws_limited_depth')
-     GROUP BY platform, display_symbol
+     GROUP BY platform, display_symbol,
+              COALESCE(market_surface, ''), COALESCE(instrument_kind, ''),
+              COALESCE(lineage, ''), COALESCE(venue_symbol, ''), COALESCE(contract_id, '')
   ) latest
     ON latest.platform = s.platform
    AND latest.display_symbol = s.display_symbol
+   AND latest.market_surface = COALESCE(s.market_surface, '')
+   AND latest.instrument_kind = COALESCE(s.instrument_kind, '')
+   AND latest.lineage = COALESCE(s.lineage, '')
+   AND latest.venue_symbol = COALESCE(s.venue_symbol, '')
+   AND latest.contract_id = COALESCE(s.contract_id, '')
    AND latest.snapshot_ts = s.snapshot_ts
  WHERE s.tier = ?
    AND s.depth_status IN ('complete','partial','aggregated_orderbook','ws_limited_depth')
@@ -72,18 +91,33 @@ SELECT s.platform, s.display_symbol, s.snapshot_ts,
 	out := make(map[string]map[string]liquidity.PlatformDepthRow)
 	for rows.Next() {
 		var (
-			platform, displaySymbol string
-			snapshotTS              time.Time
-			bid, ask, total         float64
+			platform, platformGroup, displayPlatform, displaySymbol string
+			canonicalSymbol, venueSymbol                            string
+			marketSurface, instrumentKind, lineage                  string
+			contractID, baseAsset, quoteAsset                       string
+			depthSource, sourceID, sourceEndpoint                   string
+			isEdgex                                                 bool
+			snapshotTS                                              time.Time
+			bid, ask, total                                         float64
 		)
-		if err := rows.Scan(&platform, &displaySymbol, &snapshotTS, &bid, &ask, &total); err != nil {
+		if err := rows.Scan(
+			&platform, &platformGroup, &displayPlatform, &isEdgex,
+			&displaySymbol, &canonicalSymbol, &venueSymbol,
+			&marketSurface, &instrumentKind, &lineage,
+			&contractID, &baseAsset, &quoteAsset,
+			&depthSource, &sourceID, &sourceEndpoint,
+			&snapshotTS, &bid, &ask, &total,
+		); err != nil {
 			return nil, fmt.Errorf("scan depth matrix row: %w", err)
 		}
 		base := extractBase(displaySymbol)
 		if base == "" {
 			continue
 		}
-		canonical := strings.ToUpper(base)
+		canonical := strings.ToUpper(strings.TrimSpace(canonicalSymbol))
+		if canonical == "" {
+			canonical = strings.ToUpper(base)
+		}
 		if index != nil {
 			if resolved := index.Resolve(platform, base); strings.TrimSpace(resolved) != "" {
 				canonical = resolved
@@ -104,13 +138,27 @@ SELECT s.platform, s.display_symbol, s.snapshot_ts,
 			continue
 		}
 		perPlatform[key] = liquidity.PlatformDepthRow{
-			Platform:      key,
-			DisplaySymbol: displaySymbol,
-			Tier:          tier,
-			DepthUSD:      total,
-			BidUSD:        bid,
-			AskUSD:        ask,
-			SnapshotTS:    snapshotTS,
+			Platform:        key,
+			PlatformGroup:   platformGroup,
+			DisplayPlatform: displayPlatform,
+			IsEdgeX:         isEdgex,
+			DisplaySymbol:   displaySymbol,
+			CanonicalSymbol: canonical,
+			VenueSymbol:     venueSymbol,
+			MarketSurface:   marketSurface,
+			InstrumentKind:  instrumentKind,
+			Lineage:         lineage,
+			ContractID:      contractID,
+			BaseAsset:       baseAsset,
+			QuoteAsset:      quoteAsset,
+			DepthSource:     depthSource,
+			SourceID:        sourceID,
+			SourceEndpoint:  sourceEndpoint,
+			Tier:            tier,
+			DepthUSD:        total,
+			BidUSD:          bid,
+			AskUSD:          ask,
+			SnapshotTS:      snapshotTS,
 		}
 	}
 	return out, rows.Err()

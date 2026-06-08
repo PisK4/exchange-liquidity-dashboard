@@ -4,7 +4,21 @@ import type { SymbolsResponse } from './types';
 export { getJSON, getJSONWithFallback } from './fetcher';
 export type * from './types';
 
-export type FrontendURLLookup = (platform: string, displaySymbol: string) => string | undefined;
+export type FrontendURLMeta = {
+  marketSurface?: string;
+  lineage?: string;
+  venueSymbol?: string;
+  contractId?: string;
+};
+
+export type FrontendURLLookup = (platform: string, displaySymbol: string, meta?: FrontendURLMeta) => string | undefined;
+
+function frontendURLKey(platform: string, displaySymbol: string, meta?: FrontendURLMeta) {
+  if (!meta || (!meta.marketSurface && !meta.lineage && !meta.venueSymbol && !meta.contractId)) {
+    return `${platform}::${displaySymbol}`;
+  }
+  return `${platform}::${displaySymbol}::${meta.marketSurface ?? ''}::${meta.lineage ?? ''}::${meta.venueSymbol ?? ''}::${meta.contractId ?? ''}`;
+}
 
 export async function getFrontendURLLookup(): Promise<FrontendURLLookup> {
   try {
@@ -12,10 +26,16 @@ export async function getFrontendURLLookup(): Promise<FrontendURLLookup> {
     const idx = new Map<string, string>();
     for (const m of data.mappings ?? []) {
       if (m.frontend_url) {
+        idx.set(frontendURLKey(m.platform, m.display_symbol, {
+          marketSurface: m.market_surface,
+          lineage: m.lineage,
+          venueSymbol: m.api_symbol,
+          contractId: m.contract_id,
+        }), m.frontend_url);
         idx.set(`${m.platform}::${m.display_symbol}`, m.frontend_url);
       }
     }
-    return (platform: string, displaySymbol: string) => idx.get(`${platform}::${displaySymbol}`);
+    return (platform: string, displaySymbol: string, meta?: FrontendURLMeta) => idx.get(frontendURLKey(platform, displaySymbol, meta)) ?? idx.get(`${platform}::${displaySymbol}`);
   } catch {
     return () => undefined;
   }

@@ -6,6 +6,7 @@ import { StatusEmptyState } from '@/components/status-empty-state';
 import {
   money,
   type FrontendURLLookup,
+  type ListedSurfaceDetail,
   type Top30AggregateRow,
   type Top30DivergenceKPI,
   type Top30DivergenceRow,
@@ -51,6 +52,32 @@ function filterRows(rows: Top30DivergenceRow[], filter: FilterKey): Top30Diverge
   if (filter === 'all') return rows;
   if (filter === 'heavy') return rows.filter(row => isHeavy(row.category));
   return rows.filter(row => row.category === filter);
+}
+
+function surfaceLabel(surface: ListedSurfaceDetail) {
+  return surface.display_platform || surface.market_surface || surface.lineage || surface.platform || 'edgeX';
+}
+
+function ListedSurfaceBadges({ surfaces }: { surfaces?: ListedSurfaceDetail[] }) {
+  if (!surfaces?.length) return null;
+  return (
+    <span className="surface-badge-list" aria-label="edgeX listed surfaces">
+      {surfaces.map(surface => {
+        const key = `${surface.platform ?? 'edgeX'}::${surface.market_surface ?? ''}::${surface.lineage ?? ''}::${surface.contract_id ?? ''}`;
+        return <span className="badge b-ok" key={key}>{surfaceLabel(surface)}</span>;
+      })}
+    </span>
+  );
+}
+
+function renderListedCell(row: Top30DivergenceRow) {
+  const listedStatus = row.edgex_listed_status;
+  if (listedStatus && listedStatus !== 'complete') {
+    return <StatusBadge status={listedStatus} />;
+  }
+  if (!row.edgex_listed) return <span className="muted">否</span>;
+  if (!row.edgex_listed_surfaces?.length) return '是';
+  return <ListedSurfaceBadges surfaces={row.edgex_listed_surfaces} />;
 }
 
 function KpiStrip({ kpi, signifThreshold }: { kpi: Top30DivergenceKPI; signifThreshold: number }) {
@@ -182,7 +209,7 @@ export function Top30DivergenceView({ snapshot, lookup: _lookup }: { snapshot: T
                 <th className="num">DEX 24h vol</th>
                 <th className="num">|Δrank|</th>
                 <th>分歧类型</th>
-                <th>edgeX 已上线?</th>
+                <th>edgeX 已上线 surface</th>
               </tr>
             </thead>
             <tbody>
@@ -190,7 +217,6 @@ export function Top30DivergenceView({ snapshot, lookup: _lookup }: { snapshot: T
                 <tr><td colSpan={8}><div className="empty-state">当前筛选下无 symbol</div></td></tr>
               ) : rowsFiltered.map(row => {
                 const cat = categoryBadge(row.category);
-                const listedStatus = row.edgex_listed_status;
                 return (
                   <tr key={row.symbol}>
                     <td>{row.symbol}</td>
@@ -200,9 +226,7 @@ export function Top30DivergenceView({ snapshot, lookup: _lookup }: { snapshot: T
                     <td className="num">{typeof row.dex_adjusted_volume_24h_usd === 'number' ? money(row.dex_adjusted_volume_24h_usd) : <span className="muted">—</span>}</td>
                     <td className="num">{typeof row.rank_delta === 'number' ? row.rank_delta : <span className="muted">—</span>}</td>
                     <td><span className={`badge ${cat.cls}`}>{cat.label}</span></td>
-                    <td>{listedStatus && listedStatus !== 'complete'
-                      ? <StatusBadge status={listedStatus} />
-                      : (row.edgex_listed ? '是' : <span className="muted">否</span>)}</td>
+                    <td>{renderListedCell(row)}</td>
                   </tr>
                 );
               })}
