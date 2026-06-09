@@ -545,6 +545,54 @@ func (r *Repository) GetCandidate(ctx context.Context, id int64) (Candidate, err
 	return c, err
 }
 
+// MarkCandidateAlreadyListed reconciles a single candidate when a late
+// producer/delivery guard discovers that edgeX already lists the asset.
+// The bulk listed-universe refresh uses a set-based sibling; this method
+// keeps the decision-card path from re-considering the same stale candidate
+// after it has been suppressed.
+func (r *Repository) MarkCandidateAlreadyListed(ctx context.Context, candidateID int64, now time.Time) error {
+	if r.db == nil {
+		return errors.New("listing repository: no db attached")
+	}
+	if now.IsZero() {
+		now = r.now()
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE t_listing_candidate
+		    SET lifecycle_status = ?, lifecycle_status_label = ?,
+		        recommendation = ?, recommendation_label = ?, updated_at = ?
+		  WHERE id = ?`,
+		LifecycleAlreadyListed, LifecycleStatusLabels[LifecycleAlreadyListed],
+		RecommendationRecordOnly, RecommendationLabels[RecommendationRecordOnly], now, candidateID,
+	)
+	return err
+}
+
+// HasDecisionOutboxForCandidate returns true once any decision-card outbox
+// row exists for the candidate. The check intentionally matches historical
+// evidence-hash/date dedupe keys as well as the current stable first-listing
+// key so old cards also enforce the "one candidate, one decision card" rule.
+func (r *Repository) HasDecisionOutboxForCandidate(ctx context.Context, candidateID int64) (bool, error) {
+	if r.db == nil {
+		return false, errors.New("listing repository: no db attached")
+	}
+	prefix := fmt.Sprintf("listing_decision|%d|", candidateID)
+	var present int
+	err := r.db.QueryRowContext(ctx,
+		`SELECT 1 FROM t_listing_delivery_outbox
+		  WHERE event_type = ? AND dedupe_key LIKE ?
+		  LIMIT 1`,
+		DeliveryEventListingDecisionCandidate, prefix+"%",
+	).Scan(&present)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, err
+	}
+	return present == 1, nil
+}
+
 // ListCandidateSignals returns the SignalObservation rows linked to
 // the candidate. includeRaw controls whether the raw payload column
 // is materialised; the read-only API returns the raw payload only on

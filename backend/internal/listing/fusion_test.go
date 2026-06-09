@@ -291,10 +291,10 @@ func TestFuseSignalsPromotesNewSymbolSignal(t *testing.T) {
 	}
 }
 
-// TestFuseSignalsPromotesStatusChangedToActive: status_changed with
-// status_to ∈ {active, pre_listing} is a real listing event and must
-// elevate to candidate.
-func TestFuseSignalsPromotesStatusChangedToActive(t *testing.T) {
+// TestFuseSignalsSkipsStatusChangedToActive locks the first-listing-only
+// contract: a previously observed instrument moving from paused / limit_open /
+// pre_listing back to active is a lifecycle transition, not a new listing.
+func TestFuseSignalsSkipsStatusChangedToActive(t *testing.T) {
 	now := time.Date(2026, 6, 1, 14, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
@@ -314,10 +314,6 @@ func TestFuseSignalsPromotesStatusChangedToActive(t *testing.T) {
 	)
 	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).
 		WillReturnRows(rows)
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_candidate")).
-		WillReturnResult(sqlmock.NewResult(88, 1))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_candidate_signal")).WithArgs(int64(88), int64(9200)).
-		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9200)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -329,8 +325,39 @@ func TestFuseSignalsPromotesStatusChangedToActive(t *testing.T) {
 	if err != nil {
 		t.Fatalf("FuseSignals err = %v", err)
 	}
-	if result.Candidates != 1 {
-		t.Fatalf("Candidates = %d, want 1", result.Candidates)
+	if result.Candidates != 0 {
+		t.Fatalf("Candidates = %d, want 0", result.Candidates)
+	}
+	if result.SkippedObservationOnly != 1 {
+		t.Fatalf("SkippedObservationOnly = %d, want 1", result.SkippedObservationOnly)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestFuseSignalsSkipsListingTimeChangedAsObservationOnly(t *testing.T) {
+	now := time.Date(2026, 6, 9, 12, 7, 0, 0, time.UTC)
+	listingTime := now.Add(-30 * time.Minute)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	rows := sqlmock.NewRows(fusionSignalColumns())
+	addFusionInstrumentSignal(rows, 9201, "okx", DiffListingTimeChanged, "TIME", StatusActive, now, &listingTime)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_signal_observation .+ fused_at IS NULL`).WillReturnRows(rows)
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_signal_observation SET fused_at")).WithArgs(now, int64(9201)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	universe := config.NewListedUniverseFromMap(map[string][]string{"edgeX": {"BTC"}})
+	result, err := FuseSignals(context.Background(), repo, FusionDeps{
+		LoadUniverse: func() (*config.ListedUniverse, error) { return universe, nil },
+		Now:          func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("FuseSignals err = %v", err)
+	}
+	if result.Candidates != 0 || result.SkippedObservationOnly != 1 {
+		t.Fatalf("result = %+v, want observation-only listing_time_changed", result)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)

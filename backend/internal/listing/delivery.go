@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -87,6 +88,14 @@ func DrainDueOutbox(ctx context.Context, repo *Repository, deps DeliveryDeps) (D
 	}
 	out := DeliveryResult{}
 	for _, row := range rows {
+		suppressed, err := suppressStaleDecisionOutbox(ctx, repo, row, now)
+		if err != nil {
+			return out, err
+		}
+		if suppressed {
+			out.Disabled++
+			continue
+		}
 		webhookURL, webhookSecret := resolveRowWebhook(deps, row.EventType)
 		// Treat empty webhook URL as disabled regardless of stored status.
 		if strings.TrimSpace(webhookURL) == "" {
@@ -132,6 +141,66 @@ func DrainDueOutbox(ctx context.Context, repo *Repository, deps DeliveryDeps) (D
 		}
 	}
 	return out, nil
+}
+
+func suppressStaleDecisionOutbox(ctx context.Context, repo *Repository, row DeliveryOutbox, now time.Time) (bool, error) {
+	if row.EventType != DeliveryEventListingDecisionCandidate {
+		return false, nil
+	}
+	candidateID, ok := decisionCandidateIDFromOutbox(row)
+	if !ok {
+		return false, nil
+	}
+	candidate, err := repo.GetCandidate(ctx, candidateID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return false, nil
+		}
+		return false, fmt.Errorf("load decision candidate %d for outbox %d: %w", candidateID, row.ID, err)
+	}
+	if candidate.LifecycleStatus != LifecycleAlreadyListed {
+		return false, nil
+	}
+	if err := repo.markOutboxSuppressed(ctx, row.ID, "suppressed: candidate already listed on edgeX", now); err != nil {
+		return false, fmt.Errorf("suppress stale decision outbox %d: %w", row.ID, err)
+	}
+	return true, nil
+}
+
+func decisionCandidateIDFromOutbox(row DeliveryOutbox) (int64, bool) {
+	parts := strings.Split(row.DedupeKey, "|")
+	if len(parts) >= 3 && parts[0] == "listing_decision" {
+		id, err := strconv.ParseInt(parts[1], 10, 64)
+		if err == nil && id > 0 {
+			return id, true
+		}
+	}
+	var envelope struct {
+		Card struct {
+			Elements []struct {
+				Tag     string `json:"tag"`
+				Actions []struct {
+					Value struct {
+						CandidateID int64 `json:"candidate_id"`
+					} `json:"value"`
+				} `json:"actions"`
+			} `json:"elements"`
+		} `json:"card"`
+	}
+	if err := json.Unmarshal(row.PayloadJSON, &envelope); err != nil {
+		return 0, false
+	}
+	for _, el := range envelope.Card.Elements {
+		if el.Tag != "action" {
+			continue
+		}
+		for _, action := range el.Actions {
+			if action.Value.CandidateID > 0 {
+				return action.Value.CandidateID, true
+			}
+		}
+	}
+	return 0, false
 }
 
 // resolveRowWebhook returns the webhook URL + secret to use for the
@@ -255,9 +324,13 @@ func (r *Repository) loadDueOutbox(ctx context.Context, now time.Time, limit int
 }
 
 func (r *Repository) markOutboxDisabled(ctx context.Context, id int64, now time.Time) error {
+	return r.markOutboxSuppressed(ctx, id, "webhook url not configured", now)
+}
+
+func (r *Repository) markOutboxSuppressed(ctx context.Context, id int64, reason string, now time.Time) error {
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE t_listing_delivery_outbox SET status = ?, last_error = ?, updated_at = ? WHERE id = ?`,
-		OutboxStatusDisabled, "webhook url not configured", now, id,
+		OutboxStatusDisabled, reason, now, id,
 	)
 	return err
 }

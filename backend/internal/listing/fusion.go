@@ -2,7 +2,6 @@ package listing
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -80,47 +79,14 @@ func isCandidateBearingSignal(signalType string) bool {
 // instrument_diff signal's subtype should elevate to a
 // t_listing_candidate row (and thereby a Lark decision card).
 //
-// Only events that semantically describe "a new perpetual / spot
-// listing has appeared on this venue" qualify:
-//   - new_symbol            (instrument first observed)
-//   - listing_time_changed  (scheduled listing time moved)
-//   - status_changed where status_to ∈ {active, pre_listing}
-//
-// All other subtypes (metadata_changed, delisted, status_changed →
-// paused/inactive/delisted) are observation-only: they may be useful
-// for forensic analysis and DB-first CatalogResolver reads, but they
-// are NOT "新上市候选" decisions and must not surface in the Lark
-// listing group. See the 2026-06-01 hash-noise incident root-cause
-// for why this gate exists.
+// Only true first-observation events qualify. Status transitions
+// (paused / pre_listing / limit_open -> active), relists, listing-time
+// edits, delists and metadata changes are observation-only across ALL
+// platforms. They stay in t_listing_signal_observation for audit,
+// catalog and source-health diagnostics, but must not re-trigger
+// "New Listing" cards for instruments the system has already seen.
 func isCandidatePromotingInstrumentDiff(s SignalObservation) bool {
-	switch s.SignalSubtype {
-	case DiffNewSymbol, DiffListingTimeChanged:
-		return true
-	case DiffStatusChanged:
-		return statusChangedPromotes(s.PayloadJSON)
-	}
-	return false
-}
-
-// statusChangedPromotes inspects the diff payload's status_to field.
-// Only transitions INTO an active / pre-listing state qualify as a
-// listing decision; transitions OUT (active → paused / delisted) are
-// the opposite of a listing event.
-func statusChangedPromotes(payload json.RawMessage) bool {
-	if len(payload) == 0 {
-		return false
-	}
-	var p struct {
-		StatusTo string `json:"status_to"`
-	}
-	if err := json.Unmarshal(payload, &p); err != nil {
-		return false
-	}
-	switch p.StatusTo {
-	case "active", "pre_listing":
-		return true
-	}
-	return false
+	return s.SignalSubtype == DiffNewSymbol
 }
 
 // FuseSignals reads the next batch of unfused signals and groups them

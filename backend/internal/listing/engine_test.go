@@ -303,6 +303,9 @@ func TestEngineRunOnceProducesDecisionCardsWhenEnabled(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT s.id, s.signal_type, s.signal_subtype")).
 		WithArgs(int64(7)).
 		WillReturnRows(signalRows)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM t_listing_delivery_outbox")).
+		WithArgs(DeliveryEventListingDecisionCandidate, "listing_decision|7|%").
+		WillReturnRows(sqlmock.NewRows([]string{"1"}))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_risk_plan")).
 		WillReturnResult(sqlmock.NewResult(201, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_delivery_outbox")).

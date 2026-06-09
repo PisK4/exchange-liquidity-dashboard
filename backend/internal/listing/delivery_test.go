@@ -94,6 +94,64 @@ func TestDrainDueOutboxDisablesWhenNoWebhook(t *testing.T) {
 	}
 }
 
+func TestDrainDueOutboxSuppressesAlreadyListedDecisionCardBeforeRetry(t *testing.T) {
+	now := time.Date(2026, 6, 9, 12, 20, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	var hits int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&hits, 1)
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	rows := sqlmock.NewRows([]string{
+		"id", "event_type", "dedupe_key", "target_channel", "status", "attempt_count", "max_attempts",
+		"next_attempt_at", "payload_json", "last_error", "sent_at", "created_at", "updated_at",
+	}).AddRow(
+		int64(77), DeliveryEventListingDecisionCandidate, "listing_decision|13602|first_listing", DeliveryChannelLarkTop30,
+		OutboxStatusRetry, 2, 5, now.Add(-time.Minute),
+		[]byte(`{"msg_type":"interactive","card":{"elements":[]}}`), "previous webhook error", nil, now.Add(-10*time.Minute), now.Add(-time.Minute),
+	)
+	mock.ExpectQuery(`SELECT .+ FROM t_listing_delivery_outbox WHERE status IN`).
+		WillReturnRows(rows)
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT id, canonical_symbol, display_symbol")).
+		WithArgs(int64(13602)).
+		WillReturnRows(sqlmock.NewRows([]string{
+			"id", "canonical_symbol", "display_symbol", "market_surface", "instrument_kind",
+			"lifecycle_status", "lifecycle_status_label", "evidence_kind", "confidence_level",
+			"business_score", "business_score_version", "recommendation", "recommendation_label",
+			"source_platforms_json", "top30_enrichment_json", "first_observed_at", "last_observed_at",
+		}).AddRow(
+			int64(13602), "SPCX", "SPCXUSDC", "perp", "rwa",
+			LifecycleAlreadyListed, LifecycleStatusLabels[LifecycleAlreadyListed], EvidenceInstrumentDiffOnly, ConfidenceMedium,
+			nil, BusinessScoreVersion, RecommendationRecordOnly, RecommendationLabels[RecommendationRecordOnly],
+			[]byte(`["bitget"]`), nil, now.Add(-24*time.Hour), now,
+		))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE t_listing_delivery_outbox SET status")).
+		WithArgs(OutboxStatusDisabled, "suppressed: candidate already listed on edgeX", now, int64(77)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	result, err := DrainDueOutbox(context.Background(), repo, DeliveryDeps{
+		WebhookURL: srv.URL,
+		Client:     srv.Client(),
+		Now:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("DrainDueOutbox err = %v", err)
+	}
+	if result.Disabled != 1 || result.Sent != 0 || result.Retried != 0 || result.Failed != 0 {
+		t.Fatalf("result = %+v, want only disabled suppression", result)
+	}
+	if atomic.LoadInt32(&hits) != 0 {
+		t.Fatalf("webhook hits = %d, want 0 for suppressed stale decision card", hits)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func TestLarkSignProducesStableHash(t *testing.T) {
 	sig := LarkSign("secret-key", time.Unix(1716800000, 0))
 	if sig == "" {

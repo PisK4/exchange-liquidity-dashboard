@@ -1,13 +1,10 @@
 package listing
 
 import (
-	"bytes"
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
@@ -122,21 +119,12 @@ func RefreshListedUniverseFromSnapshots(ctx context.Context, repo *Repository, a
 	if seed == nil {
 		seed = &config.ListedUniverse{Platforms: map[string]config.ListedPlatform{}}
 	}
-	//region debug-be6994 listed-universe refresh start
-	debugListedUniverseLog("H3,H5", "backend/internal/listing/listed_universe_refresh.go:seed_loaded", "listed universe refresh inputs loaded", map[string]any{
-		"freshWindowSeconds": int64(args.FreshWindow.Seconds()),
-		"shrinkFloor":        args.ShrinkFloor,
-		"coveredPlatforms":   args.CoveredPlatforms,
-		"seedPlatformCount":  len(seed.Platforms),
-	})
-	//endregion
 
 	// (2) DB-derived bases.
 	dbRows, err := repo.QueryActiveListedBases(ctx, args.FreshWindow)
 	if err != nil {
 		return ListedUniverseRefreshResult{}, fmt.Errorf("query active bases: %w", err)
 	}
-	debugListedUniverseSnapshotBreakdown(ctx, repo, args.CoveredPlatforms, now.Add(-args.FreshWindow))
 
 	// (3) Merge per platform with shrink-floor safety net.
 	out := config.ListedUniverse{
@@ -154,20 +142,6 @@ func RefreshListedUniverseFromSnapshots(ctx context.Context, repo *Repository, a
 			return res, fmt.Errorf("load listed universe source state %s: %w", platform, loadErr)
 		}
 		decision := decideListedUniversePlatform(platform, dbBases, seedBases, dbRows, previousState, args)
-		//region debug-be6994 listed-universe platform decision
-		debugListedUniverseLog("H1,H2,H3,H4,H5", "backend/internal/listing/listed_universe_refresh.go:platform_decision", "listed universe platform merge decision", map[string]any{
-			"platform":           platform,
-			"seedCount":          len(seedBases),
-			"dbFreshActiveCount": len(dbBases),
-			"threshold":          decision.Context.Threshold,
-			"fallback":           !decision.UseDB,
-			"baselineType":       decision.Context.BaselineType,
-			"reason":             decision.Context.Reason,
-			"surfaceCounts":      surfaceCountsForPlatform(dbRows, platform),
-			"seedOnlySample":     sampleMissingBases(seedBases, dbBases, 15),
-			"dbOnlySample":       sampleMissingBases(dbBases, seedBases, 15),
-		})
-		//endregion
 		if !decision.UseDB {
 			out.Platforms[platform] = config.ListedPlatform{BaseAssets: append([]string(nil), seedBases...)}
 			res.PlatformsFromSeed = append(res.PlatformsFromSeed, platform)
@@ -415,144 +389,6 @@ func marshalListedUniverseContext(ctx listedUniverseRefreshContext) json.RawMess
 		return nil
 	}
 	return json.RawMessage(body)
-}
-
-func debugListedUniverseSnapshotBreakdown(ctx context.Context, repo *Repository, coveredPlatforms []string, cutoff time.Time) {
-	if repo == nil || repo.db == nil || len(coveredPlatforms) == 0 {
-		return
-	}
-	placeholders := make([]string, 0, len(coveredPlatforms))
-	args := make([]any, 0, len(coveredPlatforms))
-	for _, p := range coveredPlatforms {
-		p = strings.TrimSpace(p)
-		if p == "" {
-			continue
-		}
-		placeholders = append(placeholders, "?")
-		args = append(args, p)
-	}
-	if len(placeholders) == 0 {
-		return
-	}
-	query := fmt.Sprintf(`SELECT platform,
-	       COALESCE(market_surface, '') AS market_surface,
-	       COALESCE(status_normalized, '') AS status_normalized,
-	       COALESCE(instrument_kind, '') AS instrument_kind,
-	       SUM(CASE WHEN last_seen_at >= ? THEN 1 ELSE 0 END) AS fresh_rows,
-	       COUNT(*) AS total_rows,
-	       COUNT(DISTINCT CASE WHEN last_seen_at >= ? THEN base_asset END) AS fresh_bases,
-	       COUNT(DISTINCT base_asset) AS total_bases,
-	       MIN(last_seen_at) AS min_seen_at,
-	       MAX(last_seen_at) AS max_seen_at
-	  FROM t_listing_instrument_snapshot
-	 WHERE platform IN (%s)
-	   AND COALESCE(base_asset, '') <> ''
-	 GROUP BY platform, market_surface, status_normalized, instrument_kind
-	 ORDER BY platform, market_surface, status_normalized, instrument_kind`, strings.Join(placeholders, ","))
-	queryArgs := make([]any, 0, len(args)+2)
-	queryArgs = append(queryArgs, cutoff, cutoff)
-	queryArgs = append(queryArgs, args...)
-	rows, err := repo.db.QueryContext(ctx, query, queryArgs...)
-	if err != nil {
-		debugListedUniverseLog("H2,H3,H4", "backend/internal/listing/listed_universe_refresh.go:snapshot_breakdown_error", "listed universe snapshot breakdown query failed", map[string]any{
-			"error": err.Error(),
-		})
-		return
-	}
-	defer rows.Close()
-	type breakdownRow struct {
-		Platform         string `json:"platform"`
-		MarketSurface    string `json:"marketSurface"`
-		StatusNormalized string `json:"statusNormalized"`
-		InstrumentKind   string `json:"instrumentKind"`
-		FreshRows        int64  `json:"freshRows"`
-		TotalRows        int64  `json:"totalRows"`
-		FreshBases       int64  `json:"freshBases"`
-		TotalBases       int64  `json:"totalBases"`
-		MinSeenAt        string `json:"minSeenAt"`
-		MaxSeenAt        string `json:"maxSeenAt"`
-	}
-	breakdown := []breakdownRow{}
-	for rows.Next() {
-		var row breakdownRow
-		var minSeenAt, maxSeenAt sql.NullTime
-		if err := rows.Scan(&row.Platform, &row.MarketSurface, &row.StatusNormalized, &row.InstrumentKind, &row.FreshRows, &row.TotalRows, &row.FreshBases, &row.TotalBases, &minSeenAt, &maxSeenAt); err != nil {
-			debugListedUniverseLog("H2,H3,H4", "backend/internal/listing/listed_universe_refresh.go:snapshot_breakdown_scan_error", "listed universe snapshot breakdown scan failed", map[string]any{
-				"error": err.Error(),
-			})
-			return
-		}
-		if minSeenAt.Valid {
-			row.MinSeenAt = minSeenAt.Time.UTC().Format(time.RFC3339)
-		}
-		if maxSeenAt.Valid {
-			row.MaxSeenAt = maxSeenAt.Time.UTC().Format(time.RFC3339)
-		}
-		breakdown = append(breakdown, row)
-	}
-	if err := rows.Err(); err != nil {
-		debugListedUniverseLog("H2,H3,H4", "backend/internal/listing/listed_universe_refresh.go:snapshot_breakdown_rows_error", "listed universe snapshot breakdown rows failed", map[string]any{
-			"error": err.Error(),
-		})
-		return
-	}
-	//region debug-be6994 listed-universe snapshot breakdown
-	debugListedUniverseLog("H2,H3,H4", "backend/internal/listing/listed_universe_refresh.go:snapshot_breakdown", "listed universe DB snapshot breakdown", map[string]any{
-		"cutoff":    cutoff.UTC().Format(time.RFC3339),
-		"breakdown": breakdown,
-	})
-	//endregion
-}
-
-func debugListedUniverseLog(hypothesisID, location, message string, data map[string]any) {
-	entry := map[string]any{
-		"sessionId":    "be6994",
-		"hypothesisId": hypothesisID,
-		"location":     location,
-		"message":      message,
-		"data":         data,
-		"timestamp":    time.Now().UnixMilli(),
-	}
-	line, err := json.Marshal(entry)
-	if err != nil {
-		return
-	}
-	//region debug-be6994 listed-universe docker stdout fallback
-	// Docker containers cannot always write to the host debug path. Keep a stdout
-	// fallback so runtime evidence is still visible in `docker logs`.
-	fmt.Printf("debug-be6994 %s\n", string(line))
-	//endregion
-	debugPostListedUniverseLog(line)
-	f, err := os.OpenFile("/Users/pis/workspace-intelligence/edgex-intelligence/.cursor/debug-be6994.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	_, _ = f.Write(append(line, '\n'))
-}
-
-func debugPostListedUniverseLog(line []byte) {
-	endpoints := []string{
-		"http://127.0.0.1:7751/ingest/7e939475-49af-44d7-87cf-0aa77e4d521c",
-		"http://host.docker.internal:7751/ingest/7e939475-49af-44d7-87cf-0aa77e4d521c",
-	}
-	client := http.Client{Timeout: 200 * time.Millisecond}
-	for _, endpoint := range endpoints {
-		req, err := http.NewRequest(http.MethodPost, endpoint, bytes.NewReader(line))
-		if err != nil {
-			continue
-		}
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("X-Debug-Session-Id", "be6994")
-		resp, err := client.Do(req)
-		if err != nil {
-			continue
-		}
-		_ = resp.Body.Close()
-		if resp.StatusCode >= 200 && resp.StatusCode < 300 {
-			return
-		}
-	}
 }
 
 // writeListedUniverseAtomic writes the universe yaml via temp +

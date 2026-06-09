@@ -138,7 +138,7 @@ func BuildDecisionCardEvent(c Candidate, plan RiskPlan, triggerTime time.Time) D
 		ConfidenceLevel: c.ConfidenceLevel,
 		SourcePlatforms: append([]string{}, c.SourcePlatforms...),
 		TriggerTime:     triggerTime,
-		DedupeKey:       fmt.Sprintf("listing_decision|%d|%s", c.ID, triggerTime.UTC().Format("2006-01-02")),
+		DedupeKey:       buildDecisionDedupeKey(c.ID, ""),
 	}
 	if c.BusinessScore != nil {
 		ev.BusinessScore = *c.BusinessScore
@@ -162,12 +162,8 @@ func decisionEvidenceSignature(signals []SignalObservation) string {
 	return fmt.Sprintf("%x", sum)[:16]
 }
 
-func buildDecisionDedupeKey(candidateID int64, evidenceSignature string) string {
-	signature := strings.TrimSpace(evidenceSignature)
-	if signature == "" {
-		signature = decisionEvidenceSignature(nil)
-	}
-	return fmt.Sprintf("listing_decision|%d|%s", candidateID, signature)
+func buildDecisionDedupeKey(candidateID int64, _ string) string {
+	return fmt.Sprintf("listing_decision|%d|first_listing", candidateID)
 }
 
 // standardButtonMatrix returns the 4-button set defined in PRD §6.
@@ -409,13 +405,26 @@ func primarySourceLabel(sources []string) string {
 // edgexListedLabel returns the locale-friendly edgeX status string
 // honouring the three-state EdgexListedKnown contract.
 func edgexListedLabel(e DecisionCardEnrichment) string {
+	if e.EdgexListed || hasActiveEdgexMarketStatus(e) {
+		return "已上线"
+	}
 	if !e.EdgexListedKnown {
 		return "未知"
 	}
-	if e.EdgexListed {
-		return "已上线"
-	}
 	return "未上线"
+}
+
+func hasActiveEdgexMarketStatus(e DecisionCardEnrichment) bool {
+	for _, ms := range e.MarketStatuses {
+		if strings.EqualFold(ms.Platform, edgexListedPlatformName) && ms.Status == StatusActive {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldSuppressDecisionCardForEdgexLive(e DecisionCardEnrichment) bool {
+	return e.EdgexListed || hasActiveEdgexMarketStatus(e)
 }
 
 func canonicalOrDash(s string) string {
@@ -667,14 +676,16 @@ type DecisionCardResult struct {
 	SkippedCooldown        int
 	SkippedNoAction        int
 	SkippedNoFreshEvidence int
+	SkippedDuplicate       int
+	SkippedEdgexLive       int
 }
 
 // ProduceDecisionCards is the producer entry point. For each
 // actionable candidate it: (1) checks the ignore cooldown against
 // the latest decision; (2) derives + persists a risk plan; (3)
-// writes the decision card outbox row keyed on the candidate and its
-// linked evidence signature so re-runs without new signals are no-ops
-// even across UTC day boundaries.
+// writes the decision card outbox row keyed once per candidate so
+// later platform evidence, status transitions, or UTC day boundaries
+// cannot re-trigger another "New Listing" card for the same candidate.
 func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCardDeps) (DecisionCardResult, error) {
 	if repo == nil {
 		return DecisionCardResult{}, errors.New("decision card: repo is nil")
@@ -725,6 +736,24 @@ func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCa
 			continue
 		}
 
+		hasOutbox, err := repo.HasDecisionOutboxForCandidate(ctx, c.ID)
+		if err != nil {
+			return res, fmt.Errorf("check decision outbox %d: %w", c.ID, err)
+		}
+		if hasOutbox {
+			res.SkippedDuplicate++
+			continue
+		}
+
+		enrichment := EnrichCandidateForDecisionCard(ctx, deps.Enrich, c)
+		if shouldSuppressDecisionCardForEdgexLive(enrichment) {
+			if err := repo.MarkCandidateAlreadyListed(ctx, c.ID, now); err != nil {
+				return res, fmt.Errorf("mark already listed %d: %w", c.ID, err)
+			}
+			res.SkippedEdgexLive++
+			continue
+		}
+
 		plan := BuildRiskPlanFromCandidate(c, now)
 		planID, err := repo.UpsertRiskPlan(ctx, plan)
 		if err != nil {
@@ -736,7 +765,7 @@ func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCa
 		ev := BuildDecisionCardEvent(c, plan, now)
 		ev.DedupeKey = buildDecisionDedupeKey(c.ID, decisionEvidenceSignature(freshSignals))
 		ev.PrimaryListingTime = selectPrimaryListingTime(c.SourcePlatforms, freshSignals)
-		ev.Enrichment = EnrichCandidateForDecisionCard(ctx, deps.Enrich, c)
+		ev.Enrichment = enrichment
 		payload, err := RenderDecisionCardPostMessage(ev)
 		if err != nil {
 			return res, fmt.Errorf("render decision card %d: %w", c.ID, err)
