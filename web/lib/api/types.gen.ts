@@ -1675,6 +1675,9 @@ export interface components {
             /** Format: date-time */
             disabled_until?: string | null;
             last_error?: string;
+            source_context_json?: {
+                [key: string]: unknown;
+            };
             /** Format: date-time */
             updated_at?: string;
         };

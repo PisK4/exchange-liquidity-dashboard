@@ -325,21 +325,22 @@ func evidenceKindLabel(kind string) string {
 func buildDecisionBasicInfoFields(ev DecisionCardEvent) map[string]any {
 	source := primarySourceLabel(ev.SourcePlatforms)
 	edgex := edgexListedLabel(ev.Enrichment)
+	fields := []any{
+		summaryField("Token", canonicalOrDash(ev.CanonicalSymbol)),
+		summaryField("edgeX 状态", edgex),
+		summaryField("Source", source),
+		decisionTimeSummaryField(ev),
+	}
+	if ev.PrimaryListingTime != nil && !ev.PrimaryListingTime.IsZero() {
+		fields = append(fields, summaryField("Exchange Listing Time", formatUTC8(*ev.PrimaryListingTime)))
+	}
 	return map[string]any{
-		"tag": "div",
-		"fields": []any{
-			summaryField("Token", canonicalOrDash(ev.CanonicalSymbol)),
-			summaryField("edgeX 状态", edgex),
-			summaryField("Source", source),
-			decisionTimeSummaryField(ev),
-		},
+		"tag":    "div",
+		"fields": fields,
 	}
 }
 
 func decisionTimeSummaryField(ev DecisionCardEvent) map[string]any {
-	if ev.PrimaryListingTime != nil && !ev.PrimaryListingTime.IsZero() {
-		return summaryField("Listing Time", formatUTC8(*ev.PrimaryListingTime))
-	}
 	return summaryField("Detected Time", formatUTC8(ev.TriggerTime))
 }
 
@@ -651,19 +652,21 @@ func buildDecisionFooterNote(ev DecisionCardEvent) map[string]any {
 // behaviour — the renderer degrades each block gracefully so this
 // is safe in test setups that have not wired all data sources.
 type DecisionCardDeps struct {
-	Now            func() time.Time
-	IgnoreCooldown time.Duration
-	MaxPerTick     int
-	Enrich         DecisionCardEnrichDeps
+	Now                          func() time.Time
+	IgnoreCooldown               time.Duration
+	MaxPerTick                   int
+	HistoricalListingGracePeriod time.Duration
+	Enrich                       DecisionCardEnrichDeps
 }
 
 // DecisionCardResult is the per-tick summary written onto RunSummary.
 type DecisionCardResult struct {
-	Considered      int
-	RiskPlans       int
-	OutboxRows      int
-	SkippedCooldown int
-	SkippedNoAction int
+	Considered             int
+	RiskPlans              int
+	OutboxRows             int
+	SkippedCooldown        int
+	SkippedNoAction        int
+	SkippedNoFreshEvidence int
 }
 
 // ProduceDecisionCards is the producer entry point. For each
@@ -685,11 +688,14 @@ func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCa
 	if deps.MaxPerTick <= 0 {
 		deps.MaxPerTick = 20
 	}
+	if deps.HistoricalListingGracePeriod <= 0 {
+		deps.HistoricalListingGracePeriod = 48 * time.Hour
+	}
 	now := deps.Now()
 
-	candidates, err := repo.ListCandidates(ctx, CandidateFilter{Limit: deps.MaxPerTick})
+	candidates, err := repo.ListActionableDecisionCandidates(ctx, deps.MaxPerTick)
 	if err != nil {
-		return DecisionCardResult{}, fmt.Errorf("list candidates: %w", err)
+		return DecisionCardResult{}, fmt.Errorf("list actionable decision candidates: %w", err)
 	}
 	res := DecisionCardResult{Considered: len(candidates)}
 
@@ -709,6 +715,16 @@ func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCa
 			continue
 		}
 
+		signals, err := repo.ListCandidateSignals(ctx, c.ID, false)
+		if err != nil {
+			return res, fmt.Errorf("list candidate signals %d: %w", c.ID, err)
+		}
+		freshSignals := freshDecisionEvidenceSignals(signals, deps.HistoricalListingGracePeriod)
+		if len(freshSignals) == 0 {
+			res.SkippedNoFreshEvidence++
+			continue
+		}
+
 		plan := BuildRiskPlanFromCandidate(c, now)
 		planID, err := repo.UpsertRiskPlan(ctx, plan)
 		if err != nil {
@@ -717,13 +733,9 @@ func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCa
 		plan.ID = planID
 		res.RiskPlans++
 
-		signals, err := repo.ListCandidateSignals(ctx, c.ID, false)
-		if err != nil {
-			return res, fmt.Errorf("list candidate signals %d: %w", c.ID, err)
-		}
 		ev := BuildDecisionCardEvent(c, plan, now)
-		ev.DedupeKey = buildDecisionDedupeKey(c.ID, decisionEvidenceSignature(signals))
-		ev.PrimaryListingTime = selectPrimaryListingTime(c.SourcePlatforms, signals)
+		ev.DedupeKey = buildDecisionDedupeKey(c.ID, decisionEvidenceSignature(freshSignals))
+		ev.PrimaryListingTime = selectPrimaryListingTime(c.SourcePlatforms, freshSignals)
 		ev.Enrichment = EnrichCandidateForDecisionCard(ctx, deps.Enrich, c)
 		payload, err := RenderDecisionCardPostMessage(ev)
 		if err != nil {
@@ -745,4 +757,21 @@ func ProduceDecisionCards(ctx context.Context, repo *Repository, deps DecisionCa
 		res.OutboxRows++
 	}
 	return res, nil
+}
+
+func freshDecisionEvidenceSignals(signals []SignalObservation, grace time.Duration) []SignalObservation {
+	if len(signals) == 0 {
+		return nil
+	}
+	out := make([]SignalObservation, 0, len(signals))
+	for _, s := range signals {
+		if !isCandidatePromotingSignal(s) {
+			continue
+		}
+		if isHistoricalListingSignal(s, grace) {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
 }

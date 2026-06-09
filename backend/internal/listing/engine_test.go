@@ -297,11 +297,14 @@ func TestEngineRunOnceProducesDecisionCardsWhenEnabled(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT action, callback_ts FROM t_listing_decision")).
 		WithArgs(int64(7)).
 		WillReturnRows(sqlmock.NewRows([]string{"action", "callback_ts"}))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_risk_plan")).
-		WillReturnResult(sqlmock.NewResult(201, 1))
+	signalRows := sqlmock.NewRows(fusionSignalColumns())
+	listingTime := now.Add(-1 * time.Hour)
+	addFusionInstrumentSignal(signalRows, 7001, "binance", DiffNewSymbol, "ABC", StatusActive, now, &listingTime)
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT s.id, s.signal_type, s.signal_subtype")).
 		WithArgs(int64(7)).
-		WillReturnRows(sqlmock.NewRows(fusionSignalColumns()))
+		WillReturnRows(signalRows)
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_risk_plan")).
+		WillReturnResult(sqlmock.NewResult(201, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_delivery_outbox")).
 		WillReturnResult(sqlmock.NewResult(301, 1))
 	// Delivery drain: no due rows.

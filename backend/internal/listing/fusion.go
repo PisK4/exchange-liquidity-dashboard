@@ -54,7 +54,12 @@ type FusionResult struct {
 	// and surfaced as bogus "New Perp Listing Detected" Lark cards
 	// for already-listed tokens like GLM.
 	SkippedObservationOnly int
-	FailClosed             string
+	// SkippedHistorical counts candidate-shaped signals whose exchange-side
+	// listing timestamp is older than the configured freshness gate. They are
+	// preserved in t_listing_signal_observation for audit/catalog use but are
+	// marked fused without creating or updating candidates.
+	SkippedHistorical int
+	FailClosed        string
 }
 
 // isCandidateBearingSignal reports whether a signal type carries
@@ -161,21 +166,21 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 
 	type groupKey struct{ canonical, surface, kind string }
 	type group struct {
-		key                     groupKey
-		signals                 []SignalObservation
-		display                 string
-		firstSeen               time.Time
-		lastSeen                time.Time
-		platforms               map[string]struct{}
-		scoringPlatforms        map[string]struct{}
-		hasFreshInstrument      bool
-		hasHistoricalInstrument bool
-		hasAnnouncement         bool
+		key                groupKey
+		signals            []SignalObservation
+		display            string
+		firstSeen          time.Time
+		lastSeen           time.Time
+		platforms          map[string]struct{}
+		scoringPlatforms   map[string]struct{}
+		hasFreshInstrument bool
+		hasAnnouncement    bool
 	}
 	groups := make(map[groupKey]*group)
 	order := make([]groupKey, 0)
 	aggregatorIDs := make([]int64, 0)
 	observationOnlyIDs := make([]int64, 0)
+	historicalIDs := make([]int64, 0)
 	for _, s := range signals {
 		if !isCandidateBearingSignal(s.SignalType) {
 			aggregatorIDs = append(aggregatorIDs, s.ID)
@@ -191,6 +196,10 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 		}
 		if isNonListingTargetSignal(s) {
 			observationOnlyIDs = append(observationOnlyIDs, s.ID)
+			continue
+		}
+		if isHistoricalListingSignal(s, deps.HistoricalListingGracePeriod) {
+			historicalIDs = append(historicalIDs, s.ID)
 			continue
 		}
 		key := groupKey{strings.ToUpper(s.CanonicalSymbol), s.MarketSurface, s.InstrumentKind}
@@ -216,13 +225,9 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 		}
 		switch s.SignalType {
 		case SignalInstrumentDiff:
-			if isHistoricalActiveListing(s, deps.HistoricalListingGracePeriod) {
-				g.hasHistoricalInstrument = true
-			} else {
-				g.hasFreshInstrument = true
-				if platform != "" {
-					g.scoringPlatforms[platform] = struct{}{}
-				}
+			g.hasFreshInstrument = true
+			if platform != "" {
+				g.scoringPlatforms[platform] = struct{}{}
 			}
 		case SignalAnnouncementListing:
 			g.hasAnnouncement = true
@@ -236,7 +241,6 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 	out := FusionResult{}
 	for _, key := range order {
 		g := groups[key]
-		pureHistorical := g.hasHistoricalInstrument && !g.hasFreshInstrument && !g.hasAnnouncement
 		evidence := EvidenceInstrumentDiffOnly
 		switch {
 		case g.hasAnnouncement && g.hasFreshInstrument:
@@ -263,36 +267,6 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 			InstrumentKind: g.key.kind,
 		})
 		lifecycleStatus, lifecycleLabel := deriveLifecycle(evidence, isListed, score.LifecycleStatus, score.LifecycleStatusLabel)
-		if pureHistorical {
-			score = ScoreResult{
-				Recommendation:       RecommendationNoAction,
-				RecommendationLabel:  RecommendationLabels[RecommendationNoAction],
-				LifecycleStatus:      LifecycleAlreadyListed,
-				LifecycleStatusLabel: LifecycleStatusLabels[LifecycleAlreadyListed],
-				BusinessScoreVersion: BusinessScoreVersion,
-				ConfidenceLevel:      ConfidenceLow,
-			}
-			lifecycleStatus = LifecycleAlreadyListed
-			lifecycleLabel = LifecycleStatusLabels[LifecycleAlreadyListed]
-			existing, ok, err := repo.GetCandidateByKey(ctx, g.key.canonical, g.key.surface, g.key.kind)
-			if err != nil {
-				return out, fmt.Errorf("get candidate %s: %w", g.key.canonical, err)
-			}
-			if ok && isActionableCandidate(existing) {
-				for _, s := range g.signals {
-					if err := repo.LinkCandidateSignal(ctx, existing.ID, s.ID); err != nil {
-						return out, fmt.Errorf("link candidate %d signal %d: %w", existing.ID, s.ID, err)
-					}
-				}
-				for _, s := range g.signals {
-					if err := repo.MarkSignalFused(ctx, s.ID, now); err != nil {
-						return out, fmt.Errorf("mark signal fused %d: %w", s.ID, err)
-					}
-				}
-				out.Signals += len(g.signals)
-				continue
-			}
-		}
 		upsert := CandidateUpsert{
 			CanonicalSymbol:      g.key.canonical,
 			DisplaySymbol:        g.display,
@@ -346,27 +320,35 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 		}
 		out.SkippedObservationOnly++
 	}
+	// Drain historical listing evidence separately so operators can distinguish
+	// stale exchange launch/open times from generic observation-only diffs.
+	for _, id := range historicalIDs {
+		if err := repo.MarkSignalFused(ctx, id, now); err != nil {
+			return out, fmt.Errorf("mark historical listing signal fused %d: %w", id, err)
+		}
+		out.SkippedHistorical++
+	}
 	return out, nil
 }
 
-func isHistoricalActiveListing(s SignalObservation, grace time.Duration) bool {
-	if s.SignalType != SignalInstrumentDiff || grace <= 0 {
+func isHistoricalListingSignal(s SignalObservation, grace time.Duration) bool {
+	if grace <= 0 || s.ListingTimeTS == nil || s.ObservedAt.IsZero() {
 		return false
 	}
-	if s.ListingTimeTS == nil || s.ObservedAt.IsZero() {
-		return false
-	}
-	if s.StatusNormalized != StatusActive {
-		return false
-	}
-	if !isCandidatePromotingInstrumentDiff(s) {
+	if !isCandidatePromotingSignal(s) {
 		return false
 	}
 	return !s.ListingTimeTS.After(s.ObservedAt.Add(-grace))
 }
 
-func isActionableCandidate(c Candidate) bool {
-	return c.Recommendation != RecommendationNoAction && c.LifecycleStatus != LifecycleAlreadyListed
+func isCandidatePromotingSignal(s SignalObservation) bool {
+	switch s.SignalType {
+	case SignalInstrumentDiff:
+		return isCandidatePromotingInstrumentDiff(s)
+	case SignalAnnouncementListing:
+		return true
+	}
+	return false
 }
 
 // deriveLifecycle picks the lifecycle_status enum for the candidate

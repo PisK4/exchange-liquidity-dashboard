@@ -472,6 +472,37 @@ func (r *Repository) ListCandidates(ctx context.Context, f CandidateFilter) ([]C
 	return scanCandidateRows(rows)
 }
 
+// ListActionableDecisionCandidates returns candidates that are eligible for
+// decision-card consideration before per-candidate cooldown and evidence gates.
+// Filtering no_action / already_listed rows in SQL prevents historical or
+// already-reconciled noise from starving the per-tick decision-card window.
+func (r *Repository) ListActionableDecisionCandidates(ctx context.Context, limit int) ([]Candidate, error) {
+	if r.db == nil {
+		return nil, errors.New("listing repository: no db attached")
+	}
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT id, canonical_symbol, display_symbol, market_surface, instrument_kind,
+	         lifecycle_status, lifecycle_status_label, evidence_kind, confidence_level,
+	         business_score, business_score_version, recommendation, recommendation_label,
+	         source_platforms_json, top30_enrichment_json, first_observed_at, last_observed_at
+	    FROM t_listing_candidate
+	   WHERE COALESCE(recommendation, '') <> ?
+	     AND lifecycle_status <> ?
+	   ORDER BY last_observed_at DESC
+	   LIMIT ?`, RecommendationNoAction, LifecycleAlreadyListed, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanCandidateRows(rows)
+}
+
 // GetCandidateByKey fetches a candidate by its unique semantic key.
 func (r *Repository) GetCandidateByKey(ctx context.Context, canonical, surface, kind string) (Candidate, bool, error) {
 	if r.db == nil {
@@ -554,7 +585,7 @@ func (r *Repository) ListSourceHealth(ctx context.Context) ([]SourceState, error
 	rows, err := r.db.QueryContext(ctx,
 		`SELECT source_key, source_type, platform, status,
 		         last_success_at, last_error_at, consecutive_error_count, schema_drift_count,
-		         disabled_until, last_error, updated_at
+		         disabled_until, last_error, source_context_json, updated_at
 		    FROM t_listing_source_state
 		   ORDER BY source_key ASC`)
 	if err != nil {
@@ -566,9 +597,10 @@ func (r *Repository) ListSourceHealth(ctx context.Context) ([]SourceState, error
 		var s SourceState
 		var lastSuccess, lastError, disabledUntil sql.NullTime
 		var lastErr sql.NullString
+		var sourceContext []byte
 		if err := rows.Scan(&s.SourceKey, &s.SourceType, &s.Platform, &s.Status,
 			&lastSuccess, &lastError, &s.ConsecutiveErrorCount, &s.SchemaDriftCount,
-			&disabledUntil, &lastErr, &s.UpdatedAt); err != nil {
+			&disabledUntil, &lastErr, &sourceContext, &s.UpdatedAt); err != nil {
 			return nil, err
 		}
 		if lastSuccess.Valid {
@@ -586,6 +618,9 @@ func (r *Repository) ListSourceHealth(ctx context.Context) ([]SourceState, error
 		if lastErr.Valid {
 			s.LastError = lastErr.String
 		}
+		if len(sourceContext) > 0 {
+			s.SourceContextJSON = json.RawMessage(append([]byte(nil), sourceContext...))
+		}
 		out = append(out, s)
 	}
 	return out, rows.Err()
@@ -601,7 +636,7 @@ func (r *Repository) LoadSourceState(ctx context.Context, sourceKey string) (*So
 	}
 	const query = `SELECT source_key, source_type, platform, status,
 	  last_success_at, last_error_at, consecutive_error_count, schema_drift_count,
-	  disabled_until, last_error, updated_at
+	  disabled_until, last_error, source_context_json, updated_at
 	  FROM t_listing_source_state
 	  WHERE source_key = ?
 	  LIMIT 1`
@@ -616,9 +651,10 @@ func (r *Repository) LoadSourceState(ctx context.Context, sourceKey string) (*So
 	var s SourceState
 	var lastSuccess, lastError, disabledUntil sql.NullTime
 	var lastErr sql.NullString
+	var sourceContext []byte
 	if err := rows.Scan(&s.SourceKey, &s.SourceType, &s.Platform, &s.Status,
 		&lastSuccess, &lastError, &s.ConsecutiveErrorCount, &s.SchemaDriftCount,
-		&disabledUntil, &lastErr, &s.UpdatedAt); err != nil {
+		&disabledUntil, &lastErr, &sourceContext, &s.UpdatedAt); err != nil {
 		return nil, err
 	}
 	if lastSuccess.Valid {
@@ -636,6 +672,9 @@ func (r *Repository) LoadSourceState(ctx context.Context, sourceKey string) (*So
 	if lastErr.Valid {
 		s.LastError = lastErr.String
 	}
+	if len(sourceContext) > 0 {
+		s.SourceContextJSON = json.RawMessage(append([]byte(nil), sourceContext...))
+	}
 	return &s, rows.Err()
 }
 
@@ -651,8 +690,8 @@ func (r *Repository) UpsertSourceState(ctx context.Context, s SourceState) error
 		`INSERT INTO t_listing_source_state
 		   (source_key, source_type, platform, status,
 		    last_success_at, last_error_at, consecutive_error_count, schema_drift_count,
-		    disabled_until, last_error, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		    disabled_until, last_error, source_context_json, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
 		   status = VALUES(status),
 		   last_success_at = COALESCE(VALUES(last_success_at), last_success_at),
@@ -661,11 +700,12 @@ func (r *Repository) UpsertSourceState(ctx context.Context, s SourceState) error
 		   schema_drift_count = VALUES(schema_drift_count),
 		   disabled_until = VALUES(disabled_until),
 		   last_error = VALUES(last_error),
+		   source_context_json = COALESCE(VALUES(source_context_json), source_context_json),
 		   updated_at = VALUES(updated_at)`,
 		s.SourceKey, s.SourceType, s.Platform, s.Status,
 		nullTimePtr(s.LastSuccessAt), nullTimePtr(s.LastErrorAt),
 		s.ConsecutiveErrorCount, s.SchemaDriftCount,
-		nullTimePtr(s.DisabledUntil), nullString(s.LastError), s.UpdatedAt,
+		nullTimePtr(s.DisabledUntil), nullString(s.LastError), nullRawJSON(s.SourceContextJSON), s.UpdatedAt,
 	)
 	return err
 }

@@ -244,6 +244,7 @@ type SourceState struct {
 	SchemaDriftCount      int
 	DisabledUntil         *time.Time
 	LastError             string
+	SourceContextJSON     json.RawMessage
 	UpdatedAt             time.Time
 }
 

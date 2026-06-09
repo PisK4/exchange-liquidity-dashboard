@@ -149,6 +149,7 @@ func (s *Server) listingSourceHealth(w http.ResponseWriter, r *http.Request) {
 			"schema_drift_count":      row.SchemaDriftCount,
 			"disabled_until":          row.DisabledUntil,
 			"last_error":              row.LastError,
+			"source_context_json":     json.RawMessage(rawJSONOrDefault(row.SourceContextJSON, []byte(`{}`))),
 			"updated_at":              row.UpdatedAt,
 		})
 	}

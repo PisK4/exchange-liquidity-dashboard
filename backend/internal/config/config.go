@@ -173,13 +173,23 @@ type ListingAgentConfig struct {
 // is the safety net: when DB rows for a platform drop below
 // floor*seed_size, we fall back to seed for that platform alone.
 type ListedUniverseRefreshConfig struct {
-	Enabled          bool          `json:"enabled"`
-	Interval         time.Duration `json:"interval"`
-	SeedPath         string        `json:"seed_path"`
-	RuntimePath      string        `json:"runtime_path"`
-	FreshWindow      time.Duration `json:"fresh_window"`
-	SeedShrinkFloor  float64       `json:"seed_shrink_floor"`
-	CoveredPlatforms []string      `json:"covered_platforms"`
+	Enabled           bool                                           `json:"enabled"`
+	Interval          time.Duration                                  `json:"interval"`
+	SeedPath          string                                         `json:"seed_path"`
+	RuntimePath       string                                         `json:"runtime_path"`
+	FreshWindow       time.Duration                                  `json:"fresh_window"`
+	SeedShrinkFloor   float64                                        `json:"seed_shrink_floor"`
+	CoveredPlatforms  []string                                       `json:"covered_platforms"`
+	PlatformOverrides map[string]ListedUniverseRefreshPlatformPolicy `json:"platform_overrides"`
+}
+
+// ListedUniverseRefreshPlatformPolicy lets platforms whose seed universe is
+// known to be wider than their DB-derived active universe establish a safe
+// runtime baseline from DB once a minimum active count is met.
+type ListedUniverseRefreshPlatformPolicy struct {
+	BootstrapBaseline string  `json:"bootstrap_baseline"`
+	BootstrapMinCount int     `json:"bootstrap_min_count"`
+	ShrinkFloor       float64 `json:"shrink_floor"`
 }
 
 // ListingDecisionCardConfig is the runtime block for the Phase 2
@@ -954,6 +964,20 @@ func defaultListingAgentConfig() ListingAgentConfig {
 				"binance", "bybit", "okx", "bitget", "mexc",
 				"hyperliquid", "edgeX", "bingx", "gate", "lighter",
 			},
+			PlatformOverrides: map[string]ListedUniverseRefreshPlatformPolicy{
+				"edgeX": {
+					BootstrapBaseline: "db_first",
+					BootstrapMinCount: 50,
+				},
+				"hyperliquid": {
+					BootstrapBaseline: "db_first",
+					BootstrapMinCount: 100,
+				},
+				"mexc": {
+					BootstrapBaseline: "db_first",
+					BootstrapMinCount: 500,
+				},
+			},
 		},
 	}
 }
@@ -1242,13 +1266,20 @@ type listingAgentFile struct {
 }
 
 type listedUniverseRefreshFile struct {
-	Enabled          *bool    `yaml:"enabled"`
-	Interval         string   `yaml:"interval"`
-	SeedPath         string   `yaml:"seed_path"`
-	RuntimePath      string   `yaml:"runtime_path"`
-	FreshWindow      string   `yaml:"fresh_window"`
-	SeedShrinkFloor  *float64 `yaml:"seed_shrink_floor"`
-	CoveredPlatforms []string `yaml:"covered_platforms"`
+	Enabled           *bool                                          `yaml:"enabled"`
+	Interval          string                                         `yaml:"interval"`
+	SeedPath          string                                         `yaml:"seed_path"`
+	RuntimePath       string                                         `yaml:"runtime_path"`
+	FreshWindow       string                                         `yaml:"fresh_window"`
+	SeedShrinkFloor   *float64                                       `yaml:"seed_shrink_floor"`
+	CoveredPlatforms  []string                                       `yaml:"covered_platforms"`
+	PlatformOverrides map[string]listedUniverseRefreshPlatformPolicy `yaml:"platform_overrides"`
+}
+
+type listedUniverseRefreshPlatformPolicy struct {
+	BootstrapBaseline string   `yaml:"bootstrap_baseline"`
+	BootstrapMinCount *int     `yaml:"bootstrap_min_count"`
+	ShrinkFloor       *float64 `yaml:"shrink_floor"`
 }
 
 type listingDecisionCardFile struct {
@@ -2176,6 +2207,37 @@ func applyListedUniverseRefreshFile(base ListedUniverseRefreshConfig, file liste
 	}
 	if len(file.CoveredPlatforms) > 0 {
 		base.CoveredPlatforms = append([]string(nil), file.CoveredPlatforms...)
+	}
+	if len(file.PlatformOverrides) > 0 {
+		if base.PlatformOverrides == nil {
+			base.PlatformOverrides = map[string]ListedUniverseRefreshPlatformPolicy{}
+		}
+		for platform, override := range file.PlatformOverrides {
+			platform = strings.TrimSpace(platform)
+			if platform == "" {
+				return ListedUniverseRefreshConfig{}, fmt.Errorf("listing_agent.listed_universe_refresh.platform_overrides: platform key is required")
+			}
+			policy := base.PlatformOverrides[platform]
+			if override.BootstrapBaseline != "" {
+				policy.BootstrapBaseline = strings.TrimSpace(override.BootstrapBaseline)
+			}
+			if override.BootstrapMinCount != nil {
+				if *override.BootstrapMinCount < 0 {
+					return ListedUniverseRefreshConfig{}, fmt.Errorf("listing_agent.listed_universe_refresh.platform_overrides.%s.bootstrap_min_count: must be >= 0", platform)
+				}
+				policy.BootstrapMinCount = *override.BootstrapMinCount
+			}
+			if override.ShrinkFloor != nil {
+				if *override.ShrinkFloor <= 0 || *override.ShrinkFloor > 1 {
+					return ListedUniverseRefreshConfig{}, fmt.Errorf("listing_agent.listed_universe_refresh.platform_overrides.%s.shrink_floor: must be in (0,1]", platform)
+				}
+				policy.ShrinkFloor = *override.ShrinkFloor
+			}
+			if policy.BootstrapBaseline != "" && policy.BootstrapBaseline != "seed_floor" && policy.BootstrapBaseline != "db_first" {
+				return ListedUniverseRefreshConfig{}, fmt.Errorf("listing_agent.listed_universe_refresh.platform_overrides.%s.bootstrap_baseline: must be seed_floor or db_first", platform)
+			}
+			base.PlatformOverrides[platform] = policy
+		}
 	}
 	return base, nil
 }

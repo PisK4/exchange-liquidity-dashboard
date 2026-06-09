@@ -19,7 +19,7 @@ import (
 var sourceStateCols = []string{
 	"source_key", "source_type", "platform", "status",
 	"last_success_at", "last_error_at", "consecutive_error_count", "schema_drift_count",
-	"disabled_until", "last_error", "updated_at",
+	"disabled_until", "last_error", "source_context_json", "updated_at",
 }
 
 func defaultHealthDeps(now time.Time) PollHealthDeps {
@@ -76,7 +76,7 @@ func TestPollWithSourceHealthSuccessResetsConsecutiveErrors(t *testing.T) {
 		WithArgs("listing/instrument/binance/usdm_futures").
 		WillReturnRows(sqlmock.NewRows(sourceStateCols).AddRow(
 			"listing/instrument/binance/usdm_futures", SourceTypeInstrument, "binance", SourceStatusError,
-			nil, prevErrAt, 3, 0, nil, "timeout", prevErrAt,
+			nil, prevErrAt, 3, 0, nil, "timeout", nil, prevErrAt,
 		))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_source_state")).
 		WillReturnResult(sqlmock.NewResult(0, 2))
@@ -109,7 +109,7 @@ func TestPollWithSourceHealthErrorIncrementsConsecutiveErrors(t *testing.T) {
 		WithArgs("listing/instrument/binance/usdm_futures").
 		WillReturnRows(sqlmock.NewRows(sourceStateCols).AddRow(
 			"listing/instrument/binance/usdm_futures", SourceTypeInstrument, "binance", SourceStatusError,
-			nil, now.Add(-5*time.Minute), 2, 0, nil, "timeout", now.Add(-5*time.Minute),
+			nil, now.Add(-5*time.Minute), 2, 0, nil, "timeout", nil, now.Add(-5*time.Minute),
 		))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_source_state")).
 		WillReturnResult(sqlmock.NewResult(0, 2))
@@ -147,7 +147,7 @@ func TestPollWithSourceHealthEscalatesToDisabledUntil(t *testing.T) {
 		WithArgs("listing/instrument/binance/usdm_futures").
 		WillReturnRows(sqlmock.NewRows(sourceStateCols).AddRow(
 			"listing/instrument/binance/usdm_futures", SourceTypeInstrument, "binance", SourceStatusError,
-			nil, now.Add(-5*time.Minute), 4, 0, nil, "timeout", now.Add(-5*time.Minute),
+			nil, now.Add(-5*time.Minute), 4, 0, nil, "timeout", nil, now.Add(-5*time.Minute),
 		))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_source_state")).
 		WillReturnResult(sqlmock.NewResult(0, 2))
@@ -254,7 +254,7 @@ func TestPollWithSourceHealthSkipsWhenDisabledUntilInFuture(t *testing.T) {
 		WithArgs("listing/instrument/binance/usdm_futures").
 		WillReturnRows(sqlmock.NewRows(sourceStateCols).AddRow(
 			"listing/instrument/binance/usdm_futures", SourceTypeInstrument, "binance", SourceStatusDisabledUntil,
-			nil, now.Add(-2*time.Minute), 5, 0, future, "throttled", now.Add(-2*time.Minute),
+			nil, now.Add(-2*time.Minute), 5, 0, future, "throttled", nil, now.Add(-2*time.Minute),
 		))
 
 	pollCalled := 0

@@ -296,6 +296,20 @@ Runtime:
         - bingx
         - gate
         - lighter
+      # Some seed universes intentionally cover a wider historical/full-market
+      # surface than the live DB-derived active perp universe. For those
+      # platforms, bootstrap from DB once a conservative minimum count is met,
+      # then guard future refreshes against the previous successful DB count.
+      platform_overrides:
+        edgeX:
+          bootstrap_baseline: db_first
+          bootstrap_min_count: 50
+        hyperliquid:
+          bootstrap_baseline: db_first
+          bootstrap_min_count: 100
+        mexc:
+          bootstrap_baseline: db_first
+          bootstrap_min_count: 500
     delivery:
       enabled: true
       # Webhook target is configured in the top-level Alert block so the

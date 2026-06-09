@@ -154,6 +154,14 @@ DB-first 主要解决的问题：
 
 `RefreshListedUniverseFromSnapshots` 会从 active instrument snapshot 派生 runtime universe，并原子写入 `listed_universe.runtime.yaml`。runtime universe 的新鲜度只依赖 `t_listing_instrument_snapshot.last_seen_at` 是否落在 `fresh_window` 内；本次修复后，单条 signal 写入失败不应再阻断 snapshot upsert，因此不应再因为一个 fingerprint / constraint 问题导致整个平台 universe 被误清空。
 
+静态 seed 与 runtime universe 的语义不同：`listed_universe.yaml` 是历史 / 全市场 / 人工审计 seed，适合冷启动和故障 fallback；runtime universe 是当前 DB snapshot 中新鲜且 active 的可交易集合。MEXC、Hyperliquid、edgeX 等平台的 seed 会显著宽于当前 active perp surface，因此 refresh 不再长期拿 DB count 与 seed count 做唯一 shrink 判据。
+
+当前 shrink 保护分三层：
+
+1. 若上一轮 `listing/listed_universe/<platform>` 成功写入了 `source_context_json`，优先使用其中的 `db_fresh_active_count` 作为 previous-success baseline；当前 DB count 低于 `shrink_floor * previous_success` 时 fail-closed 并回退 seed。
+2. 没有 previous-success baseline 时，默认平台仍使用 `seed_shrink_floor` 对比 seed count，保留原有冷启动安全网。
+3. 对 seed 已知过宽的平台，可在 `platform_overrides` 配 `bootstrap_baseline: db_first` 和 `bootstrap_min_count`；首次 DB count 达到最小值即接受 DB runtime，随后转入 previous-success baseline 保护。
+
 | 配置 | 作用 |
 |---|---|
 | `seed_path` | 静态 seed，通常是 `config/listed_universe.yaml`。 |
@@ -161,6 +169,9 @@ DB-first 主要解决的问题：
 | `fresh_window` | DB snapshot 新鲜度窗口，过期记录不参与 universe。 |
 | `seed_shrink_floor` | DB 派生集合低于 seed 数量阈值时回退 seed，避免上游故障把 universe 大面积清空。 |
 | `covered_platforms` | 允许由 DB 动态覆盖的平台；seed-only 平台会 pass-through。 |
+| `platform_overrides` | 平台级 bootstrap 策略；`edgeX` / `hyperliquid` / `mexc` 使用 `db_first` + `bootstrap_min_count`，避免过宽 seed 造成误报。 |
+
+每次 refresh 都会写入 synthetic source-health 行 `listing/listed_universe/<platform>`。`source_context_json` 中保留本轮决策证据，包括 `baseline_type`、`db_fresh_active_count`、`previous_success_db_fresh_active_count`、`seed_count`、`threshold`、`surface_counts`、`seed_only_sample` 和 `db_only_sample`，用于区分真实 runtime shrink 与 seed/runtime 语义差异。
 
 loader 行为：
 
@@ -234,7 +245,7 @@ WHERE source_key LIKE 'listing/listed_universe/%'
 ORDER BY updated_at DESC;
 ```
 
-`last_error` 包含 `listed_universe shrink_floor triggered` 时，表示系统已自动回退 seed，避免误清空。
+`last_error` 包含 `listed_universe shrink_floor triggered` 时，表示系统已按 seed floor 自动回退 seed；包含 `listed_universe runtime shrink triggered` 时，表示当前 DB count 低于上一轮成功 DB baseline。进一步查看 `source_context_json` 可确认 `baseline_type`、`threshold`、`surface_counts` 和样本差异。
 
 ### 4. signal insert silent-fail / fingerprint overflow
 

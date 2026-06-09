@@ -51,6 +51,7 @@ listing engine (RunOnce, 与 Phase 1 共用 cadence)
 | `cand.LifecycleStatus ∈ {confirmed_listing_candidate, announced_pending_api, api_detected_no_announcement, pre_assessment_observed}` | 仅对仍可动作的 lifecycle 触发；已上线（`already_listed_on_edgex`）一律跳过。该状态可由 edgeX instrument snapshot 通过 `RefreshListedUniverseFromSnapshots` / `BulkMarkCandidatesAlreadyListed` 自动 reconcile 得到。 |
 | `cand.Recommendation ≠ ""` | 评分还没生成 recommendation 的候选不发卡 |
 | `cand.CanonicalSymbol` 不属于 stablecoin / quote / collateral target denylist | `USDC`、`USDT`、`USD1`、`USD`、`FDUSD`、`DAI` 等资产不是新 listing 操作标的；即便历史上已有旧 candidate，也跳过 risk plan / outbox，避免类似 Gate `USDC_USD1` 误推。 |
+| linked signals 至少存在一条 fresh decision evidence | producer 会读取候选已链接信号，只保留 candidate-promoting 且未超过 `Runtime.listing_agent.candidate.historical_listing_grace_period` 的证据。若所有证据的 exchange-side `listing_time_ts` 都早于 `observed_at - grace_period`，则跳过 risk plan / outbox；原始 signal 保留供审计。 |
 | `LatestDecisionForCandidate(candidate_id)` 不在冷却窗内 | 若上一条决策是 `ignore` 且 `now - callback_ts < IgnoreCooldown`（默认 24h），跳过；其它动作的最新决策也按相同窗口冷却 |
 | 单 tick `Considered <= MaxPerTick` | 默认 20，避免新部署 burst 飞书群 |
 
@@ -60,9 +61,11 @@ listing engine (RunOnce, 与 Phase 1 共用 cadence)
 匹配的候选每个产出：
 
 1. 一条 `t_listing_risk_plan` 审计行（recommendation → template 见下方「风险计划模板」）；
-2. 一条 `t_listing_delivery_outbox` 行，`event_type = listing_decision_candidate`，`dedupe_key = listing_decision|<candidate_id>|YYYY-MM-DD`，UTC 日。
+2. 一条 `t_listing_delivery_outbox` 行，`event_type = listing_decision_candidate`，`dedupe_key = listing_decision|<candidate_id>|<fresh_evidence_signature>`。
 
-`uk_listing_delivery_dedupe` 保证同一候选同一天只发一张决策卡。隔天若 lifecycle 仍 actionable 会自然续推；若运营当天点过 `ignore`，第二天的 dedupe key 是新的，但 `LatestDecisionForCandidate` 仍在 24h 冷却窗内 → 仍跳过。
+`fresh_evidence_signature` 只由通过 freshness gate 的 linked signal fingerprint 计算；历史 `listing_time_ts` 证据不会改变 dedupe key，也不会被用于选取卡片中的交易所 listing time。`uk_listing_delivery_dedupe` 保证相同候选 + 相同新鲜证据只发一张决策卡；若出现新的 fresh evidence，dedupe key 会变化，但 `LatestDecisionForCandidate` 仍可通过 24h 冷却窗压住重复打扰。
+
+`historical_listing_grace_period` 默认在 `config/edgex-ops-intelligence.yaml` 中配置为 `48h`。调大该值会把更早的交易所 launch/open 时间视为 fresh，可能增加推送；调小则更积极地把晚发现的旧市场 observation-only 化。
 
 ## 按钮矩阵（per evidence_kind）
 
@@ -132,6 +135,7 @@ listing engine (RunOnce, 与 Phase 1 共用 cadence)
 - **Header 颜色**：`prepare_listing → red`、`evaluate_listing → blue`、`hold_watch → grey`、其它 → 默认 grey。`recommendationHeaderTemplate(rec)` 集中映射。
 - **按钮顺序固定**：`prepare_listing → enter_watchlist → contact_mm → ignore`，即便某些 button 被矩阵剥掉、剩余按钮按相同顺序填进 `card.i18n_elements`。运营肌肉记忆固定后误点率会降——顺序是 UX 契约。
 - **`value` payload**：每个按钮 `value` 都带 `candidate_id / risk_plan_id / action / dedupe_key` 四元组；其中 `dedupe_key` 与 outbox 表对齐，便于回调 handler 反查 outbox。
+- **时间语义**：基础信息区主字段固定展示 `Detected Time`（producer 触发时间）。交易所 API 返回的 launch/open 时间只在存在 fresh evidence 时以 `Exchange Listing Time` 单独展示，避免把几周/月前的真实 listing time 误读为本次推送触发时间。
 - **schema gotchas**：与 hot-gap 卡完全一致——`plain_text` / `lark_md` 的字段名是 `content` 不是 `text`，emoji 用于语义符号但 tier / status 类视觉用 `<font color>`，`SetEscapeHTML(false)` 让 outbox `payload_json` 肉眼可读。
 
 ## 回调：`POST /api/listing/callback`

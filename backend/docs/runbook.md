@@ -207,6 +207,103 @@ make -C backend verify-urls CATALOG_PROXY=http://127.0.0.1:7897
 Operator review the report; commit the regenerated catalog when happy.
 `--preserve-url-verified` (default) keeps approvals from prior runs.
 
+### 3.4.1 Listing listed_universe reports schema_drift
+
+The synthetic sources `listing/listed_universe/<platform>` describe the
+runtime universe refresh, not the parser health of the underlying exchange
+source. A `schema_drift` row means the refresh failed closed to the seed
+universe because the DB-derived active universe looked too small for the
+selected baseline.
+
+Check the decision context first:
+
+```
+docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -e \
+  "SELECT source_key, status, last_error,
+          JSON_UNQUOTE(JSON_EXTRACT(source_context_json,'$.baseline_type')) AS baseline_type,
+          JSON_EXTRACT(source_context_json,'$.db_fresh_active_count') AS db_count,
+          JSON_EXTRACT(source_context_json,'$.previous_success_db_fresh_active_count') AS previous_success,
+          JSON_EXTRACT(source_context_json,'$.seed_count') AS seed_count,
+          JSON_EXTRACT(source_context_json,'$.threshold') AS threshold,
+          JSON_EXTRACT(source_context_json,'$.surface_counts') AS surface_counts,
+          updated_at
+     FROM t_listing_source_state
+    WHERE source_key LIKE 'listing/listed_universe/%'
+    ORDER BY updated_at DESC;"
+```
+
+Interpretation:
+
+- `baseline_type=previous_success` means the current DB count is compared with
+  the previous successful DB-derived count. A failure here is a real runtime
+  shrink signal unless the previous context was manually corrupted.
+- `baseline_type=seed_floor` means this platform is still in cold-start / seed
+  safety-net mode. The seed is a historical/full-market fallback, so compare
+  `surface_counts` before assuming the instrument source is broken.
+- `baseline_type=db_first_bootstrap` applies to seed-wide platforms such as
+  `edgeX`, `hyperliquid`, and `mexc`; once `bootstrap_min_count` is met, the
+  DB runtime universe is accepted and future refreshes use previous-success
+  baseline instead of the wide seed.
+
+If `db_count` is unexpectedly low, verify snapshot freshness:
+
+```
+docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -e \
+  "SELECT platform, market_type, market_surface, status_normalized,
+          COUNT(*) AS rows, COUNT(DISTINCT base_asset) AS bases,
+          MAX(last_seen_at) AS last_seen
+     FROM t_listing_instrument_snapshot
+    GROUP BY platform, market_type, market_surface, status_normalized
+    ORDER BY platform, market_type, market_surface, status_normalized;"
+```
+
+Do not clear `schema_drift` manually unless the DB snapshot and runtime file are
+also healthy. A successful next refresh will write `status=ok` and replace
+`source_context_json` with the accepted decision evidence.
+
+### 3.4.2 Listing decision card shows an old exchange listing time
+
+The Listing Agent keeps exchange-side `listing_time_ts` values from native
+instrument APIs for audit and card context. A venue can legitimately return a
+launch/open timestamp that is weeks or months old when the local baseline first
+observes the symbol. Those late discoveries must not become new listing pushes.
+
+Current gate:
+
+- Config key: `Runtime.listing_agent.candidate.historical_listing_grace_period`.
+- Tracked default: `48h` in `config/edgex-ops-intelligence.yaml`.
+- Fusion behavior: candidate-shaped `instrument_diff` / `announcement_listing`
+  signals whose `listing_time_ts <= observed_at - grace_period` are marked
+  fused and counted as `SkippedHistorical`; they remain in
+  `t_listing_signal_observation` but do not create/update candidates or link to
+  existing actionable candidates.
+- Decision-card behavior: the producer re-checks linked evidence and skips a
+  candidate when no fresh candidate-promoting signal remains. Dedupe and
+  exchange listing time selection use only fresh evidence.
+- Card time semantics: `Detected Time` is the primary card field; a venue
+  launch/open timestamp is shown separately as `Exchange Listing Time` when
+  present.
+
+If operators report a BP/SPCX-like card where the exchange listing time is old,
+check whether the outbox row was created before this gate was deployed, then
+inspect linked signals:
+
+```
+SELECT s.id, s.signal_type, s.signal_subtype, s.source_platform,
+       s.status_normalized, s.observed_at, s.listing_time_ts,
+       TIMESTAMPDIFF(HOUR, s.listing_time_ts, s.observed_at) AS age_hours
+FROM t_listing_candidate_signal cs
+JOIN t_listing_signal_observation s ON s.id = cs.signal_id
+WHERE cs.candidate_id = <candidate_id>
+ORDER BY s.observed_at DESC;
+```
+
+Tuning impact: increasing the grace period admits older exchange-side listing
+evidence as fresh and can raise push volume; decreasing it suppresses late
+discoveries more aggressively. Keep it large enough to cover expected poll or
+deployment gaps, but short enough to avoid treating historical venue metadata as
+a new listing opportunity.
+
 ### 3.5 0-platform canonical (BIRD / CBPS / XYZ100 / ZM / RIVN / BX / DKNG / EWZ)
 
 These canonicals are listed in `config/unresolved_symbols.yaml` for

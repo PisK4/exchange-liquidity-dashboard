@@ -52,6 +52,16 @@ dedupe review.
 ## Candidate and card rules
 
 - Perp announcement signals remain candidate-bearing.
+- Candidate-promoting signals with exchange-side `listing_time_ts` older than
+  `observed_at - Runtime.listing_agent.candidate.historical_listing_grace_period`
+  are historical evidence. Fusion marks them fused and counts
+  `SkippedHistorical`, but does not create/update candidates or link them to
+  existing actionable candidates. The tracked default grace period is `48h`.
+- Decision-card production applies the same freshness gate to linked evidence:
+  candidates with no fresh candidate-promoting signal are skipped, and card
+  dedupe / `Exchange Listing Time` selection uses only fresh evidence. This
+  prevents late-discovered but real old exchange listings from re-triggering
+  Lark pushes while preserving raw signals for audit.
 - Spot announcement signals can become candidates, but scoring only permits:
   - `record_only` for announcement-only / single-source spot evidence.
   - `watch` for dual-source or multi-platform spot evidence.

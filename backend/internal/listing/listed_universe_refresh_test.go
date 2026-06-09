@@ -2,6 +2,7 @@ package listing
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -58,8 +59,11 @@ func TestRefreshListedUniverseHappyPathWritesAtomicallyAndReconciles(t *testing.
 			AddRow("bingx", "BTC", "spot").
 			AddRow("bingx", "ETH", "spot"))
 	// DB-derived platforms clear any previous listed_universe fallback state.
+	expectListedUniversePreviousStateMissing(mock, "edgeX")
 	expectListedUniverseOK(mock, "edgeX", now)
+	expectListedUniversePreviousStateMissing(mock, "binance")
 	expectListedUniverseOK(mock, "binance", now)
+	expectListedUniversePreviousStateMissing(mock, "bingx")
 	expectListedUniverseOK(mock, "bingx", now)
 	// Two BulkMark calls: edgeX perp (3 bases) + edgeX spot (1 base).
 	mock.ExpectExec(`UPDATE t_listing_candidate`).
@@ -123,7 +127,9 @@ func TestRefreshListedUniverseShrinkFloorFallsBackToSeed(t *testing.T) {
 			AddRow("binance", "SOL", "perp").
 			AddRow("binance", "DOGE", "perp"))
 	// Source-health writes: edgeX shrink fallback, binance DB-derived OK.
+	expectListedUniversePreviousStateMissing(mock, "edgeX")
 	expectListedUniverseShrink(mock, "edgeX", "listed_universe shrink_floor triggered: db=1 seed=4 floor=0.50", now)
+	expectListedUniversePreviousStateMissing(mock, "binance")
 	expectListedUniverseOK(mock, "binance", now)
 	// edgeX perp BulkMark with the seed-derived bases — 1 base from DB.
 	mock.ExpectExec(`UPDATE t_listing_candidate`).
@@ -170,7 +176,9 @@ func TestRefreshListedUniverseFallsBackToSeedWhenDBEmpty(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}))
 	// Source-health writes for the seed fallback on each covered platform.
+	expectListedUniversePreviousStateMissing(mock, "edgeX")
 	expectListedUniverseShrink(mock, "edgeX", "listed_universe shrink_floor triggered: db=0 seed=4 floor=0.50", now)
+	expectListedUniversePreviousStateMissing(mock, "binance")
 	expectListedUniverseShrink(mock, "binance", "listed_universe shrink_floor triggered: db=0 seed=4 floor=0.50", now)
 
 	seed := writeSeed(t)
@@ -222,6 +230,7 @@ func TestRefreshListedUniverseSurfaceSplitDoesNotCloseSpotWhenOnlyPerpListed(t *
 			AddRow("edgeX", "ETH", "perp").
 			AddRow("edgeX", "SOL", "perp").
 			AddRow("edgeX", "OLD", "perp"))
+	expectListedUniversePreviousStateMissing(mock, "edgeX")
 	expectListedUniverseOK(mock, "edgeX", now)
 	// Exactly ONE BulkMark call expected (perp side); spot side
 	// is skipped because canonicalBases is empty.
@@ -259,6 +268,7 @@ func TestRefreshListedUniverseHonoursMissingSeed(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp"))
+	expectListedUniversePreviousStateMissing(mock, "edgeX")
 	expectListedUniverseOK(mock, "edgeX", now)
 	mock.ExpectExec(`UPDATE t_listing_candidate`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -280,6 +290,121 @@ func TestRefreshListedUniverseHonoursMissingSeed(t *testing.T) {
 	}
 }
 
+func TestRefreshListedUniverseDBFirstBootstrapAcceptsDBBelowSeedFloor(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
+			AddRow("edgeX", "BTC", "perp"))
+	expectListedUniversePreviousStateMissing(mock, "edgeX")
+	expectListedUniverseOK(mock, "edgeX", now)
+	mock.ExpectExec(`UPDATE t_listing_candidate`).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	seed := writeSeed(t)
+	runtimePath := filepath.Join(t.TempDir(), "listed_universe.runtime.yaml")
+	res, err := RefreshListedUniverseFromSnapshots(context.Background(), repo, ListedUniverseRefreshArgs{
+		SeedPath:         seed,
+		RuntimePath:      runtimePath,
+		FreshWindow:      30 * time.Minute,
+		CoveredPlatforms: []string{"edgeX"},
+		ShrinkFloor:      0.5,
+		PlatformOverrides: map[string]config.ListedUniverseRefreshPlatformPolicy{
+			"edgeX": {BootstrapBaseline: "db_first", BootstrapMinCount: 1},
+		},
+		Now:     now,
+		Metrics: NewInMemoryMetrics(),
+	})
+	if err != nil {
+		t.Fatalf("RefreshListedUniverseFromSnapshots err = %v", err)
+	}
+	if len(res.PlatformsFromSeed) != 0 {
+		t.Fatalf("db_first bootstrap should accept DB, got seed fallback %v", res.PlatformsFromSeed)
+	}
+	loaded, err := config.LoadListedUniverse(runtimePath)
+	if err != nil {
+		t.Fatalf("load runtime universe: %v", err)
+	}
+	if got := loaded.BaseAssets("edgeX"); len(got) != 1 || got[0] != "BTC" {
+		t.Fatalf("runtime edgeX bases = %v, want [BTC]", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestRefreshListedUniversePreviousSuccessBaselineAllowsRuntimeBelowSeed(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
+			AddRow("edgeX", "BTC", "perp"))
+	expectListedUniversePreviousStateOK(mock, "edgeX", 2, now.Add(-15*time.Minute))
+	expectListedUniverseOK(mock, "edgeX", now)
+	mock.ExpectExec(`UPDATE t_listing_candidate`).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	seed := writeSeed(t)
+	runtimePath := filepath.Join(t.TempDir(), "listed_universe.runtime.yaml")
+	res, err := RefreshListedUniverseFromSnapshots(context.Background(), repo, ListedUniverseRefreshArgs{
+		SeedPath:         seed,
+		RuntimePath:      runtimePath,
+		FreshWindow:      30 * time.Minute,
+		CoveredPlatforms: []string{"edgeX"},
+		ShrinkFloor:      0.5,
+		Now:              now,
+		Metrics:          NewInMemoryMetrics(),
+	})
+	if err != nil {
+		t.Fatalf("RefreshListedUniverseFromSnapshots err = %v", err)
+	}
+	if len(res.PlatformsFromSeed) != 0 {
+		t.Fatalf("previous-success baseline should accept DB, got seed fallback %v", res.PlatformsFromSeed)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
+func TestRefreshListedUniversePreviousSuccessBaselineFailsClosedOnRuntimeShrink(t *testing.T) {
+	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+	repo, mock, cleanup := newRepoWithMock(t, now)
+	defer cleanup()
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
+			AddRow("edgeX", "BTC", "perp"))
+	expectListedUniversePreviousStateOK(mock, "edgeX", 4, now.Add(-15*time.Minute))
+	expectListedUniverseShrink(mock, "edgeX", "listed_universe runtime shrink triggered: db=1 previous_success=4 floor=0.50", now)
+	mock.ExpectExec(`UPDATE t_listing_candidate`).
+		WillReturnResult(sqlmock.NewResult(0, 0))
+
+	seed := writeSeed(t)
+	runtimePath := filepath.Join(t.TempDir(), "listed_universe.runtime.yaml")
+	res, err := RefreshListedUniverseFromSnapshots(context.Background(), repo, ListedUniverseRefreshArgs{
+		SeedPath:         seed,
+		RuntimePath:      runtimePath,
+		FreshWindow:      30 * time.Minute,
+		CoveredPlatforms: []string{"edgeX"},
+		ShrinkFloor:      0.5,
+		Now:              now,
+		Metrics:          NewInMemoryMetrics(),
+	})
+	if err != nil {
+		t.Fatalf("RefreshListedUniverseFromSnapshots err = %v", err)
+	}
+	if len(res.PlatformsFromSeed) != 1 || res.PlatformsFromSeed[0] != "edgeX" {
+		t.Fatalf("runtime shrink should fail closed to seed, got %v", res.PlatformsFromSeed)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatalf("expectations: %v", err)
+	}
+}
+
 func expectListedUniverseOK(mock sqlmock.Sqlmock, platform string, now time.Time) {
 	mock.ExpectExec(`INSERT INTO t_listing_source_state`).
 		WithArgs(
@@ -293,6 +418,7 @@ func expectListedUniverseOK(mock sqlmock.Sqlmock, platform string, now time.Time
 			0,
 			nil,
 			nil,
+			sqlmock.AnyArg(),
 			now,
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -311,7 +437,41 @@ func expectListedUniverseShrink(mock sqlmock.Sqlmock, platform string, msg strin
 			0,
 			nil,
 			msg,
+			sqlmock.AnyArg(),
 			now,
 		).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+}
+
+var listedUniverseSourceStateCols = []string{
+	"source_key", "source_type", "platform", "status",
+	"last_success_at", "last_error_at", "consecutive_error_count", "schema_drift_count",
+	"disabled_until", "last_error", "source_context_json", "updated_at",
+}
+
+func expectListedUniversePreviousStateMissing(mock sqlmock.Sqlmock, platform string) {
+	mock.ExpectQuery(`SELECT source_key, source_type, platform, status`).
+		WithArgs("listing/listed_universe/" + platform).
+		WillReturnRows(sqlmock.NewRows(listedUniverseSourceStateCols))
+}
+
+func expectListedUniversePreviousStateOK(mock sqlmock.Sqlmock, platform string, dbCount int, lastSuccess time.Time) {
+	ctx := fmt.Sprintf(`{"schema_version":1,"db_fresh_active_count":%d,"previous_success_db_fresh_active_count":%d}`, dbCount, dbCount)
+	mock.ExpectQuery(`SELECT source_key, source_type, platform, status`).
+		WithArgs("listing/listed_universe/" + platform).
+		WillReturnRows(sqlmock.NewRows(listedUniverseSourceStateCols).
+			AddRow(
+				"listing/listed_universe/"+platform,
+				"listed_universe_refresh",
+				platform,
+				SourceStatusOK,
+				lastSuccess,
+				nil,
+				0,
+				0,
+				nil,
+				nil,
+				[]byte(ctx),
+				lastSuccess,
+			))
 }

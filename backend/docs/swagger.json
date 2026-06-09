@@ -2137,6 +2137,7 @@
           "schema_drift_count": {"type": "integer"},
           "disabled_until": {"type": "string", "format": "date-time", "nullable": true},
           "last_error": {"type": "string"},
+          "source_context_json": {"type": "object", "additionalProperties": true},
           "updated_at": {"type": "string", "format": "date-time"}
         }
       },

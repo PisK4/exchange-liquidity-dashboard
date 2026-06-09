@@ -215,13 +215,14 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	refreshCfg := e.cfg.Runtime.ListingAgent.ListedUniverseRefresh
 	if refreshCfg.Enabled && e.hasRunFirstPoll && refreshCfg.Interval > 0 && start.Sub(e.lastUniverseRefresh) >= refreshCfg.Interval {
 		refreshRes, refreshErr := RefreshListedUniverseFromSnapshots(ctx, e.repo, ListedUniverseRefreshArgs{
-			SeedPath:         refreshCfg.SeedPath,
-			RuntimePath:      refreshCfg.RuntimePath,
-			FreshWindow:      refreshCfg.FreshWindow,
-			ShrinkFloor:      refreshCfg.SeedShrinkFloor,
-			CoveredPlatforms: refreshCfg.CoveredPlatforms,
-			Now:              start,
-			Metrics:          NopMetrics{},
+			SeedPath:          refreshCfg.SeedPath,
+			RuntimePath:       refreshCfg.RuntimePath,
+			FreshWindow:       refreshCfg.FreshWindow,
+			ShrinkFloor:       refreshCfg.SeedShrinkFloor,
+			CoveredPlatforms:  refreshCfg.CoveredPlatforms,
+			PlatformOverrides: refreshCfg.PlatformOverrides,
+			Now:               start,
+			Metrics:           NopMetrics{},
 		})
 		if refreshErr != nil {
 			e.deps.Logger.Printf("listing engine: listed_universe refresh failed: %v", refreshErr)
@@ -305,10 +306,11 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	// engine doesn't re-emit a suppressed card.
 	if e.cfg.Runtime.ListingAgent.DecisionCard.Enabled {
 		decisionRes, decisionErr := ProduceDecisionCards(ctx, e.repo, DecisionCardDeps{
-			Now:            e.deps.Now,
-			IgnoreCooldown: e.cfg.Runtime.ListingAgent.DecisionCard.IgnoreCooldown,
-			MaxPerTick:     e.cfg.Runtime.ListingAgent.DecisionCard.MaxPerTick,
-			Enrich:         e.deps.DecisionCardEnrich,
+			Now:                          e.deps.Now,
+			IgnoreCooldown:               e.cfg.Runtime.ListingAgent.DecisionCard.IgnoreCooldown,
+			MaxPerTick:                   e.cfg.Runtime.ListingAgent.DecisionCard.MaxPerTick,
+			HistoricalListingGracePeriod: e.cfg.Runtime.ListingAgent.Candidate.HistoricalListingGracePeriod,
+			Enrich:                       e.deps.DecisionCardEnrich,
 		})
 		summary.DecisionCard = decisionRes
 		if decisionErr != nil {

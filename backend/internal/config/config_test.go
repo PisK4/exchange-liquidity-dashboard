@@ -1078,6 +1078,15 @@ func TestDefaultListingAgentSeedsP1Sources(t *testing.T) {
 	if la.ListedUniverseRefresh.FreshWindow != 30*time.Minute {
 		t.Fatalf("default refresh fresh_window = %s, want 30m", la.ListedUniverseRefresh.FreshWindow)
 	}
+	if got := la.ListedUniverseRefresh.PlatformOverrides["edgeX"]; got.BootstrapBaseline != "db_first" || got.BootstrapMinCount != 50 {
+		t.Fatalf("default edgeX listed universe override = %+v, want db_first min=50", got)
+	}
+	if got := la.ListedUniverseRefresh.PlatformOverrides["hyperliquid"]; got.BootstrapBaseline != "db_first" || got.BootstrapMinCount != 100 {
+		t.Fatalf("default hyperliquid listed universe override = %+v, want db_first min=100", got)
+	}
+	if got := la.ListedUniverseRefresh.PlatformOverrides["mexc"]; got.BootstrapBaseline != "db_first" || got.BootstrapMinCount != 500 {
+		t.Fatalf("default mexc listed universe override = %+v, want db_first min=500", got)
+	}
 	if la.ListedUniverseRefresh.SeedShrinkFloor != 0.5 {
 		t.Fatalf("default refresh shrink floor = %v, want 0.5", la.ListedUniverseRefresh.SeedShrinkFloor)
 	}
