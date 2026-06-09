@@ -168,6 +168,86 @@ func TestFetchEdgeXMissingTickerValueErrors(t *testing.T) {
 	}
 }
 
+func TestFetchMEXCVolumeAcceptsQuoteFieldVariants(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want float64
+	}{
+		{name: "amount24 string", body: `{"data":{"amount24":"123.45"}}`, want: 123.45},
+		{name: "quoteVolume number", body: `{"data":{"quoteVolume":456.78}}`, want: 456.78},
+		{name: "base volume times price", body: `{"data":{"volume24":"10","lastPrice":"2.5"}}`, want: 25},
+		{name: "zero amount", body: `{"data":{"amount24":"0"}}`, want: 0},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := RESTAdapter{
+				Platform: "mexc",
+				Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					if !strings.Contains(req.URL.String(), "symbol=NFLX_USDT") {
+						t.Fatalf("requested URL = %q, want symbol=NFLX_USDT", req.URL.String())
+					}
+					return jsonResponse(tt.body), nil
+				})},
+				MaxAttempts: 1,
+			}
+			vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+				Platform:      "mexc",
+				Canonical:     "NFLX",
+				DisplaySymbol: "NFLX-USDT (perp)",
+				APISymbol:     "NFLX_USDT",
+			})
+			if err != nil {
+				t.Fatalf("FetchTicker err = %v", err)
+			}
+			if vol.Status != domain.StatusComplete {
+				t.Fatalf("Status = %q, want complete", vol.Status)
+			}
+			if vol.Volume24HUSD != tt.want {
+				t.Fatalf("Volume24HUSD = %f, want %f", vol.Volume24HUSD, tt.want)
+			}
+		})
+	}
+}
+
+func TestFetchMEXCVolumeErrorsWhenFieldsMissingOrInvalid(t *testing.T) {
+	tests := []struct {
+		name    string
+		body    string
+		wantErr string
+	}{
+		{name: "missing fields", body: `{"data":{"symbol":"NFLX_USDT"}}`, wantErr: "missing quote volume fields"},
+		{name: "negative quote", body: `{"data":{"amount24":"-1"}}`, wantErr: "invalid mexc quote volume field amount24"},
+		{name: "base without price", body: `{"data":{"volume24":"10"}}`, wantErr: "no usable price field"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := RESTAdapter{
+				Platform: "mexc",
+				Client: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+					return jsonResponse(tt.body), nil
+				})},
+				MaxAttempts: 1,
+			}
+			vol, err := adapter.FetchTicker(context.Background(), domain.SymbolSub{
+				Platform:      "mexc",
+				Canonical:     "NFLX",
+				DisplaySymbol: "NFLX-USDT (perp)",
+				APISymbol:     "NFLX_USDT",
+			})
+			if err == nil {
+				t.Fatalf("FetchTicker err = nil, want %q", tt.wantErr)
+			}
+			if vol.Status != domain.StatusError {
+				t.Fatalf("Status = %q, want error", vol.Status)
+			}
+			if !strings.Contains(err.Error(), tt.wantErr) {
+				t.Fatalf("err = %q, want containing %q", err.Error(), tt.wantErr)
+			}
+		})
+	}
+}
+
 func TestFetchEdgeXPerpV2UsesV2DepthEndpointAndSurfaceMeta(t *testing.T) {
 	var requestedURL string
 	adapter := RESTAdapter{

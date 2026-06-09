@@ -1101,6 +1101,7 @@ export interface components {
             rows: components["schemas"]["CoverageRow"][];
             /** Format: date-time */
             snapshot_ts: string;
+            latency_ms?: number;
         };
         DashboardCategorySymbol: {
             canonical: string;
@@ -1442,7 +1443,6 @@ export interface components {
             error?: string;
             /** Format: date-time */
             snapshot_ts?: string;
-            latency_ms?: number;
         } & {
             [key: string]: unknown;
         };
@@ -1508,12 +1508,34 @@ export interface components {
             source_group: string;
             source_type?: string;
             source_url?: string | null;
+            source_key?: string;
             fetch_mode?: string;
+            evidence_quality?: string;
             enabled: boolean;
             auto_push_enabled?: boolean;
+            requires_proxy?: boolean;
+            requires_browser_context?: boolean;
+            requires_login?: boolean;
+            personalized?: boolean;
+            /** @description Compatibility alias for source_status. */
+            status?: string;
             source_status?: string;
+            poll_interval_seconds?: number;
             last_http_status?: number | null;
             last_error_kind?: string;
+            last_schema_hash?: string | null;
+            last_content_hash?: string | null;
+            sample_count?: number;
+            event_count?: number;
+            source_context_json?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            disabled_until?: string | null;
+            /** Format: date-time */
+            last_checked_at?: string | null;
+            /** Format: date-time */
+            last_success_at?: string | null;
             /** Format: date-time */
             updated_at?: string;
         } & {

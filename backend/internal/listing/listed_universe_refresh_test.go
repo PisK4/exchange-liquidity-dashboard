@@ -57,6 +57,10 @@ func TestRefreshListedUniverseHappyPathWritesAtomicallyAndReconciles(t *testing.
 			AddRow("binance", "DOGE", "perp").
 			AddRow("bingx", "BTC", "spot").
 			AddRow("bingx", "ETH", "spot"))
+	// DB-derived platforms clear any previous listed_universe fallback state.
+	expectListedUniverseOK(mock, "edgeX", now)
+	expectListedUniverseOK(mock, "binance", now)
+	expectListedUniverseOK(mock, "bingx", now)
 	// Two BulkMark calls: edgeX perp (3 bases) + edgeX spot (1 base).
 	mock.ExpectExec(`UPDATE t_listing_candidate`).
 		WillReturnResult(sqlmock.NewResult(0, 2))
@@ -118,9 +122,9 @@ func TestRefreshListedUniverseShrinkFloorFallsBackToSeed(t *testing.T) {
 			AddRow("binance", "ETH", "perp").
 			AddRow("binance", "SOL", "perp").
 			AddRow("binance", "DOGE", "perp"))
-	// Source-health write for the shrink fallback.
-	mock.ExpectExec(`INSERT INTO t_listing_source_state`).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+	// Source-health writes: edgeX shrink fallback, binance DB-derived OK.
+	expectListedUniverseShrink(mock, "edgeX", "listed_universe shrink_floor triggered: db=1 seed=4 floor=0.50", now)
+	expectListedUniverseOK(mock, "binance", now)
 	// edgeX perp BulkMark with the seed-derived bases — 1 base from DB.
 	mock.ExpectExec(`UPDATE t_listing_candidate`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
@@ -166,10 +170,8 @@ func TestRefreshListedUniverseFallsBackToSeedWhenDBEmpty(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}))
 	// Source-health writes for the seed fallback on each covered platform.
-	mock.ExpectExec(`INSERT INTO t_listing_source_state`).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec(`INSERT INTO t_listing_source_state`).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+	expectListedUniverseShrink(mock, "edgeX", "listed_universe shrink_floor triggered: db=0 seed=4 floor=0.50", now)
+	expectListedUniverseShrink(mock, "binance", "listed_universe shrink_floor triggered: db=0 seed=4 floor=0.50", now)
 
 	seed := writeSeed(t)
 	runtimePath := filepath.Join(t.TempDir(), "listed_universe.runtime.yaml")
@@ -220,6 +222,7 @@ func TestRefreshListedUniverseSurfaceSplitDoesNotCloseSpotWhenOnlyPerpListed(t *
 			AddRow("edgeX", "ETH", "perp").
 			AddRow("edgeX", "SOL", "perp").
 			AddRow("edgeX", "OLD", "perp"))
+	expectListedUniverseOK(mock, "edgeX", now)
 	// Exactly ONE BulkMark call expected (perp side); spot side
 	// is skipped because canonicalBases is empty.
 	mock.ExpectExec(`UPDATE t_listing_candidate`).
@@ -256,6 +259,7 @@ func TestRefreshListedUniverseHonoursMissingSeed(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp"))
+	expectListedUniverseOK(mock, "edgeX", now)
 	mock.ExpectExec(`UPDATE t_listing_candidate`).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
@@ -274,4 +278,40 @@ func TestRefreshListedUniverseHonoursMissingSeed(t *testing.T) {
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)
 	}
+}
+
+func expectListedUniverseOK(mock sqlmock.Sqlmock, platform string, now time.Time) {
+	mock.ExpectExec(`INSERT INTO t_listing_source_state`).
+		WithArgs(
+			"listing/listed_universe/"+platform,
+			"listed_universe_refresh",
+			platform,
+			SourceStatusOK,
+			sqlmock.AnyArg(),
+			nil,
+			0,
+			0,
+			nil,
+			nil,
+			now,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+}
+
+func expectListedUniverseShrink(mock sqlmock.Sqlmock, platform string, msg string, now time.Time) {
+	mock.ExpectExec(`INSERT INTO t_listing_source_state`).
+		WithArgs(
+			"listing/listed_universe/"+platform,
+			"listed_universe_refresh",
+			platform,
+			SourceStatusSchemaDrift,
+			nil,
+			sqlmock.AnyArg(),
+			0,
+			0,
+			nil,
+			msg,
+			now,
+		).
+		WillReturnResult(sqlmock.NewResult(0, 1))
 }

@@ -197,15 +197,17 @@ function ActivitySourceHealthTable({ rows }: { rows: ActivitySourceHealth[] }) {
   return (
     <div className="table-wrap">
       <table className="tbl">
-        <thead><tr><th>平台</th><th>Source</th><th>状态</th><th>HTTP</th><th>Error</th></tr></thead>
+        <thead><tr><th>平台</th><th>Source</th><th>状态</th><th>最近检查</th><th>最近成功</th><th>样本/事件</th><th>Error</th></tr></thead>
         <tbody>
           {rows.map((row, idx) => (
             <tr key={`${row.platform}-${sourceGroup(row)}-${idx}`}>
               <td>{row.platform}</td>
               <td>{sourceGroup(row)}</td>
               <td><StatusPill value={sourceStatus(row)} /></td>
-              <td>{row.last_http_status ?? row.lastHTTPStatus ?? '—'}</td>
-              <td>{row.last_error_kind ?? row.lastErrorKind ?? '—'}</td>
+              <td>{formatShortTime(row.last_checked_at ?? row.lastCheckedAt)}</td>
+              <td>{formatShortTime(row.last_success_at ?? row.lastSuccessAt)}</td>
+              <td>{sourceCounts(row)}</td>
+              <td>{sourceError(row)}</td>
             </tr>
           ))}
         </tbody>
@@ -245,5 +247,30 @@ function sourceGroup(row: ActivitySourceHealth) {
 }
 
 function sourceStatus(row: ActivitySourceHealth) {
-  return row.source_status ?? row.sourceStatus ?? '—';
+  return row.status ?? row.source_status ?? row.sourceStatus ?? '—';
+}
+
+function sourceCounts(row: ActivitySourceHealth) {
+  const samples = row.sample_count ?? row.sampleCount;
+  const events = row.event_count ?? row.eventCount;
+  return `${samples ?? '—'}/${events ?? '—'}`;
+}
+
+function sourceError(row: ActivitySourceHealth) {
+  const http = row.last_http_status ?? row.lastHTTPStatus;
+  const error = row.last_error_kind ?? row.lastErrorKind;
+  if (http && error) return `${http} / ${error}`;
+  return String(http ?? error ?? '—');
+}
+
+function formatShortTime(raw?: string | null) {
+  if (!raw) return '—';
+  const date = new Date(raw);
+  if (Number.isNaN(date.getTime())) return raw;
+  return date.toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }

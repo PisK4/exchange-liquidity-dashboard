@@ -309,3 +309,66 @@ func TestIngestSourcesKeepsRawEvidenceForNon2xxEvenWhenContentUnchanged(t *testi
 		t.Fatalf("raw meta=%+v", meta)
 	}
 }
+
+func TestIngestSourcesAggregatesSkipReasons(t *testing.T) {
+	now := time.Date(2026, 6, 6, 10, 0, 0, 0, time.UTC)
+	disabledUntil := now.Add(15 * time.Minute)
+	recentChecked := now.Add(-5 * time.Minute)
+	sources := []SourceConfig{
+		{
+			Platform:    "binance",
+			SourceGroup: "disabled",
+			FetchMode:   "http_direct",
+			Enabled:     false,
+		},
+		{
+			Platform:     "okx",
+			SourceGroup:  "blocked",
+			FetchMode:    "http_direct",
+			Enabled:      true,
+			PollInterval: 30 * time.Minute,
+		},
+		{
+			Platform:     "gate",
+			SourceGroup:  "not_due",
+			FetchMode:    "utls_proxy_json",
+			Enabled:      true,
+			PollInterval: 30 * time.Minute,
+		},
+	}
+	store := &fakeIngestionStore{existingStates: map[string]SourceState{
+		BuildSourceKey("okx", "blocked", "http_direct"): {
+			DisabledUntil: &disabledUntil,
+		},
+		BuildSourceKey("gate", "not_due", "utls_proxy_json"): {
+			LastCheckedAt: &recentChecked,
+		},
+	}}
+	fetchCalls := 0
+	res, err := IngestSources(context.Background(), store, IngestionDeps{
+		Sources: sources,
+		Fetch: func(ctx context.Context, req FetchRequest) (FetchResult, error) {
+			fetchCalls++
+			return FetchResult{}, nil
+		},
+		Parse: func(ctx context.Context, doc RawDocument) ([]ActivityEvent, error) {
+			return nil, nil
+		},
+		Now: func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("IngestSources err=%v", err)
+	}
+	if res.SkippedSources != 3 || res.Sources != 0 || fetchCalls != 0 {
+		t.Fatalf("result=%+v fetchCalls=%d", res, fetchCalls)
+	}
+	want := map[string]int{"disabled_config": 1, "disabled_until": 1, "poll_interval": 1}
+	if len(res.SkipReasons) != len(want) {
+		t.Fatalf("SkipReasons=%+v", res.SkipReasons)
+	}
+	for reason, count := range want {
+		if res.SkipReasons[reason] != count {
+			t.Fatalf("SkipReasons[%s]=%d want %d; all=%+v", reason, res.SkipReasons[reason], count, res.SkipReasons)
+		}
+	}
+}

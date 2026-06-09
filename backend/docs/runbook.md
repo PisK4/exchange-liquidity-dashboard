@@ -486,7 +486,7 @@ from MySQL rather than guessing from the config file baked into a Docker image:
 docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -e \
   "SELECT platform, source_group, source_status, last_http_status,
           COALESCE(last_error_kind,'') AS last_error_kind,
-          poll_interval_seconds,
+          poll_interval_seconds, last_checked_at, last_success_at,
           JSON_UNQUOTE(JSON_EXTRACT(source_context_json,'$.attempt_count')) AS attempt_count,
           JSON_UNQUOTE(JSON_EXTRACT(source_context_json,'$.elapsed_ms')) AS elapsed_ms,
           JSON_UNQUOTE(JSON_EXTRACT(source_context_json,'$.proxy_used')) AS proxy_used,
@@ -498,11 +498,21 @@ docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -e \
 Expected healthy shape:
 
 - `source_status=ok` and `last_http_status=200` for reachable sources.
+- `/api/activity/source-health` exposes both `status` and `source_status`;
+  `status` is a compatibility alias so generic health tooling does not show a
+  null status.
+- `last_checked_at` means the source was evaluated by ingestion; `last_success_at`
+  means the most recent successful fetch/parse or unchanged 2xx sample. A source
+  can be `degraded` while still having a recent historical success.
 - `poll_interval_seconds=1800` for the default 30 minute cadence.
 - `source_context_json` carries fetch diagnostics such as `attempt_count`,
   `elapsed_ms`, `proxy_used`, `source_url`, and `fetch_mode`. Fetch failures
   also set `last_error_message` so Binance/BingX-style intermittent network
   issues can be separated from parser or delivery failures.
+- Worker summaries include `SkipReasons` when sources are skipped before fetch,
+  for example `SkipReasons:map[poll_interval:9]`. This is expected between
+  scheduled polls; `disabled_config` and `disabled_until` require operator
+  attention.
 
 The ingestion path intentionally suppresses repeated raw/event writes when a
 successful 2xx fetch returns the same `content_hash` as the previous successful
@@ -547,6 +557,25 @@ make -C backend smoke-listing MYSQL_DSN='root:root@tcp(127.0.0.1:3306)/edgex_ops
 curl -fsS 'http://127.0.0.1:8080/api/listing/source-health' | jq
 curl -fsS 'http://127.0.0.1:8080/api/listing/deliveries?limit=20' | jq
 ```
+
+Rows with `source_type=listed_universe_refresh` are synthetic health rows for
+the dynamic listed-universe safety net. A `schema_drift` status on these rows
+means the DB-derived active base list fell below the configured shrink floor and
+the runtime universe fell back to the seed list; it is not the same as a parser
+schema drift from an instrument or announcement fetcher. When a platform later
+passes the DB-derived shrink-floor check, the synthetic row is written back to
+`ok` so old fallback errors do not remain as active problems.
+
+For Hyperliquid announcements, `unexpected EOF` usually indicates a CloudFront,
+proxy, or transport truncation. The fetcher reports the URL, stage, payload byte
+count, and attempt count in `last_error` so operators can distinguish transport
+truncation from parser-level schema drift.
+
+MEXC ticker volume uses quote-volume fields first (`amount24`, `turnover24`,
+`quoteVolume`, `usdtVolume`) and falls back to base volume times a usable price.
+A real zero volume is preserved as a complete zero-volume sample; missing fields
+or negative values remain explicit adapter errors. The MEXC 0.4 discount still
+applies only to volume/share, never to depth, spread, or slippage.
 
 Webhook routing uses `Alert.Webhooks.Listing` for Top30/divergence cards and
 `Alert.Webhooks.Liquidity` for Dashboard liquidity-lag / worst-depth cards.

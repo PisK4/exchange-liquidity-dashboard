@@ -789,9 +789,7 @@ func (a RESTAdapter) fetchBingXVolume(ctx context.Context, sub domain.SymbolSub)
 
 func (a RESTAdapter) fetchMEXCVolume(ctx context.Context, sub domain.SymbolSub) (float64, error) {
 	var resp struct {
-		Data struct {
-			Amount24 any `json:"amount24"`
-		}
+		Data map[string]any `json:"data"`
 	}
 	contract := sub.APISymbol
 	if contract == "" {
@@ -800,11 +798,57 @@ func (a RESTAdapter) fetchMEXCVolume(ctx context.Context, sub domain.SymbolSub) 
 	if err := a.fetchJSON(ctx, http.MethodGet, "https://contract.mexc.com/api/v1/contract/ticker?symbol="+contract, nil, &resp); err != nil {
 		return 0, err
 	}
-	amount := anyFloat(resp.Data.Amount24)
-	if amount <= 0 {
-		return 0, errors.New("empty mexc quote volume")
+	if len(resp.Data) == 0 {
+		return 0, errors.New("empty mexc ticker")
 	}
-	return amount, nil
+	return parseMEXCQuoteVolume(resp.Data)
+}
+
+func parseMEXCQuoteVolume(data map[string]any) (float64, error) {
+	for _, field := range []string{"amount24", "turnover24", "quoteVolume", "usdtVolume"} {
+		if value, ok := parseFieldFloat(data, field); ok {
+			if value < 0 {
+				return 0, fmt.Errorf("invalid mexc quote volume field %s", field)
+			}
+			return value, nil
+		}
+	}
+
+	for _, volumeField := range []string{"volume24", "volume", "vol24h"} {
+		volume, ok := parseFieldFloat(data, volumeField)
+		if !ok {
+			continue
+		}
+		if volume < 0 {
+			return 0, fmt.Errorf("invalid mexc base volume field %s", volumeField)
+		}
+		if volume == 0 {
+			return 0, nil
+		}
+		for _, priceField := range []string{"lastPrice", "fairPrice", "indexPrice"} {
+			price, priceOK := parseFieldFloat(data, priceField)
+			if !priceOK {
+				continue
+			}
+			if price <= 0 {
+				return 0, fmt.Errorf("invalid mexc price field %s", priceField)
+			}
+			return volume * price, nil
+		}
+		return 0, fmt.Errorf("empty mexc quote volume: %s present but no usable price field", volumeField)
+	}
+	return 0, errors.New("empty mexc quote volume: missing quote volume fields and base volume fallback")
+}
+
+func parseFieldFloat(data map[string]any, field string) (float64, bool) {
+	if data == nil {
+		return 0, false
+	}
+	v, ok := data[field]
+	if !ok {
+		return 0, false
+	}
+	return parseAnyFloat(v)
 }
 
 func (a RESTAdapter) fetchEdgeXVolume(ctx context.Context, sub domain.SymbolSub) (float64, error) {

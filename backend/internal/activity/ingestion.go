@@ -112,6 +112,7 @@ type IngestionResult struct {
 	SourceErrors     int
 	ParserErrors     int
 	SkippedSources   int
+	SkipReasons      map[string]int
 	UnchangedSources int
 }
 
@@ -161,7 +162,7 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 	res := IngestionResult{}
 	for _, src := range deps.Sources {
 		if !src.Enabled {
-			res.SkippedSources++
+			recordActivitySourceSkip(&res, "disabled_config")
 			continue
 		}
 		sourceKey := BuildSourceKey(src.Platform, src.SourceGroup, src.FetchMode)
@@ -171,7 +172,7 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 		}
 		decision := ShouldPollActivitySource(src, state, hasState, now)
 		if !decision.ShouldPoll {
-			res.SkippedSources++
+			recordActivitySourceSkip(&res, decision.Reason)
 			continue
 		}
 		if strings.TrimSpace(src.SourceURL) == "" {
@@ -304,6 +305,21 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 		}
 	}
 	return res, nil
+}
+
+func recordActivitySourceSkip(res *IngestionResult, reason string) {
+	if res == nil {
+		return
+	}
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		reason = "unknown"
+	}
+	res.SkippedSources++
+	if res.SkipReasons == nil {
+		res.SkipReasons = make(map[string]int, 1)
+	}
+	res.SkipReasons[reason]++
 }
 
 func BuildSourceKey(platform, sourceGroup, fetchMode string) string {

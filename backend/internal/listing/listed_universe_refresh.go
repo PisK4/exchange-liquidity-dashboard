@@ -117,6 +117,7 @@ func RefreshListedUniverseFromSnapshots(ctx context.Context, repo *Repository, a
 		}
 		out.Platforms[platform] = config.ListedPlatform{BaseAssets: dbBases}
 		res.PlatformsFromDB = append(res.PlatformsFromDB, platform)
+		recordListedUniverseRefreshOK(ctx, repo, platform, now)
 	}
 	// (4) Pass-through seed-only platforms.
 	for name, plat := range seed.Platforms {
@@ -230,11 +231,11 @@ func writeListedUniverseAtomic(path string, u config.ListedUniverse) error {
 	return nil
 }
 
-// recordShrinkFloorError surfaces the safety-net trip on
-// t_listing_source_state.last_error so operators can see it next
-// to the rest of the source health. The platform key is the same
-// one PollWithSourceHealth uses for the underlying instrument source
-// so the row lines up in /admin/listing/sources.
+// recordShrinkFloorError surfaces the safety-net trip on a synthetic
+// listed_universe_refresh source row. It intentionally does not
+// overwrite the underlying instrument source (for example bybit/linear)
+// because shrink fallback is a derived-universe health signal rather
+// than a parser/fetcher failure in the poll source itself.
 func recordShrinkFloorError(ctx context.Context, repo *Repository, platform string, dbCount, seedCount int, floor float64, now time.Time) {
 	if repo == nil {
 		return
@@ -248,5 +249,20 @@ func recordShrinkFloorError(ctx context.Context, repo *Repository, platform stri
 		LastErrorAt: &now,
 		LastError:   msg,
 		UpdatedAt:   now,
+	})
+}
+
+func recordListedUniverseRefreshOK(ctx context.Context, repo *Repository, platform string, now time.Time) {
+	if repo == nil {
+		return
+	}
+	_ = repo.UpsertSourceState(ctx, SourceState{
+		SourceKey:     fmt.Sprintf("listing/listed_universe/%s", platform),
+		SourceType:    "listed_universe_refresh",
+		Platform:      platform,
+		Status:        SourceStatusOK,
+		LastSuccessAt: &now,
+		LastError:     "",
+		UpdatedAt:     now,
 	})
 }
