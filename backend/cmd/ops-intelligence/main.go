@@ -312,7 +312,7 @@ func buildAPIOptions(cfg config.Config, listingRepo *listing.Repository, activit
 	}
 	if activityRepo != nil {
 		opts = append(opts, api.WithActivityStore(activityRepo))
-		opts = append(opts, api.WithActivityDecisionTokenSecret(os.Getenv(cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv)))
+		opts = append(opts, api.WithActivityDecisionTokenSecret(resolveActivityDecisionTokenSecret(cfg)))
 	}
 	return opts
 }
@@ -639,17 +639,21 @@ func buildActivityEngineConfig(cfg config.Config) activity.EngineConfig {
 		activityfetcher.WithProxyUsed(activitySourceProxyURL(cfg) != ""),
 	)
 	return activity.EngineConfig{
-		Enabled:             aa.Enabled,
-		WorkerLeaseTTL:      aa.WorkerLeaseTTL,
-		Schedule:            buildActivityEngineSchedule(cfg),
-		WebhookURL:          resolveActivityWebhookURL(cfg),
-		WebhookURLByChannel: buildActivityWebhookURLs(cfg),
-		DecisionTokenSecret: os.Getenv(aa.DecisionToken.SecretEnv),
-		DashboardBaseURL:    aa.Delivery.DashboardBaseURL,
-		MaxPerTick:          aa.Delivery.MaxPerTick,
-		SendSpacing:         aa.Delivery.SendSpacing,
-		SourceDelivery:      buildActivitySourceDeliveryPolicies(cfg),
-		Sources:             buildActivitySources(cfg),
+		Enabled:                        aa.Enabled,
+		WorkerLeaseTTL:                 aa.WorkerLeaseTTL,
+		Schedule:                       buildActivityEngineSchedule(cfg),
+		WebhookURL:                     resolveActivityWebhookURL(cfg),
+		WebhookURLByChannel:            buildActivityWebhookURLs(cfg),
+		DecisionTokenSecret:            resolveActivityDecisionTokenSecret(cfg),
+		EventAgeCutoff:                 aa.Producer.EventAgeCutoff,
+		SuppressInitialSnapshot:        aa.Producer.SuppressInitialSnapshot,
+		RequireSourceTimeForAutoPush:   aa.Producer.RequireSourceTimeForAutoPush,
+		SuppressMissingTimeOnBootstrap: aa.Producer.SuppressMissingTimeOnBootstrap,
+		DashboardBaseURL:               aa.Delivery.DashboardBaseURL,
+		MaxPerTick:                     aa.Delivery.MaxPerTick,
+		SendSpacing:                    aa.Delivery.SendSpacing,
+		SourceDelivery:                 buildActivitySourceDeliveryPolicies(cfg),
+		Sources:                        buildActivitySources(cfg),
 		Fetch: func(ctx context.Context, req activity.FetchRequest) (activity.FetchResult, error) {
 			got, err := activityHTTPFetcher.Fetch(ctx, activityfetcher.Request{
 				URL:         req.URL,
@@ -788,10 +792,7 @@ func buildActivitySourceDeliveryPolicies(cfg config.Config) []activity.SourceDel
 		if channel == "" {
 			channel = defaultChannel
 		}
-		webhookURL := ""
-		if envName := strings.TrimSpace(src.Delivery.WebhookURLEnv); envName != "" {
-			webhookURL = strings.TrimSpace(os.Getenv(envName))
-		}
+		webhookURL := strings.TrimSpace(src.Delivery.WebhookURL)
 		maxPerTick := src.Delivery.MaxPerTick
 		if maxPerTick <= 0 {
 			maxPerTick = cfg.Runtime.ActivityAgent.Delivery.MaxPerTick
@@ -821,10 +822,8 @@ func buildActivityWebhookURLs(cfg config.Config) map[string]string {
 		if channel == "" {
 			channel = activity.DeliveryChannelLarkActivity
 		}
-		if envName := strings.TrimSpace(src.Delivery.WebhookURLEnv); envName != "" {
-			if webhookURL := strings.TrimSpace(os.Getenv(envName)); webhookURL != "" {
-				out[channel] = webhookURL
-			}
+		if webhookURL := strings.TrimSpace(src.Delivery.WebhookURL); webhookURL != "" {
+			out[channel] = webhookURL
 		}
 	}
 	return out
@@ -838,9 +837,9 @@ func defaultActivitySourceURL(platform, sourceGroup string) string {
 		"bingx|openapi_notice":           "https://open-api.bingx.com/openApi/content/v1/announcement?contentType=LatestPromotions&language=en-us&page=1",
 		"gate|launchpool_project_list":   "https://www.gate.com/apiw/v2/earn/launch-pool/project-list?page=1&pageSize=10&sub_website_id=0",
 		"mexc|latest_events":             "https://www.mexc.com/announcements/latest-events/ongoing",
-		"bybit|announcements_ssr":        "https://announcements.bybit.com/en/?category=&page=1",
+		"bybit|announcements_api":        "https://api.bybit.com/v5/announcements/index?locale=en-US&type=new_crypto&page=1&limit=20",
 		"bitget|support_ongoing_section": "https://www.bitget.com/support/sections/4413154768537",
-		"hyperliquid|cloudfront_entries": "https://dzjnlsk4rxci0.cloudfront.net/mainnet/entries.json",
+		"hyperliquid|cloudfront_entries": "https://dzjnlsk4rxci0.cloudfront.net/mainnet/feed_data.json",
 		"lighter|incentive_docs":         "https://docs.lighter.xyz/points-program.md",
 	}
 	return urls[key]
@@ -895,13 +894,20 @@ func dispatchActivityParser(ctx context.Context, doc activity.RawDocument) ([]ac
 }
 
 func resolveActivityWebhookURL(cfg config.Config) string {
-	envName := strings.TrimSpace(cfg.Runtime.ActivityAgent.Delivery.WebhookURLEnv)
-	if envName != "" {
-		if value := strings.TrimSpace(os.Getenv(envName)); value != "" {
-			return value
-		}
+	if value := strings.TrimSpace(cfg.Runtime.ActivityAgent.Delivery.WebhookURL); value != "" {
+		return value
 	}
-	return strings.TrimSpace(cfg.Alert.Webhooks.Activity)
+	if value := strings.TrimSpace(cfg.Alert.Webhooks.Activity); value != "" {
+		return value
+	}
+	return ""
+}
+
+func resolveActivityDecisionTokenSecret(cfg config.Config) string {
+	if value := strings.TrimSpace(cfg.Runtime.ActivityAgent.DecisionToken.Secret); value != "" {
+		return value
+	}
+	return ""
 }
 
 // resolveListingCallbackSecret mirrors the Delivery.Top30WebhookURLEnv

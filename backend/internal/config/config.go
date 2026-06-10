@@ -69,6 +69,7 @@ type ActivityAgentConfig struct {
 	WorkerLeaseTTL      time.Duration                `json:"worker_lease_ttl"`
 	SourceProxy         string                       `json:"source_proxy,omitempty"`
 	DecisionToken       ActivityDecisionTokenConfig  `json:"decision_token"`
+	Producer            ActivityProducerConfig       `json:"producer"`
 	HighValueRules      ActivityHighValueRulesConfig `json:"high_value_rules"`
 	Delivery            ActivityDeliveryConfig       `json:"delivery"`
 	Sources             []ActivitySourceConfig       `json:"sources"`
@@ -87,8 +88,15 @@ type ActivityCollectionConfig struct {
 }
 
 type ActivityDecisionTokenConfig struct {
-	SecretEnv string        `json:"secret_env"`
-	TTL       time.Duration `json:"ttl"`
+	Secret string        `json:"secret,omitempty"`
+	TTL    time.Duration `json:"ttl"`
+}
+
+type ActivityProducerConfig struct {
+	EventAgeCutoff                 time.Duration `json:"event_age_cutoff"`
+	SuppressInitialSnapshot        bool          `json:"suppress_initial_snapshot"`
+	RequireSourceTimeForAutoPush   bool          `json:"require_source_time_for_auto_push"`
+	SuppressMissingTimeOnBootstrap bool          `json:"suppress_missing_time_on_bootstrap"`
 }
 
 type ActivityHighValueRulesConfig struct {
@@ -100,7 +108,7 @@ type ActivityHighValueRulesConfig struct {
 
 type ActivityDeliveryConfig struct {
 	Enabled                   bool          `json:"enabled"`
-	WebhookURLEnv             string        `json:"webhook_url_env"`
+	WebhookURL                string        `json:"webhook_url,omitempty"`
 	CollectOnlyWithoutWebhook bool          `json:"collect_only_without_webhook"`
 	Proxy                     string        `json:"proxy,omitempty"`
 	DashboardBaseURL          string        `json:"dashboard_base_url,omitempty"`
@@ -143,7 +151,7 @@ type ActivitySourceDeliveryConfig struct {
 	Enabled         *bool         `json:"enabled,omitempty"`
 	AutoPushEnabled *bool         `json:"auto_push_enabled,omitempty"`
 	TargetChannel   string        `json:"target_channel,omitempty"`
-	WebhookURLEnv   string        `json:"webhook_url_env,omitempty"`
+	WebhookURL      string        `json:"webhook_url,omitempty"`
 	MaxPerTick      int           `json:"max_per_tick,omitempty"`
 	SendSpacing     time.Duration `json:"send_spacing,omitempty"`
 }
@@ -830,8 +838,12 @@ func defaultActivityAgentConfig() ActivityAgentConfig {
 		},
 		WorkerLeaseTTL: 2 * time.Minute,
 		DecisionToken: ActivityDecisionTokenConfig{
-			SecretEnv: "ACTIVITY_DECISION_TOKEN_SECRET",
-			TTL:       30 * 24 * time.Hour,
+			TTL: 30 * 24 * time.Hour,
+		},
+		Producer: ActivityProducerConfig{
+			EventAgeCutoff:                 48 * time.Hour,
+			SuppressInitialSnapshot:        true,
+			SuppressMissingTimeOnBootstrap: true,
 		},
 		HighValueRules: ActivityHighValueRulesConfig{
 			SourceGroups: []string{
@@ -849,7 +861,6 @@ func defaultActivityAgentConfig() ActivityAgentConfig {
 		},
 		Delivery: ActivityDeliveryConfig{
 			Enabled:                   true,
-			WebhookURLEnv:             "ACTIVITY_LARK_WEBHOOK_URL",
 			CollectOnlyWithoutWebhook: true,
 			MaxPerTick:                20,
 			SendSpacing:               2 * time.Second,
@@ -862,7 +873,7 @@ func defaultActivityAgentConfig() ActivityAgentConfig {
 			{Platform: "bingx", SourceGroup: "openapi_notice", FetchMode: "http_direct_json", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true},
 			{Platform: "gate", SourceGroup: "launchpool_project_list", FetchMode: "utls_proxy_json", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
 			{Platform: "mexc", SourceGroup: "latest_events", FetchMode: "utls_proxy_html", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresProxy: true},
-			{Platform: "bybit", SourceGroup: "announcements_ssr", FetchMode: "utls_html", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
+			{Platform: "bybit", SourceGroup: "announcements_api", FetchMode: "http_direct_json", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true},
 			{Platform: "bitget", SourceGroup: "support_ongoing_section", FetchMode: "utls_html", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true, RequiresBrowserContext: true},
 			{Platform: "hyperliquid", SourceGroup: "cloudfront_entries", FetchMode: "http_direct_json", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true},
 			{Platform: "lighter", SourceGroup: "incentive_docs", FetchMode: "markdown_doc", PollInterval: 30 * time.Minute, Enabled: true, AutoPushEnabled: true},
@@ -1173,6 +1184,7 @@ type activityAgentFile struct {
 	WorkerLeaseTTL      string                      `yaml:"worker_lease_ttl"`
 	SourceProxy         string                      `yaml:"source_proxy"`
 	DecisionToken       *activityDecisionTokenFile  `yaml:"decision_token"`
+	Producer            *activityProducerFile       `yaml:"producer"`
 	HighValueRules      *activityHighValueRulesFile `yaml:"high_value_rules"`
 	Delivery            *activityDeliveryFile       `yaml:"delivery"`
 	Sources             []activitySourceFile        `yaml:"sources"`
@@ -1191,8 +1203,15 @@ type activityCollectionFile struct {
 }
 
 type activityDecisionTokenFile struct {
-	SecretEnv string `yaml:"secret_env"`
-	TTL       string `yaml:"ttl"`
+	Secret string `yaml:"secret"`
+	TTL    string `yaml:"ttl"`
+}
+
+type activityProducerFile struct {
+	EventAgeCutoff                 string `yaml:"event_age_cutoff"`
+	SuppressInitialSnapshot        *bool  `yaml:"suppress_initial_snapshot"`
+	RequireSourceTimeForAutoPush   *bool  `yaml:"require_source_time_for_auto_push"`
+	SuppressMissingTimeOnBootstrap *bool  `yaml:"suppress_missing_time_on_bootstrap"`
 }
 
 type activityHighValueRulesFile struct {
@@ -1204,7 +1223,7 @@ type activityHighValueRulesFile struct {
 
 type activityDeliveryFile struct {
 	Enabled                   *bool  `yaml:"enabled"`
-	WebhookURLEnv             string `yaml:"webhook_url_env"`
+	WebhookURL                string `yaml:"webhook_url"`
 	CollectOnlyWithoutWebhook *bool  `yaml:"collect_only_without_webhook"`
 	Proxy                     string `yaml:"proxy"`
 	DashboardBaseURL          string `yaml:"dashboard_base_url"`
@@ -1247,7 +1266,7 @@ type activitySourceDeliveryFile struct {
 	Enabled         *bool  `yaml:"enabled"`
 	AutoPushEnabled *bool  `yaml:"auto_push_enabled"`
 	TargetChannel   string `yaml:"target_channel"`
-	WebhookURLEnv   string `yaml:"webhook_url_env"`
+	WebhookURL      string `yaml:"webhook_url"`
 	MaxPerTick      *int   `yaml:"max_per_tick"`
 	SendSpacing     string `yaml:"send_spacing"`
 }
@@ -1846,8 +1865,8 @@ func applyActivityAgentFile(base ActivityAgentConfig, file activityAgentFile) (A
 		base.SourceProxy = file.SourceProxy
 	}
 	if file.DecisionToken != nil {
-		if file.DecisionToken.SecretEnv != "" {
-			base.DecisionToken.SecretEnv = file.DecisionToken.SecretEnv
+		if file.DecisionToken.Secret != "" {
+			base.DecisionToken.Secret = file.DecisionToken.Secret
 		}
 		if file.DecisionToken.TTL != "" {
 			d, err := time.ParseDuration(file.DecisionToken.TTL)
@@ -1856,6 +1875,13 @@ func applyActivityAgentFile(base ActivityAgentConfig, file activityAgentFile) (A
 			}
 			base.DecisionToken.TTL = d
 		}
+	}
+	if file.Producer != nil {
+		producer, err := applyActivityProducerFile(base.Producer, *file.Producer)
+		if err != nil {
+			return ActivityAgentConfig{}, err
+		}
+		base.Producer = producer
 	}
 	if file.HighValueRules != nil {
 		if len(file.HighValueRules.SourceGroups) > 0 {
@@ -1888,6 +1914,29 @@ func applyActivityAgentFile(base ActivityAgentConfig, file activityAgentFile) (A
 			return ActivityAgentConfig{}, err
 		}
 		base.Sources = sources
+	}
+	return base, nil
+}
+
+func applyActivityProducerFile(base ActivityProducerConfig, file activityProducerFile) (ActivityProducerConfig, error) {
+	if file.EventAgeCutoff != "" {
+		d, err := time.ParseDuration(file.EventAgeCutoff)
+		if err != nil {
+			return ActivityProducerConfig{}, fmt.Errorf("activity_agent.producer.event_age_cutoff: %w", err)
+		}
+		if d < 0 {
+			return ActivityProducerConfig{}, fmt.Errorf("activity_agent.producer.event_age_cutoff: must be >= 0")
+		}
+		base.EventAgeCutoff = d
+	}
+	if file.SuppressInitialSnapshot != nil {
+		base.SuppressInitialSnapshot = *file.SuppressInitialSnapshot
+	}
+	if file.RequireSourceTimeForAutoPush != nil {
+		base.RequireSourceTimeForAutoPush = *file.RequireSourceTimeForAutoPush
+	}
+	if file.SuppressMissingTimeOnBootstrap != nil {
+		base.SuppressMissingTimeOnBootstrap = *file.SuppressMissingTimeOnBootstrap
 	}
 	return base, nil
 }
@@ -1942,8 +1991,8 @@ func applyActivityDeliveryFile(base ActivityDeliveryConfig, file activityDeliver
 	if file.Enabled != nil {
 		base.Enabled = *file.Enabled
 	}
-	if file.WebhookURLEnv != "" {
-		base.WebhookURLEnv = file.WebhookURLEnv
+	if file.WebhookURL != "" {
+		base.WebhookURL = file.WebhookURL
 	}
 	if file.CollectOnlyWithoutWebhook != nil {
 		base.CollectOnlyWithoutWebhook = *file.CollectOnlyWithoutWebhook
@@ -2079,8 +2128,8 @@ func applyActivitySourcesFile(files []activitySourceFile, fallbackInterval time.
 			if file.Delivery.TargetChannel != "" {
 				src.Delivery.TargetChannel = file.Delivery.TargetChannel
 			}
-			if file.Delivery.WebhookURLEnv != "" {
-				src.Delivery.WebhookURLEnv = file.Delivery.WebhookURLEnv
+			if file.Delivery.WebhookURL != "" {
+				src.Delivery.WebhookURL = file.Delivery.WebhookURL
 			}
 			if file.Delivery.MaxPerTick != nil {
 				src.Delivery.MaxPerTick = *file.Delivery.MaxPerTick

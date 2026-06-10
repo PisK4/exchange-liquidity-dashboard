@@ -123,15 +123,13 @@ func TestRoleAllLoadsLatestSnapshotsAsynchronously(t *testing.T) {
 	}
 }
 
-func TestBuildActivityEngineConfigResolvesEnvWebhookFirst(t *testing.T) {
-	t.Setenv("ACTIVITY_WEBHOOK_TEST", "https://env.example/webhook")
-	t.Setenv("ACTIVITY_SECRET_TEST", "decision-secret")
+func TestBuildActivityEngineConfigResolvesDeliveryWebhookFirst(t *testing.T) {
 	cfg := config.Default()
 	cfg.Alert.Webhooks.Activity = "https://yaml.example/webhook"
-	cfg.Runtime.ActivityAgent.Delivery.WebhookURLEnv = "ACTIVITY_WEBHOOK_TEST"
-	cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv = "ACTIVITY_SECRET_TEST"
+	cfg.Runtime.ActivityAgent.Delivery.WebhookURL = "https://delivery.example/webhook"
+	cfg.Runtime.ActivityAgent.DecisionToken.Secret = "decision-secret"
 	got := buildActivityEngineConfig(cfg)
-	if got.WebhookURL != "https://env.example/webhook" {
+	if got.WebhookURL != "https://delivery.example/webhook" {
 		t.Fatalf("webhook=%q", got.WebhookURL)
 	}
 	if got.DecisionTokenSecret != "decision-secret" {
@@ -140,11 +138,9 @@ func TestBuildActivityEngineConfigResolvesEnvWebhookFirst(t *testing.T) {
 }
 
 func TestBuildActivityEngineConfigFallsBackToYAMLWebhook(t *testing.T) {
-	t.Setenv("ACTIVITY_SECRET_TEST", "decision-secret")
 	cfg := config.Default()
 	cfg.Alert.Webhooks.Activity = "https://yaml.example/webhook"
-	cfg.Runtime.ActivityAgent.Delivery.WebhookURLEnv = "ACTIVITY_WEBHOOK_TEST"
-	cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv = "ACTIVITY_SECRET_TEST"
+	cfg.Runtime.ActivityAgent.DecisionToken.Secret = "decision-secret"
 	got := buildActivityEngineConfig(cfg)
 	if got.WebhookURL != "https://yaml.example/webhook" {
 		t.Fatalf("webhook=%q", got.WebhookURL)

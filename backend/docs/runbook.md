@@ -54,9 +54,13 @@ Current env indirections:
 |---|---|
 | `COINGECKO_DEMO_API_KEY` | `Runtime.coingecko.api_key_env` |
 | `LARK_LISTING_CALLBACK_SECRET` | `Runtime.listing_agent.decision_card.callback.secret_env` |
-| `ACTIVITY_LARK_WEBHOOK_URL` | `Runtime.activity_agent.delivery.webhook_url_env` |
-| `ACTIVITY_DECISION_TOKEN_SECRET` | `Runtime.activity_agent.decision_token.secret_env` |
 | `LARK_LISTING_TOP30_WEBHOOK_URL` | Only when a private config sets `Runtime.listing_agent.delivery.top30_webhook_url_env` to this name. The tracked config currently routes Listing cards through `Alert.Webhooks.*`. |
+
+Activity Agent webhook and decision-token values are intentionally YAML/Nacos
+driven: set `Alert.Webhooks.Activity` or
+`Runtime.activity_agent.delivery.webhook_url`, and
+`Runtime.activity_agent.decision_token.secret`, in a private config-dir. Do not
+commit those values to the tracked sample config.
 
 Scoped proxy fields are intentionally YAML/config-dir driven:
 
@@ -692,9 +696,11 @@ curl -fsS 'http://127.0.0.1:8080/api/activity/source-health' | jq
 curl -fsS 'http://127.0.0.1:8080/api/activity/deliveries?limit=20' | jq
 ```
 
-Activity delivery uses `Alert.Webhooks.Activity` or the configured
-`ACTIVITY_LARK_WEBHOOK_URL`; decision links require
-`ACTIVITY_DECISION_TOKEN_SECRET` so stale/forged decisions can be rejected.
+Activity delivery uses `Alert.Webhooks.Activity` or
+`Runtime.activity_agent.delivery.webhook_url`; decision links require
+`Runtime.activity_agent.decision_token.secret` so stale/forged decisions can be
+rejected. Keep these values in private YAML/Nacos config, not in the tracked
+sample config.
 
 ## 6. Backup and Restore
 

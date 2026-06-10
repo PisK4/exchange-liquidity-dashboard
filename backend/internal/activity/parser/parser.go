@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"edgex-ops-intelligence/backend/internal/activity"
 )
@@ -25,16 +26,20 @@ type RawDocument struct {
 }
 
 type rawActivity struct {
-	ID           string            `json:"id"`
-	Title        string            `json:"title"`
-	Name         string            `json:"name"`
-	Summary      string            `json:"summary"`
-	Content      string            `json:"content"`
-	URL          string            `json:"url"`
-	Link         string            `json:"link"`
-	ActivityType string            `json:"activity_type"`
-	Symbols      []string          `json:"symbols"`
-	RewardPools  []json.RawMessage `json:"reward_pools"`
+	ID             string            `json:"id"`
+	Title          string            `json:"title"`
+	Name           string            `json:"name"`
+	Summary        string            `json:"summary"`
+	Content        string            `json:"content"`
+	URL            string            `json:"url"`
+	Link           string            `json:"link"`
+	ActivityType   string            `json:"activity_type"`
+	Symbols        []string          `json:"symbols"`
+	RewardPools    []json.RawMessage `json:"reward_pools"`
+	PublishTime    *time.Time
+	RawTimeText    string
+	TimeConfidence string
+	SourceContext  map[string]any
 }
 
 func ParseBinance(ctx context.Context, doc RawDocument) ([]activity.ActivityEvent, error) {
@@ -58,7 +63,7 @@ func ParseMEXC(ctx context.Context, doc RawDocument) ([]activity.ActivityEvent, 
 }
 
 func ParseBybit(ctx context.Context, doc RawDocument) ([]activity.ActivityEvent, error) {
-	return parseGeneric(ctx, doc)
+	return parseBybitAnnouncements(ctx, doc)
 }
 
 func ParseBitget(ctx context.Context, doc RawDocument) ([]activity.ActivityEvent, error) {
@@ -66,7 +71,7 @@ func ParseBitget(ctx context.Context, doc RawDocument) ([]activity.ActivityEvent
 }
 
 func ParseHyperliquid(ctx context.Context, doc RawDocument) ([]activity.ActivityEvent, error) {
-	return parseGeneric(ctx, doc)
+	return parseHyperliquidEntries(ctx, doc)
 }
 
 func ParseLighter(ctx context.Context, doc RawDocument) ([]activity.ActivityEvent, error) {
@@ -156,6 +161,138 @@ func parseDocumentActivity(doc RawDocument) []rawActivity {
 	}}
 }
 
+var bybitAnnouncementSlugRE = regexp.MustCompile(`blt[0-9a-f]{16}`)
+
+func parseBybitAnnouncements(ctx context.Context, doc RawDocument) ([]activity.ActivityEvent, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	var envelope struct {
+		RetCode int    `json:"retCode"`
+		RetMsg  string `json:"retMsg"`
+		Result  struct {
+			List []struct {
+				Title         string      `json:"title"`
+				Description   string      `json:"description"`
+				URL           string      `json:"url"`
+				DateTimestamp json.Number `json:"dateTimestamp"`
+				PublishTime   json.Number `json:"publishTime"`
+				Type          struct {
+					Title string `json:"title"`
+					Key   string `json:"key"`
+				} `json:"type"`
+			} `json:"list"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(doc.Payload, &envelope); err != nil {
+		return parseGeneric(ctx, doc)
+	}
+	if envelope.RetCode != 0 {
+		return nil, nil
+	}
+	if len(envelope.Result.List) == 0 {
+		return parseGeneric(ctx, doc)
+	}
+	raws := make([]rawActivity, 0, len(envelope.Result.List))
+	for _, item := range envelope.Result.List {
+		publish := parseEpochMillis(firstJSONNumber(item.PublishTime, item.DateTimestamp))
+		rawTime := firstNonEmptyString(item.PublishTime.String(), item.DateTimestamp.String())
+		raws = append(raws, rawActivity{
+			ID:             deriveBybitAnnouncementID(item.URL),
+			Title:          item.Title,
+			Summary:        item.Description,
+			URL:            item.URL,
+			ActivityType:   item.Type.Title,
+			Symbols:        extractUpperSymbols(item.Title),
+			PublishTime:    publish,
+			RawTimeText:    rawTime,
+			TimeConfidence: timestampConfidence(publish),
+			SourceContext: map[string]any{
+				"bybit_type_key":   item.Type.Key,
+				"bybit_type_title": item.Type.Title,
+			},
+		})
+	}
+	return buildEventsFromRaw(ctx, doc, raws)
+}
+
+func deriveBybitAnnouncementID(rawURL string) string {
+	trimmed := strings.TrimRight(strings.TrimSpace(rawURL), "/")
+	if trimmed == "" {
+		return ""
+	}
+	if match := bybitAnnouncementSlugRE.FindString(trimmed); match != "" {
+		return match
+	}
+	return sha256Hex([]byte(trimmed))[:16]
+}
+
+func parseHyperliquidEntries(ctx context.Context, doc RawDocument) ([]activity.ActivityEvent, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	var envelope struct {
+		Entries []struct {
+			Title     string `json:"title"`
+			CreatedAt string `json:"createdAt"`
+			Preview   string `json:"preview"`
+			UUID      string `json:"uuid"`
+			Hash      string `json:"hash"`
+			Category  string `json:"category"`
+		} `json:"entries"`
+	}
+	if err := json.Unmarshal(doc.Payload, &envelope); err != nil || len(envelope.Entries) == 0 {
+		return parseGeneric(ctx, doc)
+	}
+	raws := make([]rawActivity, 0, len(envelope.Entries))
+	for _, item := range envelope.Entries {
+		publish := parseRFC3339Time(item.CreatedAt)
+		sourceURL := doc.SourceURL
+		if strings.TrimSpace(item.UUID) != "" {
+			sourceURL = hyperliquidEntryURL(doc.SourceURL, item.UUID)
+		}
+		id := firstNonEmptyString(item.UUID, item.Hash)
+		raws = append(raws, rawActivity{
+			ID:             id,
+			Title:          item.Title,
+			Summary:        item.Preview,
+			URL:            sourceURL,
+			ActivityType:   hyperliquidActivityType(item.Category, item.Title),
+			Symbols:        extractHyperliquidSymbols(item.Title),
+			PublishTime:    publish,
+			RawTimeText:    item.CreatedAt,
+			TimeConfidence: timestampConfidence(publish),
+			SourceContext: map[string]any{
+				"source_hash": item.Hash,
+				"uuid":        item.UUID,
+				"category":    item.Category,
+			},
+		})
+	}
+	return buildEventsFromRaw(ctx, doc, raws)
+}
+
+func buildEventsFromRaw(ctx context.Context, doc RawDocument, raws []rawActivity) ([]activity.ActivityEvent, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	default:
+	}
+	events := make([]activity.ActivityEvent, 0, len(raws))
+	for _, raw := range raws {
+		ev := buildEvent(doc, raw)
+		if ev.Title == "" {
+			continue
+		}
+		events = append(events, ev)
+	}
+	return events, nil
+}
+
 func buildEvent(doc RawDocument, raw rawActivity) activity.ActivityEvent {
 	if raw.Title == "" {
 		raw.Title = raw.Name
@@ -200,6 +337,17 @@ func buildEvent(doc RawDocument, raw rawActivity) activity.ActivityEvent {
 		"source_url":   doc.SourceURL,
 		"fetch_mode":   doc.FetchMode,
 	})
+	if len(raw.SourceContext) > 0 {
+		ctx := map[string]any{
+			"source_group": doc.SourceGroup,
+			"source_url":   doc.SourceURL,
+			"fetch_mode":   doc.FetchMode,
+		}
+		for k, v := range raw.SourceContext {
+			ctx[k] = v
+		}
+		sourceCtx, _ = json.Marshal(ctx)
+	}
 	rewardPools := json.RawMessage(`[]`)
 	hasRewardPool := false
 	if len(raw.RewardPools) > 0 {
@@ -233,6 +381,12 @@ func buildEvent(doc RawDocument, raw rawActivity) activity.ActivityEvent {
 		RichFieldsSummaryJSON: json.RawMessage(`{}`),
 		HasRewardPool:         hasRewardPool,
 	}
+	if raw.PublishTime != nil {
+		t := raw.PublishTime.UTC()
+		ev.PublishTime = &t
+	}
+	ev.RawTimeText = strings.TrimSpace(raw.RawTimeText)
+	ev.TimeParseConfidence = strings.TrimSpace(raw.TimeConfidence)
 	return ev
 }
 
@@ -383,4 +537,161 @@ func cleanText(text string) string {
 		return text[:2000]
 	}
 	return text
+}
+
+func firstJSONNumber(candidates ...json.Number) json.Number {
+	for _, candidate := range candidates {
+		if candidate != "" {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func parseEpochMillis(n json.Number) *time.Time {
+	if n == "" {
+		return nil
+	}
+	v, err := n.Int64()
+	if err != nil || v <= 0 {
+		return nil
+	}
+	t := time.UnixMilli(v).UTC()
+	return &t
+}
+
+func parseRFC3339Time(raw string) *time.Time {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	t, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(raw))
+	if err != nil {
+		return nil
+	}
+	t = t.UTC()
+	return &t
+}
+
+func timestampConfidence(t *time.Time) string {
+	if t == nil || t.IsZero() {
+		return "unknown"
+	}
+	return "source_published_at"
+}
+
+func firstNonEmptyString(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+var upperSymbolRE = regexp.MustCompile(`\b[A-Z0-9]{2,20}\b`)
+var quotedSymbolRE = regexp.MustCompile(`\b([0-9A-Z]{2,20})(USDT|USDC|USD)\b`)
+
+func extractUpperSymbols(text string) []string {
+	upper := strings.ToUpper(text)
+	out := []string{}
+	seen := map[string]struct{}{}
+	for _, match := range quotedSymbolRE.FindAllStringSubmatch(upper, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		appendSymbol(&out, seen, match[1])
+	}
+	if len(out) > 0 {
+		return out
+	}
+	matches := upperSymbolRE.FindAllString(upper, -1)
+	for _, match := range matches {
+		appendSymbol(&out, seen, match)
+	}
+	return out
+}
+
+var symbolStopwords = map[string]struct{}{
+	"AND": {}, "ANNOUNCEMENT": {}, "API": {}, "BYBIT": {}, "CAMPAIGN": {}, "CONTRACT": {},
+	"CRYPTO": {}, "FEE": {}, "FOR": {}, "FUTURES": {}, "HTTP": {}, "LAUNCH": {},
+	"LIST": {}, "LISTING": {}, "MARKET": {}, "NEW": {}, "ON": {}, "PERP": {},
+	"PERPETUAL": {}, "REWARD": {}, "REWARDS": {}, "SPOT": {}, "THE": {}, "TO": {},
+	"TRADE": {}, "TRADING": {}, "UPDATE": {}, "USD": {}, "USDC": {}, "USDT": {},
+	"WILL": {}, "WITH": {},
+}
+
+func isSymbolStopword(token string) bool {
+	_, ok := symbolStopwords[token]
+	return ok
+}
+
+func appendSymbol(out *[]string, seen map[string]struct{}, token string) {
+	token = strings.TrimSpace(strings.ToUpper(token))
+	if token == "" || isSymbolStopword(token) {
+		return
+	}
+	if _, ok := seen[token]; ok {
+		return
+	}
+	seen[token] = struct{}{}
+	*out = append(*out, token)
+}
+
+func hyperliquidEntryURL(entriesURL, uuid string) string {
+	u, err := url.Parse(entriesURL)
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return "https://dzjnlsk4rxci0.cloudfront.net/mainnet/entry-" + uuid + ".json"
+	}
+	path := u.Path
+	idx := strings.LastIndex(path, "/")
+	if idx >= 0 {
+		path = path[:idx+1]
+	} else {
+		path = "/"
+	}
+	u.Path = path + "entry-" + strings.TrimSpace(uuid) + ".json"
+	u.RawQuery = ""
+	u.Fragment = ""
+	return u.String()
+}
+
+func hyperliquidActivityType(category, title string) string {
+	needle := strings.ToLower(category + " " + title)
+	switch {
+	case strings.Contains(needle, "delist"):
+		return "delisting_signal"
+	case strings.Contains(needle, "listing") || strings.Contains(needle, "enabled spot"):
+		return "listing_trading_campaign"
+	default:
+		return "non_cex_update_event"
+	}
+}
+
+var hyperliquidQuotedSymbolRE = regexp.MustCompile(`\b([0-9A-Z]{2,20})[\s\-/]*(USDC|USD)\b`)
+
+func extractHyperliquidSymbols(title string) []string {
+	upper := strings.ToUpper(title)
+	out := []string{}
+	seen := map[string]struct{}{}
+	for _, match := range hyperliquidQuotedSymbolRE.FindAllStringSubmatch(upper, -1) {
+		if len(match) < 2 {
+			continue
+		}
+		sym := strings.TrimSpace(match[1])
+		if sym == "" || isSymbolStopword(sym) {
+			continue
+		}
+		if _, ok := seen[sym]; ok {
+			continue
+		}
+		seen[sym] = struct{}{}
+		out = append(out, sym)
+	}
+	if len(out) > 0 {
+		return out
+	}
+	if strings.Contains(strings.ToLower(title), "enabled spot") {
+		return extractUpperSymbols(title)
+	}
+	return nil
 }

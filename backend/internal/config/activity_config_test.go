@@ -24,7 +24,7 @@ func TestDefaultActivityAgentSeedsNinePlatformSources(t *testing.T) {
 	if aa.WorkerLeaseTTL != 2*time.Minute {
 		t.Fatalf("lease ttl=%s want 2m", aa.WorkerLeaseTTL)
 	}
-	if aa.DecisionToken.SecretEnv != "ACTIVITY_DECISION_TOKEN_SECRET" || aa.DecisionToken.TTL != 30*24*time.Hour {
+	if aa.DecisionToken.Secret != "" || aa.DecisionToken.TTL != 30*24*time.Hour {
 		t.Fatalf("decision token defaults=%+v", aa.DecisionToken)
 	}
 	seen := map[string]bool{}
@@ -39,8 +39,8 @@ func TestDefaultActivityAgentSeedsNinePlatformSources(t *testing.T) {
 			t.Fatalf("default activity sources missing %s; got %+v", platform, aa.Sources)
 		}
 	}
-	if aa.Delivery.WebhookURLEnv != "ACTIVITY_LARK_WEBHOOK_URL" {
-		t.Fatalf("activity webhook env=%q", aa.Delivery.WebhookURLEnv)
+	if aa.Delivery.WebhookURL != "" {
+		t.Fatalf("activity webhook url=%q", aa.Delivery.WebhookURL)
 	}
 	if aa.Delivery.MaxPerTick != 20 || aa.Delivery.SendSpacing != 2*time.Second {
 		t.Fatalf("activity delivery defaults=%+v", aa.Delivery)
@@ -64,11 +64,11 @@ Runtime:
     worker_lease_ttl: 90s
     source_proxy: http://127.0.0.1:7897
     decision_token:
-      secret_env: TEST_ACTIVITY_DECISION_SECRET
+      secret: test-activity-decision-secret
       ttl: 48h
     delivery:
       enabled: true
-      webhook_url_env: TEST_ACTIVITY_WEBHOOK
+      webhook_url: https://example.test/activity-delivery-hook
       collect_only_without_webhook: true
       proxy: http://127.0.0.1:7898
       dashboard_base_url: https://dashboard.example.test
@@ -95,10 +95,10 @@ Runtime:
 	if aa.DefaultPollInterval != 30*time.Minute || aa.WorkerLeaseTTL != 90*time.Second || aa.SourceProxy != "http://127.0.0.1:7897" {
 		t.Fatalf("activity runtime not loaded: %+v", aa)
 	}
-	if aa.DecisionToken.SecretEnv != "TEST_ACTIVITY_DECISION_SECRET" || aa.DecisionToken.TTL != 48*time.Hour {
+	if aa.DecisionToken.Secret != "test-activity-decision-secret" || aa.DecisionToken.TTL != 48*time.Hour {
 		t.Fatalf("decision token config=%+v", aa.DecisionToken)
 	}
-	if aa.Delivery.WebhookURLEnv != "TEST_ACTIVITY_WEBHOOK" || aa.Delivery.MaxPerTick != 3 || aa.Delivery.SendSpacing != 5*time.Second {
+	if aa.Delivery.WebhookURL != "https://example.test/activity-delivery-hook" || aa.Delivery.MaxPerTick != 3 || aa.Delivery.SendSpacing != 5*time.Second {
 		t.Fatalf("delivery config=%+v", aa.Delivery)
 	}
 	if len(aa.Sources) != 1 || aa.Sources[0].Platform != "binance" || aa.Sources[0].AutoPushEnabled {
@@ -125,7 +125,7 @@ Runtime:
       source_proxy: http://127.0.0.1:7897
     delivery:
       enabled: true
-      webhook_url_env: TEST_ACTIVITY_WEBHOOK
+      webhook_url: https://example.test/activity-delivery-hook
       max_per_tick: 9
       send_spacing: 3s
     sources:
@@ -143,7 +143,7 @@ Runtime:
           enabled: true
           auto_push_enabled: false
           target_channel: lark_activity_gate
-          webhook_url_env: TEST_ACTIVITY_GATE_WEBHOOK
+          webhook_url: https://example.test/activity-gate-hook
           max_per_tick: 2
           send_spacing: 1s
 `)
@@ -174,7 +174,7 @@ Runtime:
 	if src.Collection.Timeout != 25*time.Second || src.Collection.Proxy != "http://127.0.0.1:7899" {
 		t.Fatalf("source collection=%+v", src.Collection)
 	}
-	if src.Delivery.TargetChannel != "lark_activity_gate" || src.Delivery.WebhookURLEnv != "TEST_ACTIVITY_GATE_WEBHOOK" || src.Delivery.MaxPerTick != 2 || src.Delivery.SendSpacing != time.Second {
+	if src.Delivery.TargetChannel != "lark_activity_gate" || src.Delivery.WebhookURL != "https://example.test/activity-gate-hook" || src.Delivery.MaxPerTick != 2 || src.Delivery.SendSpacing != time.Second {
 		t.Fatalf("source delivery=%+v", src.Delivery)
 	}
 }

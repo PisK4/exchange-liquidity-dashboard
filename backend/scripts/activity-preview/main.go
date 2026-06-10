@@ -7,7 +7,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"time"
 
@@ -28,7 +27,7 @@ func main() {
 		cardFlag  = flag.String("card", "all", "Card names to render: all or comma-separated daily,event,update,review,weekly,health")
 		dryRun    = flag.Bool("dry-run", true, "Print rendered card JSON to stdout")
 		dashboard = flag.String("dashboard-base", "", "EdgeX Ops Intelligence base URL for CTA/deep-link buttons")
-		secret    = flag.String("decision-token-secret", "", "Preview-only decision token secret; falls back to env then preview-secret")
+		secret    = flag.String("decision-token-secret", "", "Preview-only decision token secret; falls back to YAML then preview-secret")
 	)
 	flag.Parse()
 
@@ -37,8 +36,8 @@ func main() {
 		*dashboard = cfg.Runtime.ActivityAgent.Delivery.DashboardBaseURL
 	}
 	if strings.TrimSpace(*secret) == "" {
-		if err == nil && cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv != "" {
-			*secret = os.Getenv(cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv)
+		if err == nil && strings.TrimSpace(cfg.Runtime.ActivityAgent.DecisionToken.Secret) != "" {
+			*secret = strings.TrimSpace(cfg.Runtime.ActivityAgent.DecisionToken.Secret)
 		}
 		if strings.TrimSpace(*secret) == "" {
 			*secret = "preview-secret"

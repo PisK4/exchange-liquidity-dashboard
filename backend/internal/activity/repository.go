@@ -87,12 +87,18 @@ func (r *Repository) UpsertActivitySourceState(ctx context.Context, s SourceStat
 	if s.LastHTTPStatus != nil {
 		httpStatus = *s.LastHTTPStatus
 	}
-	var lastCheckedAt, lastSuccessAt any
+	var lastCheckedAt, lastSuccessAt, producerWatermarkAt, bootstrapCompletedAt any
 	if s.LastCheckedAt != nil {
 		lastCheckedAt = *s.LastCheckedAt
 	}
 	if s.LastSuccessAt != nil {
 		lastSuccessAt = *s.LastSuccessAt
+	}
+	if s.ProducerWatermarkAt != nil {
+		producerWatermarkAt = *s.ProducerWatermarkAt
+	}
+	if s.BootstrapCompletedAt != nil {
+		bootstrapCompletedAt = *s.BootstrapCompletedAt
 	}
 	_, err := r.db.ExecContext(ctx,
 		`INSERT INTO t_activity_source_state
@@ -101,8 +107,9 @@ func (r *Repository) UpsertActivitySourceState(ctx context.Context, s SourceStat
 		    requires_proxy, requires_browser_context, requires_login, region_sensitive,
 		    personalized, source_context_json, last_http_status, last_error_kind,
 		    last_schema_hash, last_content_hash, sample_count, event_count,
-		    source_status, disabled_until, last_checked_at, last_success_at, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		    source_status, disabled_until, last_checked_at, last_success_at,
+		    producer_watermark_at, bootstrap_completed_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
 		   source_type = VALUES(source_type),
 		   source_url = VALUES(source_url),
@@ -126,13 +133,16 @@ func (r *Repository) UpsertActivitySourceState(ctx context.Context, s SourceStat
 		   disabled_until = VALUES(disabled_until),
 		   last_checked_at = VALUES(last_checked_at),
 		   last_success_at = COALESCE(VALUES(last_success_at), last_success_at),
+		   producer_watermark_at = COALESCE(VALUES(producer_watermark_at), producer_watermark_at),
+		   bootstrap_completed_at = COALESCE(VALUES(bootstrap_completed_at), bootstrap_completed_at),
 		   updated_at = VALUES(updated_at)`,
 		s.Platform, s.SourceGroup, s.SourceType, nullString(s.SourceURL), s.SourceKey, s.FetchMode,
 		s.EvidenceQuality, boolInt(s.Enabled), s.PollIntervalSeconds, boolInt(s.AutoPushEnabled),
 		boolInt(s.RequiresProxy), boolInt(s.RequiresBrowserContext), boolInt(s.RequiresLogin), 0,
 		boolInt(s.Personalized), sourceContext, httpStatus, nullString(s.LastErrorKind),
 		nullString(s.LastSchemaHash), nullString(s.LastContentHash), s.SampleCount, s.EventCount,
-		s.SourceStatus, s.DisabledUntil, lastCheckedAt, lastSuccessAt, s.UpdatedAt, s.UpdatedAt,
+		s.SourceStatus, s.DisabledUntil, lastCheckedAt, lastSuccessAt,
+		producerWatermarkAt, bootstrapCompletedAt, s.UpdatedAt, s.UpdatedAt,
 	)
 	return err
 }
@@ -145,7 +155,8 @@ func (r *Repository) LoadActivitySourceState(ctx context.Context, sourceKey stri
 	                 evidence_quality, enabled, poll_interval_seconds, auto_push_enabled, requires_proxy, requires_browser_context,
 	                 requires_login, personalized, source_status, last_http_status, COALESCE(last_error_kind,''),
 	                 COALESCE(last_schema_hash,''), COALESCE(last_content_hash,''), sample_count, event_count,
-	                 COALESCE(source_context_json,'{}'), disabled_until, last_checked_at, last_success_at, updated_at
+	                 COALESCE(source_context_json,'{}'), disabled_until, last_checked_at, last_success_at,
+	                 producer_watermark_at, bootstrap_completed_at, updated_at
 	            FROM t_activity_source_state
 	           WHERE source_key = ?`, sourceKey)
 	state, err := scanActivitySourceState(row)
@@ -216,8 +227,8 @@ func (r *Repository) UpsertActivityEvent(ctx context.Context, ev ActivityEvent) 
 		    confidence_score, needs_human_review, auto_push_allowed, event_status, review_status,
 		    ops_decision_stale, event_version, parser_version, source_context_json, parser_warnings_json,
 		    reward_pools_json, task_conditions_json, eligibility_rules_json, rich_fields_summary_json,
-		    created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		    source_observed_at, source_producer_watermark_at, source_bootstrap_completed_at, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON DUPLICATE KEY UPDATE
 		   id = LAST_INSERT_ID(id),
 		   raw_evidence_id = VALUES(raw_evidence_id),
@@ -251,6 +262,9 @@ func (r *Repository) UpsertActivityEvent(ctx context.Context, ev ActivityEvent) 
 		   task_conditions_json = VALUES(task_conditions_json),
 		   eligibility_rules_json = VALUES(eligibility_rules_json),
 		   rich_fields_summary_json = VALUES(rich_fields_summary_json),
+		   source_observed_at = VALUES(source_observed_at),
+		   source_producer_watermark_at = VALUES(source_producer_watermark_at),
+		   source_bootstrap_completed_at = VALUES(source_bootstrap_completed_at),
 		   updated_at = VALUES(updated_at)`,
 		nullInt64(ev.RawEvidenceID), ev.Platform, ev.SourceGroup, nullString(ev.SourceExternalID), nullString(ev.SourceURL), ev.Title, ev.ActivityType,
 		targetSymbols, nullString(ev.RewardPoolText), ev.RewardPoolUSDEstimate, nullString(ev.RewardPoolPrimaryToken),
@@ -259,7 +273,7 @@ func (r *Repository) UpsertActivityEvent(ctx context.Context, ev ActivityEvent) 
 		ev.ConfidenceScore, boolInt(ev.NeedsHumanReview), boolInt(ev.AutoPushAllowed), ev.EventStatus, ev.ReviewStatus,
 		boolInt(ev.OpsDecisionStale), ev.EventVersion, ev.ParserVersion, ev.SourceContextJSON, ev.ParserWarningsJSON,
 		ev.RewardPoolsJSON, ev.TaskConditionsJSON, ev.EligibilityRulesJSON, ev.RichFieldsSummaryJSON,
-		ev.CreatedAt, ev.UpdatedAt,
+		ev.SourceObservedAt, ev.SourceProducerWatermarkAt, ev.SourceBootstrapCompletedAt, ev.CreatedAt, ev.UpdatedAt,
 	)
 	if err != nil {
 		return 0, false, err
@@ -355,8 +369,9 @@ func (r *Repository) ListActivityEvents(ctx context.Context, filter EventFilter)
 	                 COALESCE(content_text,''), COALESCE(reward_pool_text,''), start_time, end_time, publish_time, COALESCE(raw_time_text,''),
 	                 content_hash, dedupe_key, needs_human_review, auto_push_allowed, event_status,
 	                 review_status, COALESCE(ops_decision_action,''), ops_decision_stale,
-	                 event_version, parser_version, COALESCE(parser_warnings_json,'[]'), COALESCE(rich_fields_summary_json,'{}'), created_at, updated_at
-	            FROM t_activity_event`
+	                 event_version, parser_version, COALESCE(parser_warnings_json,'[]'), COALESCE(rich_fields_summary_json,'{}'),
+		                 source_observed_at, source_producer_watermark_at, source_bootstrap_completed_at, created_at, updated_at
+		            FROM t_activity_event`
 	where := []string{}
 	args := []any{}
 	if filter.Platform != "" {
@@ -404,8 +419,9 @@ func (r *Repository) GetActivityEvent(ctx context.Context, id int64) (ActivityEv
 	                 COALESCE(content_text,''), COALESCE(reward_pool_text,''), start_time, end_time, publish_time, COALESCE(raw_time_text,''),
 	                 content_hash, dedupe_key, needs_human_review, auto_push_allowed, event_status,
 	                 review_status, COALESCE(ops_decision_action,''), ops_decision_stale,
-	                 event_version, parser_version, COALESCE(parser_warnings_json,'[]'), COALESCE(rich_fields_summary_json,'{}'), created_at, updated_at
-	            FROM t_activity_event WHERE id = ?`, id)
+	                 event_version, parser_version, COALESCE(parser_warnings_json,'[]'), COALESCE(rich_fields_summary_json,'{}'),
+		                 source_observed_at, source_producer_watermark_at, source_bootstrap_completed_at, created_at, updated_at
+		            FROM t_activity_event WHERE id = ?`, id)
 	ev, err := scanEventSummary(row)
 	if err != nil {
 		return ActivityEvent{}, nil, nil, err
@@ -429,7 +445,8 @@ func (r *Repository) ListActivitySourceHealth(ctx context.Context, platform, sta
 	                 evidence_quality, enabled, poll_interval_seconds, auto_push_enabled, requires_proxy, requires_browser_context,
 	                 requires_login, personalized, source_status, last_http_status, COALESCE(last_error_kind,''),
 	                 COALESCE(last_schema_hash,''), COALESCE(last_content_hash,''), sample_count, event_count,
-	                 COALESCE(source_context_json,'{}'), disabled_until, last_checked_at, last_success_at, updated_at
+	                 COALESCE(source_context_json,'{}'), disabled_until, last_checked_at, last_success_at,
+	                 producer_watermark_at, bootstrap_completed_at, updated_at
 	            FROM t_activity_source_state`
 	where := []string{}
 	args := []any{}
@@ -473,11 +490,11 @@ func scanActivitySourceState(scanner activitySourceStateScanner) (SourceState, e
 	var s SourceState
 	var enabledInt, autoPush, requiresProxy, requiresBrowser, requiresLogin, personalized int
 	var httpStatus sql.NullInt64
-	var disabled, lastChecked, lastSuccess sql.NullTime
+	var disabled, lastChecked, lastSuccess, producerWatermark, bootstrapCompleted sql.NullTime
 	if err := scanner.Scan(&s.ID, &s.Platform, &s.SourceGroup, &s.SourceType, &s.SourceURL, &s.SourceKey, &s.FetchMode,
 		&s.EvidenceQuality, &enabledInt, &s.PollIntervalSeconds, &autoPush, &requiresProxy, &requiresBrowser, &requiresLogin, &personalized,
 		&s.SourceStatus, &httpStatus, &s.LastErrorKind, &s.LastSchemaHash, &s.LastContentHash, &s.SampleCount, &s.EventCount,
-		&s.SourceContextJSON, &disabled, &lastChecked, &lastSuccess, &s.UpdatedAt); err != nil {
+		&s.SourceContextJSON, &disabled, &lastChecked, &lastSuccess, &producerWatermark, &bootstrapCompleted, &s.UpdatedAt); err != nil {
 		return SourceState{}, err
 	}
 	s.Enabled = enabledInt != 0
@@ -501,6 +518,14 @@ func scanActivitySourceState(scanner activitySourceStateScanner) (SourceState, e
 	if lastSuccess.Valid {
 		t := lastSuccess.Time.UTC()
 		s.LastSuccessAt = &t
+	}
+	if producerWatermark.Valid {
+		t := producerWatermark.Time.UTC()
+		s.ProducerWatermarkAt = &t
+	}
+	if bootstrapCompleted.Valid {
+		t := bootstrapCompleted.Time.UTC()
+		s.BootstrapCompletedAt = &t
 	}
 	return s, nil
 }
@@ -561,8 +586,11 @@ func (r *Repository) listOutboxCandidateEvents(ctx context.Context, platform, so
 	                 COALESCE(e.content_text,''), COALESCE(e.reward_pool_text,''), e.start_time, e.end_time, e.publish_time, COALESCE(e.raw_time_text,''),
 	                 e.content_hash, e.dedupe_key, e.needs_human_review, e.auto_push_allowed, e.event_status,
 	                 e.review_status, COALESCE(e.ops_decision_action,''), e.ops_decision_stale,
-	                 e.event_version, e.parser_version, COALESCE(e.parser_warnings_json,'[]'), COALESCE(e.rich_fields_summary_json,'{}'), e.created_at, e.updated_at
-	            FROM t_activity_event e
+	                 e.event_version, e.parser_version, COALESCE(e.parser_warnings_json,'[]'), COALESCE(e.rich_fields_summary_json,'{}'),
+		                 COALESCE(e.source_observed_at, r.fetched_at), COALESCE(e.source_producer_watermark_at, ss.producer_watermark_at), COALESCE(e.source_bootstrap_completed_at, ss.bootstrap_completed_at), e.created_at, e.updated_at
+		            FROM t_activity_event e
+	       LEFT JOIN t_activity_raw_evidence r ON r.id = e.raw_evidence_id
+	       LEFT JOIN t_activity_source_state ss ON ss.source_key = CONCAT(e.platform, '|', e.source_group, '|', JSON_UNQUOTE(JSON_EXTRACT(e.source_context_json, '$.fetch_mode')))
 	           WHERE e.event_status = ?
 	             AND e.review_status <> ?
 	             AND (e.auto_push_allowed = 1 OR e.review_status = ? OR e.needs_human_review = 1)`
@@ -752,12 +780,13 @@ func scanEventSummary(row eventScanner) (ActivityEvent, error) {
 	var sourceExternalID, sourceURL, ops string
 	var eventStatus string
 	var needsReview, autoPush, stale int
-	var start, end, publish sql.NullTime
+	var start, end, publish, observed, producerWatermark, bootstrapCompleted sql.NullTime
 	var parserWarnings, richFields []byte
 	if err := row.Scan(&ev.ID, &ev.RawEvidenceID, &ev.Platform, &ev.SourceGroup, &sourceExternalID, &sourceURL, &ev.Title, &ev.ActivityType,
 		&ev.ContentText, &ev.RewardPoolText, &start, &end, &publish, &ev.RawTimeText,
 		&ev.ContentHash, &ev.DedupeKey, &needsReview, &autoPush, &eventStatus,
-		&ev.ReviewStatus, &ops, &stale, &ev.EventVersion, &ev.ParserVersion, &parserWarnings, &richFields, &ev.CreatedAt, &ev.UpdatedAt); err != nil {
+		&ev.ReviewStatus, &ops, &stale, &ev.EventVersion, &ev.ParserVersion, &parserWarnings, &richFields,
+		&observed, &producerWatermark, &bootstrapCompleted, &ev.CreatedAt, &ev.UpdatedAt); err != nil {
 		return ActivityEvent{}, err
 	}
 	ev.SourceExternalID = sourceExternalID
@@ -778,6 +807,18 @@ func scanEventSummary(row eventScanner) (ActivityEvent, error) {
 	if publish.Valid {
 		t := publish.Time.UTC()
 		ev.PublishTime = &t
+	}
+	if observed.Valid {
+		t := observed.Time.UTC()
+		ev.SourceObservedAt = &t
+	}
+	if producerWatermark.Valid {
+		t := producerWatermark.Time.UTC()
+		ev.SourceProducerWatermarkAt = &t
+	}
+	if bootstrapCompleted.Valid {
+		t := bootstrapCompleted.Time.UTC()
+		ev.SourceBootstrapCompletedAt = &t
 	}
 	if len(parserWarnings) > 0 {
 		ev.ParserWarningsJSON = json.RawMessage(parserWarnings)

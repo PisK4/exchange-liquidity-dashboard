@@ -140,46 +140,49 @@ type RawEvidence struct {
 }
 
 type ActivityEvent struct {
-	ID                        int64
-	RawEvidenceID             int64
-	Platform                  string
-	SourceGroup               string
-	SourceExternalID          string
-	SourceURL                 string
-	Title                     string
-	ActivityType              string
-	TargetSymbols             []ActivityEventSymbol
-	RewardPoolText            string
-	RewardPoolUSDEstimate     *float64
-	RewardPoolPrimaryToken    string
-	RewardPoolParseConfidence string
-	HasRewardPool             bool
-	StartTime                 *time.Time
-	EndTime                   *time.Time
-	PublishTime               *time.Time
-	RawTimeText               string
-	RawTimezoneHint           string
-	TimeParseConfidence       string
-	ContentText               string
-	ContentHash               string
-	DedupeKey                 string
-	ConfidenceScore           float64
-	NeedsHumanReview          bool
-	AutoPushAllowed           bool
-	EventStatus               string
-	ReviewStatus              string
-	OpsDecisionAction         string
-	OpsDecisionStale          bool
-	EventVersion              int
-	ParserVersion             string
-	SourceContextJSON         json.RawMessage
-	ParserWarningsJSON        json.RawMessage
-	RewardPoolsJSON           json.RawMessage
-	TaskConditionsJSON        json.RawMessage
-	EligibilityRulesJSON      json.RawMessage
-	RichFieldsSummaryJSON     json.RawMessage
-	CreatedAt                 time.Time
-	UpdatedAt                 time.Time
+	ID                         int64
+	RawEvidenceID              int64
+	Platform                   string
+	SourceGroup                string
+	SourceExternalID           string
+	SourceURL                  string
+	Title                      string
+	ActivityType               string
+	TargetSymbols              []ActivityEventSymbol
+	RewardPoolText             string
+	RewardPoolUSDEstimate      *float64
+	RewardPoolPrimaryToken     string
+	RewardPoolParseConfidence  string
+	HasRewardPool              bool
+	StartTime                  *time.Time
+	EndTime                    *time.Time
+	PublishTime                *time.Time
+	RawTimeText                string
+	RawTimezoneHint            string
+	TimeParseConfidence        string
+	ContentText                string
+	ContentHash                string
+	DedupeKey                  string
+	ConfidenceScore            float64
+	NeedsHumanReview           bool
+	AutoPushAllowed            bool
+	EventStatus                string
+	ReviewStatus               string
+	OpsDecisionAction          string
+	OpsDecisionStale           bool
+	EventVersion               int
+	ParserVersion              string
+	SourceContextJSON          json.RawMessage
+	ParserWarningsJSON         json.RawMessage
+	RewardPoolsJSON            json.RawMessage
+	TaskConditionsJSON         json.RawMessage
+	EligibilityRulesJSON       json.RawMessage
+	RichFieldsSummaryJSON      json.RawMessage
+	SourceObservedAt           *time.Time
+	SourceProducerWatermarkAt  *time.Time
+	SourceBootstrapCompletedAt *time.Time
+	CreatedAt                  time.Time
+	UpdatedAt                  time.Time
 }
 
 type ActivityEventSymbol struct {
@@ -234,6 +237,8 @@ type SourceState struct {
 	DisabledUntil          *time.Time
 	LastCheckedAt          *time.Time
 	LastSuccessAt          *time.Time
+	ProducerWatermarkAt    *time.Time
+	BootstrapCompletedAt   *time.Time
 	UpdatedAt              time.Time
 }
 

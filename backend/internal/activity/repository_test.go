@@ -29,7 +29,7 @@ func activitySourceStateRows() *sqlmock.Rows {
 		"evidence_quality", "enabled", "poll_interval_seconds", "auto_push_enabled", "requires_proxy", "requires_browser_context",
 		"requires_login", "personalized", "source_status", "last_http_status", "last_error_kind",
 		"last_schema_hash", "last_content_hash", "sample_count", "event_count", "source_context_json",
-		"disabled_until", "last_checked_at", "last_success_at", "updated_at",
+		"disabled_until", "last_checked_at", "last_success_at", "producer_watermark_at", "bootstrap_completed_at", "updated_at",
 	})
 }
 
@@ -110,7 +110,7 @@ func TestRepositoryLoadActivitySourceState(t *testing.T) {
 			int64(9), "gate", "launchpool_project_list", "announcement_api", "https://gate.example/launchpool",
 			"gate|launchpool_project_list|utls_proxy_json", "utls_proxy_json", "api_json",
 			1, 600, 1, 1, 0, 0, 0, SourceStatusDegraded, 429, "http_429",
-			"schema-hash", "content-hash", 3, 4, []byte(`{"last_error_message":"EOF","attempt_count":3,"proxy_used":true}`), disabledUntil, checkedAt, successAt, now,
+			"schema-hash", "content-hash", 3, 4, []byte(`{"last_error_message":"EOF","attempt_count":3,"proxy_used":true}`), disabledUntil, checkedAt, successAt, checkedAt, successAt, now,
 		))
 	state, ok, err := repo.LoadActivitySourceState(context.Background(), "gate|launchpool_project_list|utls_proxy_json")
 	if err != nil {
@@ -211,13 +211,13 @@ func TestRepositoryListOutboxCandidateEventsSkipsAlreadyProducedAndHydratesConte
 		"content_text", "reward_pool_text", "start_time", "end_time", "publish_time", "raw_time_text",
 		"content_hash", "dedupe_key", "needs_human_review", "auto_push_allowed", "event_status",
 		"review_status", "ops_decision_action", "ops_decision_stale", "event_version", "parser_version",
-		"parser_warnings_json", "rich_fields_summary_json", "created_at", "updated_at",
+		"parser_warnings_json", "rich_fields_summary_json", "source_observed_at", "producer_watermark_at", "bootstrap_completed_at", "created_at", "updated_at",
 	}).AddRow(
 		int64(42), int64(9), "binance", "cms_article_detail", "abc", "https://binance.example/abc", "Binance Launchpool ABC", "launchpool",
 		"Stake BNB to earn ABC", "300,000 USDT", nil, nil, now, "",
 		"hash", "binance|cms_article_detail|abc", 0, 1, EventStatusActive,
 		ReviewPending, "", 0, 1, "activity-parser-v1",
-		[]byte(`["raw_time_unknown"]`), []byte(`{"reward":"300,000 USDT"}`), now, now,
+		[]byte(`["raw_time_unknown"]`), []byte(`{"reward":"300,000 USDT"}`), now, nil, nil, now, now,
 	)
 	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_event e")).
 		WithArgs(EventStatusActive, ReviewRejected, ReviewApproved, 10).
@@ -252,13 +252,13 @@ func TestRepositoryListOutboxCandidateEventsBySourceFiltersPlatformAndGroup(t *t
 		"content_text", "reward_pool_text", "start_time", "end_time", "publish_time", "raw_time_text",
 		"content_hash", "dedupe_key", "needs_human_review", "auto_push_allowed", "event_status",
 		"review_status", "ops_decision_action", "ops_decision_stale", "event_version", "parser_version",
-		"parser_warnings_json", "rich_fields_summary_json", "created_at", "updated_at",
+		"parser_warnings_json", "rich_fields_summary_json", "source_observed_at", "producer_watermark_at", "bootstrap_completed_at", "created_at", "updated_at",
 	}).AddRow(
 		int64(43), int64(10), "gate", "launchpool_project_list", "gate-abc", "https://gate.example/abc", "Gate Launchpool ABC", "launchpool",
 		"Stake to earn ABC", "100,000 USDT", nil, nil, now, "",
 		"hash-gate", "gate|launchpool_project_list|abc", 0, 1, EventStatusActive,
 		ReviewPending, "", 0, 1, "activity-parser-v1",
-		[]byte(`[]`), []byte(`{"reward":"100,000 USDT"}`), now, now,
+		[]byte(`[]`), []byte(`{"reward":"100,000 USDT"}`), now, nil, nil, now, now,
 	)
 	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_event e")).
 		WithArgs(EventStatusActive, ReviewRejected, ReviewApproved, "gate", "launchpool_project_list", 2).
@@ -286,13 +286,13 @@ func TestRepositoryGetActivityEventReturnsRawEvidencePreview(t *testing.T) {
 		"content_text", "reward_pool_text", "start_time", "end_time", "publish_time", "raw_time_text",
 		"content_hash", "dedupe_key", "needs_human_review", "auto_push_allowed", "event_status",
 		"review_status", "ops_decision_action", "ops_decision_stale", "event_version", "parser_version",
-		"parser_warnings_json", "rich_fields_summary_json", "created_at", "updated_at",
+		"parser_warnings_json", "rich_fields_summary_json", "source_observed_at", "producer_watermark_at", "bootstrap_completed_at", "created_at", "updated_at",
 	}).AddRow(
 		int64(42), int64(9), "gate", "launchpool_project_list", "gate-abc", "https://gate.example/abc", "Gate Launchpool ABC", "launchpool",
 		"Launchpool project list entry", "", nil, nil, nil, "",
 		"hash", "gate|launchpool|abc", 0, 1, EventStatusActive,
 		ReviewPending, "", 0, 1, "activity-parser-v1",
-		[]byte(`[]`), []byte(`{}`), now, now,
+		[]byte(`[]`), []byte(`{}`), nil, nil, nil, now, now,
 	)
 	mock.ExpectQuery(regexp.QuoteMeta("FROM t_activity_event WHERE id = ?")).
 		WithArgs(int64(42)).

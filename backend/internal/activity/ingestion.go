@@ -212,11 +212,12 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 		httpStatus := fetched.HTTPStatus
 		if httpStatus >= 200 && httpStatus < 300 && hasState && strings.TrimSpace(state.LastContentHash) != "" && state.LastContentHash == contentHash {
 			res.UnchangedSources++
-			state := buildSourceState(src, now, &httpStatus, SourceStatusOK, "", 0, contentHash)
-			state.SourceContextJSON = fetchResultSourceContext(src, fetched)
+			nextState := buildSourceState(src, now, &httpStatus, SourceStatusOK, "", 0, contentHash)
+			applySourceBootstrap(&nextState, state, hasState, firstNonZeroTime(fetched.FetchedAt, now))
+			nextState.SourceContextJSON = fetchResultSourceContext(src, fetched)
 			successAt := now
-			state.LastSuccessAt = &successAt
-			if err := store.UpsertActivitySourceState(ctx, state); err != nil {
+			nextState.LastSuccessAt = &successAt
+			if err := store.UpsertActivitySourceState(ctx, nextState); err != nil {
 				return res, err
 			}
 			continue
@@ -258,15 +259,21 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 		})
 		if err != nil {
 			res.ParserErrors++
-			state := buildSourceState(src, now, &httpStatus, SourceStatusDegraded, "parser_error", 1, contentHash)
-			state.SourceContextJSON = fetchResultSourceContext(src, fetched)
-			if upErr := store.UpsertActivitySourceState(ctx, state); upErr != nil {
+			nextState := buildSourceState(src, now, &httpStatus, SourceStatusDegraded, "parser_error", 1, contentHash)
+			applySourceBootstrap(&nextState, state, hasState, firstNonZeroTime(fetched.FetchedAt, now))
+			nextState.SourceContextJSON = fetchResultSourceContext(src, fetched)
+			if upErr := store.UpsertActivitySourceState(ctx, nextState); upErr != nil {
 				return res, upErr
 			}
 			continue
 		}
+		observedAt := firstNonZeroTime(fetched.FetchedAt, now)
+		producerWatermarkAt, bootstrapCompletedAt := sourceBootstrapTimes(state, hasState, observedAt)
 		for _, ev := range events {
 			ev.RawEvidenceID = rawID
+			ev.SourceObservedAt = &observedAt
+			ev.SourceProducerWatermarkAt = producerWatermarkAt
+			ev.SourceBootstrapCompletedAt = bootstrapCompletedAt
 			applySourcePolicy(&ev, src)
 			if ev.DedupeKey == "" {
 				ev.DedupeKey = BuildEventDedupeKey(ev.Platform, ev.SourceGroup, ev.SourceExternalID, ev.SourceURL)
@@ -295,16 +302,56 @@ func IngestSources(ctx context.Context, store IngestionStore, deps IngestionDeps
 			}
 			res.Events++
 		}
-		state = buildSourceState(src, now, &httpStatus, SourceStatusOK, "", 1, contentHash)
-		state.SourceContextJSON = fetchResultSourceContext(src, fetched)
-		state.EventCount = len(events)
+		nextState := buildSourceState(src, now, &httpStatus, SourceStatusOK, "", 1, contentHash)
+		applySourceBootstrap(&nextState, state, hasState, observedAt)
+		nextState.SourceContextJSON = fetchResultSourceContext(src, fetched)
+		nextState.EventCount = len(events)
 		successAt := now
-		state.LastSuccessAt = &successAt
-		if err := store.UpsertActivitySourceState(ctx, state); err != nil {
+		nextState.LastSuccessAt = &successAt
+		if err := store.UpsertActivitySourceState(ctx, nextState); err != nil {
 			return res, err
 		}
 	}
 	return res, nil
+}
+
+func applySourceBootstrap(out *SourceState, previous SourceState, hasPrevious bool, watermark time.Time) {
+	if out == nil {
+		return
+	}
+	if watermark.IsZero() {
+		watermark = time.Now().UTC()
+	}
+	watermark = watermark.UTC()
+	if hasPrevious {
+		if previous.ProducerWatermarkAt != nil {
+			out.ProducerWatermarkAt = previous.ProducerWatermarkAt
+		}
+		if previous.BootstrapCompletedAt != nil {
+			out.BootstrapCompletedAt = previous.BootstrapCompletedAt
+		}
+	}
+	if out.ProducerWatermarkAt == nil {
+		out.ProducerWatermarkAt = &watermark
+	}
+	if out.BootstrapCompletedAt == nil {
+		out.BootstrapCompletedAt = &watermark
+	}
+}
+
+func sourceBootstrapTimes(previous SourceState, hasPrevious bool, watermark time.Time) (*time.Time, *time.Time) {
+	state := SourceState{}
+	applySourceBootstrap(&state, previous, hasPrevious, watermark)
+	return state.ProducerWatermarkAt, state.BootstrapCompletedAt
+}
+
+func firstNonZeroTime(values ...time.Time) time.Time {
+	for _, value := range values {
+		if !value.IsZero() {
+			return value.UTC()
+		}
+	}
+	return time.Time{}
 }
 
 func recordActivitySourceSkip(res *IngestionResult, reason string) {
@@ -423,13 +470,68 @@ func fetchResultSourceContext(src SourceConfig, fetched FetchResult) json.RawMes
 }
 
 func fetchResultMeta(src SourceConfig, fetched FetchResult) map[string]any {
-	return map[string]any{
+	meta := map[string]any{
 		"source_url":    firstNonEmptyString(fetched.SourceURL, src.SourceURL),
 		"fetch_mode":    firstNonEmptyString(fetched.FetchMode, src.FetchMode),
 		"elapsed_ms":    fetched.ElapsedMS,
 		"attempt_count": normalizeAttemptCount(fetched.AttemptCount),
 		"proxy_used":    fetched.ProxyUsed,
 	}
+	if strings.EqualFold(strings.TrimSpace(src.Platform), "hyperliquid") && strings.TrimSpace(src.SourceGroup) == "cloudfront_entries" {
+		for k, v := range hyperliquidEntriesMetadata(fetched.Payload) {
+			meta[k] = v
+		}
+	}
+	return meta
+}
+
+func hyperliquidEntriesMetadata(payload []byte) map[string]any {
+	var envelope struct {
+		Entries []struct {
+			Title     string `json:"title"`
+			CreatedAt string `json:"createdAt"`
+			UUID      string `json:"uuid"`
+			Hash      string `json:"hash"`
+		} `json:"entries"`
+	}
+	if len(payload) == 0 || json.Unmarshal(payload, &envelope) != nil || len(envelope.Entries) == 0 {
+		return nil
+	}
+	latest := envelope.Entries[0]
+	latestAt := parseActivityRFC3339(latest.CreatedAt)
+	for _, entry := range envelope.Entries[1:] {
+		entryAt := parseActivityRFC3339(entry.CreatedAt)
+		if !entryAt.IsZero() && (latestAt.IsZero() || entryAt.After(latestAt)) {
+			latest = entry
+			latestAt = entryAt
+		}
+	}
+	meta := map[string]any{
+		"entries_count":           len(envelope.Entries),
+		"latest_entry_title":      latest.Title,
+		"latest_entry_created_at": latest.CreatedAt,
+		"latest_entry_uuid":       latest.UUID,
+		"latest_entry_hash":       latest.Hash,
+	}
+	if !latestAt.IsZero() {
+		if time.Since(latestAt) > 14*24*time.Hour {
+			meta["feed_freshness"] = "stale_static_feed"
+		} else {
+			meta["feed_freshness"] = "fresh"
+		}
+	}
+	return meta
+}
+
+func parseActivityRFC3339(raw string) time.Time {
+	if strings.TrimSpace(raw) == "" {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339Nano, strings.TrimSpace(raw))
+	if err != nil {
+		return time.Time{}
+	}
+	return t.UTC()
 }
 
 func fetchErrorSourceContext(src SourceConfig, err error) json.RawMessage {

@@ -18,20 +18,24 @@ type EngineStore interface {
 }
 
 type EngineConfig struct {
-	Enabled             bool
-	OwnerID             string
-	WorkerLeaseTTL      time.Duration
-	Schedule            EngineSchedule
-	WebhookURL          string
-	WebhookURLByChannel map[string]string
-	DecisionTokenSecret string
-	DashboardBaseURL    string
-	MaxPerTick          int
-	SendSpacing         time.Duration
-	SourceDelivery      []SourceDeliveryPolicy
-	Sources             []SourceConfig
-	Fetch               FetchFunc
-	Parse               ParseFunc
+	Enabled                        bool
+	OwnerID                        string
+	WorkerLeaseTTL                 time.Duration
+	Schedule                       EngineSchedule
+	WebhookURL                     string
+	WebhookURLByChannel            map[string]string
+	DecisionTokenSecret            string
+	EventAgeCutoff                 time.Duration
+	SuppressInitialSnapshot        bool
+	RequireSourceTimeForAutoPush   bool
+	SuppressMissingTimeOnBootstrap bool
+	DashboardBaseURL               string
+	MaxPerTick                     int
+	SendSpacing                    time.Duration
+	SourceDelivery                 []SourceDeliveryPolicy
+	Sources                        []SourceConfig
+	Fetch                          FetchFunc
+	Parse                          ParseFunc
 }
 
 type EngineSchedule struct {
@@ -224,13 +228,17 @@ func (e *Engine) acquirePhaseLease(ctx context.Context, leaseName string) (RunSu
 
 func (e *Engine) producerConfig() ProducerConfig {
 	return ProducerConfig{
-		WebhookURL:          e.cfg.WebhookURL,
-		WebhookURLByChannel: e.cfg.WebhookURLByChannel,
-		DecisionTokenSecret: e.cfg.DecisionTokenSecret,
-		DashboardBaseURL:    e.cfg.DashboardBaseURL,
-		MaxPerTick:          e.cfg.MaxPerTick,
-		SourcePolicies:      e.cfg.SourceDelivery,
-		Now:                 e.now,
+		WebhookURL:                     e.cfg.WebhookURL,
+		WebhookURLByChannel:            e.cfg.WebhookURLByChannel,
+		DecisionTokenSecret:            e.cfg.DecisionTokenSecret,
+		EventAgeCutoff:                 e.cfg.EventAgeCutoff,
+		SuppressInitialSnapshot:        e.cfg.SuppressInitialSnapshot,
+		RequireSourceTimeForAutoPush:   e.cfg.RequireSourceTimeForAutoPush,
+		SuppressMissingTimeOnBootstrap: e.cfg.SuppressMissingTimeOnBootstrap,
+		DashboardBaseURL:               e.cfg.DashboardBaseURL,
+		MaxPerTick:                     e.cfg.MaxPerTick,
+		SourcePolicies:                 e.cfg.SourceDelivery,
+		Now:                            e.now,
 	}
 }
 

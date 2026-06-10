@@ -40,11 +40,10 @@ Alert:
     # dedicated bot in the Liquidity group and paste its URL here
     # before flipping enabled=true.
     Liquidity: ""
-    # Activity Agent uses its own Lark bot for local operator validation.
-    # Production should still inject this through ACTIVITY_LARK_WEBHOOK_URL
-    # or a private runtime overlay.
-    # Activity: "https://open.larksuite.com/open-apis/bot/v2/hook/091da0b1-bcfe-432e-a15a-79dfeba56714"
-    Activity: "https://open.larksuite.com/open-apis/bot/v2/hook/f16a7ede-6ccb-4d87-9587-cd9cd7530cd6"
+    # Activity Agent uses its own Lark bot. Keep the committed value
+    # empty; local/prod operators should provide it through private
+    # YAML/Nacos config rather than environment-variable indirection.
+    Activity: ""
 
 Catalog:
   ExchangeEndpointsFile: exchange_endpoints.yaml
@@ -454,7 +453,9 @@ Runtime:
     worker_lease_ttl: 2m
     source_proxy: ""
     decision_token:
-      secret_env: ACTIVITY_DECISION_TOKEN_SECRET
+      # Fill in private YAML/Nacos config before enabling decision-card
+      # callbacks. Empty keeps outbound cards disabled_missing_secret.
+      secret: ""
       ttl: 720h
     high_value_rules:
       source_groups: [launchpool_project_list, cms_article_detail, latest_events, support_ongoing_section]
@@ -463,7 +464,7 @@ Runtime:
       confirmed_reward_threshold_usd: 50000
     delivery:
       enabled: true
-      webhook_url_env: ACTIVITY_LARK_WEBHOOK_URL
+      webhook_url: ""
       collect_only_without_webhook: true
       proxy: "http://host.docker.internal:7897"
       dashboard_base_url: "https://exchange-liquidity-dashboard-pisk4s-projects.vercel.app/activity"
@@ -534,17 +535,16 @@ Runtime:
           max_per_tick: 3
         requires_proxy: true
       - platform: bybit
-        source_group: announcements_ssr
+        source_group: announcements_api
         collection:
           enabled: true
-          fetch_mode: utls_html
+          fetch_mode: http_direct_json
           poll_interval: 30m
         delivery:
           enabled: true
           auto_push_enabled: true
           target_channel: lark_activity
           max_per_tick: 3
-        requires_browser_context: true
       - platform: bitget
         source_group: support_ongoing_section
         collection:

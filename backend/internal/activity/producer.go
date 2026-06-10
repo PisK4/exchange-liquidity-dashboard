@@ -25,13 +25,17 @@ type SourceDeliveryPolicy struct {
 }
 
 type ProducerConfig struct {
-	WebhookURL          string
-	WebhookURLByChannel map[string]string
-	DecisionTokenSecret string
-	DashboardBaseURL    string
-	MaxPerTick          int
-	SourcePolicies      []SourceDeliveryPolicy
-	Now                 func() time.Time
+	WebhookURL                     string
+	WebhookURLByChannel            map[string]string
+	DecisionTokenSecret            string
+	EventAgeCutoff                 time.Duration
+	SuppressInitialSnapshot        bool
+	RequireSourceTimeForAutoPush   bool
+	SuppressMissingTimeOnBootstrap bool
+	DashboardBaseURL               string
+	MaxPerTick                     int
+	SourcePolicies                 []SourceDeliveryPolicy
+	Now                            func() time.Time
 }
 
 type ProducerResult struct {
@@ -41,6 +45,9 @@ type ProducerResult struct {
 	OutboxRows            int
 	DisabledNoWebhook     int
 	DisabledMissingSecret int
+	SuppressedHistorical  int
+	SuppressedBootstrap   int
+	SuppressedMissingTime int
 }
 
 func ProduceOutbox(ctx context.Context, store ProducerStore, cfg ProducerConfig) (ProducerResult, error) {
@@ -58,6 +65,17 @@ func ProduceOutbox(ctx context.Context, store ProducerStore, cfg ProducerConfig)
 	now := cfg.Now().UTC()
 	res := ProducerResult{Candidates: len(events)}
 	for _, ev := range events {
+		if suppressed, reason := suppressActivityEventForProducer(ev, cfg, now); suppressed {
+			switch reason {
+			case "historical_event_age_cutoff":
+				res.SuppressedHistorical++
+			case "missing_source_time_bootstrap":
+				res.SuppressedMissingTime++
+			default:
+				res.SuppressedBootstrap++
+			}
+			continue
+		}
 		policy := sourceDeliveryPolicyFor(cfg, ev)
 		if !policy.Enabled {
 			continue
@@ -138,6 +156,48 @@ func ProduceOutbox(ctx context.Context, store ProducerStore, cfg ProducerConfig)
 		res.OutboxRows++
 	}
 	return res, nil
+}
+
+func suppressActivityEventForProducer(ev ActivityEvent, cfg ProducerConfig, now time.Time) (bool, string) {
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	now = now.UTC()
+	eventTime, hasSourceTime := effectiveActivityEventTime(ev)
+	if cfg.EventAgeCutoff > 0 && hasSourceTime && !eventTime.After(now.Add(-cfg.EventAgeCutoff)) {
+		return true, "historical_event_age_cutoff"
+	}
+	if cfg.RequireSourceTimeForAutoPush && ev.AutoPushAllowed && !hasSourceTime && ev.ReviewStatus != ReviewApproved {
+		return true, "missing_source_time"
+	}
+	if cfg.SuppressInitialSnapshot {
+		if ev.SourceBootstrapCompletedAt == nil || ev.SourceProducerWatermarkAt == nil {
+			if cfg.SuppressMissingTimeOnBootstrap && !hasSourceTime {
+				return true, "missing_source_time_bootstrap"
+			}
+			return true, "bootstrap_incomplete"
+		}
+		if !eventTime.IsZero() && !eventTime.After(ev.SourceProducerWatermarkAt.UTC()) {
+			return true, "before_source_producer_watermark"
+		}
+	}
+	return false, ""
+}
+
+func effectiveActivityEventTime(ev ActivityEvent) (time.Time, bool) {
+	if ev.PublishTime != nil && !ev.PublishTime.IsZero() {
+		return ev.PublishTime.UTC(), true
+	}
+	if ev.StartTime != nil && !ev.StartTime.IsZero() {
+		return ev.StartTime.UTC(), true
+	}
+	if ev.SourceObservedAt != nil && !ev.SourceObservedAt.IsZero() {
+		return ev.SourceObservedAt.UTC(), false
+	}
+	if !ev.CreatedAt.IsZero() {
+		return ev.CreatedAt.UTC(), false
+	}
+	return time.Time{}, false
 }
 
 func listOutboxCandidates(ctx context.Context, store ProducerStore, cfg ProducerConfig, defaultLimit int) ([]ActivityEvent, error) {
