@@ -39,6 +39,32 @@ func TestFoldMarketStatusRowsAPISourceWins(t *testing.T) {
 	if got[0].StatusLabel != "Perp LIVE" {
 		t.Errorf("StatusLabel = %q, want 'Perp LIVE'", got[0].StatusLabel)
 	}
+	if got[0].ListingTime == nil || !got[0].ListingTime.Equal(listingTime) {
+		t.Errorf("ListingTime = %v, want %v", got[0].ListingTime, listingTime)
+	}
+}
+
+func TestFoldMarketStatusRowsAPIPollTimeDoesNotBecomeListingTime(t *testing.T) {
+	now := time.Date(2026, 6, 10, 16, 32, 0, 0, time.UTC)
+	raw := []MarketStatusRow{
+		{
+			Platform:         "bingx",
+			MarketType:       "swap",
+			StatusNormalized: StatusActive,
+			LastSeenAt:       now,
+			SourceKind:       "api",
+		},
+	}
+	got := foldMarketStatusRows(raw)
+	if len(got) != 1 {
+		t.Fatalf("expected 1 entry, got %d", len(got))
+	}
+	if got[0].ListingTime != nil {
+		t.Fatalf("poll LastSeenAt must not be surfaced as ListingTime: %v", got[0].ListingTime)
+	}
+	if !got[0].OccurredAt.Equal(now) {
+		t.Fatalf("OccurredAt should remain available for sorting/audit; got %v want %v", got[0].OccurredAt, now)
+	}
 }
 
 func TestFoldMarketStatusRowsAnnouncementOnlyShowsPreListing(t *testing.T) {
@@ -142,6 +168,9 @@ func TestFoldMarketStatusRowsFutureActiveRendersPreListing(t *testing.T) {
 	}
 	if !got[0].OccurredAt.Equal(listingTime) {
 		t.Fatalf("OccurredAt = %v, want future listing time %v", got[0].OccurredAt, listingTime)
+	}
+	if got[0].ListingTime == nil || !got[0].ListingTime.Equal(listingTime) {
+		t.Fatalf("ListingTime = %v, want future listing time %v", got[0].ListingTime, listingTime)
 	}
 }
 

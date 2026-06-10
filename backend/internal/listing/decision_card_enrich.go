@@ -76,6 +76,9 @@ func statusLabelByEnum(status, sourceKind string) string {
 }
 
 func marketStatusLabel(ms PlatformMarketStatus) string {
+	if isEdgeXEnableDisplayFalse(ms) {
+		return "未上线（API: enable_display_false）"
+	}
 	label := statusLabelByEnum(ms.Status, ms.SourceKind)
 	if ms.Status != StatusPaused && ms.Status != StatusDelisted {
 		return label
@@ -137,11 +140,13 @@ func foldMarketStatusRows(raw []MarketStatusRow) []PlatformMarketStatus {
 		case "api":
 			acc.hasAPI = true
 			effectiveStatus := r.StatusNormalized
-			// Prefer the listing_time_ts when present (true exchange-
-			// declared listing moment), otherwise fall back to
-			// last_seen_at which is when we last polled the row.
+			var listingTime *time.Time
+			// Prefer listing_time_ts for status scheduling when present,
+			// but keep it separate from OccurredAt so cards do not render
+			// poll time as a fake listing time.
 			if r.ListingTimeTS != nil {
 				occurredAt = *r.ListingTimeTS
+				listingTime = cloneTimePtr(r.ListingTimeTS)
 				if r.StatusNormalized == StatusActive && r.ListingTimeTS.After(r.LastSeenAt) {
 					effectiveStatus = StatusPreListing
 				}
@@ -152,6 +157,9 @@ func foldMarketStatusRows(raw []MarketStatusRow) []PlatformMarketStatus {
 				acc.status.Status = effectiveStatus
 				acc.status.StatusRaw = r.StatusRaw
 				acc.status.OccurredAt = occurredAt
+				acc.status.ListingTime = listingTime
+			} else if acc.status.ListingTime == nil && listingTime != nil {
+				acc.status.ListingTime = listingTime
 			}
 		case "announcement":
 			acc.hasAnn = true
@@ -300,9 +308,14 @@ type PlatformMarketStatus struct {
 	//   - "both"         → both sources agree on the canonical
 	SourceKind string
 	// OccurredAt is the most recent timestamp we can attribute to
-	// this platform's status (listing_time_ts or
-	// announcement.published_at, whichever is newer).
+	// this platform's status for sorting/audit. It may be a poll
+	// observation time, so the renderer must not present it as a listing
+	// time.
 	OccurredAt time.Time
+	// ListingTime is the exchange-declared listing/open time from API
+	// metadata. Nil means the platform has no trustworthy listing time;
+	// renderer should not fall back to LastSeenAt/poll time.
+	ListingTime *time.Time
 }
 
 // DepthEvidence is one platform's depth measurement at one tier.
@@ -666,5 +679,16 @@ func clonePlatformMarketStatuses(in []PlatformMarketStatus) []PlatformMarketStat
 	}
 	out := make([]PlatformMarketStatus, len(in))
 	copy(out, in)
+	for i := range out {
+		out[i].ListingTime = cloneTimePtr(out[i].ListingTime)
+	}
 	return out
+}
+
+func cloneTimePtr(in *time.Time) *time.Time {
+	if in == nil {
+		return nil
+	}
+	out := *in
+	return &out
 }

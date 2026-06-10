@@ -60,10 +60,11 @@ func edgeXMarketSurfaceFor(marketType string) (string, error) {
 // raw_json so the DB-first CatalogResolver can read platform-specific
 // fields without hitting raw-instruments JSON dumps.
 //
-// Status semantics: EdgeX hides a contract from the trading UI by
-// flipping either enableTrade or enableDisplay to false. Both flips
-// map to status_normalized=delisted because either prevents the
-// dashboard from observing real V1 data on it.
+// Status semantics: enableTrade=false means an existing EdgeX market
+// cannot trade and is treated as delisted. enableDisplay=false only
+// means the contract is not visible on the product surface; it may be
+// an internal/preconfigured market that has never launched, so we keep
+// it as unknown instead of implying a historical delisting.
 func NormalizeEdgeXContract(raw json.RawMessage, marketType, baseAsset string) (NormalizedInstrument, error) {
 	surface, err := edgeXMarketSurfaceFor(marketType)
 	if err != nil {
@@ -82,9 +83,11 @@ func NormalizeEdgeXContract(raw json.RawMessage, marketType, baseAsset string) (
 	enableDisplay := p.EnableDisplay == nil || *p.EnableDisplay
 	status := "active"
 	delist := false
-	if !enableTrade || !enableDisplay {
+	if !enableTrade {
 		status = "delisted"
 		delist = true
+	} else if !enableDisplay {
+		status = "unknown"
 	}
 
 	base := strings.ToUpper(strings.TrimSpace(baseAsset))

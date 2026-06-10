@@ -463,9 +463,7 @@ func buildDecisionMarketStatusBlock(ev DecisionCardEvent) map[string]any {
 }
 
 func formatMarketStatusLine(ms PlatformMarketStatus, reference time.Time) string {
-	bullet := marketStatusBullet(ms.Status)
-	when := formatUTC8MarketStatusTime(ms.OccurredAt, reference)
-	source := marketStatusSourceLabel(ms.SourceKind)
+	bullet := marketStatusBulletFor(ms)
 	name := strings.TrimSpace(ms.DisplayName)
 	if name == "" {
 		name = ms.Platform
@@ -481,7 +479,33 @@ func formatMarketStatusLine(ms PlatformMarketStatus, reference time.Time) string
 			label += "（当前状态 · API: " + raw + "）"
 		}
 	}
-	return fmt.Sprintf("%s **%s** · %s · %s · %s", bullet, name, label, when, source)
+	parts := []string{fmt.Sprintf("%s **%s**", bullet, name), label}
+	if ms.ListingTime != nil && !ms.ListingTime.IsZero() {
+		parts = append(parts, "Listing on "+formatMarketStatusListingDate(*ms.ListingTime, reference))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func formatMarketStatusListingDate(t, reference time.Time) string {
+	if t.IsZero() {
+		return "—"
+	}
+	local := t.In(utc8Zone)
+	if !reference.IsZero() && local.Year() != reference.In(utc8Zone).Year() {
+		return local.Format("2006-01-02")
+	}
+	return local.Format("01-02")
+}
+
+func marketStatusBulletFor(ms PlatformMarketStatus) string {
+	if isEdgeXEnableDisplayFalse(ms) {
+		return "<font color='grey'>●</font>"
+	}
+	return marketStatusBullet(ms.Status)
+}
+
+func isEdgeXEnableDisplayFalse(ms PlatformMarketStatus) bool {
+	return strings.EqualFold(ms.Platform, edgexListedPlatformName) && strings.EqualFold(strings.TrimSpace(ms.StatusRaw), "enable_display_false")
 }
 
 // marketStatusBullet picks the bullet colour matching the status

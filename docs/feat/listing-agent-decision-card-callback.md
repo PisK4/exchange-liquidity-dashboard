@@ -150,6 +150,8 @@ trigger=2026-05-30 17:25 UTC+8 · evidence=API + 公告都已确认 · dedupe=li
 - **`value` payload**：每个按钮 `value` 都带 `candidate_id / risk_plan_id / action / dedupe_key` 四元组；其中 `dedupe_key` 与 outbox 表对齐，便于回调 handler 反查 outbox。
 - **卡片减负**：recommendation、confidence、risk plan 不再渲染到 Lark 卡片。它们仍保留在 backend event / DB audit / callback payload 路径，保证兼容下游审计和动作分发。
 - **时间语义**：基础信息区主字段固定展示 `Detected Time`（producer 触发时间）。交易所 API 返回的 launch/open 时间只在存在 fresh instrument-diff evidence 时以 `Listing Time` 单独展示；announcement `published_at` / `createdAt` 不得作为 `Listing Time`。
+- **Market Status 行语义**：每个平台默认只展示 `平台 · 状态`，例如 `BingX Futures · Perp LIVE`。`last_seen_at` / poll observation time 只用于排序和审计，不得渲染成 listing/open 时间；只有 API 明确返回 `listing_time_ts` 时才追加 `Listing on MM-DD`（跨年时 `Listing on YYYY-MM-DD`）。Market Status 行默认不再追加 `API` / `公告` source 后缀，source evidence 仍保留在 footer 与后台审计字段中。
+- **edgeX 可见性语义**：edgeX `enable_display_false` 表示未在产品前端展示/可能尚未上线，不等于已下架。卡片中应显示为 `未上线（API: enable_display_false）`，而不是 `已下架`；只有明确 `enable_trade_false` 才按下架/不可交易处理。
 - **Market Status 预刷新**：渲染前可按 `Runtime.listing_agent.decision_card.market_status_refresh` 对 source platforms + edgeX 做一次 bounded/fail-open instrument API refresh。该 refresh 只读 API、带 timeout/concurrency/request budget/tick cache，不写 snapshot、不写 signal、不改变 candidate；失败时按配置回退 DB snapshot。
 - **schema gotchas**：与 hot-gap 卡完全一致——`plain_text` / `lark_md` 的字段名是 `content` 不是 `text`，emoji 用于语义符号但 tier / status 类视觉用 `<font color>`，`SetEscapeHTML(false)` 让 outbox `payload_json` 肉眼可读。
 

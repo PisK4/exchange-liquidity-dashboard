@@ -172,6 +172,51 @@ func TestRenderDecisionCardMarketStatusBlockListsAllPlatforms(t *testing.T) {
 	}
 }
 
+func TestRenderDecisionCardMarketStatusOmitsPollTimeAndSourceByDefault(t *testing.T) {
+	ev := baseEvent()
+	ev.Enrichment.MarketStatuses = []PlatformMarketStatus{
+		{Platform: "bingx", DisplayName: "BingX Futures", Status: StatusActive, StatusLabel: "Perp LIVE", SourceKind: "api", OccurredAt: time.Date(2026, 6, 10, 16, 32, 0, 0, time.UTC)},
+	}
+	raw, _ := renderForTest(t, ev)
+	if !strings.Contains(raw, "BingX Futures") || !strings.Contains(raw, "Perp LIVE") {
+		t.Fatalf("market status should keep platform and status, raw=%s", raw)
+	}
+	for _, leaked := range []string{"06-11 00:32 UTC+8", "Listing on", " · API"} {
+		if strings.Contains(raw, leaked) {
+			t.Fatalf("market status leaked poll/source fragment %q, raw=%s", leaked, raw)
+		}
+	}
+}
+
+func TestRenderDecisionCardMarketStatusShowsListingOnOnlyForListingTime(t *testing.T) {
+	ev := baseEvent()
+	listingTime := time.Date(2026, 6, 10, 16, 32, 0, 0, time.UTC)
+	ev.Enrichment.MarketStatuses = []PlatformMarketStatus{
+		{Platform: "bingx", DisplayName: "BingX Futures", Status: StatusActive, StatusLabel: "Perp LIVE", SourceKind: "api", OccurredAt: listingTime, ListingTime: &listingTime},
+	}
+	raw, _ := renderForTest(t, ev)
+	if !strings.Contains(raw, "BingX Futures") || !strings.Contains(raw, "Perp LIVE") || !strings.Contains(raw, "Listing on 06-11") {
+		t.Fatalf("market status should show compact Listing on date for true listing time, raw=%s", raw)
+	}
+	if strings.Contains(raw, "00:32 UTC+8") || strings.Contains(raw, " · API") {
+		t.Fatalf("market status listing time should stay date-only and hide source, raw=%s", raw)
+	}
+}
+
+func TestRenderDecisionCardMarketStatusEdgexEnableDisplayFalseIsUnlisted(t *testing.T) {
+	ev := baseEvent()
+	ev.Enrichment.MarketStatuses = []PlatformMarketStatus{
+		{Platform: edgexListedPlatformName, DisplayName: "edgeX", Status: StatusUnknown, StatusRaw: "enable_display_false", SourceKind: "api", OccurredAt: time.Date(2026, 6, 10, 16, 36, 0, 0, time.UTC)},
+	}
+	raw, _ := renderForTest(t, ev)
+	if !strings.Contains(raw, "edgeX") || !strings.Contains(raw, "未上线（API: enable_display_false）") {
+		t.Fatalf("edgeX enable_display_false should render as unlisted, raw=%s", raw)
+	}
+	if strings.Contains(raw, "已下架") {
+		t.Fatalf("edgeX enable_display_false must not render as delisted, raw=%s", raw)
+	}
+}
+
 func TestRenderDecisionCardEmptyMarketStatusFallsBackToGreyBullet(t *testing.T) {
 	ev := baseEvent()
 	ev.Enrichment.MarketStatuses = nil
@@ -403,11 +448,12 @@ func TestRenderDecisionCardMarketStatusContextForPausedAndDelisted(t *testing.T)
 func TestRenderDecisionCardMarketStatusHistoricalDateIncludesYear(t *testing.T) {
 	ev := baseEvent()
 	ev.TriggerTime = time.Date(2026, 6, 2, 2, 18, 0, 0, time.UTC)
+	listingTime := time.Date(2025, 11, 14, 7, 0, 0, 0, time.UTC)
 	ev.Enrichment.MarketStatuses = []PlatformMarketStatus{
-		{Platform: "bingx", DisplayName: "BingX Futures", Status: StatusActive, StatusLabel: "Perp LIVE", SourceKind: "api", OccurredAt: time.Date(2025, 11, 14, 7, 0, 0, 0, time.UTC)},
+		{Platform: "bingx", DisplayName: "BingX Futures", Status: StatusActive, StatusLabel: "Perp LIVE", SourceKind: "api", OccurredAt: listingTime, ListingTime: &listingTime},
 	}
 	raw, _ := renderForTest(t, ev)
-	if !strings.Contains(raw, "2025-11-14 15:00 UTC+8") {
+	if !strings.Contains(raw, "Listing on 2025-11-14") {
 		t.Fatalf("historical market status date must include year, raw=%s", raw)
 	}
 }
@@ -415,14 +461,15 @@ func TestRenderDecisionCardMarketStatusHistoricalDateIncludesYear(t *testing.T) 
 func TestRenderDecisionCardMarketStatusSameYearKeepsShortDate(t *testing.T) {
 	ev := baseEvent()
 	ev.TriggerTime = time.Date(2026, 6, 2, 2, 18, 0, 0, time.UTC)
+	listingTime := time.Date(2026, 6, 2, 7, 0, 0, 0, time.UTC)
 	ev.Enrichment.MarketStatuses = []PlatformMarketStatus{
-		{Platform: "bingx", DisplayName: "BingX Futures", Status: StatusPreListing, StatusLabel: "pre-listing", SourceKind: "api", OccurredAt: time.Date(2026, 6, 2, 7, 0, 0, 0, time.UTC)},
+		{Platform: "bingx", DisplayName: "BingX Futures", Status: StatusPreListing, StatusLabel: "pre-listing", SourceKind: "api", OccurredAt: listingTime, ListingTime: &listingTime},
 	}
 	raw, _ := renderForTest(t, ev)
-	if !strings.Contains(raw, "06-02 15:00 UTC+8") {
+	if !strings.Contains(raw, "Listing on 06-02") {
 		t.Fatalf("same-year market status date should stay short, raw=%s", raw)
 	}
-	if strings.Contains(raw, "2026-06-02 15:00 UTC+8") {
+	if strings.Contains(raw, "Listing on 2026-06-02") || strings.Contains(raw, "15:00 UTC+8") {
 		t.Fatalf("same-year market status date should not include year, raw=%s", raw)
 	}
 }

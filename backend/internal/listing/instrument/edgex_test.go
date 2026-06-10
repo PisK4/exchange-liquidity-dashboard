@@ -83,14 +83,17 @@ func TestNormalizeEdgeXContractDelistedByEnableTrade(t *testing.T) {
 	}
 }
 
-func TestNormalizeEdgeXContractDelistedByEnableDisplay(t *testing.T) {
+func TestNormalizeEdgeXContractUnknownByEnableDisplay(t *testing.T) {
 	contract := []byte(`{"contractId":"10009999","baseCoinId":"9999","contractName":"XYZUSD","enableTrade":true,"enableDisplay":false}`)
 	got, err := NormalizeEdgeXContract(contract, "perp_v1", "XYZ")
 	if err != nil {
 		t.Fatalf("Normalize err = %v", err)
 	}
-	if got.StatusNormalized != "delisted" {
-		t.Fatalf("enable_display=false must yield delisted; got %q", got.StatusNormalized)
+	if got.StatusNormalized != "unknown" || got.DelistFlag {
+		t.Fatalf("enable_display=false must yield unknown without DelistFlag; got %+v", got)
+	}
+	if got.StatusRaw != "enable_display_false" {
+		t.Fatalf("StatusRaw = %q, want enable_display_false", got.StatusRaw)
 	}
 }
 
@@ -118,8 +121,8 @@ func TestParseEdgeXMetaPayloadJoinsBaseFromCoinList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ParseEdgeXMetaPayload err = %v", err)
 	}
-	// Expect 3 contracts (XYZ is delisted but we still emit a snapshot row
-	// — DelistFlag = true. Refresh job filters by status_normalized.
+	// Expect 3 contracts. XYZ is disabled for trading in this fixture, so it
+	// still emits a delisted snapshot row.
 	if len(out) != 3 {
 		t.Fatalf("want 3 normalized contracts, got %d (%+v)", len(out), out)
 	}
