@@ -466,7 +466,7 @@ Runtime:
       webhook_url_env: ACTIVITY_LARK_WEBHOOK_URL
       collect_only_without_webhook: true
       proxy: "http://host.docker.internal:7897"
-      dashboard_base_url: "http://127.0.0.1:3001/activity"
+      dashboard_base_url: "https://exchange-liquidity-dashboard-pisk4s-projects.vercel.app/activity"
       max_per_tick: 20
       send_spacing: 2s
       source_health_cooldown: 1h
