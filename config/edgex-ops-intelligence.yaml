@@ -43,7 +43,8 @@ Alert:
     # Activity Agent uses its own Lark bot for local operator validation.
     # Production should still inject this through ACTIVITY_LARK_WEBHOOK_URL
     # or a private runtime overlay.
-    Activity: "https://open.larksuite.com/open-apis/bot/v2/hook/091da0b1-bcfe-432e-a15a-79dfeba56714"
+    # Activity: "https://open.larksuite.com/open-apis/bot/v2/hook/091da0b1-bcfe-432e-a15a-79dfeba56714"
+    Activity: "https://open.larksuite.com/open-apis/bot/v2/hook/f16a7ede-6ccb-4d87-9587-cd9cd7530cd6"
 
 Catalog:
   ExchangeEndpointsFile: exchange_endpoints.yaml
