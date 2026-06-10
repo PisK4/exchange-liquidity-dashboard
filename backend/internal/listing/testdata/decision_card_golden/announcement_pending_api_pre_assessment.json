@@ -7,7 +7,7 @@
       {
         "tag": "div",
         "text": {
-          "content": "# NEWT\n\u003cfont color='grey'\u003e公告已发布 · 待 API 上架\u003c/font\u003e",
+          "content": "# NEWT\n\u003cfont color='grey'\u003e公告已发现\u003c/font\u003e",
           "tag": "lark_md"
         }
       },
@@ -94,28 +94,11 @@
         "tag": "hr"
       },
       {
-        "tag": "div",
-        "text": {
-          "content": "**自动参数预案**\n\u003cfont color='grey'\u003e杠杆 / 杠杆档位 / MM 报价 / Funding / Max Position 待规则补齐\u003c/font\u003e",
-          "tag": "lark_md"
-        }
-      },
-      {
-        "tag": "hr"
-      },
-      {
         "fields": [
           {
             "is_short": true,
             "text": {
               "content": "**Score**\n65 / 100",
-              "tag": "lark_md"
-            }
-          },
-          {
-            "is_short": true,
-            "text": {
-              "content": "**Recommendation**\n进入预评估",
               "tag": "lark_md"
             }
           }
@@ -189,7 +172,7 @@
       {
         "elements": [
           {
-            "content": "trigger=2026-05-31 18:15 UTC+8 · evidence=公告已发布 · 待 API 上架 · confidence=medium_high · dedupe=listing_decision|203|2026-05-31",
+            "content": "trigger=2026-05-31 18:15 UTC+8 · evidence=公告已发现 · dedupe=listing_decision|203|2026-05-31",
             "tag": "plain_text"
           }
         ],

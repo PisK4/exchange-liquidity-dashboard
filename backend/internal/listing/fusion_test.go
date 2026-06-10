@@ -677,7 +677,7 @@ func TestFuseSignalsHistoricalAndAnnouncementDoesNotDowngradeGroup(t *testing.T)
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO t_listing_candidate")).WithArgs(
 		"MIXANN", "MIXANN-USDT (perp)", "perp", "canonical",
 		LifecycleAnnouncedPendingAPI, LifecycleStatusLabels[LifecycleAnnouncedPendingAPI], EvidenceAnnouncementPendingAPI, ConfidenceMedium,
-		sqlmock.AnyArg(), BusinessScoreVersion, RecommendationPreAssessment, RecommendationLabels[RecommendationPreAssessment],
+		sqlmock.AnyArg(), BusinessScoreVersion, RecommendationRecordOnly, RecommendationLabels[RecommendationRecordOnly],
 		sqlmock.AnyArg(), sqlmock.AnyArg(), now, now,
 	).WillReturnResult(sqlmock.NewResult(123, 1))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT IGNORE INTO t_listing_candidate_signal")).WithArgs(int64(123), int64(9604)).WillReturnResult(sqlmock.NewResult(0, 1))

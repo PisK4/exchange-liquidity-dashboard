@@ -56,6 +56,18 @@ Runtime:
   collection_interval: 2m
   http_timeout: 9s
   exchange_proxy: http://proxy.dev:8080
+  listing_agent:
+    decision_card:
+      market_status_refresh:
+        enabled: true
+        source_platforms_only: true
+        include_edgex: true
+        per_source_timeout: 1500ms
+        total_timeout: 3s
+        max_concurrency: 2
+        max_requests_per_tick: 12
+        cache_ttl: 30s
+        fallback_to_snapshot: true
 Catalog:
   ExchangeEndpointsFile: endpoints-dev.yaml
   SymbolMappingFile: symbols-dev.yaml
@@ -78,6 +90,16 @@ Catalog:
 	}
 	if cfg.Runtime.CollectionInterval != 2*time.Minute || cfg.Runtime.HTTPTimeout != 9*time.Second {
 		t.Fatalf("runtime block not loaded: %+v", cfg.Runtime)
+	}
+	refresh := cfg.Runtime.ListingAgent.DecisionCard.MarketStatusRefresh
+	if !refresh.Enabled || !refresh.SourcePlatformsOnly || !refresh.IncludeEdgex || !refresh.FallbackToSnapshot {
+		t.Fatalf("market status refresh bools not loaded: %+v", refresh)
+	}
+	if refresh.PerSourceTimeout != 1500*time.Millisecond || refresh.TotalTimeout != 3*time.Second || refresh.CacheTTL != 30*time.Second {
+		t.Fatalf("market status refresh durations not loaded: %+v", refresh)
+	}
+	if refresh.MaxConcurrency != 2 || refresh.MaxRequestsPerTick != 12 {
+		t.Fatalf("market status refresh budgets not loaded: %+v", refresh)
 	}
 	if len(cfg.Symbols) != 1 || cfg.Symbols[0].APISymbol != "BTCUSDT" {
 		t.Fatalf("catalog file override not applied: %+v", cfg.Symbols)

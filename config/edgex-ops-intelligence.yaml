@@ -424,6 +424,20 @@ Runtime:
       # the producer learns to page through the candidate table or
       # the inflow rate stabilises.
       max_per_tick: 5
+      # Best-effort live Market Status refresh just before writing a
+      # decision-card outbox row. This is read-only: it calls the
+      # already-wired instrument fetchers, does not update DB snapshots,
+      # and falls back to DB snapshot rows on refresh failure.
+      market_status_refresh:
+        enabled: true
+        source_platforms_only: true
+        include_edgex: true
+        per_source_timeout: 1500ms
+        total_timeout: 3s
+        max_concurrency: 2
+        max_requests_per_tick: 12
+        cache_ttl: 30s
+        fallback_to_snapshot: true
       callback:
         # Leaving secret + secret_env both blank keeps
         # /api/listing/callback returning 503: the cards land in

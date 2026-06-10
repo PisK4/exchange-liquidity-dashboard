@@ -305,12 +305,18 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	// honours ignore decisions recorded by the callback API so the
 	// engine doesn't re-emit a suppressed card.
 	if e.cfg.Runtime.ListingAgent.DecisionCard.Enabled {
+		decisionEnrich := e.deps.DecisionCardEnrich
+		refreshCfg := e.cfg.Runtime.ListingAgent.DecisionCard.MarketStatusRefresh
+		if decisionEnrich.MarketStatusRefresher == nil {
+			decisionEnrich.MarketStatusRefresher = BuildCachedMarketStatusRefresher(e.deps.InstrumentSources, refreshCfg, e.deps.Now)
+		}
+		decisionEnrich.MarketStatusRefreshFallbackToSnapshot = refreshCfg.FallbackToSnapshot
 		decisionRes, decisionErr := ProduceDecisionCards(ctx, e.repo, DecisionCardDeps{
 			Now:                          e.deps.Now,
 			IgnoreCooldown:               e.cfg.Runtime.ListingAgent.DecisionCard.IgnoreCooldown,
 			MaxPerTick:                   e.cfg.Runtime.ListingAgent.DecisionCard.MaxPerTick,
 			HistoricalListingGracePeriod: e.cfg.Runtime.ListingAgent.Candidate.HistoricalListingGracePeriod,
-			Enrich:                       e.deps.DecisionCardEnrich,
+			Enrich:                       decisionEnrich,
 		})
 		summary.DecisionCard = decisionRes
 		if decisionErr != nil {

@@ -212,10 +212,27 @@ type ListedUniverseRefreshPlatformPolicy struct {
 // flow into the api.NewServer options via cmd/ops-intelligence wiring; the
 // secret is never persisted and never logged.
 type ListingDecisionCardConfig struct {
-	Enabled        bool                          `json:"enabled"`
-	IgnoreCooldown time.Duration                 `json:"ignore_cooldown"`
-	MaxPerTick     int                           `json:"max_per_tick"`
-	Callback       ListingDecisionCallbackConfig `json:"callback"`
+	Enabled             bool                             `json:"enabled"`
+	IgnoreCooldown      time.Duration                    `json:"ignore_cooldown"`
+	MaxPerTick          int                              `json:"max_per_tick"`
+	MarketStatusRefresh ListingMarketStatusRefreshConfig `json:"market_status_refresh"`
+	Callback            ListingDecisionCallbackConfig    `json:"callback"`
+}
+
+// ListingMarketStatusRefreshConfig controls the bounded best-effort
+// pre-push refresh that runs immediately before rendering a Listing Agent
+// decision card. It only reads instrument APIs and never writes snapshots or
+// signal rows; failures should fall back to the DB snapshot when configured.
+type ListingMarketStatusRefreshConfig struct {
+	Enabled             bool          `json:"enabled"`
+	SourcePlatformsOnly bool          `json:"source_platforms_only"`
+	IncludeEdgex        bool          `json:"include_edgex"`
+	PerSourceTimeout    time.Duration `json:"per_source_timeout"`
+	TotalTimeout        time.Duration `json:"total_timeout"`
+	MaxConcurrency      int           `json:"max_concurrency"`
+	MaxRequestsPerTick  int           `json:"max_requests_per_tick"`
+	CacheTTL            time.Duration `json:"cache_ttl"`
+	FallbackToSnapshot  bool          `json:"fallback_to_snapshot"`
 }
 
 // ListingDecisionCallbackConfig configures the Lark button callback
@@ -961,6 +978,17 @@ func defaultListingAgentConfig() ListingAgentConfig {
 			Enabled:        false,
 			IgnoreCooldown: 24 * time.Hour,
 			MaxPerTick:     20,
+			MarketStatusRefresh: ListingMarketStatusRefreshConfig{
+				Enabled:             true,
+				SourcePlatformsOnly: true,
+				IncludeEdgex:        true,
+				PerSourceTimeout:    1500 * time.Millisecond,
+				TotalTimeout:        3 * time.Second,
+				MaxConcurrency:      2,
+				MaxRequestsPerTick:  12,
+				CacheTTL:            30 * time.Second,
+				FallbackToSnapshot:  true,
+			},
 			Callback: ListingDecisionCallbackConfig{
 				MaxClockSkew:  300 * time.Second,
 				OperatorAllow: nil,

@@ -212,24 +212,13 @@ func TestRenderDecisionCardMetricsRowsFallBackToPlaceholders(t *testing.T) {
 	}
 }
 
-func TestRenderDecisionCardRiskPlanBlockShowsOnlyTBDPlaceholder(t *testing.T) {
+func TestRenderDecisionCardRiskPlanBlockIsNotRendered(t *testing.T) {
 	ev := baseEvent()
 	raw, _ := renderForTest(t, ev)
-	// Operator decision: the block keeps a title + a single TBD
-	// line summarising every parameter slot, with no specific
-	// values pre-filled.
-	for _, want := range []string{
+	for _, leaked := range []string{
 		"自动参数预案",
 		"待规则补齐",
-	} {
-		if !strings.Contains(raw, want) {
-			t.Errorf("risk plan missing %q in raw=%s", want, raw)
-		}
-	}
-	// Any specific numeric value derived from RiskPlan must NOT
-	// leak through — these are the strings the earlier renderer
-	// emitted and they should be gone now.
-	for _, leaked := range []string{
+		"杠杆 / 杠杆档位",
 		"杠杆: **",
 		"杠杆档位:",
 		"$50.00K→",
@@ -242,10 +231,7 @@ func TestRenderDecisionCardRiskPlanBlockShowsOnlyTBDPlaceholder(t *testing.T) {
 	}
 }
 
-func TestRenderDecisionCardRiskPlanBlockIgnoresRiskPlanValues(t *testing.T) {
-	// Even when RiskPlan carries fully populated values, the
-	// renderer must emit the same TBD placeholder. This guards
-	// against future code paths re-introducing pre-filled numbers.
+func TestRenderDecisionCardRiskPlanBlockStaysHiddenAcrossRecommendations(t *testing.T) {
 	for _, rec := range []string{
 		RecommendationPrepareListing,
 		RecommendationWatch,
@@ -255,11 +241,10 @@ func TestRenderDecisionCardRiskPlanBlockIgnoresRiskPlanValues(t *testing.T) {
 		ev := baseEvent()
 		ev.Recommendation = rec
 		raw, _ := renderForTest(t, ev)
-		if !strings.Contains(raw, "待规则补齐") {
-			t.Errorf("rec=%s: TBD placeholder missing", rec)
-		}
-		if strings.Contains(raw, "50×") {
-			t.Errorf("rec=%s: numeric leverage leaked through", rec)
+		for _, leaked := range []string{"自动参数预案", "待规则补齐", "50×"} {
+			if strings.Contains(raw, leaked) {
+				t.Errorf("rec=%s: risk-plan copy leaked %q", rec, leaked)
+			}
 		}
 	}
 }
@@ -275,8 +260,10 @@ func TestRenderDecisionCardPreAssessmentSuppressesLeverage(t *testing.T) {
 	if strings.Contains(raw, "杠杆: **") {
 		t.Errorf("pre_assessment should not surface a leverage line, raw=%s", raw)
 	}
-	if !strings.Contains(raw, "待规则补齐") {
-		t.Errorf("TBD note must still appear")
+	for _, leaked := range []string{"自动参数预案", "待规则补齐"} {
+		if strings.Contains(raw, leaked) {
+			t.Errorf("pre_assessment risk-plan copy leaked %q in raw=%s", leaked, raw)
+		}
 	}
 }
 
@@ -286,8 +273,8 @@ func TestRenderDecisionCardScoreLineUsesSlash100(t *testing.T) {
 	if !strings.Contains(raw, "78 / 100") {
 		t.Errorf("score must be '78 / 100', raw=%s", raw)
 	}
-	if !strings.Contains(raw, "准备上线") {
-		t.Errorf("recommendation label must render '准备上线', raw=%s", raw)
+	if strings.Contains(raw, "Recommendation") || strings.Contains(raw, "**Recommendation**") {
+		t.Errorf("recommendation field must not render on source-first card, raw=%s", raw)
 	}
 }
 
@@ -357,8 +344,7 @@ func TestRenderDecisionCardFooterCarriesAuditInfo(t *testing.T) {
 	raw, _ := renderForTest(t, ev)
 	for _, want := range []string{
 		"trigger=",
-		"evidence=公告 + API 双源确认",
-		"confidence=high",
+		"evidence=API + 公告都已确认",
 		"enrich_errors=2",
 		"dedupe=listing_decision|7|2026-05-31",
 	} {
@@ -367,9 +353,9 @@ func TestRenderDecisionCardFooterCarriesAuditInfo(t *testing.T) {
 		}
 	}
 	// CoinGecko ID must not leak into the card surface.
-	for _, banned := range []string{"cg=", "coingecko", "CoinGecko"} {
+	for _, banned := range []string{"confidence=", "cg=", "coingecko", "CoinGecko"} {
 		if strings.Contains(raw, banned) {
-			t.Errorf("footer leaked CoinGecko reference %q in raw=%s", banned, raw)
+			t.Errorf("footer leaked banned audit reference %q in raw=%s", banned, raw)
 		}
 	}
 }
@@ -449,7 +435,7 @@ func TestRenderDecisionCardBasicInfoShowsDetectedAndExchangeListingTimes(t *test
 	if !strings.Contains(raw, "Detected Time") || !strings.Contains(raw, "2026-05-31 14:30 UTC+8") {
 		t.Fatalf("detected time missing, raw=%s", raw)
 	}
-	if !strings.Contains(raw, "Exchange Listing Time") || !strings.Contains(raw, "2026-05-07 17:00 UTC+8") {
+	if !strings.Contains(raw, "Listing Time") || !strings.Contains(raw, "2026-05-07 17:00 UTC+8") {
 		t.Fatalf("exchange listing time missing, raw=%s", raw)
 	}
 	if !strings.Contains(raw, "trigger=2026-05-31 14:30 UTC+8") {
@@ -464,7 +450,7 @@ func TestRenderDecisionCardBasicInfoFallsBackToDetectedTime(t *testing.T) {
 	if !strings.Contains(raw, "Detected Time") || !strings.Contains(raw, "2026-05-31 14:30 UTC+8") {
 		t.Fatalf("detected time fallback missing, raw=%s", raw)
 	}
-	if strings.Contains(raw, "Exchange Listing Time") {
-		t.Fatalf("fallback should not render Exchange Listing Time label, raw=%s", raw)
+	if strings.Contains(raw, "Listing Time") {
+		t.Fatalf("fallback should not render Listing Time label, raw=%s", raw)
 	}
 }

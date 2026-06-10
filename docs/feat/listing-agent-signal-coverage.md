@@ -59,9 +59,12 @@ dedupe review.
   existing actionable candidates. The tracked default grace period is `48h`.
 - Decision-card production applies the same freshness gate to linked evidence:
   candidates with no fresh candidate-promoting signal are skipped, and card
-  dedupe / `Exchange Listing Time` selection uses only fresh evidence. This
-  prevents late-discovered but real old exchange listings from re-triggering
-  Lark pushes while preserving raw signals for audit.
+  dedupe / `Listing Time` selection uses only fresh instrument-diff API
+  evidence. Announcement `published_at` / Hyperliquid `createdAt` values remain
+  audit timestamps and must not be copied into child signal `listing_time_ts` or
+  displayed as card `Listing Time`. This prevents late-discovered but real old
+  exchange listings from re-triggering Lark pushes while preserving raw signals
+  for audit.
 - Spot announcement signals can become candidates, but scoring only permits:
   - `record_only` for announcement-only / single-source spot evidence.
   - `watch` for dual-source or multi-platform spot evidence.

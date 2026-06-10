@@ -48,7 +48,6 @@ func ParseBitgetAnnouncement(raw json.RawMessage) (ParsedAnnouncement, error) {
 				MarketSurface:   "perp",
 				InstrumentKind:  "canonical",
 				SignalSubtype:   subtype,
-				ListingTimeTS:   out.PublishedAt,
 			})
 		}
 	}

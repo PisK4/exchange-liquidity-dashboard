@@ -99,6 +99,56 @@ func TestBuildDecisionCardEventAnnouncementPendingAPIShowsAllButtons(t *testing.
 	}
 }
 
+func TestBuildDecisionCardEventEveryEvidenceKindShowsAllButtons(t *testing.T) {
+	for _, kind := range []string{
+		EvidenceAnnouncementAndAPI,
+		EvidenceInstrumentDiffOnly,
+		EvidenceAnnouncementPendingAPI,
+		EvidenceTop30Only,
+		EvidenceManualSeed,
+	} {
+		t.Run(kind, func(t *testing.T) {
+			score := 40.0
+			c := Candidate{
+				ID:              12,
+				CanonicalSymbol: "XYZ",
+				DisplaySymbol:   "XYZ-USDT (perp)",
+				MarketSurface:   "perp",
+				InstrumentKind:  "canonical",
+				EvidenceKind:    kind,
+				ConfidenceLevel: ConfidenceMedium,
+				BusinessScore:   &score,
+				Recommendation:  RecommendationRecordOnly,
+				SourcePlatforms: []string{"mexc"},
+			}
+			ev := BuildDecisionCardEvent(c, RiskPlan{ID: 202, CandidateID: 12}, time.Date(2026, 6, 10, 10, 0, 0, 0, time.UTC))
+			assertStandardDecisionActions(t, kind, ev.Actions)
+		})
+	}
+}
+
+func assertStandardDecisionActions(t *testing.T, context string, actions []DecisionCardAction) {
+	t.Helper()
+	want := map[string]string{
+		DecisionActionPrepareListing: DecisionActionLabels[DecisionActionPrepareListing],
+		DecisionActionEnterWatchlist: DecisionActionLabels[DecisionActionEnterWatchlist],
+		DecisionActionContactMM:      DecisionActionLabels[DecisionActionContactMM],
+		DecisionActionIgnore:         DecisionActionLabels[DecisionActionIgnore],
+	}
+	if len(actions) != len(want) {
+		t.Fatalf("%s: len(actions) = %d, want %d", context, len(actions), len(want))
+	}
+	for _, a := range actions {
+		label, ok := want[a.Action]
+		if !ok {
+			t.Fatalf("%s: unexpected action %q", context, a.Action)
+		}
+		if a.Label != label {
+			t.Fatalf("%s: action %q label = %q, want %q", context, a.Action, a.Label, label)
+		}
+	}
+}
+
 func TestDecisionHeaderTextUsesMarketSurface(t *testing.T) {
 	spot := decisionHeaderText(DecisionCardEvent{CanonicalSymbol: "PUMP", MarketSurface: "spot"})
 	if spot != "🚨 New Spot Listing Detected · PUMP" {
@@ -111,6 +161,35 @@ func TestDecisionHeaderTextUsesMarketSurface(t *testing.T) {
 	legacy := decisionHeaderText(DecisionCardEvent{CanonicalSymbol: "ABC"})
 	if legacy != "🚨 New Perp Listing Detected · ABC" {
 		t.Fatalf("legacy header = %q", legacy)
+	}
+}
+
+func TestSelectPrimaryListingTimeUsesOnlyInstrumentAPITime(t *testing.T) {
+	publishedAt := time.Date(2026, 6, 10, 1, 0, 0, 0, time.UTC)
+	got := selectPrimaryListingTime([]string{"binance"}, []SignalObservation{
+		{
+			SignalType:     SignalAnnouncementListing,
+			SourcePlatform: "binance",
+			ObservedAt:     publishedAt.Add(5 * time.Minute),
+			ListingTimeTS:  &publishedAt,
+		},
+	})
+	if got != nil {
+		t.Fatalf("announcement published_at-backed listing time should not render as Listing Time, got %v", got)
+	}
+}
+
+func TestSelectPrimaryListingTimePrefersSourcePlatformOrderThenObservedAt(t *testing.T) {
+	okxListing := time.Date(2026, 6, 10, 2, 0, 0, 0, time.UTC)
+	binanceListingOld := time.Date(2026, 6, 10, 3, 0, 0, 0, time.UTC)
+	binanceListingNew := time.Date(2026, 6, 10, 4, 0, 0, 0, time.UTC)
+	got := selectPrimaryListingTime([]string{"binance", "okx"}, []SignalObservation{
+		{SignalType: SignalInstrumentDiff, SourcePlatform: "okx", ObservedAt: time.Date(2026, 6, 10, 9, 0, 0, 0, time.UTC), ListingTimeTS: &okxListing},
+		{SignalType: SignalInstrumentDiff, SourcePlatform: "binance", ObservedAt: time.Date(2026, 6, 10, 7, 0, 0, 0, time.UTC), ListingTimeTS: &binanceListingOld},
+		{SignalType: SignalInstrumentDiff, SourcePlatform: "binance", ObservedAt: time.Date(2026, 6, 10, 8, 0, 0, 0, time.UTC), ListingTimeTS: &binanceListingNew},
+	})
+	if got == nil || !got.Equal(binanceListingNew) {
+		t.Fatalf("selected listing time = %v, want latest binance API listing time %v", got, binanceListingNew)
 	}
 }
 
@@ -582,7 +661,7 @@ func TestProduceDecisionCardsSeparatesDetectedAndExchangeListingTimes(t *testing
 		0,
 		5,
 		now,
-		payloadContainsAll("Detected Time", "2026-06-02 15:45 UTC+8", "Exchange Listing Time", "2026-06-02 14:45 UTC+8", "trigger=2026-06-02 15:45 UTC+8", "dedupe=listing_decision|12|first_listing"),
+		payloadContainsAll("Detected Time", "2026-06-02 15:45 UTC+8", "Listing Time", "2026-06-02 14:45 UTC+8", "trigger=2026-06-02 15:45 UTC+8", "dedupe=listing_decision|12|first_listing"),
 		nil,
 		nil,
 		now,

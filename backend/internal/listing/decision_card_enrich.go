@@ -2,7 +2,9 @@ package listing
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"edgex-ops-intelligence/backend/internal/config"
@@ -383,6 +385,14 @@ type DecisionCardEnrichDeps struct {
 	// t_listing_announcement for a canonical and returns the
 	// per-platform timeline.
 	MarketStatusLoader func(ctx context.Context, canonical string) ([]PlatformMarketStatus, error)
+	// MarketStatusRefresher performs a bounded, read-only, pre-push
+	// refresh against live instrument sources. It must not persist
+	// snapshots or emit signals; MarketStatusLoader remains the DB
+	// fallback when enabled.
+	MarketStatusRefresher func(ctx context.Context, c Candidate) ([]PlatformMarketStatus, error)
+	// MarketStatusRefreshFallbackToSnapshot controls whether a refresh
+	// error or empty refresh result should fall back to MarketStatusLoader.
+	MarketStatusRefreshFallbackToSnapshot bool
 	// CoinGeckoFetcher returns (market_cap_usd, vol_24h_usd, id) for
 	// the canonical. id may be empty if the lookup failed before
 	// the markets call.
@@ -410,7 +420,21 @@ func EnrichCandidateForDecisionCard(ctx context.Context, deps DecisionCardEnrich
 		out.EdgexListedKnown = known
 	}
 
-	if deps.MarketStatusLoader != nil {
+	marketStatusLoaded := false
+	if deps.MarketStatusRefresher != nil {
+		statuses, err := deps.MarketStatusRefresher(ctx, c)
+		if err != nil {
+			out.EnrichErrors = append(out.EnrichErrors, "market_status_refresh: "+err.Error())
+		} else if len(statuses) > 0 {
+			out.MarketStatuses = statuses
+			marketStatusLoaded = true
+		}
+		if err == nil && len(statuses) == 0 && !deps.MarketStatusRefreshFallbackToSnapshot {
+			marketStatusLoaded = true
+		}
+	}
+
+	if !marketStatusLoaded && deps.MarketStatusLoader != nil && (deps.MarketStatusRefresher == nil || deps.MarketStatusRefreshFallbackToSnapshot) {
 		statuses, err := deps.MarketStatusLoader(ctx, c.CanonicalSymbol)
 		if err != nil {
 			out.EnrichErrors = append(out.EnrichErrors, "market_status: "+err.Error())
@@ -439,5 +463,208 @@ func EnrichCandidateForDecisionCard(ctx context.Context, deps DecisionCardEnrich
 		out.PerpDepth = perp
 	}
 
+	return out
+}
+
+type marketStatusRefreshCacheEntry struct {
+	expiresAt time.Time
+	statuses  []PlatformMarketStatus
+}
+
+// BuildCachedMarketStatusRefresher adapts live InstrumentSource fetchers into
+// a bounded pre-push refresher. It is intentionally read-only: it calls the
+// existing normalizers through InstrumentSource.Fetch, folds the returned
+// instruments in memory, and never writes snapshots or signal observations.
+func BuildCachedMarketStatusRefresher(
+	sources []InstrumentSource,
+	cfg config.ListingMarketStatusRefreshConfig,
+	now func() time.Time,
+) func(context.Context, Candidate) ([]PlatformMarketStatus, error) {
+	if !cfg.Enabled || len(sources) == 0 {
+		return nil
+	}
+	if now == nil {
+		now = func() time.Time { return time.Now().UTC() }
+	}
+	if cfg.PerSourceTimeout <= 0 {
+		cfg.PerSourceTimeout = 1500 * time.Millisecond
+	}
+	if cfg.TotalTimeout <= 0 {
+		cfg.TotalTimeout = 3 * time.Second
+	}
+	if cfg.MaxConcurrency <= 0 {
+		cfg.MaxConcurrency = 2
+	}
+	if cfg.MaxRequestsPerTick <= 0 {
+		cfg.MaxRequestsPerTick = 12
+	}
+	if cfg.CacheTTL <= 0 {
+		cfg.CacheTTL = 30 * time.Second
+	}
+
+	r := &cachedMarketStatusRefresher{
+		sources: sources,
+		cfg:     cfg,
+		now:     now,
+		cache:   map[string]marketStatusRefreshCacheEntry{},
+	}
+	return r.refresh
+}
+
+type cachedMarketStatusRefresher struct {
+	sources []InstrumentSource
+	cfg     config.ListingMarketStatusRefreshConfig
+	now     func() time.Time
+
+	mu            sync.Mutex
+	cache         map[string]marketStatusRefreshCacheEntry
+	requestsSoFar int
+}
+
+func (r *cachedMarketStatusRefresher) refresh(ctx context.Context, c Candidate) ([]PlatformMarketStatus, error) {
+	selected := r.selectedSources(c)
+	if len(selected) == 0 {
+		return nil, nil
+	}
+	key := r.cacheKey(c, selected)
+	now := r.now()
+	r.mu.Lock()
+	if entry, ok := r.cache[key]; ok && now.Before(entry.expiresAt) {
+		statuses := clonePlatformMarketStatuses(entry.statuses)
+		r.mu.Unlock()
+		return statuses, nil
+	}
+	remaining := r.cfg.MaxRequestsPerTick - r.requestsSoFar
+	if remaining <= 0 {
+		r.mu.Unlock()
+		return nil, fmt.Errorf("request budget exhausted")
+	}
+	if len(selected) > remaining {
+		selected = selected[:remaining]
+	}
+	r.requestsSoFar += len(selected)
+	r.mu.Unlock()
+
+	refreshCtx, cancel := context.WithTimeout(ctx, r.cfg.TotalTimeout)
+	defer cancel()
+
+	type sourceResult struct {
+		rows []MarketStatusRow
+		err  error
+	}
+	sem := make(chan struct{}, r.cfg.MaxConcurrency)
+	resCh := make(chan sourceResult, len(selected))
+	var wg sync.WaitGroup
+	for _, src := range selected {
+		src := src
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			select {
+			case sem <- struct{}{}:
+				defer func() { <-sem }()
+			case <-refreshCtx.Done():
+				resCh <- sourceResult{err: refreshCtx.Err()}
+				return
+			}
+			perCtx, perCancel := context.WithTimeout(refreshCtx, r.cfg.PerSourceTimeout)
+			defer perCancel()
+			items, err := src.Fetch(perCtx)
+			if err != nil {
+				resCh <- sourceResult{err: fmt.Errorf("%s/%s: %w", src.Platform, src.MarketType, err)}
+				return
+			}
+			rows := make([]MarketStatusRow, 0, len(items))
+			now := r.now()
+			for _, item := range items {
+				if !strings.EqualFold(item.CanonicalSymbol, c.CanonicalSymbol) {
+					continue
+				}
+				row := MarketStatusRow{
+					Platform:         item.Platform,
+					MarketType:       item.MarketType,
+					StatusNormalized: item.StatusNormalized,
+					StatusRaw:        item.StatusRaw,
+					ListingTimeTS:    item.ListingTimeTS,
+					LastSeenAt:       now,
+					SourceKind:       "api",
+				}
+				if row.Platform == "" {
+					row.Platform = src.Platform
+				}
+				if row.MarketType == "" {
+					row.MarketType = src.MarketType
+				}
+				if row.StatusNormalized == "" {
+					row.StatusNormalized = StatusUnknown
+				}
+				rows = append(rows, row)
+			}
+			resCh <- sourceResult{rows: rows}
+		}()
+	}
+	wg.Wait()
+	close(resCh)
+
+	var rows []MarketStatusRow
+	var errs []string
+	for res := range resCh {
+		if res.err != nil {
+			errs = append(errs, res.err.Error())
+			continue
+		}
+		rows = append(rows, res.rows...)
+	}
+	statuses := foldMarketStatusRows(rows)
+	if len(statuses) == 0 && len(errs) > 0 {
+		return nil, fmt.Errorf(strings.Join(errs, "; "))
+	}
+
+	r.mu.Lock()
+	r.cache[key] = marketStatusRefreshCacheEntry{expiresAt: now.Add(r.cfg.CacheTTL), statuses: clonePlatformMarketStatuses(statuses)}
+	r.mu.Unlock()
+	return statuses, nil
+}
+
+func (r *cachedMarketStatusRefresher) selectedSources(c Candidate) []InstrumentSource {
+	want := map[string]struct{}{}
+	if r.cfg.SourcePlatformsOnly {
+		for _, p := range c.SourcePlatforms {
+			want[strings.ToLower(strings.TrimSpace(p))] = struct{}{}
+		}
+	}
+	if r.cfg.IncludeEdgex {
+		want[strings.ToLower(edgexListedPlatformName)] = struct{}{}
+	}
+	out := make([]InstrumentSource, 0, len(r.sources))
+	for _, src := range r.sources {
+		if src.Fetch == nil {
+			continue
+		}
+		if r.cfg.SourcePlatformsOnly || r.cfg.IncludeEdgex {
+			if _, ok := want[strings.ToLower(src.Platform)]; !ok {
+				continue
+			}
+		}
+		out = append(out, src)
+	}
+	return out
+}
+
+func (r *cachedMarketStatusRefresher) cacheKey(c Candidate, sources []InstrumentSource) string {
+	parts := make([]string, 0, len(sources)+1)
+	parts = append(parts, strings.ToUpper(c.CanonicalSymbol))
+	for _, src := range sources {
+		parts = append(parts, strings.ToLower(src.Platform)+"/"+strings.ToLower(src.MarketType))
+	}
+	return strings.Join(parts, "|")
+}
+
+func clonePlatformMarketStatuses(in []PlatformMarketStatus) []PlatformMarketStatus {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make([]PlatformMarketStatus, len(in))
+	copy(out, in)
 	return out
 }

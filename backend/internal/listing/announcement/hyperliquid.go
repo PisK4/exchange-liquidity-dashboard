@@ -75,7 +75,7 @@ func ParseHyperliquidAnnouncement(raw json.RawMessage) (ParsedAnnouncement, erro
 	out.SignalSubtype = subtype
 	out.ParseConfidence = confidence
 	for _, sym := range symbols {
-		out.Symbols = append(out.Symbols, sym.toParsed(out.PublishedAt, subtype, sourceModule))
+		out.Symbols = append(out.Symbols, sym.toParsed(subtype, sourceModule))
 	}
 	return out, nil
 }
@@ -148,7 +148,7 @@ func extractHyperliquidSpotSymbols(title string) []quotedSymbol {
 	return out
 }
 
-func (s quotedSymbol) toParsed(listingTime *time.Time, subtype, sourceModule string) ParsedAnnouncementSymbol {
+func (s quotedSymbol) toParsed(subtype, sourceModule string) ParsedAnnouncementSymbol {
 	surface := "perp"
 	display := s.base + "-" + s.quote + " (perp)"
 	if subtype == SubtypeSpotListing {
@@ -161,7 +161,6 @@ func (s quotedSymbol) toParsed(listingTime *time.Time, subtype, sourceModule str
 		MarketSurface:   surface,
 		InstrumentKind:  "canonical",
 		SignalSubtype:   subtype,
-		ListingTimeTS:   listingTime,
 		SourceModule:    sourceModule,
 	}
 }

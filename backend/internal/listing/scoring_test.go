@@ -33,6 +33,37 @@ func TestBusinessScoreBinanceOnly(t *testing.T) {
 	}
 }
 
+func TestBusinessScoreBinanceAnnouncementOnlyKeepsSourceScore(t *testing.T) {
+	got := ScoreCandidate(ScoreInput{
+		Platforms:     []string{"binance"},
+		EvidenceKind:  EvidenceAnnouncementPendingAPI,
+		MarketSurface: "perp",
+	})
+	if got.BusinessScore == nil || *got.BusinessScore != 80 {
+		t.Fatalf("score = %v, want 80", got.BusinessScore)
+	}
+	if got.Recommendation != RecommendationPrepareListing {
+		t.Fatalf("recommendation = %q, want prepare_listing", got.Recommendation)
+	}
+	if got.BusinessScoreVersion != "v2" {
+		t.Fatalf("business_score_version = %q, want v2", got.BusinessScoreVersion)
+	}
+}
+
+func TestBusinessScoreBinanceDualEvidenceKeepsSourceScore(t *testing.T) {
+	got := ScoreCandidate(ScoreInput{
+		Platforms:     []string{"binance"},
+		EvidenceKind:  EvidenceAnnouncementAndAPI,
+		MarketSurface: "perp",
+	})
+	if got.BusinessScore == nil || *got.BusinessScore != 80 {
+		t.Fatalf("score = %v, want 80", got.BusinessScore)
+	}
+	if got.Recommendation != RecommendationPrepareListing {
+		t.Fatalf("recommendation = %q, want prepare_listing", got.Recommendation)
+	}
+}
+
 func TestBusinessScoreTwoTier2Watch(t *testing.T) {
 	got := ScoreCandidate(ScoreInput{
 		Platforms:    []string{"bybit", "okx"},
@@ -72,15 +103,16 @@ func TestBusinessScoreSingleNonBinance(t *testing.T) {
 	}
 }
 
-func TestAnnouncementOnlyForcesPreAssessment(t *testing.T) {
+func TestAnnouncementOnlyDoesNotForcePerpPreAssessment(t *testing.T) {
 	got := ScoreCandidate(ScoreInput{
-		Platforms:    []string{"binance"},
-		EvidenceKind: EvidenceAnnouncementPendingAPI,
+		Platforms:     []string{"binance"},
+		EvidenceKind:  EvidenceAnnouncementPendingAPI,
+		MarketSurface: "perp",
 	})
-	if got.Recommendation != RecommendationPreAssessment {
-		t.Fatalf("recommendation = %q, want pre_assessment", got.Recommendation)
+	if got.Recommendation != RecommendationPrepareListing {
+		t.Fatalf("recommendation = %q, want prepare_listing", got.Recommendation)
 	}
-	if got.RecommendationLabel != "进入预评估" {
+	if got.RecommendationLabel != RecommendationLabels[RecommendationPrepareListing] {
 		t.Fatalf("label = %q", got.RecommendationLabel)
 	}
 }

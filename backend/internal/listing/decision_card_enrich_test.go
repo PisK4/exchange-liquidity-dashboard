@@ -5,6 +5,9 @@ import (
 	"errors"
 	"testing"
 	"time"
+
+	"edgex-ops-intelligence/backend/internal/config"
+	"edgex-ops-intelligence/backend/internal/listing/instrument"
 )
 
 func TestEnrichCandidateForDecisionCardAllSourcesNil(t *testing.T) {
@@ -94,5 +97,147 @@ func TestEnrichCandidateForDecisionCardRecordsPerSourceErrors(t *testing.T) {
 	}
 	if got.HasMarketStatus() {
 		t.Errorf("HasMarketStatus = true on loader error")
+	}
+}
+
+func TestEnrichCandidateForDecisionCardUsesRefreshBeforeSnapshotLoader(t *testing.T) {
+	ctx := context.Background()
+	c := Candidate{CanonicalSymbol: "ABC", SourcePlatforms: []string{"binance"}}
+	refreshed := []PlatformMarketStatus{{Platform: "binance", Status: StatusActive, SourceKind: "api"}}
+	loaderCalled := false
+	deps := DecisionCardEnrichDeps{
+		MarketStatusRefresher: func(ctx context.Context, c Candidate) ([]PlatformMarketStatus, error) {
+			return refreshed, nil
+		},
+		MarketStatusLoader: func(ctx context.Context, canonical string) ([]PlatformMarketStatus, error) {
+			loaderCalled = true
+			return []PlatformMarketStatus{{Platform: "bybit", Status: StatusPreListing, SourceKind: "announcement"}}, nil
+		},
+		MarketStatusRefreshFallbackToSnapshot: true,
+	}
+	got := EnrichCandidateForDecisionCard(ctx, deps, c)
+	if loaderCalled {
+		t.Fatalf("snapshot loader should not run after successful pre-push refresh")
+	}
+	if len(got.MarketStatuses) != 1 || got.MarketStatuses[0].Platform != "binance" {
+		t.Fatalf("MarketStatuses = %+v, want refreshed binance status", got.MarketStatuses)
+	}
+}
+
+func TestEnrichCandidateForDecisionCardRefreshErrorFallsBackToSnapshotLoader(t *testing.T) {
+	ctx := context.Background()
+	c := Candidate{CanonicalSymbol: "ABC", SourcePlatforms: []string{"binance"}}
+	deps := DecisionCardEnrichDeps{
+		MarketStatusRefresher: func(ctx context.Context, c Candidate) ([]PlatformMarketStatus, error) {
+			return nil, errors.New("refresh timeout")
+		},
+		MarketStatusLoader: func(ctx context.Context, canonical string) ([]PlatformMarketStatus, error) {
+			return []PlatformMarketStatus{{Platform: "binance", Status: StatusActive, SourceKind: "api"}}, nil
+		},
+		MarketStatusRefreshFallbackToSnapshot: true,
+	}
+	got := EnrichCandidateForDecisionCard(ctx, deps, c)
+	if len(got.MarketStatuses) != 1 || got.MarketStatuses[0].Platform != "binance" {
+		t.Fatalf("MarketStatuses = %+v, want fallback snapshot status", got.MarketStatuses)
+	}
+	if len(got.EnrichErrors) != 1 || got.EnrichErrors[0] != "market_status_refresh: refresh timeout" {
+		t.Fatalf("EnrichErrors = %v, want refresh timeout audit", got.EnrichErrors)
+	}
+}
+
+func TestBuildCachedMarketStatusRefresherCachesWithinTick(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	fetches := 0
+	refresher := BuildCachedMarketStatusRefresher([]InstrumentSource{
+		{
+			Platform:   "binance",
+			MarketType: "usdm_futures",
+			Fetch: func(ctx context.Context) ([]instrument.NormalizedInstrument, error) {
+				fetches++
+				return []instrument.NormalizedInstrument{{
+					Platform:         "binance",
+					MarketType:       "usdm_futures",
+					APISymbol:        "ABCUSDT",
+					CanonicalSymbol:  "ABC",
+					MarketSurface:    "perp",
+					InstrumentKind:   "canonical",
+					StatusRaw:        "TRADING",
+					StatusNormalized: StatusActive,
+				}}, nil
+			},
+		},
+	}, config.ListingMarketStatusRefreshConfig{
+		Enabled:             true,
+		SourcePlatformsOnly: true,
+		MaxConcurrency:      1,
+		MaxRequestsPerTick:  10,
+		CacheTTL:            time.Minute,
+		FallbackToSnapshot:  true,
+	}, func() time.Time { return now })
+	if refresher == nil {
+		t.Fatalf("refresher is nil")
+	}
+	c := Candidate{CanonicalSymbol: "ABC", SourcePlatforms: []string{"binance"}}
+	first, err := refresher(ctx, c)
+	if err != nil {
+		t.Fatalf("first refresh err = %v", err)
+	}
+	second, err := refresher(ctx, c)
+	if err != nil {
+		t.Fatalf("second refresh err = %v", err)
+	}
+	if fetches != 1 {
+		t.Fatalf("fetches = %d, want 1 cached fetch", fetches)
+	}
+	if len(first) != 1 || len(second) != 1 || first[0].Platform != "binance" || second[0].Platform != "binance" {
+		t.Fatalf("refresh results = %+v / %+v", first, second)
+	}
+}
+
+func TestBuildCachedMarketStatusRefresherFiltersSourcePlatformsAndEdgeX(t *testing.T) {
+	ctx := context.Background()
+	now := time.Date(2026, 6, 10, 12, 0, 0, 0, time.UTC)
+	fetched := map[string]int{}
+	makeSource := func(platform string) InstrumentSource {
+		return InstrumentSource{
+			Platform:   platform,
+			MarketType: "perp",
+			Fetch: func(ctx context.Context) ([]instrument.NormalizedInstrument, error) {
+				fetched[platform]++
+				return []instrument.NormalizedInstrument{{
+					Platform:         platform,
+					MarketType:       "perp",
+					APISymbol:        "ABC-USDT",
+					CanonicalSymbol:  "ABC",
+					MarketSurface:    "perp",
+					InstrumentKind:   "canonical",
+					StatusNormalized: StatusActive,
+				}}, nil
+			},
+		}
+	}
+	refresher := BuildCachedMarketStatusRefresher([]InstrumentSource{
+		makeSource("binance"),
+		makeSource("bybit"),
+		makeSource(edgexListedPlatformName),
+	}, config.ListingMarketStatusRefreshConfig{
+		Enabled:             true,
+		SourcePlatformsOnly: true,
+		IncludeEdgex:        true,
+		MaxConcurrency:      2,
+		MaxRequestsPerTick:  10,
+		CacheTTL:            time.Minute,
+		FallbackToSnapshot:  true,
+	}, func() time.Time { return now })
+	statuses, err := refresher(ctx, Candidate{CanonicalSymbol: "ABC", SourcePlatforms: []string{"binance"}})
+	if err != nil {
+		t.Fatalf("refresh err = %v", err)
+	}
+	if fetched["binance"] != 1 || fetched[edgexListedPlatformName] != 1 || fetched["bybit"] != 0 {
+		t.Fatalf("fetched = %+v, want binance+edgeX only", fetched)
+	}
+	if len(statuses) != 2 {
+		t.Fatalf("statuses = %+v, want 2", statuses)
 	}
 }

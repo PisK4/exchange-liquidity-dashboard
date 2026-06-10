@@ -2,6 +2,13 @@
 
 ## 背景
 
+> Current contract update (2026-06-10): decision cards now use source-first
+> scoring v2 and a simplified operator-facing card. Numeric score and
+> recommendation are derived from source/platform mix, not from API-vs-
+> announcement evidence channel. The backend keeps recommendation,
+> confidence, and risk plan fields for audit/callback compatibility, but the
+> Lark card no longer renders recommendation/confidence/risk-plan copy.
+
 Phase 1 把 Listing Agent 的左半边链路（信号采集 → 候选融合 → Top30 / 分歧 / 流动性推送）打通到飞书群里——但卡片**只读**：运营看到候选后还要回到 dashboard 自己点 / 自己改 SOP，决策动作没有被任何系统捕获。Phase 2 把右半边补齐：
 
 ```text
@@ -9,7 +16,7 @@ listing engine (RunOnce, 与 Phase 1 共用 cadence)
     ├── Phase 1: ProduceTop30Push / ProduceDivergencePush / ProduceLiquidityAlertPush
     └── Step 2d: ProduceDecisionCards    ← 本 doc 主体（#8）
           ↓ 写 t_listing_risk_plan + t_listing_delivery_outbox(decision_card_*)
-          ↓ DrainDueOutbox → Lark interactive card with 4 个按钮
+          ↓ DrainDueOutbox → bounded market-status refresh → Lark interactive card with 4 个按钮
 
 [运营点按钮]
     ↓ Lark webhook → POST /api/listing/callback   ← 本 doc 主体（#9）
@@ -67,18 +74,21 @@ listing engine (RunOnce, 与 Phase 1 共用 cadence)
 
 `historical_listing_grace_period` 默认在 `config/edgex-ops-intelligence.yaml` 中配置为 `48h`。调大该值会把更早的交易所 launch/open 时间视为 fresh，可能增加推送；调小则更积极地把晚发现的旧市场 observation-only 化。
 
-## 按钮矩阵（per evidence_kind）
+## 按钮矩阵（all evidence kinds）
 
-`BuildDecisionCardEvent` 内部 `buttonMatrixFor(evidence_kind, lifecycle_status)` 是纯函数，按 spec §5 的真值表给每张卡装配按钮组：
+`BuildDecisionCardEvent` 现在对所有 decision-card evidence kinds 使用同一组
+`standardButtonMatrix()`。按钮是否可点击不再由 API-vs-公告通道做数值或 UX 降级；通道差异只通过卡片文案解释给运营。
 
-| evidence_kind | prepare_listing | enter_watchlist | contact_mm | ignore | rationale |
+| evidence_kind | prepare_listing | enter_watchlist | contact_mm | ignore | card evidence label |
 |---|---|---|---|---|---|
-| `announcement_and_api` | ✅ | ✅ | ✅ | ✅ | 双源确认，可以直接走"准备上架"主流程 |
-| `api_detected_no_announcement` | ✅ | ✅ | ✅ | ✅ | API 已上线、公告未发——同样允许"准备上架"，但运营通常会先 `contact_mm` 验明真伪 |
-| `announcement_pending_api` | ❌ | ✅ | ✅ | ✅ | **公告已发但 API 尚未落库**——禁止"准备上架"按钮：上 edgeX 前必须看到 API 报盘，否则做市/风控参数无法确认。允许 watch / 联系 MM / 忽略 |
-| `pre_assessment_observed` | ❌ | ✅ | ❌ | ✅ | 仅观测信号（CoinGecko 热度等），不足以触发对外动作；只允许进 watchlist 或忽略 |
+| `announcement_and_api` | ✅ | ✅ | ✅ | ✅ | `API + 公告都已确认` |
+| `instrument_diff_only` / `api_detected_no_announcement` | ✅ | ✅ | ✅ | ✅ | `API 已发现` |
+| `announcement_pending_api` | ✅ | ✅ | ✅ | ✅ | `公告已发现` |
+| `top30_only` | ✅ | ✅ | ✅ | ✅ | `热度发现` |
+| `manual_seed` / `pre_assessment_observed` | ✅ | ✅ | ✅ | ✅ | `手动加入` / 原始 kind |
 
-**红线**：按钮矩阵在 spec 里是法定契约，前端 / 后端任一处偏离都会让运营按到不该有的按钮、或看不到本该有的按钮。`decision_card_test.go::TestBuildDecisionCardEventEnforcesButtonMatrix` 锁死这四行。
+**红线**：四按钮是当前法定契约。前端 / 后端任一处偏离都会让运营看不到本该有的动作。
+`decision_card_test.go::TestBuildDecisionCardEventEveryEvidenceKindShowsAllButtons` 锁定所有 evidence kind。
 
 每个按钮在 Lark interactive card 上的 `value` 字段携带：
 
@@ -113,30 +123,53 @@ listing engine (RunOnce, 与 Phase 1 共用 cadence)
 `RenderDecisionCardPostMessage(ev)`（`decision_card.go`）生成 Lark `msg_type=interactive` body，结构与 Phase 1 hot-gap 卡同源（header → headline → fields → action row → footer note）：
 
 ```text
-[Header: 颜色按 recommendation 分级]
-  🧾 候选决策 · <recommendation_label>
+[Header: New Perp/Spot Listing Detected · <symbol>]
 
-# BEAT-USDT (perp)
-<font color='blue'>证据：双源确认</font>           ← evidence_kind label
+# BEAT
+<font color='grey'>API + 公告都已确认</font>      ← evidence_kind label
 ─────────────────────
-评分 80 / v1            | lifecycle 已确认候选
-首次观测 2h 前          | 平台覆盖 5 家
+Token BEAT                     | edgeX 状态 未上线/未知
+Source Binance, Bybit          | Detected Time 2026-05-30 17:25 UTC+8
+Listing Time 2026-05-30 18:00 UTC+8（仅真实 API launch/open 时间存在时）
 ─────────────────────
-风险计划：tier1_standard · 50x / MM required
+Market Status（刷新失败则回退 DB snapshot，并在 footer 写 enrich_errors=N）
 ─────────────────────
-[准备上架] (primary, red)       [进入观察] (default)
-[联系 MM]                       [忽略]
+Market Cap / Spot 24h Vol / Spot Depth / Perp Depth
+─────────────────────
+Score 90 / 100
+─────────────────────
+[准备上线] [进入观察] [联系MM] [忽略]
 
-触发时间 2026-05-30 09:25 UTC · listing_decision|1234|2026-05-30
+trigger=2026-05-30 17:25 UTC+8 · evidence=API + 公告都已确认 · dedupe=listing_decision|1234|first_listing
 ```
 
 设计要点（仅记差异；与 hot-gap 卡共享的部分见 `listing-agent-top30-hot-gap-push.md` §"卡片渲染"）：
 
-- **Header 颜色**：`prepare_listing → red`、`evaluate_listing → blue`、`hold_watch → grey`、其它 → 默认 grey。`recommendationHeaderTemplate(rec)` 集中映射。
-- **按钮顺序固定**：`prepare_listing → enter_watchlist → contact_mm → ignore`，即便某些 button 被矩阵剥掉、剩余按钮按相同顺序填进 `card.i18n_elements`。运营肌肉记忆固定后误点率会降——顺序是 UX 契约。
+- **Source-first scoring v2**：`BusinessScoreVersion = v2`。Binance 单源即可约 80 分并进入 `prepare_listing`；Binance + 任一平台约 90；`bybit/okx/hyperliquid` 多源约 65；`mexc+bitget` 约 60；单个 `bybit/okx/hyperliquid` 约 55；其它单源约 40。API-vs-公告证据通道只影响卡片文案，不影响 numeric score。
+- **按钮顺序固定**：`prepare_listing → enter_watchlist → contact_mm → ignore`，所有 decision-card evidence kinds 都渲染四个按钮。运营肌肉记忆固定后误点率会降——顺序是 UX 契约。
 - **`value` payload**：每个按钮 `value` 都带 `candidate_id / risk_plan_id / action / dedupe_key` 四元组；其中 `dedupe_key` 与 outbox 表对齐，便于回调 handler 反查 outbox。
-- **时间语义**：基础信息区主字段固定展示 `Detected Time`（producer 触发时间）。交易所 API 返回的 launch/open 时间只在存在 fresh evidence 时以 `Exchange Listing Time` 单独展示，避免把几周/月前的真实 listing time 误读为本次推送触发时间。
+- **卡片减负**：recommendation、confidence、risk plan 不再渲染到 Lark 卡片。它们仍保留在 backend event / DB audit / callback payload 路径，保证兼容下游审计和动作分发。
+- **时间语义**：基础信息区主字段固定展示 `Detected Time`（producer 触发时间）。交易所 API 返回的 launch/open 时间只在存在 fresh instrument-diff evidence 时以 `Listing Time` 单独展示；announcement `published_at` / `createdAt` 不得作为 `Listing Time`。
+- **Market Status 预刷新**：渲染前可按 `Runtime.listing_agent.decision_card.market_status_refresh` 对 source platforms + edgeX 做一次 bounded/fail-open instrument API refresh。该 refresh 只读 API、带 timeout/concurrency/request budget/tick cache，不写 snapshot、不写 signal、不改变 candidate；失败时按配置回退 DB snapshot。
 - **schema gotchas**：与 hot-gap 卡完全一致——`plain_text` / `lark_md` 的字段名是 `content` 不是 `text`，emoji 用于语义符号但 tier / status 类视觉用 `<font color>`，`SetEscapeHTML(false)` 让 outbox `payload_json` 肉眼可读。
+
+`market_status_refresh` 推荐默认值：
+
+```yaml
+Runtime:
+  listing_agent:
+    decision_card:
+      market_status_refresh:
+        enabled: true
+        source_platforms_only: true
+        include_edgex: true
+        per_source_timeout: 1500ms
+        total_timeout: 3s
+        max_concurrency: 2
+        max_requests_per_tick: 12
+        cache_ttl: 30s
+        fallback_to_snapshot: true
+```
 
 ## 回调：`POST /api/listing/callback`
 

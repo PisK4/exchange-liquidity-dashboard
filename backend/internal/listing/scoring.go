@@ -2,7 +2,7 @@ package listing
 
 import "strings"
 
-const BusinessScoreVersion = "v1"
+const BusinessScoreVersion = "v2"
 
 // ScoreInput is the immutable per-candidate input used by the scoring
 // gate. Fusion populates it from the latest signals; nothing else
@@ -27,16 +27,17 @@ type ScoreResult struct {
 	ConfidenceLevel      string
 }
 
-// ScoreCandidate applies the §23.5 PRD score table plus the edgeX
-// listed override.
+// ScoreCandidate applies the source-first v2 score table plus the
+// edgeX listed override.
 //
 //   - edgeX listed  => no_action / already_listed regardless of score.
-//   - announcement-only perp evidence => recommendation forced to
-//     pre_assessment; the numeric score still reflects platform tier.
+//   - API / announcement evidence only changes the operator-facing signal
+//     wording and confidence; it does NOT change the numeric score nor the
+//     perp recommendation tier for the same source platform mix.
 //   - spot candidates stay low-risk (record_only / watch) until ops
 //     explicitly opts spot into the prepare-listing workflow.
 //   - otherwise the score is determined by the combined platform tier,
-//     and the recommendation follows the §23.5 PRD mapping.
+//     and the recommendation follows the PRD source-platform mapping.
 func ScoreCandidate(in ScoreInput) ScoreResult {
 	if in.EdgexListed {
 		return ScoreResult{
@@ -56,8 +57,6 @@ func ScoreCandidate(in ScoreInput) ScoreResult {
 		if in.EvidenceKind == EvidenceAnnouncementAndAPI || len(platforms) >= 2 {
 			recommendation = RecommendationWatch
 		}
-	} else if in.EvidenceKind == EvidenceAnnouncementPendingAPI {
-		recommendation = RecommendationPreAssessment
 	}
 
 	out := ScoreResult{

@@ -108,16 +108,13 @@ type DecisionCardEvent struct {
 	PrimaryListingTime *time.Time           `json:"primary_listing_time,omitempty"`
 
 	// Enrichment is the bundle of data the renderer surfaces in the
-	// Market Status / Metrics / 自动参数预案 blocks. Optional; when
+	// Market Status / Metrics blocks. Optional; when
 	// zero-value the renderer degrades each block gracefully (e.g.
 	// shows "无平台状态记录" instead of an empty bullet list).
 	Enrichment DecisionCardEnrichment `json:"-"`
 
-	// RiskPlan carries the leverage / MM-quote knobs surfaced in the
-	// "自动参数预案" block. The renderer reads MaxLeverage +
-	// LeverageTiersJSON + MMQuoteRequired only; FundingInitialMode
-	// and MaxPositionUSD stay TBD per spec C7 and the renderer
-	// surfaces a static "Funding / Max Position 待对齐" note.
+	// RiskPlan stays in the backend audit/callback path. The source-
+	// first Lark card intentionally does not render risk plan copy.
 	RiskPlan RiskPlan `json:"-"`
 }
 
@@ -180,11 +177,10 @@ func standardButtonMatrix() []DecisionCardAction {
 }
 
 // RenderDecisionCardPostMessage builds the Lark interactive card
-// envelope. The layout follows PRD §5.2 (基础信息 / Market Status /
-// Metrics / 自动参数预案 / Score+Recommendation / Actions) using
-// the Top30 card's visual idiom: action-coloured header, 2x2 fields,
-// `<hr>` separators between blocks, coloured-bullet platform list,
-// note footer.
+// envelope. The layout follows the source-first card contract:
+// 基础信息 / Market Status / Metrics / Score / Actions. Risk plan,
+// confidence, and recommendation stay in the backend audit path but
+// are intentionally not rendered to keep the operator card compact.
 //
 // Callback contract is unchanged: every button still posts back
 // {candidate_id, risk_plan_id, action, dedupe_key}, so the existing
@@ -214,8 +210,6 @@ func buildDecisionCard(ev DecisionCardEvent) map[string]any {
 		map[string]any{"tag": "hr"},
 		buildDecisionMetricsFields(ev),
 		map[string]any{"tag": "hr"},
-		buildDecisionRiskPlanBlock(ev),
-		map[string]any{"tag": "hr"},
 		buildDecisionScoreFields(ev),
 	}
 	if action := buildDecisionActionRow(ev); action != nil {
@@ -238,11 +232,9 @@ func buildDecisionCard(ev DecisionCardEvent) map[string]any {
 // decisionHeaderTemplate returns the Lark header colour for the
 // decision card. Operator chose to unify the header across all
 // recommendation tiers — every new perp listing detection deserves
-// the same visual prominence in the Listing group, and the per-card
-// recommendation tier still surfaces in the body's Score /
-// Recommendation row. We pick red because it has the strongest
-// "look at this now" signal in a busy chat list, matching the
-// "🚨 New Perp Listing Detected" banner emoji.
+// the same visual prominence in the Listing group. We pick red
+// because it has the strongest "look at this now" signal in a busy
+// chat list, matching the "🚨 New Perp Listing Detected" banner emoji.
 func decisionHeaderTemplate(rec string) string {
 	return "red"
 }
@@ -273,10 +265,9 @@ func decisionHeaderText(ev DecisionCardEvent) string {
 }
 
 // buildDecisionHeadline is the body's first row: H1 symbol + a
-// muted subtitle showing the evidence kind (Chinese label) so the
-// operator immediately knows whether this is a strong (双源确认)
-// or a weak (API only / 公告 only) candidate without parsing the
-// score.
+// muted subtitle showing the discovery channel (Chinese label). The
+// channel explains how the agent found the listing; score remains
+// source-platform driven.
 func buildDecisionHeadline(ev DecisionCardEvent) map[string]any {
 	sym := strings.TrimSpace(ev.CanonicalSymbol)
 	if sym == "" {
@@ -302,13 +293,13 @@ func buildDecisionHeadline(ev DecisionCardEvent) map[string]any {
 func evidenceKindLabel(kind string) string {
 	switch kind {
 	case EvidenceAnnouncementAndAPI:
-		return "公告 + API 双源确认"
+		return "API + 公告都已确认"
 	case EvidenceInstrumentDiffOnly:
-		return "API 已发现 · 待公告确认"
+		return "API 已发现"
 	case EvidenceAnnouncementPendingAPI:
-		return "公告已发布 · 待 API 上架"
+		return "公告已发现"
 	case EvidenceTop30Only:
-		return "Top30 热门缺口"
+		return "热度发现"
 	case EvidenceManualSeed:
 		return "手动加入"
 	default:
@@ -328,7 +319,7 @@ func buildDecisionBasicInfoFields(ev DecisionCardEvent) map[string]any {
 		decisionTimeSummaryField(ev),
 	}
 	if ev.PrimaryListingTime != nil && !ev.PrimaryListingTime.IsZero() {
-		fields = append(fields, summaryField("Exchange Listing Time", formatUTC8(*ev.PrimaryListingTime)))
+		fields = append(fields, summaryField("Listing Time", formatUTC8(*ev.PrimaryListingTime)))
 	}
 	return map[string]any{
 		"tag":    "div",
@@ -350,8 +341,12 @@ func selectPrimaryListingTime(sourcePlatforms []string, signals []SignalObservat
 	}
 	var best *SignalObservation
 	bestPriority := len(priority) + 1
+	bestSourceRank := 99
 	for i := range signals {
 		s := &signals[i]
+		if s.SignalType != SignalInstrumentDiff {
+			continue
+		}
 		if s.ListingTimeTS == nil || s.ListingTimeTS.IsZero() {
 			continue
 		}
@@ -359,9 +354,11 @@ func selectPrimaryListingTime(sourcePlatforms []string, signals []SignalObservat
 		if !ok {
 			p = len(priority)
 		}
-		if best == nil || p < bestPriority || (p == bestPriority && s.ObservedAt.After(best.ObservedAt)) {
+		sourceRank := listingTimeSourceRank(*s)
+		if best == nil || sourceRank < bestSourceRank || (sourceRank == bestSourceRank && (p < bestPriority || (p == bestPriority && s.ObservedAt.After(best.ObservedAt)))) {
 			best = s
 			bestPriority = p
+			bestSourceRank = sourceRank
 		}
 	}
 	if best == nil {
@@ -369,6 +366,15 @@ func selectPrimaryListingTime(sourcePlatforms []string, signals []SignalObservat
 	}
 	t := *best.ListingTimeTS
 	return &t
+}
+
+func listingTimeSourceRank(s SignalObservation) int {
+	switch s.SignalType {
+	case SignalInstrumentDiff:
+		return 0
+	default:
+		return 1
+	}
 }
 
 // primarySourceLabel renders the "Source: Binance Futures (+N more)"
@@ -564,22 +570,18 @@ func buildDecisionRiskPlanBlock(ev DecisionCardEvent) map[string]any {
 	}
 }
 
-// buildDecisionScoreFields renders the Score and Recommendation
-// summary as a 2-cell row right above the action buttons.
+// buildDecisionScoreFields renders only the source-first score right
+// above the action buttons. Internal recommendations still drive
+// audit/risk-plan compatibility but are no longer card copy.
 func buildDecisionScoreFields(ev DecisionCardEvent) map[string]any {
 	scoreLabel := "—"
 	if ev.BusinessScore > 0 {
 		scoreLabel = fmt.Sprintf("%.0f / 100", ev.BusinessScore)
 	}
-	rec := RecommendationLabels[ev.Recommendation]
-	if rec == "" {
-		rec = ev.Recommendation
-	}
 	return map[string]any{
 		"tag": "div",
 		"fields": []any{
 			summaryField("Score", scoreLabel),
-			summaryField("Recommendation", rec),
 		},
 	}
 }
@@ -622,16 +624,13 @@ func decisionButtonType(action string) string {
 }
 
 // buildDecisionFooterNote renders the muted footer with dedupe key,
-// trigger timestamp, evidence-kind label, confidence and any
-// best-effort enrichment errors so the operator can audit the
-// pipeline without leaving Lark.
+// trigger timestamp, evidence-kind label, and any best-effort
+// enrichment error count so the operator can audit the pipeline
+// without leaving Lark.
 func buildDecisionFooterNote(ev DecisionCardEvent) map[string]any {
 	parts := []string{
 		"trigger=" + formatUTC8(ev.TriggerTime),
 		"evidence=" + evidenceKindLabel(ev.EvidenceKind),
-	}
-	if ev.ConfidenceLevel != "" {
-		parts = append(parts, "confidence="+ev.ConfidenceLevel)
 	}
 	// CoinGecko ID intentionally omitted from the footer per ops
 	// feedback: the card should not surface external data-source

@@ -33,6 +33,9 @@ func TestParseBybitAnnouncementSplitsSymbols(t *testing.T) {
 		if s.SignalSubtype != "perp_listing_announcement" {
 			t.Fatalf("signal_subtype = %q", s.SignalSubtype)
 		}
+		if s.ListingTimeTS != nil {
+			t.Fatalf("announcement publishTime must not be copied to listing time: %+v", s.ListingTimeTS)
+		}
 	}
 	if got.PublishedAt == nil {
 		t.Fatalf("published_at should be parsed from publishTime")
@@ -71,6 +74,9 @@ func TestParseBitgetAnnouncementSingleSymbol(t *testing.T) {
 	if len(got.Symbols) != 1 || got.Symbols[0].CanonicalSymbol != "XYZ" {
 		t.Fatalf("symbols = %+v", got.Symbols)
 	}
+	if got.Symbols[0].ListingTimeTS != nil {
+		t.Fatalf("announcement publishTime must not be copied to listing time: %+v", got.Symbols[0].ListingTimeTS)
+	}
 }
 
 func TestParseHyperliquidAnnouncementPerpSingleSymbol(t *testing.T) {
@@ -95,8 +101,11 @@ func TestParseHyperliquidAnnouncementPerpSingleSymbol(t *testing.T) {
 	if s.SignalSubtype != SubtypePerpListing || s.SourceModule != "hyperliquid_entries" {
 		t.Fatalf("unexpected symbol metadata = %+v", s)
 	}
-	if s.ListingTimeTS == nil {
-		t.Fatalf("listing time should be copied from createdAt")
+	if got.PublishedAt == nil {
+		t.Fatalf("published_at should be parsed from createdAt")
+	}
+	if s.ListingTimeTS != nil {
+		t.Fatalf("announcement createdAt must not be copied to listing time: %+v", s.ListingTimeTS)
 	}
 }
 
