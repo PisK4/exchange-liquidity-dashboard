@@ -839,7 +839,7 @@ func defaultActivitySourceURL(platform, sourceGroup string) string {
 		"mexc|latest_events":             "https://www.mexc.com/announcements/latest-events/ongoing",
 		"bybit|announcements_api":        "https://api.bybit.com/v5/announcements/index?locale=en-US&type=new_crypto&page=1&limit=20",
 		"bitget|support_ongoing_section": "https://www.bitget.com/support/sections/4413154768537",
-		"hyperliquid|cloudfront_entries": "https://dzjnlsk4rxci0.cloudfront.net/mainnet/feed_data.json",
+		"hyperliquid|cloudfront_entries": "https://dzjnlsk4rxci0.cloudfront.net/mainnet/entries.json",
 		"lighter|incentive_docs":         "https://docs.lighter.xyz/points-program.md",
 	}
 	return urls[key]
