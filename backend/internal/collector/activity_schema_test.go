@@ -40,6 +40,11 @@ func TestActivitySchemaIncludedInInitSchemaSQL(t *testing.T) {
 		"uk_activity_event_symbol",
 		"last_checked_at DATETIME(3) NULL",
 		"last_success_at DATETIME(3) NULL",
+		"producer_watermark_at DATETIME(3) NULL",
+		"bootstrap_completed_at DATETIME(3) NULL",
+		"source_observed_at DATETIME(3) NULL",
+		"source_producer_watermark_at DATETIME(3) NULL",
+		"source_bootstrap_completed_at DATETIME(3) NULL",
 		"disabled_no_webhook",
 		"disabled_missing_secret",
 	} {
@@ -85,6 +90,22 @@ func TestActivityMigrationUpAndDownExist(t *testing.T) {
 				"last_success_at",
 			},
 			downSnippets: []string{"DROP COLUMN last_success_at", "DROP COLUMN last_checked_at"},
+		},
+		"000020_activity_source_bootstrap_state": {
+			upSnippets: []string{
+				"producer_watermark_at",
+				"bootstrap_completed_at",
+				"source_observed_at",
+				"source_producer_watermark_at",
+				"source_bootstrap_completed_at",
+			},
+			downSnippets: []string{
+				"DROP COLUMN source_bootstrap_completed_at",
+				"DROP COLUMN source_producer_watermark_at",
+				"DROP COLUMN source_observed_at",
+				"DROP COLUMN bootstrap_completed_at",
+				"DROP COLUMN producer_watermark_at",
+			},
 		},
 	}
 	for name, spec := range migrations {

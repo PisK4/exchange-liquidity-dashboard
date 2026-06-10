@@ -160,10 +160,16 @@ migrate-up:
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000015_activity_delivery_review.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000016_activity_indexes_postinit.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000017_activity_source_poll_state.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000018_surface_identity.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000019_listing_source_context.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000020_activity_source_bootstrap_state.up.sql"
 
 migrate-down:
 	@echo "Apply backend/migrations/*.down.sql to MySQL DSN: $(MYSQL_DSN)"
-	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000017_activity_source_poll_state.down.sql"
+	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000020_activity_source_bootstrap_state.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000019_listing_source_context.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000018_surface_identity.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000017_activity_source_poll_state.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000016_activity_indexes_postinit.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000015_activity_delivery_review.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000014_activity_event_children.down.sql"
