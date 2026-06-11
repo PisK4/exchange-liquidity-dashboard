@@ -30,6 +30,8 @@ The backend runs three active modules behind one binary:
 
 Single Compose project (`edgex-ops-intelligence`). All bind on 127.0.0.1 by
 default; expose via a reverse proxy if external access is required.
+For a full AWS DEV-like local rehearsal, follow
+`deploy/aws-dev-local-rehearsal.md` before publishing to a company AWS host.
 
 Recommended production reverse-proxy routing:
 

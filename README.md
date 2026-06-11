@@ -24,6 +24,7 @@ The current implementation has three active modules under this broader operation
 - `docs/feat/`: implementation contracts for shipped feature slices, especially Liquidity Dashboard and Listing Agent behavior.
 - `docs/feat/listing-agent-symbol-identity-normalization.md`: Listing Agent runtime symbol identity, alias resolution, listed-universe identity semantics, Lark card title mapping, and safe historical backfill contract.
 - `docs/plan/`: local execution plans and cleanup records; useful for history, but not the long-term implementation contract.
+- `deploy/aws-dev-local-rehearsal.md`: Docker Compose rehearsal guide for the AWS DEV-like deployment shape, including Nacos, AWS Secrets Manager, same-origin reverse proxy, and validation commands.
 - `backend/docs/runbook.md`: production operations, health/readiness, catalog, release, backup/restore, and module smoke procedures.
 - `backend/docs/top30-strategy.md`: Top30 acquisition and native backfill semantics.
 - `backend/docs/coverage-matrix.md`: coverage snapshot for the tracked canonical universe.
@@ -38,6 +39,7 @@ cd backend && make smoke-listing
 cd backend && make smoke-activity
 cd web && npm run typecheck && npm run lint && npm run build
 cd web && npm run test:e2e
+cd deploy && make up && make smoke && make smoke-web
 ```
 
 Technical identifiers now use the Ops Intelligence hard-cutover naming: Go module `edgex-ops-intelligence/backend`, backend command `cmd/ops-intelligence`, binary `/app/ops-intelligence`, environment variables `OPS_INTELLIGENCE_*`, default database `edgex_ops_intelligence`, and config file `edgex-ops-intelligence.yaml`.
