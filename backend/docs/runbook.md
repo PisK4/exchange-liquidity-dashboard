@@ -35,10 +35,10 @@ For a full AWS DEV-like local rehearsal, follow
 
 Recommended production reverse-proxy routing:
 
-- `/` -> web container on port 3000
-- `/api/*` -> backend container on port 8080
-- `/metrics` -> backend container on port 8080 when Prometheus scraping is
-  allowed from the proxy/network
+- Host-level Nginx on the Docker host: `/` -> `127.0.0.1:3001`, `/api/*` ->
+  `127.0.0.1:8080`, and `/metrics` -> `127.0.0.1:8080` with an allowlist.
+- Compose-internal reverse proxy: `/` -> `web:3000`, `/api/*` ->
+  `backend:8080`, and `/metrics` -> `backend:8080` with an allowlist.
 
 For this same-origin topology, build the web image with an explicitly empty
 `NEXT_PUBLIC_API_BASE` so browser requests use relative `/api/*` paths.
@@ -63,6 +63,27 @@ Backend roles are selected by `--role`:
 deployment may run Liquidity, Listing, and Activity workers together. Operator
 secrets belong in `deploy/.env`, Nacos, or a private config-dir; never paste
 production webhook URLs, callback secrets, or DSNs into tracked config files.
+
+Config source and DB precedence:
+
+1. Local file mode is the default for developer Compose: `USE_LOCAL_CONFIG=true`
+   and `OPS_INTELLIGENCE_CONFIG_SOURCE=local` read local YAML files.
+2. Production-like mode is selected by `OPS_INTELLIGENCE_CONFIG_SOURCE=nacos`
+   or `USE_LOCAL_CONFIG=false`. The backend fetches the Nacos
+   `edgex-ops-intelligence.yaml` payload once at startup and parses it as the
+   same bridge-style main YAML layout.
+3. AWS Secrets Manager resolution runs after the selected config is loaded and
+   can fill `Database.Addr`, `Database.UserName`, `Database.Password`,
+   `Runtime.coingecko.api_key`, Listing callback secret, and Activity decision
+   token. AWS SM does not resolve `Database.Name`; the schema name comes from
+   `Database.Name` unless a full DSN is supplied.
+4. A non-empty `--mysql-dsn` flag or `OPS_INTELLIGENCE_MYSQL_DSN` env var wins
+   over the generated DSN from `Database` fields. In `deploy/docker-compose.yaml`,
+   this env preserves an explicitly empty value so Nacos/AWS-SM-derived DB
+   fields can win; if the variable is omitted, local Compose uses the bundled
+   MySQL default DSN.
+5. Nacos hot reload and Nacos naming/service registration are not wired in this
+   deployment shape. Restart the backend after changing Nacos config.
 
 Current env indirections:
 
@@ -131,6 +152,8 @@ Important implementation details:
 - `backend/migrations/*.sql` are manual/auditable chronological scripts.
   `make -C backend migrate-up` and `make -C backend migrate-down` print
   operator-facing command-order references; they do not execute SQL.
+- Runtime startup does not automatically scan, sort, or execute
+  `backend/migrations/*.sql`.
 
 Fresh database behavior:
 
@@ -209,13 +232,15 @@ The first metrics set is intentionally small and process-local:
 
 - `edgex_ops_http_requests_total`
 - `edgex_ops_http_server_duration_milliseconds`
-- `edgex_ops_log_count_total` for log events emitted through the new
-  metrics-aware logger facade
+- `edgex_ops_log_count_total` for error/fatal events emitted through the new
+  metrics-aware logger facade. This is not a full bridge-server-style logger
+  stack yet, and info/warn logs emitted outside the facade are not counted.
 
 `/metrics` is a scrape endpoint, not a liveness or readiness probe. Keep Docker
 and load-balancer liveness pointed at `/api/health`, and keep traffic gating on
-`/api/readiness`. The HTTP middleware skips `/metrics` itself to avoid scrape
-traffic polluting request latency metrics.
+`/api/readiness`. Restrict `/metrics` to Prometheus/internal networks at the
+reverse proxy; do not expose it as a public endpoint. The HTTP middleware skips
+`/metrics` itself to avoid scrape traffic polluting request latency metrics.
 
 ## 3. Common Symptoms
 

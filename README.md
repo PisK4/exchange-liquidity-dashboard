@@ -24,11 +24,21 @@ The current implementation has three active modules under this broader operation
 - `docs/feat/`: implementation contracts for shipped feature slices, especially Liquidity Dashboard and Listing Agent behavior.
 - `docs/feat/listing-agent-symbol-identity-normalization.md`: Listing Agent runtime symbol identity, alias resolution, listed-universe identity semantics, Lark card title mapping, and safe historical backfill contract.
 - `docs/plan/`: local execution plans and cleanup records; useful for history, but not the long-term implementation contract.
+- `deploy/README.md`: deployment directory index for the current Docker Compose / AWS DEV-like deployment shape.
 - `deploy/aws-dev-local-rehearsal.md`: Docker Compose rehearsal guide for the AWS DEV-like deployment shape, including Nacos, AWS Secrets Manager, same-origin reverse proxy, and validation commands.
+- `deploy/.env.production.template`: operator-facing production-like environment template; copy to private `deploy/.env` before running the stack.
+- `deploy/docker-compose.yaml`: executable Compose template for bundled MySQL, one `--role=all` backend, and one Next.js standalone web container.
+- `deploy/nginx/ops-intelligence.conf`: host-level same-origin reverse proxy sample for `/`, `/api/*`, and restricted `/metrics`.
 - `backend/docs/runbook.md`: production operations, health/readiness, catalog, release, backup/restore, and module smoke procedures.
 - `backend/docs/top30-strategy.md`: Top30 acquisition and native backfill semantics.
 - `backend/docs/coverage-matrix.md`: coverage snapshot for the tracked canonical universe.
 - `backend/docs/raw-instruments/README.md`: raw instrument dump layout and catalog regeneration workflow.
+
+For AWS DEV / Docker Compose / Nacos / AWS Secrets Manager / frontend
+deployment work, start from `deploy/README.md` and
+`deploy/aws-dev-local-rehearsal.md`, then cross-check `backend/docs/runbook.md`
+and the deploy templates. Treat `docs/plan/*` as historical context unless a
+current runbook or code path explicitly points there.
 
 ## Quick commands
 

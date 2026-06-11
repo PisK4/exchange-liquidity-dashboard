@@ -6,6 +6,12 @@ This document covers the hard-cutover database rename from the former local/depl
 edgex_ops_intelligence
 ```
 
+This is a **historical migration-only** guide for hosts that already have data
+in an older physical database, such as `edgex_dashboard`. Fresh AWS DEV
+deployments should create or select `edgex_ops_intelligence` directly and should
+not depend on, create, or restore from the old `edgex_dashboard` database unless
+they are intentionally migrating historical data.
+
 The application now uses the new technical identifiers by default:
 
 - environment variable: `OPS_INTELLIGENCE_MYSQL_DSN`

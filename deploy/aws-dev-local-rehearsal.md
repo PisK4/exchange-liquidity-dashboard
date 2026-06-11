@@ -8,10 +8,15 @@ deployments use:
 
 - one backend container running `/app/ops-intelligence --role=all --addr=:8080`
 - one Next.js standalone web container
-- optional bundled MySQL for local rehearsal
+- bundled MySQL in the default Compose stack for local rehearsal
 - Nacos as the production-like config source when available
 - AWS Secrets Manager for DB/API/token secrets when available
 - same-origin reverse proxy for external browser access
+
+The bundled MySQL service is part of the default Compose stack. Rehearsing
+against an external RDS/MySQL instance requires a separate Compose override or
+operator-specific adaptation; do not run the default bundled MySQL against the
+same schema as another stack.
 
 ## Guardrails
 
@@ -22,8 +27,13 @@ deployments use:
   decision/callback secrets into tracked YAML, docs, or `.env` templates.
 - Keep `OPS_INTELLIGENCE_MYSQL_DSN` empty in Nacos/AWS SM mode unless doing a
   short-lived override. An explicit DSN env overrides the Nacos `Database` block.
+- In `deploy/docker-compose.yaml`, `OPS_INTELLIGENCE_MYSQL_DSN` preserves an
+  explicitly empty value. If the variable is omitted entirely, local file-backed
+  Compose uses the bundled MySQL default DSN.
 - `NEXT_PUBLIC_API_BASE` is a **build-time** browser value. Rebuild the web
   image after changing it.
+- `/metrics` is a real Prometheus endpoint on the backend port. Restrict it to
+  internal or Prometheus networks at the reverse proxy.
 
 ## Files involved
 
@@ -60,6 +70,9 @@ Expected behavior:
 - `web` exposes `/healthz` as container liveness.
 - `/api/readiness` may return `503` while the first collector cycle warms up;
   this should not restart either container.
+- Backend startup executes the compiled fresh schema bootstrap plus guarded
+  post-init repairs. It does not automatically scan or run
+  `backend/migrations/*.sql`.
 
 Useful direct checks:
 
@@ -99,6 +112,8 @@ or local AWS credential chain can read the target Secrets Manager secret.
    AWS_SM_SECRET_ID=<dev-secret-id>
 
    # Keep empty so Nacos Database + AWS SM-resolved Aws.DB* values win.
+   # docker-compose.yaml preserves this explicit empty value. A non-empty DSN
+   # overrides the Nacos/AWS-SM-derived Database block.
    OPS_INTELLIGENCE_MYSQL_DSN=
    ```
 
@@ -132,9 +147,24 @@ or local AWS credential chain can read the target Secrets Manager secret.
    Clients: {}
    ```
 
+   `Aws.DBAddr`, `Aws.DBUser`, and `Aws.DBPass` resolve the connection host,
+   username, and password from AWS Secrets Manager. They do not resolve the
+   database name; `Database.Name` selects the schema unless a full explicit DSN
+   is provided.
+
    The DEV business webhooks may reuse current DEV values. Production webhook
    URLs must stay in Nacos/private config and must not be copied into tracked
    docs or templates.
+
+   Business Lark webhook URLs are not read from AWS Secrets Manager in this
+   deployment shape. Use `Alert.Push.Listing`, `Alert.Push.Activity`, and
+   `Alert.Push.Liquidity` in the selected YAML/Nacos payload. `Alert.Webhooks.*`
+   is a legacy compatibility input only.
+
+   The backend fetches the Nacos payload once during startup. `ListenConfig()`
+   exists in code, but runtime hot reload and Nacos naming/service registration
+   are not wired in this deployment shape. Restart the backend after changing
+   Nacos config.
 
 4. Provide AWS credentials through the normal AWS SDK credential chain:
 

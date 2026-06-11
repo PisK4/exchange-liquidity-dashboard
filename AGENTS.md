@@ -65,6 +65,7 @@ the indexed feature contracts, runbooks, upstream PRDs, or code.
 | Listing Agent / Lark / callbacks | `docs/feat/listing-agent-*.md` | `../../architecture/方案设计/EdgeX运营/Listing/README.md` |
 | Listing Agent symbol identity / aliases / backfill | `docs/feat/listing-agent-symbol-identity-normalization.md` | `config/symbol_mapping.yaml`, `backend/internal/config/canonical_index.go`, `backend/docs/runbook.md` |
 | Activity Agent / campaign sources | `../../architecture/方案设计/EdgeX运营/活动/README.md` | `../../architecture/方案设计/EdgeX运营/活动/运营活动-agent-通用数据模型与-source-health.md`, `backend/internal/activity/*` |
+| AWS DEV / Docker Compose / Nacos / AWS SM / frontend deployment | `deploy/README.md`, `deploy/aws-dev-local-rehearsal.md` | `backend/docs/runbook.md`, `deploy/docker-compose.yaml`, `deploy/.env.production.template`, `deploy/nginx/ops-intelligence.conf`; use `docs/plan/*` only as historical context |
 | Production ops / release / migration | `backend/docs/runbook.md` | `backend/docs/coverage-matrix.md`, `backend/docs/ops-intelligence-db-migration.md`, `backend/docs/release-notes-v1.md` |
 
 ## 4. Module Implementation Map

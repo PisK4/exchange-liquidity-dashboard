@@ -38,7 +38,12 @@ services:
     environment:
       USE_LOCAL_CONFIG: ${USE_LOCAL_CONFIG:-true}
       OPS_INTELLIGENCE_CONFIG_SOURCE: ${OPS_INTELLIGENCE_CONFIG_SOURCE:-local}
-      OPS_INTELLIGENCE_MYSQL_DSN: ${OPS_INTELLIGENCE_MYSQL_DSN:-root:root@tcp(mysql:3306)/edgex_ops_intelligence?parseTime=true}
+      # Use ${VAR-default}, not ${VAR:-default}: production-like Nacos/AWS SM
+      # mode deliberately sets OPS_INTELLIGENCE_MYSQL_DSN to an empty string so
+      # the backend composes the DSN from Nacos Database plus AWS SM-resolved
+      # DBAddr/DBUser/DBPass. Local file-backed compose can omit the variable
+      # and keep this bundled-MySQL default.
+      OPS_INTELLIGENCE_MYSQL_DSN: ${OPS_INTELLIGENCE_MYSQL_DSN-root:root@tcp(mysql:3306)/edgex_ops_intelligence?parseTime=true}
       # OPS_INTELLIGENCE_DATA_DIR is the writable mount the listing engine
       # uses for files it regenerates at runtime (currently the
       # listed_universe.runtime.yaml rewritten every 15 min by
