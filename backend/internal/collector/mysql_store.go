@@ -92,9 +92,9 @@ func applySchemaPostInit(db *sql.DB) error {
 	return applyActivitySchemaPostInit(db)
 }
 
-// applyListingSchemaPostInit widens t_listing_signal_observation
-// fingerprint from VARCHAR(96) to VARCHAR(160) as a defence-in-depth
-// guard against future producer fingerprint drift.
+// applyListingSchemaPostInit keeps Listing-owned schema additions current on
+// already-created databases. Keep these checks idempotent: production services
+// run them on every boot before workers start.
 func applyListingSchemaPostInit(db *sql.DB) error {
 	const (
 		listingSignalTable      = "t_listing_signal_observation"
@@ -108,23 +108,56 @@ func applyListingSchemaPostInit(db *sql.DB) error {
 		    AND TABLE_NAME   = ?
 		    AND COLUMN_NAME  = ?`, listingSignalTable, fingerprintColumn).Scan(&currentLen)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			// Table not present yet (e.g. fresh DB before its CREATE
-			// TABLE in this same ApplyMigrations call had a chance to
-			// run, or running against a DB without the listing schema
-			// at all). Nothing to widen.
-			return nil
+		if err != sql.ErrNoRows {
+			return fmt.Errorf("inspect %s.%s width: %w", listingSignalTable, fingerprintColumn, err)
 		}
-		return fmt.Errorf("inspect %s.%s width: %w", listingSignalTable, fingerprintColumn, err)
+	} else if !currentLen.Valid || currentLen.Int64 < fingerprintTargetLength {
+		if _, err := db.Exec(fmt.Sprintf(
+			`ALTER TABLE %s MODIFY %s VARCHAR(%d) NOT NULL`,
+			listingSignalTable, fingerprintColumn, fingerprintTargetLength)); err != nil {
+			return fmt.Errorf("widen %s.%s to VARCHAR(%d): %w",
+				listingSignalTable, fingerprintColumn, fingerprintTargetLength, err)
+		}
 	}
-	if currentLen.Valid && currentLen.Int64 >= fingerprintTargetLength {
+	indexes := []struct {
+		table string
+		name  string
+		ddl   string
+	}{
+		{
+			table: "t_orderbook_snapshot",
+			name:  "idx_orderbook_canonical_surface_tier_latest",
+			ddl:   `ALTER TABLE t_orderbook_snapshot ADD INDEX idx_orderbook_canonical_surface_tier_latest (canonical_symbol, market_surface, tier, platform, snapshot_ts)`,
+		},
+		{
+			table: "t_symbol_volume_snapshot",
+			name:  "idx_symbol_volume_canonical_surface_latest",
+			ddl:   `ALTER TABLE t_symbol_volume_snapshot ADD INDEX idx_symbol_volume_canonical_surface_latest (canonical_symbol, market_surface, platform, snapshot_ts)`,
+		},
+	}
+	for _, idx := range indexes {
+		if err := ensureIndexExists(db, idx.table, idx.name, idx.ddl); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func ensureIndexExists(db *sql.DB, tableName, indexName, ddl string) error {
+	var exists int
+	err := db.QueryRow(`SELECT COUNT(*)
+		   FROM INFORMATION_SCHEMA.STATISTICS
+		  WHERE TABLE_SCHEMA = DATABASE()
+		    AND TABLE_NAME = ?
+		    AND INDEX_NAME = ?`, tableName, indexName).Scan(&exists)
+	if err != nil {
+		return fmt.Errorf("inspect %s.%s existence: %w", tableName, indexName, err)
+	}
+	if exists > 0 {
 		return nil
 	}
-	if _, err := db.Exec(fmt.Sprintf(
-		`ALTER TABLE %s MODIFY %s VARCHAR(%d) NOT NULL`,
-		listingSignalTable, fingerprintColumn, fingerprintTargetLength)); err != nil {
-		return fmt.Errorf("widen %s.%s to VARCHAR(%d): %w",
-			listingSignalTable, fingerprintColumn, fingerprintTargetLength, err)
+	if _, err := db.Exec(ddl); err != nil {
+		return fmt.Errorf("add index %s.%s: %w", tableName, indexName, err)
 	}
 	return nil
 }

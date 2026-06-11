@@ -330,6 +330,44 @@ type DepthEvidence struct {
 	// returned without normalisation; operators read it next to
 	// the USD value.
 	Tier string
+	// Source records the source family that produced this evidence,
+	// e.g. "live_reference" for direct reference-venue HTTP checks or
+	// "db_snapshot" for local snapshot fallback. It is audit metadata;
+	// the main metric label intentionally stays compact.
+	Source string
+	// SnapshotTS is set when Source points at a persisted snapshot.
+	SnapshotTS time.Time
+}
+
+// VolumeEvidence is the DB-backed fallback shape for Spot 24h Vol.
+// CoinGecko remains the preferred source; this only fills the card when the
+// token all-market value is absent and a fresh spot-only native snapshot exists.
+type VolumeEvidence struct {
+	USDValue      float64
+	Source        string
+	PlatformCount int
+	SnapshotTS    time.Time
+}
+
+type MetricStatus string
+
+const (
+	MetricStatusOK          MetricStatus = "ok"
+	MetricStatusNotFound    MetricStatus = "not_found"
+	MetricStatusUnsupported MetricStatus = "unsupported"
+	MetricStatusStale       MetricStatus = "stale"
+	MetricStatusSourceError MetricStatus = "source_error"
+	MetricStatusNoSnapshot  MetricStatus = "no_snapshot"
+)
+
+// MetricInfo captures machine-readable source/status metadata for the four
+// compact metric rows. It is intentionally not embedded in callback payloads;
+// operators only see a short footer status tag when the renderer chooses to
+// surface it.
+type MetricInfo struct {
+	Status MetricStatus
+	Source string
+	Detail string
 }
 
 // DecisionCardEnrichment is the bundle of extra data assembled by
@@ -354,7 +392,8 @@ type DecisionCardEnrichment struct {
 	// MarketCapUSD is from CoinGecko /coins/markets. Nil → renderer
 	// shows "n/a".
 	MarketCapUSD *float64
-	// Spot24hVolumeUSD is from the same CoinGecko call.
+	// Spot24hVolumeUSD prioritizes CoinGecko token all-market 24h volume;
+	// when absent it may be filled from fresh spot-only DB snapshots.
 	Spot24hVolumeUSD *float64
 	// CoinGeckoID is the resolved id used for the lookup; surfaced
 	// in EnrichErrors when the id resolved but the market call
@@ -366,6 +405,11 @@ type DecisionCardEnrichment struct {
 	// "不可用".
 	SpotDepth *DepthEvidence
 	PerpDepth *DepthEvidence
+
+	MarketCapMetric     MetricInfo
+	Spot24hVolumeMetric MetricInfo
+	SpotDepthMetric     MetricInfo
+	PerpDepthMetric     MetricInfo
 
 	// EnrichErrors lists per-source failures keyed by short tag
 	// ("coingecko" / "depth:binance" / "market_status" / ...) so the
@@ -410,6 +454,9 @@ type DecisionCardEnrichDeps struct {
 	// the canonical. id may be empty if the lookup failed before
 	// the markets call.
 	CoinGeckoFetcher func(ctx context.Context, canonical string) (marketCapUSD, vol24hUSD *float64, cgID string, err error)
+	// SpotVolumeFetcher is the spot-only DB fallback for Spot 24h Vol.
+	// CoinGecko remains authoritative when it returns a positive volume.
+	SpotVolumeFetcher func(ctx context.Context, canonical string, sourcePlatforms []string) (*VolumeEvidence, error)
 	// DepthFetcher returns (spotEvidence, perpEvidence). Each
 	// pointer may be nil when no adapter produced a usable depth.
 	// Implementation is expected to enforce its own per-platform
@@ -461,9 +508,30 @@ func EnrichCandidateForDecisionCard(ctx context.Context, deps DecisionCardEnrich
 		out.CoinGeckoID = cgID
 		if err != nil {
 			out.EnrichErrors = append(out.EnrichErrors, "coingecko: "+err.Error())
+			out.MarketCapMetric = MetricInfo{Status: MetricStatusSourceError, Source: "coingecko", Detail: err.Error()}
+			out.Spot24hVolumeMetric = MetricInfo{Status: MetricStatusSourceError, Source: "coingecko", Detail: err.Error()}
 		} else {
 			out.MarketCapUSD = mcap
 			out.Spot24hVolumeUSD = vol
+			out.MarketCapMetric = metricInfoForNullableUSD(mcap, "coingecko")
+			out.Spot24hVolumeMetric = metricInfoForNullableUSD(vol, "coingecko")
+		}
+	} else {
+		out.MarketCapMetric = MetricInfo{Status: MetricStatusUnsupported}
+		out.Spot24hVolumeMetric = MetricInfo{Status: MetricStatusUnsupported}
+	}
+
+	if !positiveUSDPtr(out.Spot24hVolumeUSD) && deps.SpotVolumeFetcher != nil {
+		vol, err := deps.SpotVolumeFetcher(ctx, c.CanonicalSymbol, c.SourcePlatforms)
+		if err != nil {
+			out.EnrichErrors = append(out.EnrichErrors, "spot_volume: "+err.Error())
+			out.Spot24hVolumeMetric = MetricInfo{Status: MetricStatusSourceError, Source: "db_spot_snapshot", Detail: err.Error()}
+		} else if vol != nil && vol.USDValue > 0 {
+			v := vol.USDValue
+			out.Spot24hVolumeUSD = &v
+			out.Spot24hVolumeMetric = MetricInfo{Status: MetricStatusOK, Source: vol.Source}
+		} else if out.Spot24hVolumeMetric.Status == "" || out.Spot24hVolumeMetric.Status == MetricStatusUnsupported || out.Spot24hVolumeMetric.Status == MetricStatusNotFound || out.Spot24hVolumeMetric.Status == MetricStatusSourceError {
+			out.Spot24hVolumeMetric = MetricInfo{Status: MetricStatusNoSnapshot, Source: "db_spot_snapshot"}
 		}
 	}
 
@@ -474,9 +542,35 @@ func EnrichCandidateForDecisionCard(ctx context.Context, deps DecisionCardEnrich
 		}
 		out.SpotDepth = spot
 		out.PerpDepth = perp
+		out.SpotDepthMetric = metricInfoForDepth(spot, err)
+		out.PerpDepthMetric = metricInfoForDepth(perp, err)
+	} else {
+		out.SpotDepthMetric = MetricInfo{Status: MetricStatusUnsupported}
+		out.PerpDepthMetric = MetricInfo{Status: MetricStatusUnsupported}
 	}
 
 	return out
+}
+
+func metricInfoForNullableUSD(v *float64, source string) MetricInfo {
+	if positiveUSDPtr(v) {
+		return MetricInfo{Status: MetricStatusOK, Source: source}
+	}
+	return MetricInfo{Status: MetricStatusNotFound, Source: source}
+}
+
+func positiveUSDPtr(v *float64) bool {
+	return v != nil && *v > 0
+}
+
+func metricInfoForDepth(d *DepthEvidence, err error) MetricInfo {
+	if d != nil && d.USDValue > 0 {
+		return MetricInfo{Status: MetricStatusOK, Source: d.Source}
+	}
+	if err != nil {
+		return MetricInfo{Status: MetricStatusSourceError, Detail: err.Error()}
+	}
+	return MetricInfo{Status: MetricStatusNoSnapshot}
 }
 
 type marketStatusRefreshCacheEntry struct {

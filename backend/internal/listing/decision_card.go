@@ -555,7 +555,7 @@ func buildDecisionMetricsFields(ev DecisionCardEvent) map[string]any {
 }
 
 func nullableUSDLabel(v *float64) string {
-	if v == nil {
+	if !positiveUSDPtr(v) {
 		return "n/a"
 	}
 	return "$" + humanUSD(*v)
@@ -660,6 +660,9 @@ func buildDecisionFooterNote(ev DecisionCardEvent) map[string]any {
 	// feedback: the card should not surface external data-source
 	// names. CoinGeckoID is still kept on DecisionCardEnrichment
 	// for log-side audit, just not displayed.
+	if metrics := metricFooterSummary(ev.Enrichment); metrics != "" {
+		parts = append(parts, "metrics="+metrics)
+	}
 	if errs := ev.Enrichment.EnrichErrors; len(errs) > 0 {
 		parts = append(parts, fmt.Sprintf("enrich_errors=%d", len(errs)))
 	}
@@ -669,6 +672,50 @@ func buildDecisionFooterNote(ev DecisionCardEvent) map[string]any {
 		"elements": []any{
 			map[string]any{"tag": "plain_text", "content": strings.Join(parts, " · ")},
 		},
+	}
+}
+
+func metricFooterSummary(enr DecisionCardEnrichment) string {
+	items := make([]string, 0, 4)
+	for _, item := range []struct {
+		name string
+		info MetricInfo
+	}{
+		{name: "mc", info: enr.MarketCapMetric},
+		{name: "vol", info: enr.Spot24hVolumeMetric},
+		{name: "spot", info: enr.SpotDepthMetric},
+		{name: "perp", info: enr.PerpDepthMetric},
+	} {
+		if cell := metricFooterCell(item.name, item.info); cell != "" {
+			items = append(items, cell)
+		}
+	}
+	return strings.Join(items, " ")
+}
+
+func metricFooterCell(name string, info MetricInfo) string {
+	if info.Status == "" {
+		return ""
+	}
+	out := name + ":" + string(info.Status)
+	if source := metricFooterSourceLabel(info.Source); source != "" {
+		out += "/" + source
+	}
+	return out
+}
+
+func metricFooterSourceLabel(source string) string {
+	switch strings.TrimSpace(source) {
+	case "coingecko":
+		return "ext"
+	case DecisionCardMetricSourceLiveReference:
+		return "live"
+	case DecisionCardMetricSourceDBSnapshot, "db_spot_snapshot":
+		return "snap"
+	case "":
+		return ""
+	default:
+		return "src"
 	}
 }
 

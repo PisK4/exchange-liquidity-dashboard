@@ -198,6 +198,52 @@ make -C backend prune-snapshots-confirm DAYS=30
 Floor is 7 days; the script refuses anything shorter so a fat-finger
 cannot wipe the same day's data.
 
+### 3.3.1 Listing decision-card metrics still show `n/a` / `不可用`
+
+Decision-card metric enrichment is best-effort and must expose missing data
+explicitly instead of fabricating successful values. The compact card body keeps
+the stable labels `Market Cap`, `Spot 24h Vol`, `现货深度`, and `合约深度`; the
+footer `metrics=` fragment carries the source/status shorthand:
+
+| Footer source | Meaning |
+|---|---|
+| `ext` | External token-level market data, currently CoinGecko `/coins/markets`. |
+| `live` | Live reference-venue depth check, controlled by `Runtime.listing_agent.decision_card.metric_enrichment.reference_platforms` (default `binance`). |
+| `snap` | Local MySQL snapshot fallback (`t_orderbook_snapshot` or spot-only `t_symbol_volume_snapshot`). |
+
+If a card still renders `n/a` / `不可用`, check in this order:
+
+1. Confirm CoinGecko governance is not exhausted if both `Market Cap` and
+   `Spot 24h Vol` are missing. CoinGecko remains the preferred source for token
+   market cap and all-market spot 24h volume.
+2. Confirm `Runtime.listing_agent.decision_card.metric_enrichment` in the
+   active config. `reference_platforms` should include at least one depth venue
+   supported by the live fetcher (currently Binance), `depth_tier_pct` defaults
+   to `0.001`, and `stale_after` defaults to `30m`.
+3. Confirm the DB fallback indexes exist before relying on snapshot fallback:
+
+```
+docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -N -e \
+  "SELECT TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME
+     FROM INFORMATION_SCHEMA.STATISTICS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND INDEX_NAME IN ('idx_orderbook_canonical_surface_tier_latest',
+                         'idx_symbol_volume_canonical_surface_latest')
+    ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX;"
+```
+
+The expected indexes are:
+
+- `idx_orderbook_canonical_surface_tier_latest (canonical_symbol, market_surface, tier, platform, snapshot_ts)` for spot/perp depth fallback.
+- `idx_symbol_volume_canonical_surface_latest (canonical_symbol, market_surface, platform, snapshot_ts)` for Spot 24h Vol snapshot fallback.
+
+These indexes are installed by migration
+`000021_listing_metric_snapshot_indexes` and guarded at backend boot by the
+schema post-init path. For large local/prod databases, run `EXPLAIN` on the
+candidate-specific snapshot queries and verify the `key` column uses the two
+indexes above. Spot 24h Vol fallback intentionally filters
+`market_surface='spot'`; do not include perp rows to inflate the card metric.
+
 ### 3.4 Catalog drifted (an exchange renamed an instrument)
 
 ```

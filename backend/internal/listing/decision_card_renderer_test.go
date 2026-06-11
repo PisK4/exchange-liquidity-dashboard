@@ -41,11 +41,15 @@ func baseEvent() DecisionCardEvent {
 			{Platform: "binance", DisplayName: "Binance Futures", Status: StatusActive, StatusLabel: "Perp LIVE", SourceKind: "api", OccurredAt: time.Date(2026, 5, 30, 2, 0, 0, 0, time.UTC)},
 			{Platform: "bybit", DisplayName: "Bybit Linear", Status: StatusPreListing, StatusLabel: "公告刚发布", SourceKind: "announcement", OccurredAt: time.Date(2026, 5, 31, 0, 15, 0, 0, time.UTC)},
 		},
-		MarketCapUSD:     &cap,
-		Spot24hVolumeUSD: &vol,
-		SpotDepth:        &DepthEvidence{Platform: "binance", USDValue: 580_000, Tier: "2pct"},
-		PerpDepth:        &DepthEvidence{Platform: "binance", USDValue: 1_200_000, Tier: "2pct"},
-		CoinGeckoID:      "abc-coin",
+		MarketCapUSD:        &cap,
+		Spot24hVolumeUSD:    &vol,
+		SpotDepth:           &DepthEvidence{Platform: "binance", USDValue: 580_000, Tier: "2pct", Source: DecisionCardMetricSourceLiveReference},
+		PerpDepth:           &DepthEvidence{Platform: "binance", USDValue: 1_200_000, Tier: "2pct", Source: DecisionCardMetricSourceDBSnapshot},
+		CoinGeckoID:         "abc-coin",
+		MarketCapMetric:     MetricInfo{Status: MetricStatusOK, Source: "coingecko"},
+		Spot24hVolumeMetric: MetricInfo{Status: MetricStatusOK, Source: "coingecko"},
+		SpotDepthMetric:     MetricInfo{Status: MetricStatusOK, Source: DecisionCardMetricSourceLiveReference},
+		PerpDepthMetric:     MetricInfo{Status: MetricStatusOK, Source: DecisionCardMetricSourceDBSnapshot},
 	}
 	return DecisionCardEvent{
 		CandidateID:     7,
@@ -238,6 +242,19 @@ func TestRenderDecisionCardMetricsRowsRenderUSD(t *testing.T) {
 	} {
 		if !strings.Contains(raw, want) {
 			t.Errorf("metrics missing %q in raw=%s", want, raw)
+		}
+	}
+}
+
+func TestRenderDecisionCardMetricFooterSummarizesStatusWithoutRenamingRows(t *testing.T) {
+	ev := baseEvent()
+	raw, _ := renderForTest(t, ev)
+	if !strings.Contains(raw, "metrics=mc:ok/ext vol:ok/ext spot:ok/live perp:ok/snap") {
+		t.Fatalf("metric footer summary missing, raw=%s", raw)
+	}
+	for _, leaked := range []string{"Token 24h Vol", "CG 24h Vol"} {
+		if strings.Contains(raw, leaked) {
+			t.Fatalf("card leaked forbidden metric label %q, raw=%s", leaked, raw)
 		}
 	}
 }

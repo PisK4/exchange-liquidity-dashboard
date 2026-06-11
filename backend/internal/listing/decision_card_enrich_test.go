@@ -73,6 +73,77 @@ func TestEnrichCandidateForDecisionCardAggregatesEvery(t *testing.T) {
 	}
 }
 
+func TestEnrichCandidateForDecisionCardKeepsCoinGeckoVolumePriority(t *testing.T) {
+	ctx := context.Background()
+	c := Candidate{CanonicalSymbol: "ABC", SourcePlatforms: []string{"binance"}}
+	cgVol := 35_000_000.0
+	dbCalled := false
+	deps := DecisionCardEnrichDeps{
+		CoinGeckoFetcher: func(ctx context.Context, canonical string) (*float64, *float64, string, error) {
+			return nil, &cgVol, "abc-coin", nil
+		},
+		SpotVolumeFetcher: func(ctx context.Context, canonical string, sourcePlatforms []string) (*VolumeEvidence, error) {
+			dbCalled = true
+			return &VolumeEvidence{USDValue: 10_000_000, Source: DecisionCardMetricSourceDBSnapshot}, nil
+		},
+	}
+	got := EnrichCandidateForDecisionCard(ctx, deps, c)
+	if dbCalled {
+		t.Fatalf("spot volume DB fallback must not run when CoinGecko volume is present")
+	}
+	if got.Spot24hVolumeUSD == nil || *got.Spot24hVolumeUSD != cgVol {
+		t.Fatalf("Spot24hVolumeUSD = %v, want CoinGecko value", got.Spot24hVolumeUSD)
+	}
+	if got.Spot24hVolumeMetric.Status != MetricStatusOK || got.Spot24hVolumeMetric.Source != "coingecko" {
+		t.Fatalf("Spot24hVolumeMetric = %+v", got.Spot24hVolumeMetric)
+	}
+}
+
+func TestEnrichCandidateForDecisionCardFallsBackToSpotVolumeSnapshot(t *testing.T) {
+	ctx := context.Background()
+	c := Candidate{CanonicalSymbol: "ABC", SourcePlatforms: []string{"bybit"}}
+	mcap := 120_000_000.0
+	deps := DecisionCardEnrichDeps{
+		CoinGeckoFetcher: func(ctx context.Context, canonical string) (*float64, *float64, string, error) {
+			return &mcap, nil, "abc-coin", nil
+		},
+		SpotVolumeFetcher: func(ctx context.Context, canonical string, sourcePlatforms []string) (*VolumeEvidence, error) {
+			if canonical != "ABC" || len(sourcePlatforms) != 1 || sourcePlatforms[0] != "bybit" {
+				t.Fatalf("fallback args canonical=%q sourcePlatforms=%v", canonical, sourcePlatforms)
+			}
+			return &VolumeEvidence{USDValue: 35_000_000, Source: DecisionCardMetricSourceDBSnapshot, PlatformCount: 2}, nil
+		},
+	}
+	got := EnrichCandidateForDecisionCard(ctx, deps, c)
+	if got.Spot24hVolumeUSD == nil || *got.Spot24hVolumeUSD != 35_000_000 {
+		t.Fatalf("Spot24hVolumeUSD = %v, want DB fallback", got.Spot24hVolumeUSD)
+	}
+	if got.Spot24hVolumeMetric.Status != MetricStatusOK || got.Spot24hVolumeMetric.Source != DecisionCardMetricSourceDBSnapshot {
+		t.Fatalf("Spot24hVolumeMetric = %+v", got.Spot24hVolumeMetric)
+	}
+}
+
+func TestEnrichCandidateForDecisionCardFallsBackWhenCoinGeckoVolumeIsZero(t *testing.T) {
+	ctx := context.Background()
+	c := Candidate{CanonicalSymbol: "ABC", SourcePlatforms: []string{"binance"}}
+	zero := 0.0
+	deps := DecisionCardEnrichDeps{
+		CoinGeckoFetcher: func(ctx context.Context, canonical string) (*float64, *float64, string, error) {
+			return nil, &zero, "abc-coin", nil
+		},
+		SpotVolumeFetcher: func(ctx context.Context, canonical string, sourcePlatforms []string) (*VolumeEvidence, error) {
+			return &VolumeEvidence{USDValue: 12_000_000, Source: DecisionCardMetricSourceDBSnapshot, PlatformCount: 1}, nil
+		},
+	}
+	got := EnrichCandidateForDecisionCard(ctx, deps, c)
+	if got.Spot24hVolumeUSD == nil || *got.Spot24hVolumeUSD != 12_000_000 {
+		t.Fatalf("Spot24hVolumeUSD = %v, want DB fallback for zero CoinGecko volume", got.Spot24hVolumeUSD)
+	}
+	if got.Spot24hVolumeMetric.Status != MetricStatusOK || got.Spot24hVolumeMetric.Source != DecisionCardMetricSourceDBSnapshot {
+		t.Fatalf("Spot24hVolumeMetric = %+v", got.Spot24hVolumeMetric)
+	}
+}
+
 func TestEnrichCandidateForDecisionCardRecordsPerSourceErrors(t *testing.T) {
 	ctx := context.Background()
 	c := Candidate{CanonicalSymbol: "ABC"}

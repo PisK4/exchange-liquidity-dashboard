@@ -125,3 +125,34 @@ func TestBuildDepthFetcherPerCallTimeout(t *testing.T) {
 		t.Errorf("expected at least 1 aborted call, got %d", callsAborted)
 	}
 }
+
+func TestBuildReferenceDepthFetcherIgnoresCandidateSources(t *testing.T) {
+	var platforms []string
+	stub := func(ctx context.Context, platform, canonical string, kind DepthMarketKind) (float64, string, error) {
+		platforms = append(platforms, platform+"/"+string(kind))
+		if platform == "binance" && kind == DepthKindSpot {
+			return 100_000, "0.1pct", nil
+		}
+		return 0, "", ErrDepthUnavailable
+	}
+	d := BuildReferenceDepthFetcher(stub, []string{" binance ", "BINANCE"}, 0, 0)
+	spot, perp, err := d(context.Background(), "ABC", []string{"bybit"})
+	if err != nil {
+		t.Fatalf("err = %v", err)
+	}
+	if spot == nil || spot.Platform != "binance" || spot.USDValue != 100_000 {
+		t.Fatalf("spot = %+v, want binance evidence", spot)
+	}
+	if perp != nil {
+		t.Fatalf("perp = %+v, want nil", perp)
+	}
+	want := map[string]bool{"binance/spot": true, "binance/perp": true}
+	if len(platforms) != len(want) {
+		t.Fatalf("platform calls = %v, want exactly binance spot+perp", platforms)
+	}
+	for _, got := range platforms {
+		if !want[got] {
+			t.Fatalf("unexpected platform call %q from calls %v", got, platforms)
+		}
+	}
+}

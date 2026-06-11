@@ -58,6 +58,10 @@ Runtime:
   exchange_proxy: http://proxy.dev:8080
   listing_agent:
     decision_card:
+      metric_enrichment:
+        reference_platforms: [binance, okx]
+        depth_tier_pct: 0.02
+        stale_after: 45m
       market_status_refresh:
         enabled: true
         source_platforms_only: true
@@ -90,6 +94,13 @@ Catalog:
 	}
 	if cfg.Runtime.CollectionInterval != 2*time.Minute || cfg.Runtime.HTTPTimeout != 9*time.Second {
 		t.Fatalf("runtime block not loaded: %+v", cfg.Runtime)
+	}
+	metric := cfg.Runtime.ListingAgent.DecisionCard.MetricEnrichment
+	if len(metric.ReferencePlatforms) != 2 || metric.ReferencePlatforms[0] != "binance" || metric.ReferencePlatforms[1] != "okx" {
+		t.Fatalf("metric enrichment reference platforms not loaded: %+v", metric.ReferencePlatforms)
+	}
+	if metric.DepthTierPct != 0.02 || metric.StaleAfter != 45*time.Minute {
+		t.Fatalf("metric enrichment knobs not loaded: %+v", metric)
 	}
 	refresh := cfg.Runtime.ListingAgent.DecisionCard.MarketStatusRefresh
 	if !refresh.Enabled || !refresh.SourcePlatformsOnly || !refresh.IncludeEdgex || !refresh.FallbackToSnapshot {

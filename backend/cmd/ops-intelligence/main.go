@@ -971,8 +971,29 @@ func buildListingEnrichDeps(cfg config.Config, repo *listing.Repository, univers
 	} else {
 		log.Printf("listing enrich: coingecko client init failed: %v (market-cap/24h-vol will render n/a)", err)
 	}
+	metricCfg := cfg.Runtime.ListingAgent.DecisionCard.MetricEnrichment
+	referencePlatforms := metricCfg.ReferencePlatforms
+	if len(referencePlatforms) == 0 {
+		referencePlatforms = []string{"binance"}
+	}
+	staleAfter := metricCfg.StaleAfter
+	if staleAfter <= 0 {
+		staleAfter = 30 * time.Minute
+	}
+	depthTierPct := metricCfg.DepthTierPct
+	if depthTierPct <= 0 {
+		depthTierPct = 0.001
+	}
 	depthFetcher := buildBinanceDepthFetcher(cfg.Runtime.ExchangeProxy, 1500*time.Millisecond)
-	deps.DepthFetcher = listing.BuildDepthFetcher(depthFetcher, 3*time.Second, 1500*time.Millisecond)
+	liveDepth := listing.BuildReferenceDepthFetcher(depthFetcher, referencePlatforms, 3*time.Second, 1500*time.Millisecond)
+	snapshotOptions := listing.SnapshotMetricOptions{
+		DepthTierPct:       depthTierPct,
+		StaleAfter:         staleAfter,
+		ReferencePlatforms: referencePlatforms,
+	}
+	snapshotDepth := listing.BuildSnapshotDepthFetcher(repo, snapshotOptions)
+	deps.DepthFetcher = listing.BuildFallbackDepthFetcher(liveDepth, snapshotDepth)
+	deps.SpotVolumeFetcher = listing.BuildSnapshotSpotVolumeFetcher(repo, snapshotOptions)
 	return deps
 }
 

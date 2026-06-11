@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -151,6 +152,43 @@ func BuildDepthFetcher(fetcher PlatformDepthFetcher, overallBudget, perCallTimeo
 		}
 		return spotBest, perpBest, aggregateErr
 	}
+}
+
+// BuildReferenceDepthFetcher pins decision-card depth checks to an explicit
+// reference-venue set instead of reusing the candidate's source platforms.
+// A Bybit-only listing signal can still be evaluated against Binance (or any
+// configured reference venue), which is the operator-facing metric contract for
+// the compact card rows.
+func BuildReferenceDepthFetcher(fetcher PlatformDepthFetcher, referencePlatforms []string, overallBudget, perCallTimeout time.Duration) func(ctx context.Context, canonical string, sources []string) (*DepthEvidence, *DepthEvidence, error) {
+	base := BuildDepthFetcher(fetcher, overallBudget, perCallTimeout)
+	refs := normalizeDepthReferencePlatforms(referencePlatforms)
+	return func(ctx context.Context, canonical string, _ []string) (*DepthEvidence, *DepthEvidence, error) {
+		if len(refs) == 0 {
+			return nil, nil, errors.New("depth reference platforms not configured")
+		}
+		spot, perp, err := base(ctx, canonical, append([]string(nil), refs...))
+		stampDepthSource(spot, DecisionCardMetricSourceLiveReference)
+		stampDepthSource(perp, DecisionCardMetricSourceLiveReference)
+		return spot, perp, err
+	}
+}
+
+func normalizeDepthReferencePlatforms(in []string) []string {
+	seen := make(map[string]struct{}, len(in))
+	out := make([]string, 0, len(in))
+	for _, p := range in {
+		p = strings.ToLower(strings.TrimSpace(p))
+		if p == "" {
+			continue
+		}
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		out = append(out, p)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func joinStrings(in []string, sep string) string {

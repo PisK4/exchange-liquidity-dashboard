@@ -215,8 +215,19 @@ type ListingDecisionCardConfig struct {
 	Enabled             bool                             `json:"enabled"`
 	IgnoreCooldown      time.Duration                    `json:"ignore_cooldown"`
 	MaxPerTick          int                              `json:"max_per_tick"`
+	MetricEnrichment    ListingDecisionMetricConfig      `json:"metric_enrichment"`
 	MarketStatusRefresh ListingMarketStatusRefreshConfig `json:"market_status_refresh"`
 	Callback            ListingDecisionCallbackConfig    `json:"callback"`
+}
+
+// ListingDecisionMetricConfig controls best-effort metric enrichment for the
+// compact Listing decision-card rows. CoinGecko remains the preferred source
+// for market cap and all-market Spot 24h Vol; local snapshots are only used as
+// bounded fallbacks.
+type ListingDecisionMetricConfig struct {
+	ReferencePlatforms []string      `json:"reference_platforms"`
+	DepthTierPct       float64       `json:"depth_tier_pct"`
+	StaleAfter         time.Duration `json:"stale_after"`
 }
 
 // ListingMarketStatusRefreshConfig controls the bounded best-effort
@@ -978,6 +989,11 @@ func defaultListingAgentConfig() ListingAgentConfig {
 			Enabled:        false,
 			IgnoreCooldown: 24 * time.Hour,
 			MaxPerTick:     20,
+			MetricEnrichment: ListingDecisionMetricConfig{
+				ReferencePlatforms: []string{"binance"},
+				DepthTierPct:       0.001,
+				StaleAfter:         30 * time.Minute,
+			},
 			MarketStatusRefresh: ListingMarketStatusRefreshConfig{
 				Enabled:             true,
 				SourcePlatformsOnly: true,
@@ -1330,10 +1346,30 @@ type listedUniverseRefreshPlatformPolicy struct {
 }
 
 type listingDecisionCardFile struct {
-	Enabled        *bool                        `yaml:"enabled"`
-	IgnoreCooldown string                       `yaml:"ignore_cooldown"`
-	MaxPerTick     *int                         `yaml:"max_per_tick"`
-	Callback       *listingDecisionCallbackFile `yaml:"callback"`
+	Enabled             *bool                           `yaml:"enabled"`
+	IgnoreCooldown      string                          `yaml:"ignore_cooldown"`
+	MaxPerTick          *int                            `yaml:"max_per_tick"`
+	MetricEnrichment    *listingDecisionMetricFile      `yaml:"metric_enrichment"`
+	MarketStatusRefresh *listingMarketStatusRefreshFile `yaml:"market_status_refresh"`
+	Callback            *listingDecisionCallbackFile    `yaml:"callback"`
+}
+
+type listingDecisionMetricFile struct {
+	ReferencePlatforms []string `yaml:"reference_platforms"`
+	DepthTierPct       *float64 `yaml:"depth_tier_pct"`
+	StaleAfter         string   `yaml:"stale_after"`
+}
+
+type listingMarketStatusRefreshFile struct {
+	Enabled             *bool  `yaml:"enabled"`
+	SourcePlatformsOnly *bool  `yaml:"source_platforms_only"`
+	IncludeEdgex        *bool  `yaml:"include_edgex"`
+	PerSourceTimeout    string `yaml:"per_source_timeout"`
+	TotalTimeout        string `yaml:"total_timeout"`
+	MaxConcurrency      *int   `yaml:"max_concurrency"`
+	MaxRequestsPerTick  *int   `yaml:"max_requests_per_tick"`
+	CacheTTL            string `yaml:"cache_ttl"`
+	FallbackToSnapshot  *bool  `yaml:"fallback_to_snapshot"`
 }
 
 type listingDecisionCallbackFile struct {
@@ -2339,12 +2375,107 @@ func applyListingDecisionCardFile(base ListingDecisionCardConfig, file listingDe
 		}
 		base.MaxPerTick = *file.MaxPerTick
 	}
+	if file.MetricEnrichment != nil {
+		metric, err := applyListingDecisionMetricFile(base.MetricEnrichment, *file.MetricEnrichment)
+		if err != nil {
+			return ListingDecisionCardConfig{}, err
+		}
+		base.MetricEnrichment = metric
+	}
+	if file.MarketStatusRefresh != nil {
+		refresh, err := applyListingMarketStatusRefreshFile(base.MarketStatusRefresh, *file.MarketStatusRefresh)
+		if err != nil {
+			return ListingDecisionCardConfig{}, err
+		}
+		base.MarketStatusRefresh = refresh
+	}
 	if file.Callback != nil {
 		cb, err := applyListingDecisionCallbackFile(base.Callback, *file.Callback)
 		if err != nil {
 			return ListingDecisionCardConfig{}, err
 		}
 		base.Callback = cb
+	}
+	return base, nil
+}
+
+func applyListingDecisionMetricFile(base ListingDecisionMetricConfig, file listingDecisionMetricFile) (ListingDecisionMetricConfig, error) {
+	if len(file.ReferencePlatforms) > 0 {
+		base.ReferencePlatforms = append([]string(nil), file.ReferencePlatforms...)
+	}
+	if file.DepthTierPct != nil {
+		if *file.DepthTierPct <= 0 {
+			return ListingDecisionMetricConfig{}, fmt.Errorf("listing_agent.decision_card.metric_enrichment.depth_tier_pct: must be > 0")
+		}
+		base.DepthTierPct = *file.DepthTierPct
+	}
+	if file.StaleAfter != "" {
+		d, err := time.ParseDuration(file.StaleAfter)
+		if err != nil {
+			return ListingDecisionMetricConfig{}, fmt.Errorf("listing_agent.decision_card.metric_enrichment.stale_after: %w", err)
+		}
+		if d <= 0 {
+			return ListingDecisionMetricConfig{}, fmt.Errorf("listing_agent.decision_card.metric_enrichment.stale_after: must be > 0")
+		}
+		base.StaleAfter = d
+	}
+	return base, nil
+}
+
+func applyListingMarketStatusRefreshFile(base ListingMarketStatusRefreshConfig, file listingMarketStatusRefreshFile) (ListingMarketStatusRefreshConfig, error) {
+	if file.Enabled != nil {
+		base.Enabled = *file.Enabled
+	}
+	if file.SourcePlatformsOnly != nil {
+		base.SourcePlatformsOnly = *file.SourcePlatformsOnly
+	}
+	if file.IncludeEdgex != nil {
+		base.IncludeEdgex = *file.IncludeEdgex
+	}
+	if file.PerSourceTimeout != "" {
+		d, err := time.ParseDuration(file.PerSourceTimeout)
+		if err != nil {
+			return ListingMarketStatusRefreshConfig{}, fmt.Errorf("listing_agent.decision_card.market_status_refresh.per_source_timeout: %w", err)
+		}
+		if d <= 0 {
+			return ListingMarketStatusRefreshConfig{}, fmt.Errorf("listing_agent.decision_card.market_status_refresh.per_source_timeout: must be > 0")
+		}
+		base.PerSourceTimeout = d
+	}
+	if file.TotalTimeout != "" {
+		d, err := time.ParseDuration(file.TotalTimeout)
+		if err != nil {
+			return ListingMarketStatusRefreshConfig{}, fmt.Errorf("listing_agent.decision_card.market_status_refresh.total_timeout: %w", err)
+		}
+		if d <= 0 {
+			return ListingMarketStatusRefreshConfig{}, fmt.Errorf("listing_agent.decision_card.market_status_refresh.total_timeout: must be > 0")
+		}
+		base.TotalTimeout = d
+	}
+	if file.MaxConcurrency != nil {
+		if *file.MaxConcurrency < 0 {
+			return ListingMarketStatusRefreshConfig{}, fmt.Errorf("listing_agent.decision_card.market_status_refresh.max_concurrency: must be >= 0")
+		}
+		base.MaxConcurrency = *file.MaxConcurrency
+	}
+	if file.MaxRequestsPerTick != nil {
+		if *file.MaxRequestsPerTick < 0 {
+			return ListingMarketStatusRefreshConfig{}, fmt.Errorf("listing_agent.decision_card.market_status_refresh.max_requests_per_tick: must be >= 0")
+		}
+		base.MaxRequestsPerTick = *file.MaxRequestsPerTick
+	}
+	if file.CacheTTL != "" {
+		d, err := time.ParseDuration(file.CacheTTL)
+		if err != nil {
+			return ListingMarketStatusRefreshConfig{}, fmt.Errorf("listing_agent.decision_card.market_status_refresh.cache_ttl: %w", err)
+		}
+		if d <= 0 {
+			return ListingMarketStatusRefreshConfig{}, fmt.Errorf("listing_agent.decision_card.market_status_refresh.cache_ttl: must be > 0")
+		}
+		base.CacheTTL = d
+	}
+	if file.FallbackToSnapshot != nil {
+		base.FallbackToSnapshot = *file.FallbackToSnapshot
 	}
 	return base, nil
 }

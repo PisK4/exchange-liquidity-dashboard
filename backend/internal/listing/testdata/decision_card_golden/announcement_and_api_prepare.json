@@ -50,7 +50,7 @@
       {
         "tag": "div",
         "text": {
-          "content": "**Market Status**\n\u003cfont color='green'\u003e●\u003c/font\u003e **Binance Futures** · Perp LIVE · 05-30 10:00 UTC+8 · API\n\u003cfont color='orange'\u003e●\u003c/font\u003e **Bybit Linear** · 公告已发 · 05-31 08:15 UTC+8 · 公告",
+          "content": "**Market Status**\n\u003cfont color='green'\u003e●\u003c/font\u003e **Binance Futures** · Perp LIVE\n\u003cfont color='orange'\u003e●\u003c/font\u003e **Bybit Linear** · 公告已发",
           "tag": "lark_md"
         }
       },
