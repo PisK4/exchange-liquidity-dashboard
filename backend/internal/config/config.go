@@ -88,8 +88,9 @@ type ActivityCollectionConfig struct {
 }
 
 type ActivityDecisionTokenConfig struct {
-	Secret string        `json:"secret,omitempty"`
-	TTL    time.Duration `json:"ttl"`
+	Secret    string        `json:"secret,omitempty"`
+	SecretEnv string        `json:"secret_env,omitempty"`
+	TTL       time.Duration `json:"ttl"`
 }
 
 type ActivityProducerConfig struct {
@@ -109,6 +110,7 @@ type ActivityHighValueRulesConfig struct {
 type ActivityDeliveryConfig struct {
 	Enabled                   bool          `json:"enabled"`
 	WebhookURL                string        `json:"webhook_url,omitempty"`
+	WebhookURLEnv             string        `json:"webhook_url_env,omitempty"`
 	CollectOnlyWithoutWebhook bool          `json:"collect_only_without_webhook"`
 	Proxy                     string        `json:"proxy,omitempty"`
 	DashboardBaseURL          string        `json:"dashboard_base_url,omitempty"`
@@ -1247,8 +1249,9 @@ type activityCollectionFile struct {
 }
 
 type activityDecisionTokenFile struct {
-	Secret string `yaml:"secret"`
-	TTL    string `yaml:"ttl"`
+	Secret    string `yaml:"secret"`
+	SecretEnv string `yaml:"secret_env"`
+	TTL       string `yaml:"ttl"`
 }
 
 type activityProducerFile struct {
@@ -1268,6 +1271,7 @@ type activityHighValueRulesFile struct {
 type activityDeliveryFile struct {
 	Enabled                   *bool  `yaml:"enabled"`
 	WebhookURL                string `yaml:"webhook_url"`
+	WebhookURLEnv             string `yaml:"webhook_url_env"`
 	CollectOnlyWithoutWebhook *bool  `yaml:"collect_only_without_webhook"`
 	Proxy                     string `yaml:"proxy"`
 	DashboardBaseURL          string `yaml:"dashboard_base_url"`
@@ -1932,6 +1936,9 @@ func applyActivityAgentFile(base ActivityAgentConfig, file activityAgentFile) (A
 		if file.DecisionToken.Secret != "" {
 			base.DecisionToken.Secret = file.DecisionToken.Secret
 		}
+		if file.DecisionToken.SecretEnv != "" {
+			base.DecisionToken.SecretEnv = file.DecisionToken.SecretEnv
+		}
 		if file.DecisionToken.TTL != "" {
 			d, err := time.ParseDuration(file.DecisionToken.TTL)
 			if err != nil {
@@ -2057,6 +2064,9 @@ func applyActivityDeliveryFile(base ActivityDeliveryConfig, file activityDeliver
 	}
 	if file.WebhookURL != "" {
 		base.WebhookURL = file.WebhookURL
+	}
+	if file.WebhookURLEnv != "" {
+		base.WebhookURLEnv = file.WebhookURLEnv
 	}
 	if file.CollectOnlyWithoutWebhook != nil {
 		base.CollectOnlyWithoutWebhook = *file.CollectOnlyWithoutWebhook

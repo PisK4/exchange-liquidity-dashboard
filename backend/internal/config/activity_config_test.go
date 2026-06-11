@@ -27,6 +27,9 @@ func TestDefaultActivityAgentSeedsNinePlatformSources(t *testing.T) {
 	if aa.DecisionToken.Secret != "" || aa.DecisionToken.TTL != 30*24*time.Hour {
 		t.Fatalf("decision token defaults=%+v", aa.DecisionToken)
 	}
+	if aa.DecisionToken.SecretEnv != "" {
+		t.Fatalf("decision token secret env=%q", aa.DecisionToken.SecretEnv)
+	}
 	seen := map[string]bool{}
 	for _, src := range aa.Sources {
 		seen[src.Platform] = true
@@ -41,6 +44,9 @@ func TestDefaultActivityAgentSeedsNinePlatformSources(t *testing.T) {
 	}
 	if aa.Delivery.WebhookURL != "" {
 		t.Fatalf("activity webhook url=%q", aa.Delivery.WebhookURL)
+	}
+	if aa.Delivery.WebhookURLEnv != "" {
+		t.Fatalf("activity webhook url env=%q", aa.Delivery.WebhookURLEnv)
 	}
 	if aa.Delivery.MaxPerTick != 20 || aa.Delivery.SendSpacing != 2*time.Second {
 		t.Fatalf("activity delivery defaults=%+v", aa.Delivery)
@@ -65,10 +71,12 @@ Runtime:
     source_proxy: http://127.0.0.1:7897
     decision_token:
       secret: test-activity-decision-secret
+      secret_env: TEST_ACTIVITY_DECISION_SECRET
       ttl: 48h
     delivery:
       enabled: true
       webhook_url: https://example.test/activity-delivery-hook
+      webhook_url_env: TEST_ACTIVITY_WEBHOOK_URL
       collect_only_without_webhook: true
       proxy: http://127.0.0.1:7898
       dashboard_base_url: https://dashboard.example.test
@@ -95,10 +103,10 @@ Runtime:
 	if aa.DefaultPollInterval != 30*time.Minute || aa.WorkerLeaseTTL != 90*time.Second || aa.SourceProxy != "http://127.0.0.1:7897" {
 		t.Fatalf("activity runtime not loaded: %+v", aa)
 	}
-	if aa.DecisionToken.Secret != "test-activity-decision-secret" || aa.DecisionToken.TTL != 48*time.Hour {
+	if aa.DecisionToken.Secret != "test-activity-decision-secret" || aa.DecisionToken.SecretEnv != "TEST_ACTIVITY_DECISION_SECRET" || aa.DecisionToken.TTL != 48*time.Hour {
 		t.Fatalf("decision token config=%+v", aa.DecisionToken)
 	}
-	if aa.Delivery.WebhookURL != "https://example.test/activity-delivery-hook" || aa.Delivery.MaxPerTick != 3 || aa.Delivery.SendSpacing != 5*time.Second {
+	if aa.Delivery.WebhookURL != "https://example.test/activity-delivery-hook" || aa.Delivery.WebhookURLEnv != "TEST_ACTIVITY_WEBHOOK_URL" || aa.Delivery.MaxPerTick != 3 || aa.Delivery.SendSpacing != 5*time.Second {
 		t.Fatalf("delivery config=%+v", aa.Delivery)
 	}
 	if len(aa.Sources) != 1 || aa.Sources[0].Platform != "binance" || aa.Sources[0].AutoPushEnabled {

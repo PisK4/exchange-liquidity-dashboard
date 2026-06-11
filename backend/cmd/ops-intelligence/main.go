@@ -897,6 +897,11 @@ func resolveActivityWebhookURL(cfg config.Config) string {
 	if value := strings.TrimSpace(cfg.Runtime.ActivityAgent.Delivery.WebhookURL); value != "" {
 		return value
 	}
+	if envName := strings.TrimSpace(cfg.Runtime.ActivityAgent.Delivery.WebhookURLEnv); envName != "" {
+		if value := strings.TrimSpace(os.Getenv(envName)); value != "" {
+			return value
+		}
+	}
 	if value := strings.TrimSpace(cfg.Alert.Webhooks.Activity); value != "" {
 		return value
 	}
@@ -906,6 +911,9 @@ func resolveActivityWebhookURL(cfg config.Config) string {
 func resolveActivityDecisionTokenSecret(cfg config.Config) string {
 	if value := strings.TrimSpace(cfg.Runtime.ActivityAgent.DecisionToken.Secret); value != "" {
 		return value
+	}
+	if envName := strings.TrimSpace(cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv); envName != "" {
+		return strings.TrimSpace(os.Getenv(envName))
 	}
 	return ""
 }

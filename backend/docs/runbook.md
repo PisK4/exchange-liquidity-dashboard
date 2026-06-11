@@ -55,12 +55,15 @@ Current env indirections:
 | `COINGECKO_DEMO_API_KEY` | `Runtime.coingecko.api_key_env` |
 | `LARK_LISTING_CALLBACK_SECRET` | `Runtime.listing_agent.decision_card.callback.secret_env` |
 | `LARK_LISTING_TOP30_WEBHOOK_URL` | Only when a private config sets `Runtime.listing_agent.delivery.top30_webhook_url_env` to this name. The tracked config currently routes Listing cards through `Alert.Webhooks.*`. |
+| `LARK_ACTIVITY_WEBHOOK_URL` | Only when the selected runtime config sets `Runtime.activity_agent.delivery.webhook_url_env` to this name. Direct `Runtime.activity_agent.delivery.webhook_url` and `Alert.Webhooks.Activity` values still work. |
+| `ACTIVITY_DECISION_TOKEN_SECRET` | Only when the selected runtime config sets `Runtime.activity_agent.decision_token.secret_env` to this name. Direct `Runtime.activity_agent.decision_token.secret` still wins when non-empty. |
 
-Activity Agent webhook and decision-token values are intentionally YAML/Nacos
-driven: set `Alert.Webhooks.Activity` or
-`Runtime.activity_agent.delivery.webhook_url`, and
-`Runtime.activity_agent.decision_token.secret`, in a private config-dir. Do not
-commit those values to the tracked sample config.
+Activity Agent webhook and decision-token values can be provided either as
+direct YAML/Nacos values or through env indirection. For env indirection, keep
+the tracked fields empty and point `Runtime.activity_agent.delivery.webhook_url_env`
+and `Runtime.activity_agent.decision_token.secret_env` at names supplied by
+`deploy/.env` or the process environment. Do not commit the real webhook URL or
+decision-token secret to tracked config files.
 
 Scoped proxy fields are intentionally YAML/config-dir driven:
 

@@ -147,6 +147,51 @@ func TestBuildActivityEngineConfigFallsBackToYAMLWebhook(t *testing.T) {
 	}
 }
 
+func TestBuildActivityEngineConfigResolvesDeliveryWebhookEnv(t *testing.T) {
+	t.Setenv("TEST_ACTIVITY_WEBHOOK_URL", "https://env.example/webhook")
+	cfg := config.Default()
+	cfg.Alert.Webhooks.Activity = "https://yaml.example/webhook"
+	cfg.Runtime.ActivityAgent.Delivery.WebhookURLEnv = "TEST_ACTIVITY_WEBHOOK_URL"
+	cfg.Runtime.ActivityAgent.DecisionToken.Secret = "decision-secret"
+	got := buildActivityEngineConfig(cfg)
+	if got.WebhookURL != "https://env.example/webhook" {
+		t.Fatalf("webhook=%q", got.WebhookURL)
+	}
+}
+
+func TestBuildActivityEngineConfigDeliveryWebhookYAMLWinsOverEnv(t *testing.T) {
+	t.Setenv("TEST_ACTIVITY_WEBHOOK_URL", "https://env.example/webhook")
+	cfg := config.Default()
+	cfg.Runtime.ActivityAgent.Delivery.WebhookURL = "https://delivery.example/webhook"
+	cfg.Runtime.ActivityAgent.Delivery.WebhookURLEnv = "TEST_ACTIVITY_WEBHOOK_URL"
+	cfg.Runtime.ActivityAgent.DecisionToken.Secret = "decision-secret"
+	got := buildActivityEngineConfig(cfg)
+	if got.WebhookURL != "https://delivery.example/webhook" {
+		t.Fatalf("webhook=%q", got.WebhookURL)
+	}
+}
+
+func TestBuildActivityEngineConfigResolvesDecisionSecretEnv(t *testing.T) {
+	t.Setenv("TEST_ACTIVITY_DECISION_SECRET", "secret-from-env")
+	cfg := config.Default()
+	cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv = "TEST_ACTIVITY_DECISION_SECRET"
+	got := buildActivityEngineConfig(cfg)
+	if got.DecisionTokenSecret != "secret-from-env" {
+		t.Fatalf("secret=%q", got.DecisionTokenSecret)
+	}
+}
+
+func TestBuildActivityEngineConfigDecisionSecretYAMLWinsOverEnv(t *testing.T) {
+	t.Setenv("TEST_ACTIVITY_DECISION_SECRET", "secret-from-env")
+	cfg := config.Default()
+	cfg.Runtime.ActivityAgent.DecisionToken.Secret = "secret-from-yaml"
+	cfg.Runtime.ActivityAgent.DecisionToken.SecretEnv = "TEST_ACTIVITY_DECISION_SECRET"
+	got := buildActivityEngineConfig(cfg)
+	if got.DecisionTokenSecret != "secret-from-yaml" {
+		t.Fatalf("secret=%q", got.DecisionTokenSecret)
+	}
+}
+
 func TestBuildActivityEngineConfigWiresIngestionSources(t *testing.T) {
 	cfg := config.Default()
 	got := buildActivityEngineConfig(cfg)

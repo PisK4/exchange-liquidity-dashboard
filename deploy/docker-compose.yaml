@@ -53,11 +53,13 @@ services:
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
       NO_PROXY: ${NO_PROXY:-}
-      # Module-scoped secrets/env indirections. Activity webhook and
-      # decision token are read from YAML/Nacos, not environment vars.
+      # Module-scoped secrets/env indirections. Keep real values in
+      # deploy/.env or a private config-dir, never in tracked YAML.
       COINGECKO_DEMO_API_KEY: ${COINGECKO_DEMO_API_KEY:-}
       LARK_LISTING_TOP30_WEBHOOK_URL: ${LARK_LISTING_TOP30_WEBHOOK_URL:-}
       LARK_LISTING_CALLBACK_SECRET: ${LARK_LISTING_CALLBACK_SECRET:-}
+      LARK_ACTIVITY_WEBHOOK_URL: ${LARK_ACTIVITY_WEBHOOK_URL:-}
+      ACTIVITY_DECISION_TOKEN_SECRET: ${ACTIVITY_DECISION_TOKEN_SECRET:-}
     ports:
       - "${BACKEND_PUBLISH_HOST:-127.0.0.1}:${BACKEND_PUBLISH_PORT:-8080}:8080"
     depends_on:
