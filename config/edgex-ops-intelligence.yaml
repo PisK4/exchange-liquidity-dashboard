@@ -43,7 +43,7 @@ Alert:
     # Activity Agent uses its own Lark bot. Keep the committed value
     # empty; local/prod operators should provide it through private
     # YAML/Nacos config rather than environment-variable indirection.
-    Activity: ""
+    Activity: "https://open.larksuite.com/open-apis/bot/v2/hook/898603cc-ee14-47eb-8152-43806e433dec"
 
 Catalog:
   ExchangeEndpointsFile: exchange_endpoints.yaml
@@ -428,6 +428,10 @@ Runtime:
       # decision-card outbox row. This is read-only: it calls the
       # already-wired instrument fetchers, does not update DB snapshots,
       # and falls back to DB snapshot rows on refresh failure.
+      metric_enrichment:
+        reference_platforms: [binance]
+        depth_tier_pct: 0.001
+        stale_after: 30m
       market_status_refresh:
         enabled: true
         source_platforms_only: true
@@ -469,7 +473,7 @@ Runtime:
     decision_token:
       # Fill in private YAML/Nacos config before enabling decision-card
       # callbacks. Empty keeps outbound cards disabled_missing_secret.
-      secret: ""
+      secret: "N7hJ4rQhhzro9G8FdpS6x7SXDAsGdvBwpeGLZZtWqmbZL7hpSq23J6t4Dcd8PiGP"
       ttl: 720h
     high_value_rules:
       source_groups: [launchpool_project_list, cms_article_detail, latest_events, support_ongoing_section]

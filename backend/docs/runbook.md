@@ -211,6 +211,15 @@ footer `metrics=` fragment carries the source/status shorthand:
 | `live` | Live reference-venue depth check, controlled by `Runtime.listing_agent.decision_card.metric_enrichment.reference_platforms` (default `binance`). |
 | `snap` | Local MySQL snapshot fallback (`t_orderbook_snapshot` or spot-only `t_symbol_volume_snapshot`). |
 
+| Footer status | Meaning |
+|---|---|
+| `ok` | Metric value is available and rendered in the card body. |
+| `not_found` | The preferred external/token-level source did not find the token. |
+| `unsupported` | The metric is not supported for the current source or market surface. |
+| `stale` | The newest local snapshot is older than `metric_enrichment.stale_after`. |
+| `source_error` | The live or external source failed before producing a valid metric. |
+| `no_snapshot` | The local DB fallback had no fresh usable snapshot rows. |
+
 If a card still renders `n/a` / `不可用`, check in this order:
 
 1. Confirm CoinGecko governance is not exhausted if both `Market Cap` and
@@ -223,7 +232,10 @@ If a card still renders `n/a` / `不可用`, check in this order:
 3. Confirm the DB fallback indexes exist before relying on snapshot fallback:
 
 ```
-docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -N -e \
+MYSQL_DB=${MYSQL_DATABASE:-edgex_ops_intelligence}
+
+docker compose -f deploy/docker-compose.yaml exec mysql \
+  mysql -uroot -proot "${MYSQL_DB}" -N -e \
   "SELECT TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX, COLUMN_NAME
      FROM INFORMATION_SCHEMA.STATISTICS
     WHERE TABLE_SCHEMA = DATABASE()
@@ -231,6 +243,10 @@ docker exec deploy-mysql-1 mysql -uroot -proot edgex_dashboard -N -e \
                          'idx_symbol_volume_canonical_surface_latest')
     ORDER BY TABLE_NAME, INDEX_NAME, SEQ_IN_INDEX;"
 ```
+
+Legacy local Docker volumes may still use `edgex_dashboard`; verify with
+`SHOW DATABASES` before running the check if the backend was originally booted
+from the historical compose stack.
 
 The expected indexes are:
 

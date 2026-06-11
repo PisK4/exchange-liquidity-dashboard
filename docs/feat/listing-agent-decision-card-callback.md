@@ -134,7 +134,7 @@ Listing Time 2026-05-30 18:00 UTC+8（仅真实 API launch/open 时间存在时�
 ─────────────────────
 Market Status（刷新失败则回退 DB snapshot，并在 footer 写 enrich_errors=N）
 ─────────────────────
-Market Cap / Spot 24h Vol / Spot Depth / Perp Depth
+Market Cap / Spot 24h Vol / 现货深度 / 合约深度
 footer: metrics=mc:ok/ext vol:ok/ext spot:ok/live perp:ok/snap（仅在状态存在时显示）
 ─────────────────────
 Score 90 / 100
@@ -155,6 +155,7 @@ trigger=2026-05-30 17:25 UTC+8 · evidence=API + 公告都已确认 · dedupe=li
 - **edgeX 可见性语义**：edgeX `enable_display_false` 表示未在产品前端展示/可能尚未上线，不等于已下架。卡片中应显示为 `未上线（API: enable_display_false）`，而不是 `已下架`；只有明确 `enable_trade_false` 才按下架/不可交易处理。
 - **Market Status 预刷新**：渲染前可按 `Runtime.listing_agent.decision_card.market_status_refresh` 对 source platforms + edgeX 做一次 bounded/fail-open instrument API refresh。该 refresh 只读 API、带 timeout/concurrency/request budget/tick cache，不写 snapshot、不写 signal、不改变 candidate；失败时按配置回退 DB snapshot。
 - **Metrics enrichment 语义**：卡片正文继续只显示 `Market Cap` / `Spot 24h Vol` / `现货深度` / `合约深度` 四个短标签，不新增 `Token 24h Vol` 或 `CG 24h Vol`。Market Cap 与 Spot 24h Vol 优先使用 CoinGecko token-level markets 数据；当 Spot 24h Vol 缺失时，才从本地 `t_symbol_volume_snapshot` 的 fresh `market_surface='spot'` 行汇总 fallback，明确排除 perp volume。深度不再复用候选 source platforms，而是按 `metric_enrichment.reference_platforms`（默认 Binance）查询 reference venue live depth，并在 live 某侧缺失时从 `t_orderbook_snapshot` fresh rows fallback。footer 的 `metrics=` 仅压缩展示状态/来源族（`ext` / `live` / `snap`），按钮 `value` payload 不变。
+- **Metric footer source/status**：`metrics=` 的 source family 只用 `ext`（CoinGecko token-level market data）、`live`（reference venue live depth）和 `snap`（local MySQL snapshot fallback）。status 只表达指标可用性：`ok` 表示正文已渲染数值；`not_found` 表示外部 token-level source 未找到 token；`unsupported` 表示当前 source/surface 不支持；`stale` 表示 newest snapshot 超过 `metric_enrichment.stale_after`；`source_error` 表示 live/external source 请求或解析失败；`no_snapshot` 表示 DB fallback 没有 fresh usable rows。
 - **Metric DB fallback 索引**：Spot/Perp depth fallback 依赖 `idx_orderbook_canonical_surface_tier_latest (canonical_symbol, market_surface, tier, platform, snapshot_ts)`；Spot 24h Vol fallback 依赖 `idx_symbol_volume_canonical_surface_latest (canonical_symbol, market_surface, platform, snapshot_ts)`。两者由 migration `000021_listing_metric_snapshot_indexes` 和 backend boot-time post-init guard 共同维护；上线前可用 `EXPLAIN` 确认查询命中这两个索引。
 - **schema gotchas**：与 hot-gap 卡完全一致——`plain_text` / `lark_md` 的字段名是 `content` 不是 `text`，emoji 用于语义符号但 tier / status 类视觉用 `<font color>`，`SetEscapeHTML(false)` 让 outbox `payload_json` 肉眼可读。
 
