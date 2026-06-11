@@ -9,7 +9,10 @@ import (
 
 	"edgex-ops-intelligence/backend/internal/config"
 	"edgex-ops-intelligence/backend/internal/domain"
+	"edgex-ops-intelligence/backend/internal/metrics"
 	"edgex-ops-intelligence/backend/internal/startup"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Version is the human-readable build identifier surfaced by the
@@ -72,6 +75,7 @@ func WithStartupStatus(status StartupReader) Option {
 
 func (s *Server) Routes() http.Handler {
 	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
 	mux.HandleFunc("/api/health", s.health)
 	mux.HandleFunc("/api/readiness", s.readiness)
 	mux.HandleFunc("/api/ops-intelligence/meta", s.opsIntelligenceMeta)
@@ -86,7 +90,7 @@ func (s *Server) Routes() http.Handler {
 	mux.HandleFunc("/api/runtime-config", s.runtimeConfig)
 	s.registerListingRoutes(mux)
 	s.registerActivityRoutes(mux)
-	return cors(mux)
+	return metrics.Middleware(cors(mux))
 }
 
 // health returns rich liveness + observability JSON. It always returns

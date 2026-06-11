@@ -65,6 +65,7 @@ smoke-api:
 		sleep 0.5; \
 	done; \
 	curl -fsS http://127.0.0.1:$(PORT)/api/health; \
+	curl -fsS http://127.0.0.1:$(PORT)/metrics >/dev/null; \
 	curl -fsS 'http://127.0.0.1:$(PORT)/api/snapshot/liquidity?symbol=$(SYMBOL)%20%28perp%29'
 
 smoke-all-startup:

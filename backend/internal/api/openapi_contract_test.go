@@ -47,6 +47,10 @@ func TestOpenAPIResponsesHaveSchemas(t *testing.T) {
 			if !ok {
 				t.Fatalf("%s %s 200 response missing content", method, path)
 			}
+			if path == "/metrics" {
+				assertOpenAPIMediaSchema(t, content, "text/plain", method, path)
+				continue
+			}
 			media, ok := content["application/json"].(map[string]any)
 			if !ok {
 				t.Fatalf("%s %s 200 response missing application/json content", method, path)
@@ -56,6 +60,18 @@ func TestOpenAPIResponsesHaveSchemas(t *testing.T) {
 				t.Fatalf("%s %s 200 response missing schema", method, path)
 			}
 		}
+	}
+}
+
+func assertOpenAPIMediaSchema(t *testing.T, content map[string]any, mediaType, method, path string) {
+	t.Helper()
+	media, ok := content[mediaType].(map[string]any)
+	if !ok {
+		t.Fatalf("%s %s 200 response missing %s content", method, path, mediaType)
+	}
+	schema, ok := media["schema"].(map[string]any)
+	if !ok || len(schema) == 0 {
+		t.Fatalf("%s %s 200 response missing %s schema", method, path, mediaType)
 	}
 }
 

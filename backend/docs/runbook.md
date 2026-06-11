@@ -180,6 +180,26 @@ fast liveness on a laptop or CI host without depending on a pre-created local
 database. To exercise warm-cache readiness against a real DB, pass
 `STARTUP_MYSQL_DSN='user:pass@tcp(host:3306)/db?parseTime=true'`.
 
+### 2.1 Metrics endpoint
+
+The backend exposes Prometheus metrics on the main API port:
+
+```bash
+curl -fsS http://127.0.0.1:8080/metrics
+```
+
+The first metrics set is intentionally small and process-local:
+
+- `edgex_ops_http_requests_total`
+- `edgex_ops_http_server_duration_milliseconds`
+- `edgex_ops_log_count_total` for log events emitted through the new
+  metrics-aware logger facade
+
+`/metrics` is a scrape endpoint, not a liveness or readiness probe. Keep Docker
+and load-balancer liveness pointed at `/api/health`, and keep traffic gating on
+`/api/readiness`. The HTTP middleware skips `/metrics` itself to avoid scrape
+traffic polluting request latency metrics.
+
 ## 3. Common Symptoms
 
 ### 3.1 Frontend shows "no data" for one platform
