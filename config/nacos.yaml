@@ -1,0 +1,12 @@
+Region: ap-southeast-1
+ServerIP: 127.0.0.1
+ServerPort: 8848
+ClientLogDir: ./nacos/log
+ClientCacheDir: ./nacos/cache
+ClientLogLevel: error
+Username: ""
+Password: ""
+ClientNamespaceID: dev
+ClusterName: DEFAULT
+GroupName: DEFAULT_GROUP
+ConfigName: edgex-ops-intelligence.yaml

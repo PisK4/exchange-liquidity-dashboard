@@ -259,6 +259,104 @@ Runtime:
 	}
 }
 
+func TestLoadReadsBridgeStyleAwsAndAlertPush(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `
+symbols:
+  - display_symbol: BTC-USDT (perp)
+    canonical: BTC
+platforms: [binance]
+`)
+	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), `
+endpoints:
+  binance: https://example.invalid/binance
+`)
+	mustWrite(t, filepath.Join(dir, "instrument_catalog.yaml"), `
+schema_version: 1
+platforms: {}
+`)
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
+Database:
+  Name: ops
+  Addr: mysql.nacos:3306
+  UserName: ops_user
+  Password: local-pass
+  ParseTime: true
+Aws:
+  DBAddr: OPS_DB_ADDR
+  DBUser: OPS_DB_USER
+  DBPass: OPS_DB_PASS
+  CoinGeckoAPIKey: OPS_CG_KEY
+  ListingCallbackSecret: OPS_LISTING_CALLBACK_SECRET
+  ActivityDecisionToken: OPS_ACTIVITY_DECISION_TOKEN
+Alert:
+  AppName: edgex-ops-intelligence
+  Enabled: true
+  WebHookP3: legacy-listing
+  Push:
+    Listing: push-listing
+    Activity: push-activity
+    Liquidity: push-liquidity
+  Webhooks:
+    Listing: legacy-webhooks-listing
+    Activity: legacy-webhooks-activity
+    Liquidity: legacy-webhooks-liquidity
+Clients:
+  SomeClient:
+    Endpoint: https://example.invalid
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Aws.DBAddr != "OPS_DB_ADDR" || cfg.Aws.DBUser != "OPS_DB_USER" || cfg.Aws.DBPass != "OPS_DB_PASS" {
+		t.Fatalf("aws db mapping not loaded: %+v", cfg.Aws)
+	}
+	if cfg.Aws.CoinGeckoAPIKey != "OPS_CG_KEY" || cfg.Aws.ListingCallbackSecret != "OPS_LISTING_CALLBACK_SECRET" || cfg.Aws.ActivityDecisionToken != "OPS_ACTIVITY_DECISION_TOKEN" {
+		t.Fatalf("aws non-db mapping not loaded: %+v", cfg.Aws)
+	}
+	if cfg.Alert.Push.Listing != "push-listing" || cfg.Alert.Push.Activity != "push-activity" || cfg.Alert.Push.Liquidity != "push-liquidity" {
+		t.Fatalf("alert push not loaded: %+v", cfg.Alert.Push)
+	}
+	if cfg.Alert.Webhooks.Listing != "push-listing" || cfg.Alert.Webhooks.Activity != "push-activity" || cfg.Alert.Webhooks.Liquidity != "push-liquidity" {
+		t.Fatalf("push should win over legacy webhooks: %+v", cfg.Alert.Webhooks)
+	}
+	if cfg.Clients["SomeClient"] == nil {
+		t.Fatalf("clients block not loaded: %+v", cfg.Clients)
+	}
+}
+
+func TestLoadKeepsLegacyAlertWebhooksWhenPushIsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	mustWrite(t, filepath.Join(dir, "symbol_mapping.yaml"), `symbols: []
+platforms: []
+`)
+	mustWrite(t, filepath.Join(dir, "exchange_endpoints.yaml"), `endpoints: {}
+`)
+	mustWrite(t, filepath.Join(dir, "instrument_catalog.yaml"), `schema_version: 1
+platforms: {}
+`)
+	mustWrite(t, filepath.Join(dir, "edgex-ops-intelligence.yaml"), `
+Alert:
+  WebHookP3: legacy-p3
+  Webhooks:
+    Activity: legacy-activity
+    Liquidity: legacy-liquidity
+`)
+
+	cfg, err := Load(dir)
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+	if cfg.Alert.Push.Listing != "legacy-p3" || cfg.Alert.Webhooks.Listing != "legacy-p3" {
+		t.Fatalf("legacy WebHookP3 fallback not applied: push=%+v webhooks=%+v", cfg.Alert.Push, cfg.Alert.Webhooks)
+	}
+	if cfg.Alert.Push.Activity != "legacy-activity" || cfg.Alert.Push.Liquidity != "legacy-liquidity" {
+		t.Fatalf("legacy webhooks not mirrored into push: %+v", cfg.Alert.Push)
+	}
+}
+
 func TestLoadFallsBackToDotEnvWhenOpsIntelligenceConfigMissing(t *testing.T) {
 	dir := t.TempDir()
 	mustWrite(t, filepath.Join(dir, ".env"), `

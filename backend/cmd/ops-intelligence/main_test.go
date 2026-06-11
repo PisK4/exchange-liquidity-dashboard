@@ -147,6 +147,17 @@ func TestBuildActivityEngineConfigFallsBackToYAMLWebhook(t *testing.T) {
 	}
 }
 
+func TestBuildActivityEngineConfigAlertPushWinsOverLegacyWebhooks(t *testing.T) {
+	cfg := config.Default()
+	cfg.Alert.Push.Activity = "https://push.example/webhook"
+	cfg.Alert.Webhooks.Activity = "https://legacy.example/webhook"
+	cfg.Runtime.ActivityAgent.DecisionToken.Secret = "decision-secret"
+	got := buildActivityEngineConfig(cfg)
+	if got.WebhookURL != "https://push.example/webhook" {
+		t.Fatalf("webhook=%q", got.WebhookURL)
+	}
+}
+
 func TestBuildActivityEngineConfigResolvesDeliveryWebhookEnv(t *testing.T) {
 	t.Setenv("TEST_ACTIVITY_WEBHOOK_URL", "https://env.example/webhook")
 	cfg := config.Default()
@@ -235,10 +246,16 @@ func TestBuildHTTPClientWithProxyConfiguresTransportProxy(t *testing.T) {
 }
 
 func TestResolveMySQLDSNUsesFlagBeforeConfig(t *testing.T) {
+	t.Setenv("OPS_INTELLIGENCE_MYSQL_DSN", "")
 	cfg := config.Config{Database: config.DatabaseConfig{DSN: "from-config"}}
 	if got := resolveMySQLDSN("from-flag", cfg); got != "from-flag" {
 		t.Fatalf("resolveMySQLDSN flag = %q", got)
 	}
+	t.Setenv("OPS_INTELLIGENCE_MYSQL_DSN", "from-env")
+	if got := resolveMySQLDSN("", cfg); got != "from-env" {
+		t.Fatalf("resolveMySQLDSN env = %q", got)
+	}
+	t.Setenv("OPS_INTELLIGENCE_MYSQL_DSN", "")
 	if got := resolveMySQLDSN("", cfg); got != "from-config" {
 		t.Fatalf("resolveMySQLDSN config = %q", got)
 	}

@@ -10,6 +10,17 @@ Database:
   MaxOpenConn: 8
   ConnMaxLifeTime: 30m
 
+Aws:
+  # Key names inside AWS Secrets Manager JSON. AWS_SM_REGION and
+  # AWS_SM_SECRET_ID are provided through process env, matching
+  # edgex-bridge-server. Lark business push webhooks remain in Alert.Push.
+  DBAddr: ""
+  DBUser: ""
+  DBPass: ""
+  CoinGeckoAPIKey: ""
+  ListingCallbackSecret: ""
+  ActivityDecisionToken: ""
+
 Alert:
   # Alert display identity. Runtime/deployment identifiers such as
   # edgex-ops-intelligence, OPS_INTELLIGENCE_* and edgex_ops_intelligence are intentionally
@@ -26,13 +37,15 @@ Alert:
   # EdgeX services; Listing Agent only consumes it, not its own module.
   WebHookP3: "https://open.larksuite.com/open-apis/bot/v2/hook/2983a36c-de31-4190-99b4-e256662bb8f7"
   WebHookP45: ""
-  # Business-module routing. Webhooks.Listing replaces WebHookP3 and
-  # holds Top30 hot-gap (#1) + CEX/DEX divergence (#2-#5) cards.
-  # Webhooks.Liquidity is a separate bot dedicated to Dashboard
-  # liquidity-lag (#10) and worst-depth (#11) cards so operators can
-  # mute / forward those independently. Leave Webhooks.* empty to
-  # fall back to the legacy WebHookP3 (Listing only). New deployments
-  # SHOULD migrate to Webhooks; this is the long-term schema.
+  # DEV business push routing for AWS DEV / internal testnet rehearsal.
+  # Production webhook URLs must be managed in Nacos Alert.Push and must
+  # not be copied into tracked templates or docs.
+  Push:
+    Listing: "https://open.larksuite.com/open-apis/bot/v2/hook/2983a36c-de31-4190-99b4-e256662bb8f7"
+    Liquidity: ""
+    Activity: "https://open.larksuite.com/open-apis/bot/v2/hook/898603cc-ee14-47eb-8152-43806e433dec"
+  # Legacy compatibility input. Loader mirrors Alert.Push into
+  # Webhooks when Push is set, so Push wins during migration.
   Webhooks:
     Listing: "https://open.larksuite.com/open-apis/bot/v2/hook/2983a36c-de31-4190-99b4-e256662bb8f7"
     # Leave empty so liquidity_alert.enabled=true cannot accidentally

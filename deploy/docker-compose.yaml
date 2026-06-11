@@ -36,6 +36,8 @@ services:
         BUILD_VERSION: ${BUILD_VERSION:-dev}
     command: ["/app/ops-intelligence", "--role=all", "--addr=:8080"]
     environment:
+      USE_LOCAL_CONFIG: ${USE_LOCAL_CONFIG:-true}
+      OPS_INTELLIGENCE_CONFIG_SOURCE: ${OPS_INTELLIGENCE_CONFIG_SOURCE:-local}
       OPS_INTELLIGENCE_MYSQL_DSN: ${OPS_INTELLIGENCE_MYSQL_DSN:-root:root@tcp(mysql:3306)/edgex_ops_intelligence?parseTime=true}
       # OPS_INTELLIGENCE_DATA_DIR is the writable mount the listing engine
       # uses for files it regenerates at runtime (currently the
@@ -53,6 +55,21 @@ services:
       HTTP_PROXY: ${HTTP_PROXY:-}
       HTTPS_PROXY: ${HTTPS_PROXY:-}
       NO_PROXY: ${NO_PROXY:-}
+      # Nacos config source. Local compose defaults to file mode; AWS DEV
+      # sets USE_LOCAL_CONFIG=false or OPS_INTELLIGENCE_CONFIG_SOURCE=nacos.
+      NACOS_CONFIG_SERVER_ADDR: ${NACOS_CONFIG_SERVER_ADDR:-}
+      NACOS_CONFIG_SERVER_IP: ${NACOS_CONFIG_SERVER_IP:-}
+      NACOS_CONFIG_SERVER_PORT: ${NACOS_CONFIG_SERVER_PORT:-}
+      NACOS_CONFIG_NAMESPACE: ${NACOS_CONFIG_NAMESPACE:-}
+      NACOS_CONFIG_GROUP: ${NACOS_CONFIG_GROUP:-DEFAULT_GROUP}
+      NACOS_CONFIG_NAME: ${NACOS_CONFIG_NAME:-edgex-ops-intelligence.yaml}
+      NACOS_CONFIG_USERNAME: ${NACOS_CONFIG_USERNAME:-}
+      NACOS_CONFIG_PASSWORD: ${NACOS_CONFIG_PASSWORD:-}
+      # AWS Secrets Manager resolver. Region/secret id stay in env, while
+      # Nacos Alert.Push owns Lark business webhook URLs.
+      AWS_SM_ENABLE: ${AWS_SM_ENABLE:-false}
+      AWS_SM_REGION: ${AWS_SM_REGION:-}
+      AWS_SM_SECRET_ID: ${AWS_SM_SECRET_ID:-}
       # Module-scoped secrets/env indirections. Keep real values in
       # deploy/.env or a private config-dir, never in tracked YAML.
       COINGECKO_DEMO_API_KEY: ${COINGECKO_DEMO_API_KEY:-}

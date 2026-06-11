@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"edgex-ops-intelligence/backend/internal/domain"
+	internalnacos "edgex-ops-intelligence/backend/internal/nacos"
 	"gopkg.in/yaml.v3"
 )
 
@@ -534,6 +535,7 @@ type BackfillConfig struct {
 type CoinGeckoConfig struct {
 	Enabled        bool                      `json:"enabled"`
 	BaseURL        string                    `json:"base_url"`
+	APIKey         string                    `json:"-"`
 	APIKeyEnv      string                    `json:"api_key_env"`
 	Proxy          string                    `json:"proxy,omitempty"`
 	PullInterval   time.Duration             `json:"pull_interval"`
@@ -580,6 +582,15 @@ type DatabaseConfig struct {
 	DSN             string        `json:"-"`
 }
 
+type AwsConfig struct {
+	DBAddr                string `json:"db_addr,omitempty"`
+	DBUser                string `json:"db_user,omitempty"`
+	DBPass                string `json:"db_pass,omitempty"`
+	CoinGeckoAPIKey       string `json:"coingecko_api_key,omitempty"`
+	ListingCallbackSecret string `json:"listing_callback_secret,omitempty"`
+	ActivityDecisionToken string `json:"activity_decision_token,omitempty"`
+}
+
 type AlertConfig struct {
 	AppName         string `json:"app_name"`
 	Enabled         bool   `json:"enabled"`
@@ -587,12 +598,13 @@ type AlertConfig struct {
 	DestPhoneNumber string `json:"dest_phone_number,omitempty"`
 	Business        string `json:"business,omitempty"`
 	ServerURL       string `json:"server_url,omitempty"`
-	// Webhooks routes alerts by business module (listing /
-	// liquidity / ...). Replaces the legacy priority-named
-	// WebHookP12 / P3 / P45 fields. On Load, when Webhooks.Listing
-	// is empty and the legacy WebHookP3 is set, the loader auto-
-	// migrates WebHookP3 → Webhooks.Listing so existing nacos
-	// configs keep working without redeploy.
+	// Push is the long-term business delivery route. It keeps Listing,
+	// Activity, and Liquidity webhook routing separate from severity alert
+	// lanes WebHookP12/P3/P45.
+	Push AlertPush `json:"push"`
+
+	// Webhooks is the legacy business-module route. It is still parsed for
+	// compatibility, but Push wins when both are configured.
 	Webhooks AlertWebhooks `json:"webhooks"`
 
 	// Deprecated. Kept so existing nacos / yaml configs continue
@@ -601,6 +613,12 @@ type AlertConfig struct {
 	WebHookP12 string `json:"webhook_p12,omitempty"`
 	WebHookP3  string `json:"webhook_p3,omitempty"`
 	WebHookP45 string `json:"webhook_p45,omitempty"`
+}
+
+type AlertPush struct {
+	Listing   string `json:"listing,omitempty"   yaml:"Listing"`
+	Liquidity string `json:"liquidity,omitempty" yaml:"Liquidity"`
+	Activity  string `json:"activity,omitempty"  yaml:"Activity"`
 }
 
 // AlertWebhooks maps each business module to its Lark bot URL.
@@ -626,8 +644,10 @@ type Config struct {
 	Platforms []string           `json:"platforms"`
 	Runtime   Runtime            `json:"runtime"`
 	Database  DatabaseConfig     `json:"database"`
+	Aws       AwsConfig          `json:"aws"`
 	Alert     AlertConfig        `json:"alert"`
 	Catalog   CatalogConfig      `json:"catalog"`
+	Clients   map[string]any     `json:"clients,omitempty"`
 	// CanonicalIndex is the reverse alias map built from
 	// symbol_mapping.yaml at Load time. nil when the YAML cannot be
 	// read; callers must treat the receiver as nil-safe.
@@ -657,24 +677,74 @@ func (d DatabaseConfig) DSNString() string {
 }
 
 func Load(configDir string) (Config, error) {
+	return LoadLocal(configDir)
+}
+
+func LoadLocal(configDir string) (Config, error) {
 	if configDir == "" {
 		configDir = filepath.Join("..", "config")
 	}
 	loadDotEnv(filepath.Join(configDir, ".env"))
-	cfg := Default()
 
 	mainCfg, hasMain, err := loadDashboardConfig(filepath.Join(configDir, "edgex-ops-intelligence.yaml"))
 	if err != nil {
 		return Config{}, err
 	}
+	return loadFromDashboardFile(configDir, mainCfg, hasMain)
+}
+
+func LoadFromMainYAML(data []byte, configDir string) (Config, error) {
+	if configDir == "" {
+		configDir = filepath.Join("..", "config")
+	}
+	var mainCfg dashboardFile
+	if err := yaml.Unmarshal(data, &mainCfg); err != nil {
+		return Config{}, err
+	}
+	return loadFromDashboardFile(configDir, mainCfg, true)
+}
+
+func LoadRuntime(configDir string) (Config, error) {
+	if configDir == "" {
+		configDir = filepath.Join("..", "config")
+	}
+	loadDotEnv(filepath.Join(configDir, ".env"))
+
+	source := strings.ToLower(strings.TrimSpace(os.Getenv("OPS_INTELLIGENCE_CONFIG_SOURCE")))
+	useLocal := strings.ToLower(strings.TrimSpace(os.Getenv("USE_LOCAL_CONFIG")))
+	if source != "nacos" && useLocal != "false" {
+		return LoadLocal(configDir)
+	}
+
+	bootstrap, err := internalnacos.LoadBootstrap(configDir)
+	if err != nil {
+		return Config{}, fmt.Errorf("load nacos bootstrap: %w", err)
+	}
+	registry, err := internalnacos.NewRegistry(bootstrap)
+	if err != nil {
+		return Config{}, fmt.Errorf("init nacos client: %w", err)
+	}
+	content, err := registry.GetConfig()
+	if err != nil {
+		return Config{}, fmt.Errorf("load nacos config %s/%s: %w", bootstrap.GroupName, bootstrap.ConfigName, err)
+	}
+	return LoadFromMainYAML([]byte(content), configDir)
+}
+
+func loadFromDashboardFile(configDir string, mainCfg dashboardFile, hasMain bool) (Config, error) {
+	cfg := Default()
+
 	if hasMain {
 		cfg.Database = mainCfg.Database.toConfig()
+		cfg.Aws = mainCfg.Aws.toConfig()
 		cfg.Alert = mainCfg.Alert.toConfig()
 		cfg.Catalog = mainCfg.Catalog.withDefaults()
+		cfg.Clients = mainCfg.Clients
 		runtimeBlock := mainCfg.Runtime
 		if !runtimeBlock.hasValues() {
 			runtimeBlock = mainCfg.LegacyRuntime()
 		}
+		var err error
 		cfg.Runtime, err = applyRuntimeFile(cfg.Runtime, runtimeBlock)
 		if err != nil {
 			return Config{}, err
@@ -1457,10 +1527,12 @@ type listingCandidateFile struct {
 
 type dashboardFile struct {
 	runtimeFile `yaml:",inline"`
-	Database    databaseFile `yaml:"Database"`
-	Alert       alertFile    `yaml:"Alert"`
-	Runtime     runtimeFile  `yaml:"Runtime"`
-	Catalog     catalogFile  `yaml:"Catalog"`
+	Database    databaseFile   `yaml:"Database"`
+	Aws         awsFile        `yaml:"Aws"`
+	Alert       alertFile      `yaml:"Alert"`
+	Runtime     runtimeFile    `yaml:"Runtime"`
+	Catalog     catalogFile    `yaml:"Catalog"`
+	Clients     map[string]any `yaml:"Clients"`
 }
 
 type databaseFile struct {
@@ -1475,6 +1547,15 @@ type databaseFile struct {
 	DSN             string `yaml:"DSN"`
 }
 
+type awsFile struct {
+	DBAddr                string `yaml:"DBAddr"`
+	DBUser                string `yaml:"DBUser"`
+	DBPass                string `yaml:"DBPass"`
+	CoinGeckoAPIKey       string `yaml:"CoinGeckoAPIKey"`
+	ListingCallbackSecret string `yaml:"ListingCallbackSecret"`
+	ActivityDecisionToken string `yaml:"ActivityDecisionToken"`
+}
+
 type alertFile struct {
 	AppName         string             `yaml:"AppName"`
 	Enabled         *bool              `yaml:"Enabled"`
@@ -1482,10 +1563,17 @@ type alertFile struct {
 	DestPhoneNumber string             `yaml:"DestPhoneNumber"`
 	Business        string             `yaml:"Business"`
 	ServerURL       string             `yaml:"ServerUrl"`
+	Push            *alertPushFile     `yaml:"Push"`
 	Webhooks        *alertWebhooksFile `yaml:"Webhooks"`
 	WebHookP12      string             `yaml:"WebHookP12"`
 	WebHookP3       string             `yaml:"WebHookP3"`
 	WebHookP45      string             `yaml:"WebHookP45"`
+}
+
+type alertPushFile struct {
+	Listing   string `yaml:"Listing"`
+	Liquidity string `yaml:"Liquidity"`
+	Activity  string `yaml:"Activity"`
 }
 
 type alertWebhooksFile struct {
@@ -1745,10 +1833,29 @@ func (f databaseFile) toConfig() DatabaseConfig {
 	return cfg
 }
 
+func (f awsFile) toConfig() AwsConfig {
+	return AwsConfig{
+		DBAddr:                strings.TrimSpace(f.DBAddr),
+		DBUser:                strings.TrimSpace(f.DBUser),
+		DBPass:                strings.TrimSpace(f.DBPass),
+		CoinGeckoAPIKey:       strings.TrimSpace(f.CoinGeckoAPIKey),
+		ListingCallbackSecret: strings.TrimSpace(f.ListingCallbackSecret),
+		ActivityDecisionToken: strings.TrimSpace(f.ActivityDecisionToken),
+	}
+}
+
 func (f alertFile) toConfig() AlertConfig {
 	enabled := false
 	if f.Enabled != nil {
 		enabled = *f.Enabled
+	}
+	var push AlertPush
+	if f.Push != nil {
+		push = AlertPush{
+			Listing:   strings.TrimSpace(f.Push.Listing),
+			Liquidity: strings.TrimSpace(f.Push.Liquidity),
+			Activity:  strings.TrimSpace(f.Push.Activity),
+		}
 	}
 	var hooks AlertWebhooks
 	if f.Webhooks != nil {
@@ -1758,8 +1865,26 @@ func (f alertFile) toConfig() AlertConfig {
 			Activity:  strings.TrimSpace(f.Webhooks.Activity),
 		}
 	}
+	if push.Listing != "" {
+		hooks.Listing = push.Listing
+	}
+	if push.Liquidity != "" {
+		hooks.Liquidity = push.Liquidity
+	}
+	if push.Activity != "" {
+		hooks.Activity = push.Activity
+	}
 	if hooks.Listing == "" && strings.TrimSpace(f.WebHookP3) != "" {
 		hooks.Listing = strings.TrimSpace(f.WebHookP3)
+	}
+	if push.Listing == "" {
+		push.Listing = hooks.Listing
+	}
+	if push.Liquidity == "" {
+		push.Liquidity = hooks.Liquidity
+	}
+	if push.Activity == "" {
+		push.Activity = hooks.Activity
 	}
 	return AlertConfig{
 		AppName:         f.AppName,
@@ -1768,6 +1893,7 @@ func (f alertFile) toConfig() AlertConfig {
 		DestPhoneNumber: f.DestPhoneNumber,
 		Business:        f.Business,
 		ServerURL:       f.ServerURL,
+		Push:            push,
 		Webhooks:        hooks,
 		WebHookP12:      f.WebHookP12,
 		WebHookP3:       f.WebHookP3,

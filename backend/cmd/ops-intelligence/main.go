@@ -22,6 +22,7 @@ import (
 	"edgex-ops-intelligence/backend/internal/listing"
 	listingfetcher "edgex-ops-intelligence/backend/internal/listing/fetcher"
 	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
+	"edgex-ops-intelligence/backend/internal/secrets"
 	"edgex-ops-intelligence/backend/internal/startup"
 )
 
@@ -50,9 +51,12 @@ func main() {
 	api.Version = version
 	startupState := startup.New(*role)
 
-	cfg, err := config.Load(*configDir)
+	cfg, err := config.LoadRuntime(*configDir)
 	if err != nil {
 		log.Fatalf("load config: %v", err)
+	}
+	if err := secrets.Resolve(context.Background(), &cfg, nil); err != nil {
+		log.Fatalf("resolve secrets: %v", err)
 	}
 	startupState.MarkConfigLoaded()
 	cgGovernor := buildCoinGeckoGovernor(cfg.Runtime.CoinGecko.Governance)
@@ -541,8 +545,8 @@ func startPeriodicCollectionLoop(ctx context.Context, status *startup.State, sto
 // unset is allowed (the public endpoint still works at lower QPS).
 func buildCoinGeckoCollector(cfg config.Config, store *collector.Store, governor *coingecko.BudgetGovernor) (*collector.CoinGeckoCollector, error) {
 	cgCfg := cfg.Runtime.CoinGecko
-	apiKey := ""
-	if cgCfg.APIKeyEnv != "" {
+	apiKey := strings.TrimSpace(cgCfg.APIKey)
+	if apiKey == "" && cgCfg.APIKeyEnv != "" {
 		apiKey = os.Getenv(cgCfg.APIKeyEnv)
 	}
 	client, err := coingecko.New(coingecko.Config{
@@ -623,6 +627,9 @@ func monitorLighterStartup(ctx context.Context, status *startup.State, provider 
 func resolveMySQLDSN(flagValue string, cfg config.Config) string {
 	if flagValue != "" {
 		return flagValue
+	}
+	if envValue := os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN"); envValue != "" {
+		return envValue
 	}
 	return cfg.MySQLDSN()
 }
@@ -901,6 +908,9 @@ func resolveActivityWebhookURL(cfg config.Config) string {
 		if value := strings.TrimSpace(os.Getenv(envName)); value != "" {
 			return value
 		}
+	}
+	if value := strings.TrimSpace(cfg.Alert.Push.Activity); value != "" {
+		return value
 	}
 	if value := strings.TrimSpace(cfg.Alert.Webhooks.Activity); value != "" {
 		return value

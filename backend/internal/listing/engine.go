@@ -420,11 +420,15 @@ func formatAnnouncementPollSummaries(polls []AnnouncementPollResult) string {
 
 // resolveListingWebhookURL picks the webhook for listing-announcement
 // cards (Top30 hot-gap + CEX/DEX divergence). Resolution order:
-//  1. cfg.Alert.Webhooks.Listing  (new business-module routing)
-//  2. cfg.Alert.WebHookP3         (legacy, kept for back-compat)
-//  3. cfg.Runtime...Top30WebhookURL / *URLEnv
+//  1. cfg.Alert.Push.Listing      (business push routing)
+//  2. cfg.Alert.Webhooks.Listing  (legacy compatibility)
+//  3. cfg.Alert.WebHookP3         (legacy priority lane)
+//  4. cfg.Runtime...Top30WebhookURL / *URLEnv
 func resolveListingWebhookURL(cfg config.Config) string {
 	if cfg.Alert.Enabled {
+		if u := strings.TrimSpace(cfg.Alert.Push.Listing); u != "" {
+			return u
+		}
 		if u := strings.TrimSpace(cfg.Alert.Webhooks.Listing); u != "" {
 			return u
 		}
@@ -446,9 +450,12 @@ func resolveListingWebhookURL(cfg config.Config) string {
 // liquidity-alert cards (#10 / #11). Returns empty when not
 // configured, which makes the producer enqueue rows with status =
 // disabled so the operator sees them in the outbox table without
-// any external traffic firing. New surface — no legacy fallback.
+// any external traffic firing.
 func resolveLiquidityWebhookURL(cfg config.Config) string {
 	if cfg.Alert.Enabled {
+		if u := strings.TrimSpace(cfg.Alert.Push.Liquidity); u != "" {
+			return u
+		}
 		if u := strings.TrimSpace(cfg.Alert.Webhooks.Liquidity); u != "" {
 			return u
 		}
