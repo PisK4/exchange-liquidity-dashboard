@@ -31,6 +31,20 @@ The backend runs three active modules behind one binary:
 Single Compose project (`edgex-ops-intelligence`). All bind on 127.0.0.1 by
 default; expose via a reverse proxy if external access is required.
 
+Recommended production reverse-proxy routing:
+
+- `/` -> web container on port 3000
+- `/api/*` -> backend container on port 8080
+- `/metrics` -> backend container on port 8080 when Prometheus scraping is
+  allowed from the proxy/network
+
+For this same-origin topology, build the web image with an explicitly empty
+`NEXT_PUBLIC_API_BASE` so browser requests use relative `/api/*` paths.
+`NEXT_PUBLIC_*` values are baked into the client bundle by `next build`, so
+changing this value after image build requires rebuilding the web image. The
+runtime-only `SERVER_API_BASE` may remain `http://backend:8080` for Next.js
+server-side requests inside the Compose network.
+
 Backend roles are selected by `--role`:
 
 | Role | Starts | MySQL required? | Typical use |
@@ -152,6 +166,7 @@ Two distinct endpoints with deliberately different semantics:
 |---------------------|-------------|-------------------------------------------------------------------------|
 | `/api/health`       | Yes         | Liveness. Container HEALTHCHECK targets this. Surfaces build_version, deps.mysql ping latency, deps.catalog symbol count, goroutine count, and startup state when enabled. |
 | `/api/readiness`    | No (200 or 503) | "Should this instance receive traffic?" gate. 503 when catalog is empty, MySQL ping fails, or `--role=all` has neither warm cache nor a terminal first collection. |
+| `/healthz` on web   | Yes         | Next.js web container liveness. Docker web HEALTHCHECK targets this route; it does not validate backend readiness. |
 
 Why split: pointing the container HEALTHCHECK at `/api/readiness`
 would put the container into a restart loop during transient upstream

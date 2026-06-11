@@ -6,7 +6,7 @@
 # developer's `deploy-*` containers without conflicting on names or the
 # default network.
 
-.PHONY: help up down logs ps smoke smoke-readiness backup-mysql restore-mysql build-image test-image
+.PHONY: help up down logs ps smoke smoke-readiness smoke-web backup-mysql restore-mysql build-image test-image
 
 PROJECT_NAME ?= edgex-ops-intelligence
 COMPOSE = docker compose --project-name $(PROJECT_NAME)
@@ -25,6 +25,7 @@ help:
 	@echo "  make ps              - list running containers"
 	@echo "  make smoke           - curl /api/health on the published backend port"
 	@echo "  make smoke-readiness - curl /api/readiness, fails on non-200"
+	@echo "  make smoke-web       - curl /healthz on the published web port"
 	@echo "  make backup-mysql    - mysqldump to ./backups/<timestamp>.sql.gz"
 	@echo "  make restore-mysql FILE=<path> - restore a mysqldump archive"
 	@echo "  make build-image     - rebuild backend image with the current git version"
@@ -54,6 +55,11 @@ smoke-readiness:
 	@PORT=$${BACKEND_PUBLISH_PORT:-8080}; \
 	HOST=$${BACKEND_PUBLISH_HOST:-127.0.0.1}; \
 	curl -fsS http://$$HOST:$$PORT/api/readiness | head -200
+
+smoke-web:
+	@PORT=$${WEB_PUBLISH_PORT:-3001}; \
+	HOST=$${WEB_PUBLISH_HOST:-127.0.0.1}; \
+	curl -fsS http://$$HOST:$$PORT/healthz | head -200
 
 backup-mysql:
 	@mkdir -p backups
