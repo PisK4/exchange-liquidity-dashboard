@@ -11,7 +11,7 @@ listing engine (RunOnce, 与 #1 共用 cadence)
     ├── ProduceDivergencePush  (#2-#5 卡, 本 doc 主体)
     │     ↓ 写 t_listing_delivery_outbox (event_type = top30_divergence_*)
     └── DrainDueOutbox
-          ↓ POST Lark webhook (与 #1 共用 Alert.WebHookP3)
+          ↓ POST Lark webhook (与 #1 共用 Listing delivery channel；推荐 Alert.Webhooks.Listing，兼容 Alert.WebHookP3)
           ↓ 写 t_listing_delivery_attempt 审计行
 ```
 
@@ -19,7 +19,7 @@ listing engine (RunOnce, 与 #1 共用 cadence)
 
 参考设计文档：
 
-- `../../../../architecture/方案设计/EdgeX运营/Listing/2026-05-28-Listing-Agent-P2-CEX-DEX-divergence-#2-#5.md`（本 doc 的业务设计 + canonicalisation 真值来源）
+- `../../../../architecture/方案设计/EdgeX运营/Listing/2026-05-28-Listing-Agent-P2-CEX-DEX-divergence-#2-#5.md`（业务设计背景；当前 canonicalisation / symbol identity implementation truth 以本仓库 `config/symbol_mapping.yaml`、`backend/internal/config/canonical_index.go` 和 `listing-agent-symbol-identity-normalization.md` 为准）
 - `listing-agent-top30-hot-gap-push.md`（#1 卡，本 doc 大量复用其设计 —— 三态语义、proxy 边界、delivery state machine、interactive card schema gotchas）
 - `listing-agent-dynamic-catalog-integration.md`（动态 instrument snapshot 与 runtime listed universe 如何影响 `EdgexListed` 三态）
 
@@ -77,6 +77,12 @@ Runtime:
 ```
 
 ## Symbol canonicalisation（含别名感知，cfdad4e 后）
+
+This divergence path folds Top30 display/native forms for cross-camp ranking;
+the broader Listing Agent runtime identity contract is documented in
+`listing-agent-symbol-identity-normalization.md`. Keep the same source of truth
+(`config/symbol_mapping.yaml`) for both paths so a venue alias reviewed for one
+Listing Agent surface does not drift from the other.
 
 跨交易所同一资产命名差异会造成分桶错位：1000PEPE/PEPE、GOLD/XAU/XAUT/PAXG、XYZ:CL/CL、BRENTOIL/CL/OIL 等。两层处理：
 

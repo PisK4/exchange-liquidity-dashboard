@@ -62,6 +62,14 @@ StreakDays   int                     // 1 = 🆕 NEW；>= 2 = "已第 N 天在�
 TriggerTime  time.Time               // 触发时刻 UTC，写入 footer note；与 SnapshotDate 区分"快照时间 vs 告警发出时间"
 ```
 
+Identity boundary: `Symbol` here is a display/event label for the Top30 card,
+not the Listing Agent candidate identity by itself. Candidate and
+listed-universe semantics use `canonical_symbol + market_surface +
+instrument_kind`, with native aliases resolved from `config/symbol_mapping.yaml`
+as described in `listing-agent-symbol-identity-normalization.md`. Do not use a
+pretty `display_symbol` alone as a dedupe key for decision candidates or
+already-listed reconciliation.
+
 Stale 守护：`ProduceTop30Push` 在 `now - latest > StaleAfter`（默认 30 min）时 fail-closed 返回 `FailClosed: "snapshot_stale"`，**不写** outbox。runtime/seed listed universe loader 都不可用时同样 fail-closed。
 
 ## edgex_listed 三态语义（不可塌缩）
@@ -86,14 +94,16 @@ func edgexListedTinyInt(listed *bool, listedStatus string) any { ... }
 
 本卡片的 `edgex_listed` 前置判断依赖动态 Catalog 链路：`Runtime.listing_agent.sources.instrument_diff` 刷新 `t_listing_instrument_snapshot`，`Runtime.listing_agent.listed_universe_refresh` 生成 `listed_universe.runtime.yaml`。本节只列 Lark delivery 相关字段；动态 catalog 配置见 `listing-agent-dynamic-catalog-integration.md`。注意动态 catalog poll loop 的 best-effort 语义：单条 signal insert 失败不应阻断 snapshot refresh，也不应直接让 Top30 hot-gap 误判 catalog 缺失。
 
-webhook target 从 listing 模块**升至顶层** `Alert.WebHookP3`，与其它 EdgeX 服务的 Nacos 告警 contract 对齐：
+当前推荐 webhook target 是顶层 `Alert.Webhooks.Listing`；`Alert.WebHookP3` 只保留为历史兼容 fallback。模块内 `Runtime.listing_agent.delivery.top30_webhook_url(_env)` 仍可用于私有部署覆盖，但不要再把 `Alert.WebHookP3` 当成新的主配置入口：
 
 ```yaml
 # config/edgex-ops-intelligence.yaml
 Alert:
-  AppName: edgex-liquidity-dashboard
+  AppName: edgex-ops-intelligence
   Enabled: true
-  WebHookP3: "https://open.larksuite.com/open-apis/bot/v2/hook/<token>"  # 永不持久化到 MySQL / 日志
+  Webhooks:
+    Listing: "https://open.larksuite.com/open-apis/bot/v2/hook/<token>"  # 永不持久化到 MySQL / 日志
+  WebHookP3: ""  # legacy fallback only
 
 Runtime:
   listing_agent:
@@ -105,8 +115,8 @@ Runtime:
       max_attempts: 5
     delivery:
       enabled: true
-      # 历史 fallback：webhook URL 也可以从 delivery 里读
-      # （Alert.WebHookP3 优先级更高，此处通常留空）
+      # 私有部署覆盖：webhook URL 也可以从 delivery 里读。
+      # 默认优先使用 Alert.Webhooks.Listing；此处通常留空。
       top30_webhook_url: ""
       top30_webhook_url_env: ""
       top30_webhook_secret: ""
@@ -121,10 +131,11 @@ Runtime:
 `resolveWebhookURL(cfg)` 优先级：
 
 ```text
-1. cfg.Alert.Enabled && cfg.Alert.WebHookP3 非空  → 用顶层 Alert（推荐）
-2. Runtime.listing_agent.delivery.top30_webhook_url 非空  → 用模块字段
-3. Runtime.listing_agent.delivery.top30_webhook_url_env 非空  → os.Getenv()
-4. 都没配  → outbox row 写 status=disabled，不发网络请求
+1. Alert.Webhooks.Listing 非空  → 用 Listing 专属顶层通道（推荐）
+2. cfg.Alert.Enabled && cfg.Alert.WebHookP3 非空  → legacy fallback
+3. Runtime.listing_agent.delivery.top30_webhook_url 非空  → 用模块字段
+4. Runtime.listing_agent.delivery.top30_webhook_url_env 非空  → os.Getenv()
+5. 都没配  → outbox row 写 status=disabled，不发网络请求
 ```
 
 `resolveWebhookURL` 与 yaml/Alert 的契约由 `engine_test.go` 与 `e2e/listing_e2e_test.go` 同时锁定。

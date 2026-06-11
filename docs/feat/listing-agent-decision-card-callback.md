@@ -146,6 +146,15 @@ trigger=2026-05-30 17:25 UTC+8 · evidence=API + 公告都已确认 · dedupe=li
 
 设计要点（仅记差异；与 hot-gap 卡共享的部分见 `listing-agent-top30-hot-gap-push.md` §"卡片渲染"）：
 
+- **Symbol identity**：卡片标题展示业务身份 `canonical_symbol`，不是交易所原生
+  `base_asset`。例如 MEXC `api_symbol=EBAYSTOCK_USDT` /
+  `base_asset=EBAYSTOCK` 会通过 runtime alias 归一成 `canonical_symbol=EBAY`，
+  标题渲染为 `New Perp Listing Detected · EBAY`；原生字段仍保留在 evidence、
+  source URL、market-status audit 与 debug payload 中。完整契约见
+  `listing-agent-symbol-identity-normalization.md`。
+- **Surface-aware title**：`market_surface=synthetic_futures` 按 Perp 机会处理，
+  与 `perp` 或空 surface 一样使用 `New Perp Listing Detected` 前缀；`spot` 使用
+  `New Spot Listing Detected`，其它未知 surface 使用通用 `New Listing Detected`。
 - **Source-first scoring v2**：`BusinessScoreVersion = v2`。Binance 单源即可约 80 分并进入 `prepare_listing`；Binance + 任一平台约 90；`bybit/okx/hyperliquid` 多源约 65；`mexc+bitget` 约 60；单个 `bybit/okx/hyperliquid` 约 55；其它单源约 40。API-vs-公告证据通道只影响卡片文案，不影响 numeric score。
 - **按钮顺序固定**：`prepare_listing → enter_watchlist → contact_mm → ignore`，所有 decision-card evidence kinds 都渲染四个按钮。运营肌肉记忆固定后误点率会降——顺序是 UX 契约。
 - **`value` payload**：每个按钮 `value` 都带 `candidate_id / risk_plan_id / action / dedupe_key` 四元组；其中 `dedupe_key` 与 outbox 表对齐，便于回调 handler 反查 outbox。

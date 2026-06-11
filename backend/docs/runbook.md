@@ -773,6 +773,32 @@ are preferred over broad suffix stripping: add `mexc: [EBAYSTOCK]` for EBAY, not
 a generic `*STOCK` rule that could collapse an unrelated crypto symbol. Runtime
 normalization uses the same alias source of truth as catalog generation.
 
+For a larger cleanup, generate an alias gap report before editing config or
+data. At minimum, inspect active synthetic/native-looking rows and already-sent
+card payloads so operators can review one exact mapping at a time:
+
+```sql
+SELECT platform, canonical_symbol, display_symbol, base_asset, api_symbol,
+       market_surface, instrument_kind, COUNT(*) AS rows, MAX(last_seen_at) AS last_seen
+  FROM t_listing_instrument_snapshot
+ WHERE canonical_symbol LIKE '%STOCK'
+    OR base_asset LIKE '%STOCK'
+ GROUP BY platform, canonical_symbol, display_symbol, base_asset, api_symbol,
+          market_surface, instrument_kind
+ ORDER BY platform, canonical_symbol;
+
+SELECT id, status, created_at, JSON_UNQUOTE(JSON_EXTRACT(payload_json, '$.card.header.title.content')) AS title
+  FROM t_listing_delivery_outbox
+ WHERE event_type = 'listing_decision_candidate'
+   AND CAST(payload_json AS CHAR) LIKE '%STOCK%'
+ ORDER BY id DESC
+ LIMIT 50;
+```
+
+Use the report to add exact aliases to `symbol_mapping.yaml`, then dry-run and
+apply one reviewed mapping at a time. Do not run a global SQL replacement or a
+global suffix-strip backfill.
+
 If historical rows were already written under the wrong identity, run the safe
 backfill in two phases. Dry-run is mandatory and is the default:
 
@@ -804,7 +830,8 @@ Backfill guardrails:
   observations, announcement symbols, candidates, and watchlist rows in one
   transaction.
 - Sent delivery outbox payloads are historical audit evidence and are not
-  rewritten.
+  rewritten. A previously sent wrong card should stay visible in delivery audit;
+  only future ingestion/card creation should use the corrected identity.
 - Pending/retry delivery outbox rows that still contain the old symbol cause
   execute mode to fail closed. Inspect, redrive, cancel, or manually reconcile
   those rows before rerunning; this prevents a backfill from continuously

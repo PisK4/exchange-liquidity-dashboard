@@ -63,6 +63,7 @@ the indexed feature contracts, runbooks, upstream PRDs, or code.
 | Exchange adapters / depth / slippage / proxy | `docs/feat/adapter-four-tier-depth.md`, `docs/feat/native-exchange-proxy.md`, `docs/feat/edgex-perps-v2-liquidity-adapter.md` | `../../architecture/方案设计/EdgeX运营/盘口数据精炼/README.md` and the relevant platform doc |
 | Top30 / share / history | `backend/docs/top30-strategy.md` | `docs/feat/top30-share-history-backfill.md`, `docs/feat/liquidity-24h-share-cg-fallback.md` |
 | Listing Agent / Lark / callbacks | `docs/feat/listing-agent-*.md` | `../../architecture/方案设计/EdgeX运营/Listing/README.md` |
+| Listing Agent symbol identity / aliases / backfill | `docs/feat/listing-agent-symbol-identity-normalization.md` | `config/symbol_mapping.yaml`, `backend/internal/config/canonical_index.go`, `backend/docs/runbook.md` |
 | Activity Agent / campaign sources | `../../architecture/方案设计/EdgeX运营/活动/README.md` | `../../architecture/方案设计/EdgeX运营/活动/运营活动-agent-通用数据模型与-source-health.md`, `backend/internal/activity/*` |
 | Production ops / release / migration | `backend/docs/runbook.md` | `backend/docs/coverage-matrix.md`, `backend/docs/ops-intelligence-db-migration.md`, `backend/docs/release-notes-v1.md` |
 

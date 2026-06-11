@@ -71,8 +71,14 @@ dedupe review.
   - never `prepare_listing` under the current contract.
 - Decision card titles are surface-aware:
   - `perp` or missing surface: `New Perp Listing Detected`
+  - `synthetic_futures`: `New Perp Listing Detected`
   - `spot`: `New Spot Listing Detected`
   - unknown surfaces: `New Listing Detected`
+- Decision cards use the business identity (`canonical_symbol`) in the header,
+  not the exchange-native `base_asset`. For example, a MEXC market with
+  `base_asset=EBAYSTOCK` should render as `New Perp Listing Detected · EBAY`
+  after runtime alias normalization. The detailed identity contract lives in
+  `listing-agent-symbol-identity-normalization.md`.
 
 ## Activity-derived supplemental path
 

@@ -19,6 +19,7 @@ Listing Agent 的后端决策链路已经基本建成，并且在原始 PRD 之�
 5. watchlist 自动转入 Dashboard 核心监控的闭环未看到完整落地证据。
 6. 真实 Lark 按钮点击闭环尚需用生产或准生产 callback 做一次完整验证。
 7. 动态 Catalog 已接入运行时链路：instrument snapshot、DB-first CatalogResolver、runtime listed universe、StableHash 噪声抑制、normalizer rollover guard、sha256 signal fingerprint 与 best-effort poll loop 已成为 Listing Agent 的生产契约。
+8. Symbol identity normalization 已成为运行时契约：`config/symbol_mapping.yaml` alias 会在 instrument / announcement / fusion / decision-card refresh 路径生效，保留交易所原生 `api_symbol` / `base_asset`，同时用 `canonical_symbol + market_surface + instrument_kind` 表达业务身份。
 
 因此，当前判断是：**后端核心链路完成度高，原需求主干基本匹配；但原 PRD 的完整运营闭环仍未完全验收通过。**
 
@@ -60,6 +61,7 @@ Listing Agent 的后端决策链路已经基本建成，并且在原始 PRD 之�
 | Top30 hot-gap | 额外完成 | 原 PRD 外扩展能力。 |
 | CEX/DEX divergence | 额外完成 | 原 PRD 外扩展能力。 |
 | 流动性告警 | 额外完成 | Dashboard liquidity-lag / worst-depth 告警。 |
+| Symbol identity normalization | 已完成并需持续维护 | Runtime alias 归一已接入核心 Listing Agent 路径，`synthetic_futures` 不再被 listed_universe 排除，Lark decision card 展示业务身份而不是交易所原生 base。 |
 
 ## 4. 需求匹配度评分
 
@@ -225,5 +227,7 @@ Listing Agent 的后端决策链路已经基本建成，并且在原始 PRD 之�
 - signal fingerprint 使用 sha256-prefixed compact key，配合 `fingerprint VARCHAR(160)` 和 `ErrSignalSilentFail` typed diagnostic，避免旧长明文 fingerprint 在 `INSERT IGNORE` 下 silent-drop；
 - instrument / announcement poll loop 采用 best-effort：单条 signal 写入失败不会阻断同轮 snapshot upsert，runtime universe 的稳定性以 `last_seen_at` freshness 为核心观测指标；
 - stablecoin / quote / collateral assets（如 `USDC`、`USDT`、`USD1`）不作为新 listing 操作标的：fusion 只记录 observation-only，decision-card producer 也跳过历史旧 candidate。
+- symbol identity normalization 已进入 normalizer v4：MEXC `EBAYSTOCK` 这类交易所原生 base 通过 `config/symbol_mapping.yaml` alias 归一到业务身份 `EBAY`，但原生 `api_symbol` / `base_asset` 仍保留供审计和 API 跳转；候选身份应按 `canonical_symbol + market_surface + instrument_kind` 判断，而不是只看 `canonical_symbol` 或 `display_symbol`。
+- safe backfill 需使用 `backend/cmd/listing-symbol-backfill` dry-run-first；已发送 outbox 是审计历史，不应重写。更大范围 alias 扩展必须先补 exact aliases，再逐映射 dry-run / execute，禁止全局 `*STOCK` 后缀裁剪。
 
-完整工程契约见 `listing-agent-dynamic-catalog-integration.md`。
+完整工程契约见 `listing-agent-dynamic-catalog-integration.md` 与 `listing-agent-symbol-identity-normalization.md`。

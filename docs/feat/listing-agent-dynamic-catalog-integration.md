@@ -8,7 +8,14 @@
 - `config/listed_universe.yaml`：各平台已上市 base asset 集合；
 - `backend/docs/raw-instruments/`：`build-catalog` 抓取的 per-platform raw instrument dump。
 
-Listing Agent Catalog 动态化后，运行时主路径已经变成：**instrument poll → DB snapshot → DB-first CatalogResolver → runtime listed universe → Top30 / backfill / decision / alert 消费**。静态文件仍保留，但定位变为 seed / fallback / audit，而不是唯一真值来源。
+Listing Agent Catalog 动态化后，运行时主路径已经变成：**instrument poll → symbol identity normalization → DB snapshot → DB-first CatalogResolver → runtime listed universe → Top30 / backfill / decision / alert 消费**。静态文件仍保留，但定位变为 seed / fallback / audit，而不是唯一真值来源。
+
+Symbol identity normalization is a first-class runtime step, not a catalog-build
+side effect. `config/symbol_mapping.yaml` aliases are consumed by
+`CanonicalIndex.ResolveIdentity` during live ingestion so exchange-native
+symbols such as MEXC `EBAYSTOCK` can be preserved as `base_asset` /
+`api_symbol` while the business identity becomes `canonical_symbol=EBAY`. The
+full contract is `listing-agent-symbol-identity-normalization.md`.
 
 ---
 
@@ -18,6 +25,7 @@ Listing Agent Catalog 动态化后，运行时主路径已经变成：**instrume
 Runtime.listing_agent.sources.instrument_diff
     ↓ BuildListingSources
 RunInstrumentPoll
+    ↓ ApplyInstrumentSymbolIdentity (runtime aliases)
     ↓ upsert
  t_listing_instrument_snapshot
     ├── instrument.Diff → t_listing_signal_observation → FuseSignals → t_listing_candidate
@@ -61,6 +69,11 @@ RunInstrumentPoll
 4. 单个异常 symbol soft-fail，不应中断同轮其它 snapshot upsert。
 5. signal 写入失败同样 best-effort：`LatestInstrumentSnapshotByKey` / `InsertSignal` / `UpsertInstrumentSnapshot` 的单 symbol 失败只记录日志并继续处理后续 symbol，避免一个 poisoned signal 让整个平台 `last_seen_at` 停滞。
 6. `NormalizerVersion` 不一致时触发 rollover guard：本 tick 仍 upsert 新 snapshot，但跳过 diff，避免 hash 配方升级造成一次性误报洪峰。
+7. Runtime symbol identity aliases are applied before stable hash / diff /
+   snapshot write. The normalizer v4 recipe preserves exchange-native
+   `api_symbol` / `base_asset` and rewrites business fields such as
+   `canonical_symbol`, `display_symbol`, `market_surface`, and
+   `instrument_kind` from `config/symbol_mapping.yaml`.
 
 ## Candidate fusion target gate
 
@@ -89,6 +102,13 @@ RunInstrumentPoll
 噪声字段必须排除：mark price、funding rate、open interest、daily volume、fee re-quote、price-derived minimum quantity 等都不能触发 `metadata_changed`。
 
 配方升级必须 bump `NormalizerVersion`。否则旧 snapshot 的 hash 与新配方 hash 在同一版本下比较，会绕过 rollover guard 并产生误报。
+
+The current v4 recipe includes runtime symbol identity normalization before
+snapshot and signal persistence. This is why a stock-style MEXC market can move
+from `canonical_symbol=EBAYSTOCK` / `market_surface=perp` /
+`instrument_kind=canonical` to `canonical_symbol=EBAY` /
+`market_surface=synthetic_futures` / `instrument_kind=synthetic` without
+emitting a one-shot listing diff purely from the identity recipe upgrade.
 
 ### Signal fingerprint schema
 
@@ -183,8 +203,11 @@ listed_universe.runtime.yaml 可读且非空 → 使用 runtime
 
 候选 reconcile：
 
-- refresh 会按 edgeX perp/spot DB-derived base 集合调用 `BulkMarkCandidatesAlreadyListed`；
+- refresh 会按 edgeX perp/spot DB-derived identity 集合调用 identity-aware
+  reconcile；旧 base-only reconcile 只作为 legacy fallback 保留；
 - 命中 edgeX 的候选会被标记为 `already_listed_on_edgex`，后续 decision card 跳过；
+- `canonical_symbol` alone is insufficient for closure: `EBAY spot/canonical`
+  must not close `EBAY synthetic_futures/synthetic`, and vice versa；
 - 只在 Binance/Gate/BingX 等竞品平台上市的 token 不会因此关闭，它们仍是潜在 listing opportunity。
 
 ---

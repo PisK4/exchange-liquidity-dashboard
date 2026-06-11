@@ -157,6 +157,12 @@ func (idx *CanonicalIndex) IsPlatformExclusive(canonical string) bool
 - canonical 只在 edgeX 一家声明 → 返回 true（典型的"我们独家"标的，比对无意义）。
 - canonical 在 ≥2 家声明 → 返回 false（进入比较流程）。
 
+This exclusion is local to liquidity comparability only. Do not reuse it as a
+Listing Agent candidate gate or listed-universe filter. Synthetic futures,
+stock-style perps, and other non-canonical crypto assets can still be valid
+Listing signals and must remain identity-aware in `listed_universe`; see
+`listing-agent-symbol-identity-normalization.md`.
+
 ---
 
 ## 4. Compute 算法
@@ -345,7 +351,7 @@ UPDATE t_listing_alert_state
 ```
 
 `event_type` 取值：`liquidity_lag` / `worst_depth`。
-`target_channel` 取 `Alert.Webhooks.liquidity`（fallback 到空 → outbox 标记 disabled，不阻塞产出）。
+`target_channel` 取 `Alert.Webhooks.Liquidity`（fallback 到空 → outbox 标记 disabled，不阻塞产出）。
 
 ---
 

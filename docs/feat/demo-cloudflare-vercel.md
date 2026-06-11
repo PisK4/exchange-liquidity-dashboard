@@ -21,10 +21,10 @@ Cloudflare Quick Tunnel HTTPS URL
         |
         | (Cloudflare 边缘 -> 本地 cloudflared 进程 -> localhost:8080)
         v
-本地 edgex-ops-intelligence backend (Docker, deploy-backend-1, :8080)
+本地 edgex-ops-intelligence backend (Docker Compose service `backend`, :8080)
         |
         v
-本地 MySQL (Docker, deploy-mysql-1, :3306)
+本地 MySQL (Docker Compose service `mysql`, :3306)
 ```
 
 关键事实：
@@ -74,20 +74,22 @@ curl -s http://127.0.0.1:8080/api/health | jq .build_version
 # 期望不是 "dev"；若仍是 "dev"，说明 build 时没有传 BUILD_VERSION 或镜像未重建。
 ```
 
-### ⚠️ Backend 冷启动 7 分钟空窗（重要）
+### Backend 冷启动与 readiness（当前实现）
 
-`backend/cmd/ops-intelligence/main.go` 的当前实现里，`http.ListenAndServe` 是在 `c.CollectOnce(ctx)` 同步跑完之后才启动的。`CollectOnce` 会同步拉取 9 家交易所的数据并写入 MySQL，单次冷启动观测下来约 **6–8 分钟**。
+早期 demo 版本里，HTTP listener 会等首轮 `CollectOnce` 同步完成后才启动，
+因此曾出现约 6–8 分钟的对外服务空窗。**这已经不是当前实现**。
 
-冷启动期间表现：
+当前 `backend/cmd/ops-intelligence/main.go` 在 `--role=all` 且非 `--run-once`
+时会先异步启动 API server，再在后台恢复 MySQL latest snapshots、启动
+Lighter WS 和首轮 collector。当前应按两个端点区分状态：
 
-- 容器内 `netstat -tln` **看不到 :8080**
-- 宿主机 `curl http://127.0.0.1:8080` 返回 `Connection reset by peer`
-- 经隧道访问返回 **502 Bad Gateway**（Cloudflare 边缘到 cloudflared 通，cloudflared 到 origin 不通）
+- `/api/health`：liveness，进程起来后应先可用，Docker healthcheck 也指向它。
+- `/api/readiness`：严格接流门禁；在 warm cache 恢复或首轮 collection 进入终态前可能返回 503。
 
-这是 demo 链路最大的脆弱点：**只要 backend 容器被重启**（rebuild、OOM、`docker compose restart` 等），就会进入 ~7 分钟的对外服务空窗。Vercel 用户在这个窗口期访问就会报 Connection Error，体感上等同于"隧道失效"。
-
-短期建议：demo 期间避免重启 backend；如果必须重启，提前通知体验者，或贴个临时维护页。
-长期建议：把 `CollectOnce` 改成异步 goroutine，让 HTTP server 立即起来（详见文末"后续改进项"）。
+因此，demo 链路排查时不要再用“容器启动后 7 分钟内 `:8080` 没监听”作为
+当前预期。若 tunnel 返回 502，先检查 `/api/health` 是否可达；若 health 正常
+但页面数据仍未就绪，再看 `/api/readiness` 和 `/api/collection-status` 的 startup
+字段。详见 `backend/docs/runbook.md` 的 Health and Readiness Probes 章节。
 
 ## Cloudflare Tunnel
 
@@ -340,16 +342,21 @@ Vercel 部署后重点验证：
 
 按下面顺序逐项验证，命中哪一步就修哪一步：
 
-1. **本地 backend 是否健康（含冷启动）**
+1. **本地 backend 是否健康 / ready**
    ```bash
    curl http://127.0.0.1:8080/api/health
    ```
-   如果 `Connection reset by peer`，看是不是刚重启过：
+   如果 `/api/health` 不通，说明进程或端口本身不可达，先查容器：
    ```bash
-   docker ps --format 'table {{.Names}}\t{{.Status}}' | grep deploy-backend-1
-   docker exec deploy-backend-1 sh -c 'netstat -tln | grep 8080'
+   docker compose -f deploy/docker-compose.yaml ps backend
    ```
-   `Up <2 分钟` + 容器内没有 `:8080` 监听 → 还在冷启动，等到 ~7 分钟。
+   如果 `/api/health` 正常但页面还没数据，再看严格门禁和启动状态：
+   ```bash
+   curl -sS http://127.0.0.1:8080/api/readiness | jq '.ready, .checks.startup'
+   curl -fsS http://127.0.0.1:8080/api/collection-status | jq '.startup'
+   ```
+   `--role=all` 下 API 会先启动，readiness 可能在 warm cache 或首轮 collection
+   完成前短暂返回 503，这是当前设计。
 
 2. **cloudflared 进程是否在跑**
    ```bash
@@ -364,7 +371,7 @@ Vercel 部署后重点验证：
    curl -sS -m 8 "$URL/api/health"
    ```
    - 拿到 200：隧道 OK，继续看 Vercel。
-   - **502 Bad Gateway**：cloudflared 通了但 backend 没在 8080 → 回 (1)。
+   - **502 Bad Gateway**：cloudflared 通了但 origin 不可达 → 回 (1) 查 `/api/health`。
    - **530 Cloudflare Error 1033**：cloudflared 进程存在但和边缘 control stream 断了；查日志，若是 `Failed to dial a quic connection` → QUIC 被网络掐，确认 plist 里有 `--protocol http2`。
    - **DNS `Could not resolve host`**：URL 已被 Cloudflare 回收；查日志，若是 `Unauthorized: Tunnel not found` 死循环 → 进程在用废弃 tunnel ID 撞墙，必须 unload + load 重注册（参见上文"另一种隧道失效模式"），新 URL 必须同步 Vercel + Redeploy。
 
@@ -384,7 +391,7 @@ Vercel 部署后重点验证：
 
 - **Quick Tunnel URL 随时可能失效**：cloudflared 重启即换 URL，必须同步 Vercel + redeploy。不适合生产/长期对外。
 - **本地电脑休眠 / 断网 / Docker 停止**任一发生，demo 立即不可用。
-- **Backend 冷启动 7 分钟空窗**：任何形式的容器重启都会触发，期间所有 Vercel 用户都会拿到 502 / Connection Error。
+- **Readiness warm-up**：`--role=all` 会先暴露 `/api/health`，但在 warm cache 或首轮 collection 完成前 `/api/readiness` 可能短暂 503；前端展示数据也可能晚于进程 liveness。
 - **CORS 当前全开（`*`）**：demo 友好，但任何来源都能调用 backend，公开长期使用前必须改白名单。
 - **没有 Auth / 速率限制**：tunnel URL 谁拿到都能直接请求 backend 数据。
 

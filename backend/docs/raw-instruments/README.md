@@ -62,7 +62,13 @@ and regenerates two yaml files in `config/`:
   "edgeX 已上线?" column on the Top30 tab. Stale or absent universe entries
   collapse that column back to "否" with no badge.
 
-The catalog YAML is the runtime source-of-truth; raw dumps are the audit trail.
+Current runtime resolution is DB-first where dynamic Listing snapshots are
+available: `t_listing_instrument_snapshot`, the runtime listed-universe file,
+and the seed yaml work together to drive CatalogResolver and the CoinGecko
+"edgeX 已上线?" checks. The static catalog YAML is still the cold-start seed,
+adapter fallback, and review artifact; raw dumps are the audit trail behind
+that seed. Do not treat `make catalog` as the only way production runtime state
+changes once dynamic catalog ingestion is enabled.
 
 If you only have partial network access (e.g. you can reach Gate/Hyperliquid/Lighter
 but Binance is blocked), use the `--raw-only` mode to refresh raw dumps without

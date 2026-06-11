@@ -2,13 +2,13 @@
 
 ## 背景
 
-`edgex-ops-intelligence` 后端在本地 Docker 栈（`deploy/docker-compose.yml`）里跑时，前端的 **流动性监控** 和 **盘口质量** 两个 Tab 全平台空白 / `EOF`。表现：
+`edgex-ops-intelligence` 后端在本地 Docker 栈（`deploy/docker-compose.yaml`）里跑时，前端的 **流动性监控** 和 **盘口质量** 两个 Tab 全平台空白 / `EOF`。表现：
 
 - Share Tab 正常（走 CoinGecko）。
 - Liquidity / Quality Tab 9 家原生交易所的所有 row `depth_status=error`。
 - Lighter 即便加了 REST 代理仍然 `lighter market 1 ws book not ready`。
 
-报告该问题时容器自身健康（`/healthz` 200），DB 通，前端能 SSR。问题完全发生在 backend → 上游交易所的出向链路。
+报告该问题时容器自身健康（当前 liveness 为 `/api/health` 200），DB 通，前端能 SSR。问题完全发生在 backend → 上游交易所的出向链路。
 
 参考提交：
 
@@ -305,15 +305,19 @@ config/edgex-ops-intelligence.yaml  Runtime.exchange_proxy: "http://host.docker.
 - 生产环境（JP / SG 等境外服务器）：`Runtime.exchange_proxy`、`Runtime.coingecko.proxy`、`Runtime.ws_providers.*.proxy` 留空即可直连，延迟测量保持纯净。
 - proxy URL 写错（scheme/host 缺失）：代码会静默回退直连，下一轮 collector 会在错误信息里暴露真实 dial 失败，运维可见。
 
-## 另见：Listing Agent Lark 推送的独立代理
+## 另见：Listing / Activity Lark 推送的独立代理
 
-`Runtime.exchange_proxy`、`Runtime.coingecko.proxy`、`Runtime.ws_providers.*.proxy` 都属于**数据采集出向**链路，目标是上游交易所 / 行情聚合服务。Listing Agent 的 **Top30 hot-gap Lark 推送** 是一条**告警出向**链路，从 `t_listing_delivery_outbox` 拨号到 `open.larksuite.com` 的 webhook bot，**走的是另一条独立的 HTTP client**：
+`Runtime.exchange_proxy`、`Runtime.coingecko.proxy`、`Runtime.ws_providers.*.proxy` 都属于**数据采集出向**链路，目标是上游交易所 / 行情聚合服务。Listing Agent 与 Activity Agent 的 Lark 推送是**告警/运营出向**链路，会拨到 `open.larksuite.com` 的 webhook bot，应该使用各自独立的 HTTP client / scoped proxy：
 
-- 配置字段：`Runtime.listing_agent.delivery.proxy`
-- 装配位置：`backend/internal/listing/engine.go::buildDeliveryHTTPClient`
-- 详细说明：见 `./listing-agent-top30-hot-gap-push.md` §"Delivery HTTP client 与 per-feature proxy"
+| 链路 | 配置字段 | 说明 |
+|---|---|---|
+| Listing Lark delivery | `Runtime.listing_agent.delivery.proxy` | 从 `t_listing_delivery_outbox` 发送 Listing Top30/divergence/liquidity alert cards。 |
+| Activity source fallback | `Runtime.activity_agent.source_proxy` 或 `Runtime.activity_agent.collection.source_proxy` | Activity source 抓取兜底代理；不等同于 Lark webhook 代理。 |
+| Activity Lark delivery | `Runtime.activity_agent.delivery.proxy` | 从 `t_activity_delivery_outbox` 发送 Activity event/review cards。 |
+
+Listing 详细说明见 `./listing-agent-top30-hot-gap-push.md` §"Delivery HTTP client 与 per-feature proxy"；Activity 当前实现契约见 `./activity-agent-current-contract.md`。
 
 **不要把 exchange / CoinGecko 代理与 Lark 推送代理共用**：
 
 - 二者在生产环境的拨号目标完全不同。海外直连节点上 `exchange_proxy` 留空即可拿到原生交易所数据，但同一台机器可能仍要走代理才能合规地拨 lark webhook（或反过来）。
-- 进程级 `HTTPS_PROXY` env 作用域过广（影响任何裸用 `http.DefaultClient` 的代码），与本文档 §"为什么不直接用 `HTTPS_PROXY` env" 的结论一致——所以 listing delivery 也走了独立 yaml 字段而非环境变量。
+- 进程级 `HTTPS_PROXY` env 作用域过广（影响任何裸用 `http.DefaultClient` 的代码），与本文档 §"为什么不直接用 `HTTPS_PROXY` env" 的结论一致——所以 Listing / Activity delivery 也走独立 yaml 字段，而不是依赖进程级代理。

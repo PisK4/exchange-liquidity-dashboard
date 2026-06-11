@@ -22,6 +22,7 @@ The current implementation has three active modules under this broader operation
 
 - `AGENTS.md`: task-oriented engineering guide for AI agents and developers working inside this repository.
 - `docs/feat/`: implementation contracts for shipped feature slices, especially Liquidity Dashboard and Listing Agent behavior.
+- `docs/feat/listing-agent-symbol-identity-normalization.md`: Listing Agent runtime symbol identity, alias resolution, listed-universe identity semantics, Lark card title mapping, and safe historical backfill contract.
 - `docs/plan/`: local execution plans and cleanup records; useful for history, but not the long-term implementation contract.
 - `backend/docs/runbook.md`: production operations, health/readiness, catalog, release, backup/restore, and module smoke procedures.
 - `backend/docs/top30-strategy.md`: Top30 acquisition and native backfill semantics.
@@ -42,3 +43,11 @@ cd web && npm run test:e2e
 Technical identifiers now use the Ops Intelligence hard-cutover naming: Go module `edgex-ops-intelligence/backend`, backend command `cmd/ops-intelligence`, binary `/app/ops-intelligence`, environment variables `OPS_INTELLIGENCE_*`, default database `edgex_ops_intelligence`, and config file `edgex-ops-intelligence.yaml`.
 
 For existing local or deployed MySQL data that still lives in an older database, read `backend/docs/ops-intelligence-db-migration.md` before switching DSNs.
+
+Listing Agent symbol identity is runtime-normalized through
+`config/symbol_mapping.yaml`: exchange-native `api_symbol` / `base_asset` are
+preserved for audit and API lookup, while business comparison and Lark decision
+cards use `canonical_symbol + market_surface + instrument_kind`. Read
+`docs/feat/listing-agent-symbol-identity-normalization.md` before changing
+Listing aliases, candidate identity, listed-universe reconciliation, or related
+backfill commands.
