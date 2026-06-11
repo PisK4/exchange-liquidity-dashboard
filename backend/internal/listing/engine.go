@@ -50,6 +50,10 @@ type EngineDeps struct {
 	// that have not wired the pollers (existing engine tests).
 	InstrumentSources   []InstrumentSource
 	AnnouncementSources []AnnouncementSource
+	// SymbolResolver applies config/symbol_mapping.yaml identity aliases to
+	// runtime Listing Agent ingestion paths. Production defaults to
+	// cfg.CanonicalIndex; tests may inject a fake resolver.
+	SymbolResolver SymbolIdentityResolver
 	// DecisionCardEnrich is the per-candidate enrichment bundle
 	// (edgeX listed lookup, market status loader, CoinGecko fetcher,
 	// depth fetcher) injected into ProduceDecisionCards. Optional;
@@ -101,6 +105,9 @@ func NewEngine(cfg config.Config, repo *Repository, deps EngineDeps) *Engine {
 	}
 	if deps.Logger == nil {
 		deps.Logger = log.Default()
+	}
+	if deps.SymbolResolver == nil {
+		deps.SymbolResolver = cfg.CanonicalIndex
 	}
 	return &Engine{cfg: cfg, repo: repo, deps: deps}
 }
@@ -171,7 +178,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 		pollRes := InstrumentPollResult{Platform: src.Platform, MarketType: src.MarketType}
 		outcome, err := PollWithSourceHealth(ctx, e.repo, key, pollHealthCfg, func(ctx context.Context) error {
 			var pollErr error
-			pollRes, pollErr = RunInstrumentPoll(ctx, e.repo, src, InstrumentPollDeps{Now: e.deps.Now})
+			pollRes, pollErr = RunInstrumentPoll(ctx, e.repo, src, InstrumentPollDeps{Now: e.deps.Now, SymbolResolver: e.deps.SymbolResolver})
 			return pollErr
 		})
 		summary.InstrumentHealth = append(summary.InstrumentHealth, outcome)
@@ -192,7 +199,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 		pollRes := AnnouncementPollResult{Platform: src.Platform}
 		outcome, err := PollWithSourceHealth(ctx, e.repo, key, pollHealthCfg, func(ctx context.Context) error {
 			var pollErr error
-			pollRes, pollErr = RunAnnouncementPoll(ctx, e.repo, src, AnnouncementPollDeps{Now: e.deps.Now})
+			pollRes, pollErr = RunAnnouncementPoll(ctx, e.repo, src, AnnouncementPollDeps{Now: e.deps.Now, SymbolResolver: e.deps.SymbolResolver})
 			return pollErr
 		})
 		summary.AnnouncementHealth = append(summary.AnnouncementHealth, outcome)
@@ -239,6 +246,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 	fusion, fusionErr := FuseSignals(ctx, e.repo, FusionDeps{
 		LoadUniverse:                 e.deps.LoadUniverse,
 		Now:                          e.deps.Now,
+		SymbolResolver:               e.deps.SymbolResolver,
 		HistoricalListingGracePeriod: e.cfg.Runtime.ListingAgent.Candidate.HistoricalListingGracePeriod,
 	})
 	summary.Fusion = fusion
@@ -308,7 +316,7 @@ func (e *Engine) RunOnce(ctx context.Context) (RunSummary, error) {
 		decisionEnrich := e.deps.DecisionCardEnrich
 		refreshCfg := e.cfg.Runtime.ListingAgent.DecisionCard.MarketStatusRefresh
 		if decisionEnrich.MarketStatusRefresher == nil {
-			decisionEnrich.MarketStatusRefresher = BuildCachedMarketStatusRefresher(e.deps.InstrumentSources, refreshCfg, e.deps.Now)
+			decisionEnrich.MarketStatusRefresher = BuildCachedMarketStatusRefresherWithResolver(e.deps.InstrumentSources, refreshCfg, e.deps.Now, e.deps.SymbolResolver)
 		}
 		decisionEnrich.MarketStatusRefreshFallbackToSnapshot = refreshCfg.FallbackToSnapshot
 		decisionRes, decisionErr := ProduceDecisionCards(ctx, e.repo, DecisionCardDeps{

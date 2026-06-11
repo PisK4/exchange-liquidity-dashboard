@@ -9,11 +9,10 @@ import (
 	"github.com/DATA-DOG/go-sqlmock"
 )
 
-// TestQueryActiveListedBasesFiltersFreshWindowAndSynthetic asserts
-// the SQL contract: rows older than freshWindow MUST NOT be returned
-// and instrument_kind='synthetic' rows (e.g. BingX NCSK*) MUST be
-// filtered out so they never leak into listed_universe.
-func TestQueryActiveListedBasesFiltersFreshWindowAndSynthetic(t *testing.T) {
+// TestQueryActiveListedBasesFiltersFreshWindowAndKeepsSynthetic asserts the
+// SQL contract: rows older than freshWindow MUST NOT be returned and synthetic
+// rows remain eligible for the identity-aware listed_universe.
+func TestQueryActiveListedBasesFiltersFreshWindowAndKeepsSynthetic(t *testing.T) {
 	now := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
@@ -21,23 +20,27 @@ func TestQueryActiveListedBasesFiltersFreshWindowAndSynthetic(t *testing.T) {
 	// We pin only the SQL shape — the regex matcher means we just need
 	// the WHERE columns to be present. The cutoff arg must be
 	// (now - freshWindow).
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface,")).
 		WithArgs(now.Add(-30 * time.Minute)).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp").
 			AddRow("edgeX", "ETH", "perp").
 			AddRow("edgeX", "BTC", "spot").
-			AddRow("binance", "SOL", "perp"))
+			AddRow("binance", "SOL", "perp").
+			AddRow("mexc", "EBAY", "synthetic_futures"))
 
 	got, err := repo.QueryActiveListedBases(context.Background(), 30*time.Minute)
 	if err != nil {
 		t.Fatalf("QueryActiveListedBases err = %v", err)
 	}
-	if len(got) != 4 {
-		t.Fatalf("want 4 rows, got %d", len(got))
+	if len(got) != 5 {
+		t.Fatalf("want 5 rows, got %d", len(got))
 	}
-	// Verify SQL filter intent is encoded — check the prepared
-	// statement excludes synthetic and demands status_normalized=active.
+	if got[4].BaseAsset != "EBAY" || got[4].MarketSurface != "synthetic_futures" {
+		t.Fatalf("synthetic row not preserved: %+v", got[4])
+	}
+	// Verify SQL filter intent is encoded — check the prepared statement demands
+	// status_normalized=active and fresh last_seen_at.
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatalf("expectations: %v", err)
 	}
@@ -52,7 +55,7 @@ func TestQueryActiveListedBasesSurfacesSQLError(t *testing.T) {
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface,")).
 		WillReturnError(errExample)
 	if _, err := repo.QueryActiveListedBases(context.Background(), 30*time.Minute); err == nil {
 		t.Fatalf("expected SQL error to surface")

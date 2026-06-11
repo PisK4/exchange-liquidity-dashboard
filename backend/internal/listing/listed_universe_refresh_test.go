@@ -46,7 +46,7 @@ func TestRefreshListedUniverseHappyPathWritesAtomicallyAndReconciles(t *testing.
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface,")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp").
 			AddRow("edgeX", "ETH", "perp").
@@ -119,7 +119,7 @@ func TestRefreshListedUniverseShrinkFloorFallsBackToSeed(t *testing.T) {
 	defer cleanup()
 
 	// edgeX should have 4 bases (per seed) but DB returns only 1 — under 50%.
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface,")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp").
 			AddRow("binance", "BTC", "perp").
@@ -173,7 +173,7 @@ func TestRefreshListedUniverseFallsBackToSeedWhenDBEmpty(t *testing.T) {
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface,")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}))
 	// Source-health writes for the seed fallback on each covered platform.
 	expectListedUniversePreviousStateMissing(mock, "edgeX")
@@ -224,7 +224,7 @@ func TestRefreshListedUniverseSurfaceSplitDoesNotCloseSpotWhenOnlyPerpListed(t *
 	defer cleanup()
 
 	// edgeX has BTC only on perp, NOT on spot.
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface,")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp").
 			AddRow("edgeX", "ETH", "perp").
@@ -265,7 +265,7 @@ func TestRefreshListedUniverseHonoursMissingSeed(t *testing.T) {
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface,")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp"))
 	expectListedUniversePreviousStateMissing(mock, "edgeX")
@@ -295,7 +295,7 @@ func TestRefreshListedUniverseDBFirstBootstrapAcceptsDBBelowSeedFloor(t *testing
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface,")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp"))
 	expectListedUniversePreviousStateMissing(mock, "edgeX")
@@ -340,7 +340,7 @@ func TestRefreshListedUniversePreviousSuccessBaselineAllowsRuntimeBelowSeed(t *t
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface,")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp"))
 	expectListedUniversePreviousStateOK(mock, "edgeX", 2, now.Add(-15*time.Minute))
@@ -375,7 +375,7 @@ func TestRefreshListedUniversePreviousSuccessBaselineFailsClosedOnRuntimeShrink(
 	repo, mock, cleanup := newRepoWithMock(t, now)
 	defer cleanup()
 
-	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot")).
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT platform, base_asset, market_surface,")).
 		WillReturnRows(sqlmock.NewRows([]string{"platform", "base_asset", "market_surface"}).
 			AddRow("edgeX", "BTC", "perp"))
 	expectListedUniversePreviousStateOK(mock, "edgeX", 4, now.Add(-15*time.Minute))

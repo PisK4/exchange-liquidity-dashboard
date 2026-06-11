@@ -74,6 +74,72 @@ func TestCanonicalIndex_NilSafe(t *testing.T) {
 	}
 }
 
+func TestCanonicalIndex_ResolveIdentityByPlatformAlias(t *testing.T) {
+	idx := NewCanonicalIndex([]symbolYAML{
+		{
+			DisplaySymbol:  "EBAY-USDT (perp)",
+			DisplayName:    "EBAY-USD",
+			Canonical:      "EBAY",
+			AssetCategory:  "stock",
+			MarketSurface:  "synthetic_futures",
+			InstrumentKind: "synthetic",
+			Aliases: map[string][]string{
+				"mexc": {"EBAYSTOCK"},
+			},
+		},
+	})
+
+	got := idx.ResolveIdentity("mexc", "EBAYSTOCK")
+
+	if got.Canonical != "EBAY" {
+		t.Fatalf("Canonical = %q, want EBAY", got.Canonical)
+	}
+	if got.DisplaySymbol != "EBAY-USDT (perp)" {
+		t.Fatalf("DisplaySymbol = %q", got.DisplaySymbol)
+	}
+	if got.DisplayName != "EBAY-USD" {
+		t.Fatalf("DisplayName = %q", got.DisplayName)
+	}
+	if got.AssetCategory != "stock" {
+		t.Fatalf("AssetCategory = %q", got.AssetCategory)
+	}
+	if got.MarketSurface != "synthetic_futures" {
+		t.Fatalf("MarketSurface = %q", got.MarketSurface)
+	}
+	if got.InstrumentKind != "synthetic" {
+		t.Fatalf("InstrumentKind = %q", got.InstrumentKind)
+	}
+	if !got.Matched || got.MatchKind != CanonicalMatchPlatformAlias || got.MatchedAlias != "EBAYSTOCK" {
+		t.Fatalf("match fields = matched:%v kind:%q alias:%q", got.Matched, got.MatchKind, got.MatchedAlias)
+	}
+}
+
+func TestCanonicalIndex_ResolveIdentityDuplicateCanonicalIsAmbiguous(t *testing.T) {
+	idx := NewCanonicalIndex([]symbolYAML{
+		{
+			DisplaySymbol:  "BTC-USDT (perp)",
+			Canonical:      "BTC",
+			MarketSurface:  "perp",
+			InstrumentKind: "canonical",
+		},
+		{
+			DisplaySymbol:  "BTC-USDT (perp)",
+			Canonical:      "BTC",
+			MarketSurface:  "perp_v2",
+			InstrumentKind: "canonical",
+		},
+	})
+
+	got := idx.ResolveIdentity("binance", "BTC")
+
+	if got.Canonical != "BTC" || got.Matched || got.MatchKind != CanonicalMatchAmbiguous {
+		t.Fatalf("ResolveIdentity duplicate canonical = %+v, want ambiguous BTC", got)
+	}
+	if resolved := idx.Resolve("binance", "BTC"); resolved != "BTC" {
+		t.Fatalf("Resolve duplicate canonical = %q, want BTC", resolved)
+	}
+}
+
 func TestCanonicalIndex_CrossPlatformFallback(t *testing.T) {
 	// symbol_mapping.yaml may be incomplete — e.g. OIL canonical only
 	// lists binance/edgeX/hyperliquid in its alias map, but bitget,
@@ -128,6 +194,10 @@ func TestCanonicalIndex_CrossPlatformFallbackSkippedOnConflict(t *testing.T) {
 	})
 	if got := idx.Resolve("bitget", "COIN"); got != "COIN" {
 		t.Errorf("ambiguous alias must not auto-resolve; got %q", got)
+	}
+	identity := idx.ResolveIdentity("bitget", "COIN")
+	if identity.Canonical != "COIN" || identity.Matched || identity.MatchKind != CanonicalMatchAmbiguous {
+		t.Fatalf("ambiguous identity = %+v, want no matched COIN ambiguity", identity)
 	}
 }
 

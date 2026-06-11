@@ -22,6 +22,9 @@ var ErrFusionFailClosed = errors.New("listing fusion fail-closed")
 type FusionDeps struct {
 	LoadUniverse func() (*config.ListedUniverse, error)
 	Now          func() time.Time
+	// SymbolResolver is a safety net for legacy unfused signals written before
+	// runtime identity normalization was wired into pollers.
+	SymbolResolver SymbolIdentityResolver
 	// SignalBatchSize bounds the number of unfused signals processed
 	// per run; defaults to 500.
 	SignalBatchSize int
@@ -148,6 +151,7 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 	observationOnlyIDs := make([]int64, 0)
 	historicalIDs := make([]int64, 0)
 	for _, s := range signals {
+		s = ApplySignalSymbolIdentity(s, deps.SymbolResolver)
 		if !isCandidateBearingSignal(s.SignalType) {
 			aggregatorIDs = append(aggregatorIDs, s.ID)
 			continue
@@ -218,13 +222,7 @@ func FuseSignals(ctx context.Context, repo *Repository, deps FusionDeps) (Fusion
 		if len(platforms) == 0 {
 			platforms = keysSorted(g.platforms)
 		}
-		isListed := false
-		for _, base := range universe.BaseAssets("edgeX") {
-			if strings.EqualFold(base, g.key.canonical) {
-				isListed = true
-				break
-			}
-		}
+		isListed := universe.IsListedIdentity("edgeX", g.key.canonical, g.key.surface, g.key.kind)
 		score := ScoreCandidate(ScoreInput{
 			Platforms:      platforms,
 			EvidenceKind:   evidence,

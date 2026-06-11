@@ -120,7 +120,8 @@ func RefreshListedUniverseFromSnapshots(ctx context.Context, repo *Repository, a
 		seed = &config.ListedUniverse{Platforms: map[string]config.ListedPlatform{}}
 	}
 
-	// (2) DB-derived bases.
+	// (2) DB-derived listed identities. base_assets remain for legacy callers;
+	// entries carry the exact canonical+surface+kind identity used by Listing.
 	dbRows, err := repo.QueryActiveListedBases(ctx, args.FreshWindow)
 	if err != nil {
 		return ListedUniverseRefreshResult{}, fmt.Errorf("query active bases: %w", err)
@@ -136,6 +137,7 @@ func RefreshListedUniverseFromSnapshots(ctx context.Context, repo *Repository, a
 	res := ListedUniverseRefreshResult{}
 	for _, platform := range args.CoveredPlatforms {
 		dbBases := dedupSortedBases(rowsForPlatform(dbRows, platform))
+		dbEntries := entriesForPlatform(dbRows, platform)
 		seedBases := seed.BaseAssets(platform)
 		previousState, loadErr := repo.LoadSourceState(ctx, listedUniverseSourceKey(platform))
 		if loadErr != nil {
@@ -149,7 +151,7 @@ func RefreshListedUniverseFromSnapshots(ctx context.Context, repo *Repository, a
 			recordShrinkFloorError(ctx, repo, platform, decision.Message, decision.Context, now)
 			continue
 		}
-		out.Platforms[platform] = config.ListedPlatform{BaseAssets: dbBases}
+		out.Platforms[platform] = config.ListedPlatform{BaseAssets: dbBases, Entries: dbEntries}
 		res.PlatformsFromDB = append(res.PlatformsFromDB, platform)
 		recordListedUniverseRefreshOK(ctx, repo, platform, decision.Context, now)
 	}
@@ -158,7 +160,7 @@ func RefreshListedUniverseFromSnapshots(ctx context.Context, repo *Repository, a
 		if _, ok := out.Platforms[name]; ok {
 			continue
 		}
-		out.Platforms[name] = config.ListedPlatform{BaseAssets: append([]string(nil), plat.BaseAssets...)}
+		out.Platforms[name] = config.ListedPlatform{BaseAssets: append([]string(nil), plat.BaseAssets...), Entries: append([]config.ListedIdentityEntry(nil), plat.Entries...)}
 	}
 	for _, plat := range out.Platforms {
 		res.TotalBases += len(plat.BaseAssets)
@@ -172,14 +174,14 @@ func RefreshListedUniverseFromSnapshots(ctx context.Context, repo *Repository, a
 	// (6) Reconcile candidates (edgeX surface only — that is the
 	//     only platform whose universe drives the candidate state
 	//     machine).
-	perpBases := basesFor(dbRows, "edgeX", "perp")
-	spotBases := basesFor(dbRows, "edgeX", "spot")
-	nPerp, perpErr := repo.BulkMarkCandidatesAlreadyListed(ctx, perpBases, "perp", now)
+	perpIdentities := identitiesFor(dbRows, "edgeX", "perp")
+	spotIdentities := identitiesFor(dbRows, "edgeX", "spot")
+	nPerp, perpErr := repo.BulkMarkCandidateIdentitiesAlreadyListed(ctx, perpIdentities, now)
 	if perpErr != nil {
 		return res, fmt.Errorf("bulk mark perp: %w", perpErr)
 	}
 	res.PerpReconciled = nPerp
-	nSpot, spotErr := repo.BulkMarkCandidatesAlreadyListed(ctx, spotBases, "spot", now)
+	nSpot, spotErr := repo.BulkMarkCandidateIdentitiesAlreadyListed(ctx, spotIdentities, now)
 	if spotErr != nil {
 		return res, fmt.Errorf("bulk mark spot: %w", spotErr)
 	}
@@ -193,8 +195,30 @@ func rowsForPlatform(rows []PlatformBaseSurface, platform string) []string {
 	out := make([]string, 0, len(rows))
 	for _, r := range rows {
 		if r.Platform == platform {
-			out = append(out, r.BaseAsset)
+			out = append(out, firstNonEmptyUpper(r.CanonicalSymbol, r.BaseAsset))
 		}
+	}
+	return out
+}
+
+func entriesForPlatform(rows []PlatformBaseSurface, platform string) []config.ListedIdentityEntry {
+	out := make([]config.ListedIdentityEntry, 0, len(rows))
+	for _, r := range rows {
+		if r.Platform != platform {
+			continue
+		}
+		canonical := firstNonEmptyUpper(r.CanonicalSymbol, r.BaseAsset)
+		if canonical == "" {
+			continue
+		}
+		out = append(out, config.ListedIdentityEntry{
+			CanonicalSymbol: canonical,
+			DisplaySymbol:   r.DisplaySymbol,
+			BaseAsset:       r.BaseAsset,
+			APISymbol:       r.APISymbol,
+			MarketSurface:   r.MarketSurface,
+			InstrumentKind:  r.InstrumentKind,
+		})
 	}
 	return out
 }
@@ -206,7 +230,7 @@ func basesFor(rows []PlatformBaseSurface, platform, surface string) []string {
 		if r.Platform != platform || r.MarketSurface != surface {
 			continue
 		}
-		base := strings.ToUpper(strings.TrimSpace(r.BaseAsset))
+		base := firstNonEmptyUpper(r.CanonicalSymbol, r.BaseAsset)
 		if base == "" {
 			continue
 		}
@@ -217,6 +241,36 @@ func basesFor(rows []PlatformBaseSurface, platform, surface string) []string {
 		out = append(out, base)
 	}
 	sort.Strings(out)
+	return out
+}
+
+func identitiesFor(rows []PlatformBaseSurface, platform, surface string) []CandidateIdentity {
+	out := make([]CandidateIdentity, 0, len(rows))
+	seen := map[string]struct{}{}
+	for _, r := range rows {
+		if r.Platform != platform || r.MarketSurface != surface {
+			continue
+		}
+		identity := CandidateIdentity{
+			CanonicalSymbol: firstNonEmptyUpper(r.CanonicalSymbol, r.BaseAsset),
+			MarketSurface:   strings.ToLower(strings.TrimSpace(r.MarketSurface)),
+			InstrumentKind:  strings.ToLower(strings.TrimSpace(r.InstrumentKind)),
+		}
+		if identity.CanonicalSymbol == "" || identity.MarketSurface == "" || identity.InstrumentKind == "" {
+			continue
+		}
+		key := identity.CanonicalSymbol + "|" + identity.MarketSurface + "|" + identity.InstrumentKind
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, identity)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		ki := out[i].CanonicalSymbol + "|" + out[i].MarketSurface + "|" + out[i].InstrumentKind
+		kj := out[j].CanonicalSymbol + "|" + out[j].MarketSurface + "|" + out[j].InstrumentKind
+		return ki < kj
+	})
 	return out
 }
 

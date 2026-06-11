@@ -155,7 +155,14 @@ func (s quotedSymbol) toParsed(subtype, sourceModule string) ParsedAnnouncementS
 		surface = "spot"
 		display = s.base + " (spot)"
 	}
+	rawSymbol := s.base
+	if s.quote != "" {
+		rawSymbol = s.base + s.quote
+	}
 	return ParsedAnnouncementSymbol{
+		RawSymbol:       rawSymbol,
+		BaseAsset:       s.base,
+		QuoteAsset:      s.quote,
 		CanonicalSymbol: s.base,
 		DisplaySymbol:   display,
 		MarketSurface:   surface,

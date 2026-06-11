@@ -249,7 +249,7 @@ func decisionHeaderText(ev DecisionCardEvent) string {
 	switch strings.ToLower(strings.TrimSpace(ev.MarketSurface)) {
 	case "spot":
 		prefix = "🚨 New Spot Listing Detected"
-	case "", "perp":
+	case "", "perp", "synthetic_futures":
 		prefix = "🚨 New Perp Listing Detected"
 	default:
 		prefix = "🚨 New Listing Detected"

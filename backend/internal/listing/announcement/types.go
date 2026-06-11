@@ -38,6 +38,12 @@ type ParsedAnnouncement struct {
 // ParsedAnnouncement; multi-symbol announcements produce multiple
 // independent rows.
 type ParsedAnnouncementSymbol struct {
+	// RawSymbol/BaseAsset/QuoteAsset preserve the exchange/parser-native
+	// symbol components used for canonical identity lookup. CanonicalSymbol may
+	// be rewritten by the Listing runtime resolver before persistence.
+	RawSymbol       string
+	BaseAsset       string
+	QuoteAsset      string
 	CanonicalSymbol string
 	DisplaySymbol   string
 	MarketSurface   string

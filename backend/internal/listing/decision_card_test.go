@@ -158,6 +158,10 @@ func TestDecisionHeaderTextUsesMarketSurface(t *testing.T) {
 	if perp != "🚨 New Perp Listing Detected · NIL" {
 		t.Fatalf("perp header = %q", perp)
 	}
+	synthetic := decisionHeaderText(DecisionCardEvent{CanonicalSymbol: "EBAY", MarketSurface: "synthetic_futures"})
+	if synthetic != "🚨 New Perp Listing Detected · EBAY" {
+		t.Fatalf("synthetic_futures header = %q", synthetic)
+	}
 	legacy := decisionHeaderText(DecisionCardEvent{CanonicalSymbol: "ABC"})
 	if legacy != "🚨 New Perp Listing Detected · ABC" {
 		t.Fatalf("legacy header = %q", legacy)

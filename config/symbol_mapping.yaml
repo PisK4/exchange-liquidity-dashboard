@@ -19,16 +19,17 @@
 #   instrument_kind  — canonical / synthetic / rwa / proxy / ...
 #                      (default: canonical)
 #
-# Build-catalog-only fields (read by backend/scripts/build-catalog; the
-# runtime config loader ignores them after the catalog has been generated):
+# Alias/catalog fields (read by backend/scripts/build-catalog and by the
+# runtime CanonicalIndex used by Listing Agent ingestion):
 #   aliases:
 #     <platform>: [<base_asset alias>, ...]
 #       — Tells the crawler "on this platform the canonical's base_asset
 #         actually looks like one of these". Required for non-crypto
 #         canonicals where exchanges expose synthetic names like
-#         "NCSKSAMSUNG2USD" for SAMSUNG. Matched case-insensitively
-#         against inst.BaseAsset; falls back to base==canonical when no
-#         alias is configured.
+#         "NCSKSAMSUNG2USD" for SAMSUNG or "EBAYSTOCK" for EBAY.
+#         Matched case-insensitively against inst.BaseAsset during catalog
+#         build and runtime listing ingestion; falls back to base==canonical
+#         when no alias is configured.
 #   preferred_surface: [perp, synthetic_futures, rwa_spot, spot]
 #       — Tiebreaker when multiple instruments on the same platform match
 #         the canonical (e.g. perp + synthetic_perp + rwa_spot). The
@@ -597,6 +598,41 @@ symbols:
       bingx: [NCSKORCL2USD]
       mexc: [ORCLSTOCK]
       gate: [ORCLX]
+  # Stock-suffixed MEXC listings seen by Listing Agent alerts. Keep these as
+  # exact aliases so runtime canonicalization rewrites EBAYSTOCK -> EBAY while
+  # preserving BaseAsset/APISymbol for exchange audit and API lookup.
+  - display_symbol: EBAY-USDT (perp)
+    display_name: EBAY-USD
+    canonical: EBAY
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      mexc: [EBAYSTOCK]
+  - display_symbol: AMC-USDT (perp)
+    display_name: AMC-USD
+    canonical: AMC
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      mexc: [AMCSTOCK]
+  - display_symbol: OUST-USDT (perp)
+    display_name: OUST-USD
+    canonical: OUST
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      mexc: [OUSTSTOCK]
+  - display_symbol: PL-USDT (perp)
+    display_name: PL-USD
+    canonical: PL
+    asset_category: stock
+    market_surface: synthetic_futures
+    instrument_kind: synthetic
+    aliases:
+      mexc: [PLSTOCK]
 
   # ---- Index / ETF (synthetic_futures) ----
   # US500 wraps the S&P 500 family of representations: SPX (cash index),

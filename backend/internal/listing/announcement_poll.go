@@ -60,8 +60,9 @@ func (r *AnnouncementPollResult) recordParseSkip(reason string) {
 // NOT abort the rest of the tick — see the parallel comment on
 // InstrumentPollDeps for the failure mode this guards against.
 type AnnouncementPollDeps struct {
-	Now    func() time.Time
-	Logger *log.Logger
+	Now            func() time.Time
+	Logger         *log.Logger
+	SymbolResolver SymbolIdentityResolver
 }
 
 // RunAnnouncementPoll executes one pass over the announcement source.
@@ -131,6 +132,9 @@ func RunAnnouncementPoll(ctx context.Context, repo *Repository, src Announcement
 			}
 			deps.Logger.Printf("listing announcement poll: parse %s: %v (skipping item)", src.Platform, parseErr)
 			continue
+		}
+		for i := range parsed.Symbols {
+			parsed.Symbols[i] = ApplyAnnouncementSymbolIdentity(src.Platform, parsed.Symbols[i], deps.SymbolResolver)
 		}
 
 		// On warm path decide whether the parent is new BEFORE the

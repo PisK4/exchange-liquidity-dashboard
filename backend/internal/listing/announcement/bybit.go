@@ -47,6 +47,9 @@ func ParseBybitAnnouncement(raw json.RawMessage) (ParsedAnnouncement, error) {
 	if emit {
 		for _, s := range extractCanonicalSymbols(p.Title) {
 			out.Symbols = append(out.Symbols, ParsedAnnouncementSymbol{
+				RawSymbol:       s,
+				BaseAsset:       s,
+				QuoteAsset:      "USDT",
 				CanonicalSymbol: s,
 				MarketSurface:   "perp",
 				InstrumentKind:  "canonical",

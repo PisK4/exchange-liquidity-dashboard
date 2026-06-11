@@ -73,8 +73,9 @@ type InstrumentPollResult struct {
 // InsertSignal to silently miss → return error → cascading abort of
 // every snapshot upsert in the same tick).
 type InstrumentPollDeps struct {
-	Now    func() time.Time
-	Logger *log.Logger
+	Now            func() time.Time
+	Logger         *log.Logger
+	SymbolResolver SymbolIdentityResolver
 }
 
 // RunInstrumentPoll executes one full pass over the given source.
@@ -124,6 +125,9 @@ func RunInstrumentPoll(ctx context.Context, repo *Repository, src InstrumentSour
 	instruments, err := src.Fetch(ctx)
 	if err != nil {
 		return res, fmt.Errorf("fetch %s/%s: %w", src.Platform, src.MarketType, err)
+	}
+	for i := range instruments {
+		instruments[i] = ApplyInstrumentSymbolIdentity(instruments[i], deps.SymbolResolver)
 	}
 	res.Fetched = len(instruments)
 	now := deps.Now()

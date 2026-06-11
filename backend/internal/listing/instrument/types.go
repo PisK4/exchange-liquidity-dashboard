@@ -25,7 +25,13 @@ import (
 // re-quotes) no longer flip the hash on every 5-min poll. The
 // instrument poll driver guards against the rollover so the cutover
 // does not produce a one-shot metadata_changed firehose.
-const NormalizerVersion = "v3"
+//
+// v3 -> v4 (2026-06-11): runtime Listing Agent ingestion now applies
+// symbol identity aliases from config/symbol_mapping.yaml before snapshots,
+// signals, and candidates are written. StableHash includes canonical identity
+// fields, so the version bump lets the poll driver suppress the one-shot diff
+// rollover while EBAYSTOCK-style native symbols collapse to EBAY business keys.
+const NormalizerVersion = "v4"
 
 // NormalizedInstrument is the platform-neutral view of a single
 // exchange instrument. The raw JSON is preserved verbatim for audit

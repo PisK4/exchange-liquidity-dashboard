@@ -400,6 +400,15 @@ type CandidateUpsert struct {
 	ObservedAt           time.Time
 }
 
+// CandidateIdentity is the semantic key for a listing candidate. It is used
+// when reconciling listed_universe entries back into candidates so synthetic
+// and proxy instruments do not get collapsed into plain canonical perps.
+type CandidateIdentity struct {
+	CanonicalSymbol string
+	MarketSurface   string
+	InstrumentKind  string
+}
+
 // InstrumentSnapshot mirrors one row of t_listing_instrument_snapshot.
 // It is the per-platform `prev` view the instrument Diff consumes;
 // the poller loads it before fetching new payload, computes the

@@ -587,6 +587,18 @@ func BuildCachedMarketStatusRefresher(
 	cfg config.ListingMarketStatusRefreshConfig,
 	now func() time.Time,
 ) func(context.Context, Candidate) ([]PlatformMarketStatus, error) {
+	return BuildCachedMarketStatusRefresherWithResolver(sources, cfg, now, nil)
+}
+
+// BuildCachedMarketStatusRefresherWithResolver is the identity-aware variant
+// used by production wiring. Tests that do not care about symbol aliases can
+// continue using BuildCachedMarketStatusRefresher.
+func BuildCachedMarketStatusRefresherWithResolver(
+	sources []InstrumentSource,
+	cfg config.ListingMarketStatusRefreshConfig,
+	now func() time.Time,
+	resolver SymbolIdentityResolver,
+) func(context.Context, Candidate) ([]PlatformMarketStatus, error) {
 	if !cfg.Enabled || len(sources) == 0 {
 		return nil
 	}
@@ -610,18 +622,20 @@ func BuildCachedMarketStatusRefresher(
 	}
 
 	r := &cachedMarketStatusRefresher{
-		sources: sources,
-		cfg:     cfg,
-		now:     now,
-		cache:   map[string]marketStatusRefreshCacheEntry{},
+		sources:  sources,
+		cfg:      cfg,
+		now:      now,
+		resolver: resolver,
+		cache:    map[string]marketStatusRefreshCacheEntry{},
 	}
 	return r.refresh
 }
 
 type cachedMarketStatusRefresher struct {
-	sources []InstrumentSource
-	cfg     config.ListingMarketStatusRefreshConfig
-	now     func() time.Time
+	sources  []InstrumentSource
+	cfg      config.ListingMarketStatusRefreshConfig
+	now      func() time.Time
+	resolver SymbolIdentityResolver
 
 	mu            sync.Mutex
 	cache         map[string]marketStatusRefreshCacheEntry
@@ -684,7 +698,14 @@ func (r *cachedMarketStatusRefresher) refresh(ctx context.Context, c Candidate) 
 			rows := make([]MarketStatusRow, 0, len(items))
 			now := r.now()
 			for _, item := range items {
+				item = ApplyInstrumentSymbolIdentity(item, r.resolver)
 				if !strings.EqualFold(item.CanonicalSymbol, c.CanonicalSymbol) {
+					continue
+				}
+				if c.MarketSurface != "" && item.MarketSurface != "" && !strings.EqualFold(item.MarketSurface, c.MarketSurface) {
+					continue
+				}
+				if c.InstrumentKind != "" && item.InstrumentKind != "" && !strings.EqualFold(item.InstrumentKind, c.InstrumentKind) {
 					continue
 				}
 				row := MarketStatusRow{

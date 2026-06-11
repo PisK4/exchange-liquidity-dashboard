@@ -747,6 +747,72 @@ Webhook routing uses `Alert.Webhooks.Listing` for Top30/divergence cards and
 `Alert.Webhooks.Liquidity` for Dashboard liquidity-lag / worst-depth cards.
 The legacy `Alert.WebHookP3` is a Listing fallback only.
 
+### 5.2.1 Listing symbol identity and safe backfill
+
+Listing Agent keeps two symbol layers:
+
+- Native exchange fields (`api_symbol`, `base_asset`, `quote_asset`) stay as the
+  venue exposes them. For example MEXC may report `api_symbol=EBAYSTOCK_USDT`
+  and `base_asset=EBAYSTOCK`.
+- Business identity fields (`canonical_symbol`, `display_symbol`,
+  `market_surface`, `instrument_kind`) are normalized through
+  `config/symbol_mapping.yaml` aliases at runtime. For the same MEXC contract,
+  the expected identity is `canonical_symbol=EBAY`,
+  `display_symbol=EBAY-USDT (perp)`, `market_surface=synthetic_futures`, and
+  `instrument_kind=synthetic`.
+
+`listed_universe` is identity-aware. Do not remove synthetic/proxy/RWA rows from
+the universe just because they are not plain crypto perps; Listing cards may be
+valid for those instruments. The already-listed check uses
+`canonical_symbol + market_surface + instrument_kind` when runtime entries are
+available, and only falls back to legacy base-only matching for old seed-only
+platform files.
+
+When adding a new venue alias, update `config/symbol_mapping.yaml`. Exact aliases
+are preferred over broad suffix stripping: add `mexc: [EBAYSTOCK]` for EBAY, not
+a generic `*STOCK` rule that could collapse an unrelated crypto symbol. Runtime
+normalization uses the same alias source of truth as catalog generation.
+
+If historical rows were already written under the wrong identity, run the safe
+backfill in two phases. Dry-run is mandatory and is the default:
+
+```
+cd backend
+OPS_INTELLIGENCE_MYSQL_DSN='user:pass@tcp(host:3306)/edgex_ops_intelligence?parseTime=true' \
+  go run ./cmd/listing-symbol-backfill \
+    --from-canonical=EBAYSTOCK --from-surface=perp --from-kind=canonical \
+    --to-canonical=EBAY --to-surface=synthetic_futures --to-kind=synthetic \
+    --to-display='EBAY-USDT (perp)'
+```
+
+Review the row counts before applying. Execute mode acquires the normal Listing
+Agent `listing:run_once` lease first, so it should not race a worker tick:
+
+```
+cd backend
+OPS_INTELLIGENCE_MYSQL_DSN='user:pass@tcp(host:3306)/edgex_ops_intelligence?parseTime=true' \
+  go run ./cmd/listing-symbol-backfill \
+    --from-canonical=EBAYSTOCK --from-surface=perp --from-kind=canonical \
+    --to-canonical=EBAY --to-surface=synthetic_futures --to-kind=synthetic \
+    --to-display='EBAY-USDT (perp)' \
+    --execute
+```
+
+Backfill guardrails:
+
+- The command updates business identity columns in snapshots, signal
+  observations, announcement symbols, candidates, and watchlist rows in one
+  transaction.
+- Sent delivery outbox payloads are historical audit evidence and are not
+  rewritten.
+- Pending/retry delivery outbox rows that still contain the old symbol cause
+  execute mode to fail closed. Inspect, redrive, cancel, or manually reconcile
+  those rows before rerunning; this prevents a backfill from continuously
+  pushing stale/wrong Lark cards.
+- If both source and target candidate identities already exist, execute mode
+  fails closed and requires a manual merge decision so candidate IDs and outbox
+  dedupe semantics are not accidentally split.
+
 ## 5.2 Activity Agent checks
 
 Use these checks when `/api/activity/*`, campaign ingestion, source health,

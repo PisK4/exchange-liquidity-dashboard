@@ -15,8 +15,18 @@ import "strings"
 type CanonicalIndex struct {
 	// byPlatform[platformLower][baseUpper] = canonical.
 	byPlatform map[string]map[string]string
+	// byPlatformIdentity[platformLower][baseUpper] = identity metadata
+	// from the symbol_mapping.yaml entry that declared the alias.
+	byPlatformIdentity map[string]map[string]CanonicalIdentity
 	// canonicals is the set of declared canonical keys (uppercase).
 	canonicals map[string]struct{}
+	// byCanonicalIdentity[canonical] = identity metadata when the
+	// canonical is declared by exactly one symbol_mapping entry.
+	// Duplicated canonicals (for example BTC perp + edgeX perp_v2)
+	// are marked ambiguous so callers do not accidentally inherit the
+	// wrong surface/kind metadata.
+	byCanonicalIdentity map[string]CanonicalIdentity
+	canonicalAmbiguous  map[string]struct{}
 	// crossPlatform[baseUpper] = canonical when exactly ONE
 	// canonical claims that alias across all platforms; "" when
 	// two or more canonicals collide on the same alias. Lets the
@@ -24,6 +34,12 @@ type CanonicalIndex struct {
 	// CL-USDT (perp)) onto the right canonical (OIL) when the
 	// answer is globally unambiguous.
 	crossPlatform map[string]string
+	// crossPlatformIdentity mirrors crossPlatform with the full symbol
+	// metadata. crossPlatformAmbiguous records aliases claimed by more
+	// than one canonical so ResolveIdentity can surface the ambiguity
+	// without silently choosing an owner.
+	crossPlatformIdentity  map[string]CanonicalIdentity
+	crossPlatformAmbiguous map[string]struct{}
 	// platformsByCanonical[canonical] = number of distinct platforms
 	// that declare at least one alias for this canonical in
 	// symbol_mapping.yaml. Used by IsPlatformExclusive to flag
@@ -34,6 +50,31 @@ type CanonicalIndex struct {
 	platformsByCanonical map[string]int
 }
 
+const (
+	CanonicalMatchPlatformAlias = "platform_alias"
+	CanonicalMatchCrossPlatform = "cross_platform_alias"
+	CanonicalMatchIdentity      = "canonical_identity"
+	CanonicalMatchNoMatch       = "no_match"
+	CanonicalMatchAmbiguous     = "ambiguous"
+)
+
+// CanonicalIdentity is the runtime-visible identity metadata resolved
+// from symbol_mapping.yaml. It lets Listing Agent ingestion keep native
+// exchange fields (api_symbol/base_asset/raw_json) while replacing only
+// business identity fields (canonical/display/surface/kind) before
+// snapshot/signal/candidate creation.
+type CanonicalIdentity struct {
+	Canonical      string
+	DisplaySymbol  string
+	DisplayName    string
+	AssetCategory  string
+	MarketSurface  string
+	InstrumentKind string
+	Matched        bool
+	MatchedAlias   string
+	MatchKind      string
+}
+
 // NewCanonicalIndex builds the reverse index from the raw symbol_mapping
 // entries. Each (platform, alias) pair in the per-canonical alias map
 // becomes an entry. Conflicts (same alias mapped to two canonicals on
@@ -41,15 +82,20 @@ type CanonicalIndex struct {
 // authoritative.
 func NewCanonicalIndex(symbols []symbolYAML) *CanonicalIndex {
 	idx := &CanonicalIndex{
-		byPlatform:           map[string]map[string]string{},
-		canonicals:           map[string]struct{}{},
-		crossPlatform:        map[string]string{},
-		platformsByCanonical: map[string]int{},
+		byPlatform:             map[string]map[string]string{},
+		byPlatformIdentity:     map[string]map[string]CanonicalIdentity{},
+		canonicals:             map[string]struct{}{},
+		byCanonicalIdentity:    map[string]CanonicalIdentity{},
+		canonicalAmbiguous:     map[string]struct{}{},
+		crossPlatform:          map[string]string{},
+		crossPlatformIdentity:  map[string]CanonicalIdentity{},
+		crossPlatformAmbiguous: map[string]struct{}{},
+		platformsByCanonical:   map[string]int{},
 	}
 	// owners[baseUpper] = set of canonicals that claim that alias on
 	// any platform. Used post-pass to decide which entries qualify for
 	// the unambiguous cross-platform fallback.
-	owners := map[string]map[string]struct{}{}
+	owners := map[string]map[string]CanonicalIdentity{}
 	// platformSets[canonical] = set of platforms that declare any
 	// alias for this canonical; converted to a count after the pass.
 	platformSets := map[string]map[string]struct{}{}
@@ -58,7 +104,15 @@ func NewCanonicalIndex(symbols []symbolYAML) *CanonicalIndex {
 		if canonical == "" {
 			continue
 		}
+		identity := canonicalIdentityFromYAML(s, canonical)
 		idx.canonicals[canonical] = struct{}{}
+		if prev, ok := idx.byCanonicalIdentity[canonical]; ok {
+			if !canonicalIdentityMetadataEqual(prev, identity) {
+				idx.canonicalAmbiguous[canonical] = struct{}{}
+			}
+		} else {
+			idx.byCanonicalIdentity[canonical] = identity
+		}
 		for platform, aliases := range s.Aliases {
 			plat := strings.ToLower(strings.TrimSpace(platform))
 			if plat == "" {
@@ -69,6 +123,11 @@ func NewCanonicalIndex(symbols []symbolYAML) *CanonicalIndex {
 				perPlatform = map[string]string{}
 				idx.byPlatform[plat] = perPlatform
 			}
+			perPlatformIdentity, ok := idx.byPlatformIdentity[plat]
+			if !ok {
+				perPlatformIdentity = map[string]CanonicalIdentity{}
+				idx.byPlatformIdentity[plat] = perPlatformIdentity
+			}
 			declaredAny := false
 			for _, alias := range aliases {
 				base := strings.ToUpper(strings.TrimSpace(alias))
@@ -78,13 +137,14 @@ func NewCanonicalIndex(symbols []symbolYAML) *CanonicalIndex {
 				declaredAny = true
 				if _, exists := perPlatform[base]; !exists {
 					perPlatform[base] = canonical
+					perPlatformIdentity[base] = identity
 				}
 				ownerSet, ok := owners[base]
 				if !ok {
-					ownerSet = map[string]struct{}{}
+					ownerSet = map[string]CanonicalIdentity{}
 					owners[base] = ownerSet
 				}
-				ownerSet[canonical] = struct{}{}
+				ownerSet[canonical] = identity
 			}
 			if declaredAny {
 				set, ok := platformSets[canonical]
@@ -98,16 +158,37 @@ func NewCanonicalIndex(symbols []symbolYAML) *CanonicalIndex {
 	}
 	for base, ownerSet := range owners {
 		if len(ownerSet) != 1 {
+			idx.crossPlatformAmbiguous[base] = struct{}{}
 			continue
 		}
-		for canonical := range ownerSet {
+		for canonical, identity := range ownerSet {
 			idx.crossPlatform[base] = canonical
+			idx.crossPlatformIdentity[base] = identity
 		}
 	}
 	for canonical, set := range platformSets {
 		idx.platformsByCanonical[canonical] = len(set)
 	}
 	return idx
+}
+
+func canonicalIdentityFromYAML(s symbolYAML, canonical string) CanonicalIdentity {
+	return CanonicalIdentity{
+		Canonical:      canonical,
+		DisplaySymbol:  strings.TrimSpace(s.DisplaySymbol),
+		DisplayName:    strings.TrimSpace(s.DisplayName),
+		AssetCategory:  strings.TrimSpace(s.AssetCategory),
+		MarketSurface:  strings.TrimSpace(s.MarketSurface),
+		InstrumentKind: strings.TrimSpace(s.InstrumentKind),
+	}
+}
+
+func canonicalIdentityMetadataEqual(a, b CanonicalIdentity) bool {
+	return a.DisplaySymbol == b.DisplaySymbol &&
+		a.DisplayName == b.DisplayName &&
+		a.AssetCategory == b.AssetCategory &&
+		a.MarketSurface == b.MarketSurface &&
+		a.InstrumentKind == b.InstrumentKind
 }
 
 // Resolve returns the canonical key for (platform, base) using the
@@ -120,23 +201,55 @@ func NewCanonicalIndex(symbols []symbolYAML) *CanonicalIndex {
 // the existing CanonicaliseSymbol pipeline even before the resolver
 // has been wired in.
 func (idx *CanonicalIndex) Resolve(platform, base string) string {
+	return idx.ResolveIdentity(platform, base).Canonical
+}
+
+// ResolveIdentity returns the full canonical identity for (platform, base).
+// The lookup order is:
+//   - exact platform alias (authoritative, returns that symbol entry metadata)
+//   - unambiguous cross-platform alias
+//   - canonical identity fallback when the canonical has a single metadata row
+//   - uppercase identity fallback
+//
+// Ambiguous aliases/canonicals return the uppercased base with MatchKind
+// "ambiguous" and Matched=false so callers can fail closed or preserve the
+// caller-provided surface/kind instead of inheriting arbitrary metadata.
+func (idx *CanonicalIndex) ResolveIdentity(platform, base string) CanonicalIdentity {
 	base = strings.ToUpper(strings.TrimSpace(base))
 	if base == "" {
-		return ""
+		return CanonicalIdentity{MatchKind: CanonicalMatchNoMatch}
 	}
-	if idx == nil || len(idx.byPlatform) == 0 {
-		return base
+	if idx == nil {
+		return CanonicalIdentity{Canonical: base, MatchKind: CanonicalMatchNoMatch}
 	}
 	plat := strings.ToLower(strings.TrimSpace(platform))
-	if perPlatform, ok := idx.byPlatform[plat]; ok {
-		if canonical, ok := perPlatform[base]; ok {
-			return canonical
+	if perPlatform, ok := idx.byPlatformIdentity[plat]; ok {
+		if identity, ok := perPlatform[base]; ok {
+			identity.Matched = true
+			identity.MatchedAlias = base
+			identity.MatchKind = CanonicalMatchPlatformAlias
+			return identity
 		}
 	}
-	if canonical, ok := idx.crossPlatform[base]; ok {
-		return canonical
+	if _, ambiguous := idx.crossPlatformAmbiguous[base]; ambiguous {
+		return CanonicalIdentity{Canonical: base, MatchKind: CanonicalMatchAmbiguous}
 	}
-	return base
+	if identity, ok := idx.crossPlatformIdentity[base]; ok {
+		identity.Matched = true
+		identity.MatchedAlias = base
+		identity.MatchKind = CanonicalMatchCrossPlatform
+		return identity
+	}
+	if _, ambiguous := idx.canonicalAmbiguous[base]; ambiguous {
+		return CanonicalIdentity{Canonical: base, MatchKind: CanonicalMatchAmbiguous}
+	}
+	if identity, ok := idx.byCanonicalIdentity[base]; ok {
+		identity.Matched = true
+		identity.MatchedAlias = base
+		identity.MatchKind = CanonicalMatchIdentity
+		return identity
+	}
+	return CanonicalIdentity{Canonical: base, MatchKind: CanonicalMatchNoMatch}
 }
 
 // IsCanonical reports whether s (case-insensitive) is a canonical

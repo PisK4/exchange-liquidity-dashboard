@@ -1532,8 +1532,8 @@ func nullRawJSON(raw json.RawMessage) any {
 	return []byte(raw)
 }
 
-// ListLatestInstrumentSnapshotsByPlatform returns every active,
-// non-synthetic snapshot row for the given platform. The
+// ListLatestInstrumentSnapshotsByPlatform returns every active snapshot row for
+// the given platform, including synthetic/proxy/RWA instruments. The
 // CatalogResolver DB-first path consumes the slice to derive
 // per-platform symbol metadata (hyperliquid universe, gate
 // quanto_multiplier, lighter market_id, edgeX contract_id) directly
@@ -1553,7 +1553,6 @@ func (r *Repository) ListLatestInstrumentSnapshotsByPlatform(ctx context.Context
 	  FROM t_listing_instrument_snapshot
 	  WHERE platform = ?
 	    AND status_normalized = 'active'
-	    AND COALESCE(instrument_kind, '') <> 'synthetic'
 	    AND COALESCE(base_asset, '') <> ''
 	  ORDER BY market_type, api_symbol`
 	rows, err := r.db.QueryContext(ctx, query, platform)
@@ -1646,45 +1645,65 @@ func scanInstrumentSnapshot(rows *sql.Rows) (InstrumentSnapshot, error) {
 	return out, nil
 }
 
-// PlatformBaseSurface is the deduped (platform, base, surface) tuple
-// the listed-universe refresh job consumes. market_surface is part
-// of the key so the BulkMarkCandidatesAlreadyListed call can scope
-// the reconciliation by surface and avoid closing spot candidates
-// when only the perp surface listed (and vice versa).
+// PlatformBaseSurface is the deduped listed-instrument identity tuple the
+// listed-universe refresh job consumes. market_surface and instrument_kind are
+// part of the key so synthetic/proxy/RWA markets survive refresh without being
+// confused with a canonical perp/spot candidate of the same ticker.
 type PlatformBaseSurface struct {
-	Platform      string
-	BaseAsset     string
-	MarketSurface string
+	Platform        string
+	CanonicalSymbol string
+	DisplaySymbol   string
+	BaseAsset       string
+	APISymbol       string
+	MarketSurface   string
+	InstrumentKind  string
 }
 
-// QueryActiveListedBases returns the distinct (platform, base_asset,
-// market_surface) tuples whose snapshot is younger than freshWindow
-// and currently active. Synthetic instruments (e.g. BingX NCSK*) are
-// excluded so the runtime listed_universe never gains rows the user
-// would not recognise. The freshness cutoff is computed off the
-// repository clock so tests can pin it deterministically.
+// QueryActiveListedBases returns the distinct listed instrument identities
+// whose snapshot is younger than freshWindow and currently active. Synthetic
+// instruments are intentionally included; Listing Agent also pushes synthetic
+// stock/proxy/RWA candidates, so the listed universe must preserve their exact
+// canonical+surface+kind identity instead of dropping them.
 func (r *Repository) QueryActiveListedBases(ctx context.Context, freshWindow time.Duration) ([]PlatformBaseSurface, error) {
 	if r.db == nil {
 		return nil, errors.New("listing repository: no db attached")
 	}
 	cutoff := r.now().Add(-freshWindow)
-	const query = `SELECT platform, base_asset, market_surface FROM t_listing_instrument_snapshot
+	const query = `SELECT platform, base_asset, market_surface,
+	         COALESCE(canonical_symbol, ''), COALESCE(display_symbol, ''),
+	         api_symbol, instrument_kind
+	  FROM t_listing_instrument_snapshot
 	  WHERE status_normalized = 'active'
-	    AND COALESCE(instrument_kind, '') <> 'synthetic'
-	    AND COALESCE(base_asset, '') <> ''
+	    AND COALESCE(canonical_symbol, base_asset, '') <> ''
 	    AND last_seen_at >= ?
-	  GROUP BY platform, base_asset, market_surface
-	  ORDER BY platform, base_asset, market_surface`
+	  GROUP BY platform, canonical_symbol, display_symbol, base_asset, api_symbol, market_surface, instrument_kind
+	  ORDER BY platform, canonical_symbol, market_surface, instrument_kind, api_symbol`
 	rows, err := r.db.QueryContext(ctx, query, cutoff)
 	if err != nil {
 		return nil, fmt.Errorf("query active listed bases: %w", err)
 	}
 	defer rows.Close()
 	var out []PlatformBaseSurface
+	columns, _ := rows.Columns()
 	for rows.Next() {
 		var pbs PlatformBaseSurface
-		if err := rows.Scan(&pbs.Platform, &pbs.BaseAsset, &pbs.MarketSurface); err != nil {
-			return nil, err
+		switch len(columns) {
+		case 3:
+			if err := rows.Scan(&pbs.Platform, &pbs.BaseAsset, &pbs.MarketSurface); err != nil {
+				return nil, err
+			}
+			pbs.CanonicalSymbol = pbs.BaseAsset
+			pbs.InstrumentKind = "canonical"
+		default:
+			if err := rows.Scan(&pbs.Platform, &pbs.BaseAsset, &pbs.MarketSurface, &pbs.CanonicalSymbol, &pbs.DisplaySymbol, &pbs.APISymbol, &pbs.InstrumentKind); err != nil {
+				return nil, err
+			}
+			if strings.TrimSpace(pbs.CanonicalSymbol) == "" {
+				pbs.CanonicalSymbol = pbs.BaseAsset
+			}
+			if strings.TrimSpace(pbs.InstrumentKind) == "" {
+				pbs.InstrumentKind = "canonical"
+			}
 		}
 		out = append(out, pbs)
 	}
@@ -1758,4 +1777,69 @@ func (r *Repository) BulkMarkCandidatesAlreadyListed(ctx context.Context, canoni
 		return 0, err
 	}
 	return int(rows), nil
+}
+
+// BulkMarkCandidateIdentitiesAlreadyListed is the identity-aware sibling of
+// BulkMarkCandidatesAlreadyListed. It matches the full candidate key
+// (canonical_symbol, market_surface, instrument_kind), which is required for
+// synthetic stock/proxy/RWA markets that share a canonical ticker with another
+// surface/kind.
+func (r *Repository) BulkMarkCandidateIdentitiesAlreadyListed(ctx context.Context, identities []CandidateIdentity, now time.Time) (int, error) {
+	if r.db == nil {
+		return 0, errors.New("listing repository: no db attached")
+	}
+	identities = normaliseCandidateIdentities(identities)
+	if len(identities) == 0 {
+		return 0, nil
+	}
+	if now.IsZero() {
+		now = r.now()
+	}
+	clauses := make([]string, 0, len(identities))
+	args := []any{LifecycleAlreadyListed, LifecycleStatusLabels[LifecycleAlreadyListed], now}
+	for _, identity := range identities {
+		clauses = append(clauses, "(canonical_symbol = ? AND market_surface = ? AND instrument_kind = ?)")
+		args = append(args, identity.CanonicalSymbol, identity.MarketSurface, identity.InstrumentKind)
+	}
+	args = append(args,
+		LifecycleObserved,
+		LifecycleAnnouncedPendingAPI,
+		LifecycleAPIDetectedNoAnnouncement,
+		LifecycleConfirmedListingCandidate,
+	)
+	query := `UPDATE t_listing_candidate
+	   SET lifecycle_status = ?,
+	       lifecycle_status_label = ?,
+	       last_observed_at = ?
+	 WHERE (` + strings.Join(clauses, " OR ") + `)
+	   AND lifecycle_status IN (?, ?, ?, ?)`
+	res, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return 0, fmt.Errorf("bulk mark identity already listed: %w", err)
+	}
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	return int(rows), nil
+}
+
+func normaliseCandidateIdentities(in []CandidateIdentity) []CandidateIdentity {
+	out := make([]CandidateIdentity, 0, len(in))
+	seen := map[string]struct{}{}
+	for _, identity := range in {
+		identity.CanonicalSymbol = strings.ToUpper(strings.TrimSpace(identity.CanonicalSymbol))
+		identity.MarketSurface = strings.ToLower(strings.TrimSpace(identity.MarketSurface))
+		identity.InstrumentKind = strings.ToLower(strings.TrimSpace(identity.InstrumentKind))
+		if identity.CanonicalSymbol == "" || identity.MarketSurface == "" || identity.InstrumentKind == "" {
+			continue
+		}
+		key := identity.CanonicalSymbol + "|" + identity.MarketSurface + "|" + identity.InstrumentKind
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, identity)
+	}
+	return out
 }
