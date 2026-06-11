@@ -1,4 +1,4 @@
-.PHONY: build test run smoke-api smoke-all-startup smoke-adapters smoke-coingecko smoke-listing smoke-activity e2e-listing e2e-activity backfill-share swagger migrate-up migrate-down catalog catalog-raw catalog-diff lint ci prune-snapshots-dry prune-snapshots-confirm verify-urls
+.PHONY: build test run smoke-api smoke-all-startup smoke-adapters smoke-coingecko smoke-listing smoke-activity e2e-listing e2e-activity backfill-share swagger schema-bootstrap migrate-up migrate-down catalog catalog-raw catalog-diff lint ci prune-snapshots-dry prune-snapshots-confirm verify-urls
 
 PORT ?= 18080
 SYMBOL ?= BTC-USDT
@@ -141,8 +141,18 @@ swagger:
 	mkdir -p docs
 	cp docs/openapi.json docs/swagger.json
 
+schema-bootstrap:
+	@echo "Fresh empty database bootstrap reference: schema/ops-intelligence-schema.sql"
+	@echo "Use only against an explicitly selected empty database, for example:"
+	@echo "  mysql '$(MYSQL_DSN)' < schema/ops-intelligence-schema.sql"
+	@echo "NOTE: backend startup uses compiled initSchemaSQL + applySchemaPostInit and does not read this file directly."
+	@echo "NOTE: existing databases need an audited migration plan; CREATE TABLE IF NOT EXISTS will not repair old columns/indexes."
+
 migrate-up:
-	@echo "Apply backend/migrations/*.up.sql to MySQL DSN: $(MYSQL_DSN)"
+	@echo "Manual migration plan for backend/migrations/*.up.sql against MySQL DSN: $(MYSQL_DSN)"
+	@echo "NOTE: this target prints commands only; it does not execute SQL."
+	@echo "NOTE: backend startup runs collector.ApplyMigrations from compiled initSchemaSQL + applySchemaPostInit and does not read backend/migrations/*.sql."
+	@echo "Apply in ascending order:"
 	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000001_init_schema.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000002_coingecko.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000003_widen_data_source.up.sql"
@@ -163,10 +173,15 @@ migrate-up:
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000018_surface_identity.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000019_listing_source_context.up.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000020_activity_source_bootstrap_state.up.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000021_listing_metric_snapshot_indexes.up.sql"
 
 migrate-down:
-	@echo "Apply backend/migrations/*.down.sql to MySQL DSN: $(MYSQL_DSN)"
-	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000020_activity_source_bootstrap_state.down.sql"
+	@echo "Manual rollback plan for backend/migrations/*.down.sql against MySQL DSN: $(MYSQL_DSN)"
+	@echo "NOTE: this target prints commands only; it does not execute SQL."
+	@echo "WARNING: stop backend workers before rollback; schema post-init may re-add guarded columns/indexes on next boot."
+	@echo "Apply in descending order:"
+	@echo "Use: mysql '$(MYSQL_DSN)' < migrations/000021_listing_metric_snapshot_indexes.down.sql"
+	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000020_activity_source_bootstrap_state.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000019_listing_source_context.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000018_surface_identity.down.sql"
 	@echo "Then: mysql '$(MYSQL_DSN)' < migrations/000017_activity_source_poll_state.down.sql"

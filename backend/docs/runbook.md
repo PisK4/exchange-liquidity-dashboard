@@ -54,16 +54,20 @@ Current env indirections:
 |---|---|
 | `COINGECKO_DEMO_API_KEY` | `Runtime.coingecko.api_key_env` |
 | `LARK_LISTING_CALLBACK_SECRET` | `Runtime.listing_agent.decision_card.callback.secret_env` |
-| `LARK_LISTING_TOP30_WEBHOOK_URL` | Only when a private config sets `Runtime.listing_agent.delivery.top30_webhook_url_env` to this name. The tracked config currently routes Listing cards through `Alert.Webhooks.*`. |
-| `LARK_ACTIVITY_WEBHOOK_URL` | Only when the selected runtime config sets `Runtime.activity_agent.delivery.webhook_url_env` to this name. Direct `Runtime.activity_agent.delivery.webhook_url` and `Alert.Webhooks.Activity` values still work. |
+| `LARK_LISTING_TOP30_WEBHOOK_URL` | Only when a private config sets `Runtime.listing_agent.delivery.top30_webhook_url_env` to this name. The tracked config currently routes Listing cards through `Alert.Push.Listing`, mirrored to legacy `Alert.Webhooks.Listing` for compatibility. |
+| `LARK_ACTIVITY_WEBHOOK_URL` | Only when the selected runtime config sets `Runtime.activity_agent.delivery.webhook_url_env` to this name. Direct `Runtime.activity_agent.delivery.webhook_url` and `Alert.Push.Activity` values still work. |
 | `ACTIVITY_DECISION_TOKEN_SECRET` | Only when the selected runtime config sets `Runtime.activity_agent.decision_token.secret_env` to this name. Direct `Runtime.activity_agent.decision_token.secret` still wins when non-empty. |
 
-Activity Agent webhook and decision-token values can be provided either as
-direct YAML/Nacos values or through env indirection. For env indirection, keep
-the tracked fields empty and point `Runtime.activity_agent.delivery.webhook_url_env`
-and `Runtime.activity_agent.decision_token.secret_env` at names supplied by
-`deploy/.env` or the process environment. Do not commit the real webhook URL or
-decision-token secret to tracked config files.
+Business webhook routes should use `Alert.Push.Listing`,
+`Alert.Push.Activity`, and `Alert.Push.Liquidity` in the selected YAML/Nacos
+config. `Alert.Webhooks.*` remains a legacy compatibility input only; when
+`Alert.Push.*` is set, it wins. Activity decision-token values can be provided
+either as direct YAML/Nacos values, AWS Secrets Manager-resolved values, or
+through env indirection. For env indirection, keep the tracked fields empty and
+point `Runtime.activity_agent.delivery.webhook_url_env` and
+`Runtime.activity_agent.decision_token.secret_env` at names supplied by
+`deploy/.env` or the process environment. Do not commit production webhook URLs
+or decision-token secrets to tracked config files.
 
 Scoped proxy fields are intentionally YAML/config-dir driven:
 
@@ -89,6 +93,56 @@ env overrides. Set `Runtime.listing_agent.delivery.dashboard_base_url` and
 `Runtime.activity_agent.delivery.dashboard_base_url` in the selected runtime
 config so buttons point at the public Ops Intelligence host in production and at
 the local web port during local validation.
+
+### 1.2 MySQL schema bootstrap and manual migrations
+
+When a MySQL DSN is configured, backend startup opens MySQL and runs
+`collector.ApplyMigrations(db)` before repositories and workers are attached.
+This startup step is fail-fast: if the configured database cannot be reached or
+schema bootstrap fails, the process exits instead of running workers against an
+unknown schema.
+
+Important implementation details:
+
+- `collector.ApplyMigrations` does **not** read `backend/migrations/*.sql`.
+- It executes the compiled `initSchemaSQL` string in
+  `backend/internal/collector/mysql_store.go`.
+- It then runs `applySchemaPostInit`, which performs a small set of
+  idempotent `INFORMATION_SCHEMA`-guarded repairs for existing databases.
+- `backend/schema/ops-intelligence-schema.sql` is a human-reviewable
+  consolidated fresh-database schema snapshot. Keep it in sync with
+  `initSchemaSQL`, `applySchemaPostInit`, and the latest migration number.
+- `backend/migrations/*.sql` are manual/auditable chronological scripts.
+  `make -C backend migrate-up` and `make -C backend migrate-down` print
+  operator-facing command-order references; they do not execute SQL.
+
+Fresh database behavior:
+
+- A fresh schema can be bootstrapped by starting the backend with
+  `OPS_INTELLIGENCE_MYSQL_DSN` configured, or by explicitly applying
+  `backend/schema/ops-intelligence-schema.sql` to an already selected empty
+  database.
+- The MySQL database itself must still exist first. Docker can create it on an
+  empty volume through `MYSQL_DATABASE`; otherwise create it manually.
+
+Existing database behavior:
+
+- `CREATE TABLE IF NOT EXISTS` will not widen columns, add missing columns, or
+  add indexes to pre-existing tables.
+- The post-init path currently guards the Listing signal fingerprint width,
+  Listing metric fallback indexes, and Activity source/bootstrap timestamp
+  columns.
+- For historical database upgrades, review `backend/migrations/*.sql` and apply
+  missing migrations explicitly in order, after a backup and schema audit.
+
+Before production schema work:
+
+1. Take a MySQL backup.
+2. Compare `ls backend/migrations/*.up.sql | sort` with
+   `make -C backend migrate-up` output.
+3. Verify the active schema with `INFORMATION_SCHEMA.COLUMNS` and
+   `INFORMATION_SCHEMA.STATISTICS`.
+4. Restart and check `/api/health` plus `/api/readiness`.
 
 ## 2. Health and Readiness Probes
 
@@ -256,9 +310,16 @@ The expected indexes are:
 - `idx_orderbook_canonical_surface_tier_latest (canonical_symbol, market_surface, tier, platform, snapshot_ts)` for spot/perp depth fallback.
 - `idx_symbol_volume_canonical_surface_latest (canonical_symbol, market_surface, platform, snapshot_ts)` for Spot 24h Vol snapshot fallback.
 
-These indexes are installed by migration
-`000021_listing_metric_snapshot_indexes` and guarded at backend boot by the
-schema post-init path. For large local/prod databases, run `EXPLAIN` on the
+These indexes can arrive through two supported paths:
+
+- backend startup: `applySchemaPostInit` guards and creates the two metric
+  fallback indexes when missing;
+- manual migration workflow:
+  `backend/migrations/000021_listing_metric_snapshot_indexes.up.sql`.
+
+Fresh databases get the base tables from compiled `initSchemaSQL`, then the
+same startup post-init guard creates these indexes if they are not already in
+the table definition. For large local/prod databases, run `EXPLAIN` on the
 candidate-specific snapshot queries and verify the `key` column uses the two
 indexes above. Spot 24h Vol fallback intentionally filters
 `market_surface='spot'`; do not include perp rows to inflate the card metric.
