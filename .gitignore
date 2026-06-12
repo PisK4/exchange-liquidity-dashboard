@@ -27,6 +27,12 @@ docs/feat/*
 !docs/feat/**/
 !docs/feat/**/*.md
 
+# Track only the plan status index. Historical plan bodies remain local notes
+# unless a current implementation contract explicitly promotes them.
+!docs/plan/
+docs/plan/*
+!docs/plan/README.md
+
 # Track raw instrument audit snapshots under backend/docs despite ignoring docs elsewhere.
 !backend/docs/
 !backend/docs/raw-instruments/

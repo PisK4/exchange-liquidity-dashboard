@@ -394,6 +394,10 @@
           "503": {
             "description": "listing disabled",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingUnavailableResponse"}}}
+          },
+          "500": {
+            "description": "listing read failed",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingErrorResponse"}}}
           }
         }
       }
@@ -405,6 +409,12 @@
           "200": {
             "description": "candidate detail with signals",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingCandidateDetailResponse"}}}
+          },
+          "400": {"description": "invalid candidate id"},
+          "404": {"description": "candidate not found"},
+          "500": {
+            "description": "listing read failed",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingErrorResponse"}}}
           },
           "503": {
             "description": "listing disabled",
@@ -420,6 +430,11 @@
           "200": {
             "description": "candidate signals",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingSignalListResponse"}}}
+          },
+          "400": {"description": "invalid candidate id"},
+          "500": {
+            "description": "listing read failed",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingErrorResponse"}}}
           },
           "503": {
             "description": "listing disabled",
@@ -438,6 +453,10 @@
           "503": {
             "description": "listing disabled",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingUnavailableResponse"}}}
+          },
+          "500": {
+            "description": "listing read failed",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingErrorResponse"}}}
           }
         }
       }
@@ -457,6 +476,48 @@
           "503": {
             "description": "listing disabled",
             "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingUnavailableResponse"}}}
+          },
+          "500": {
+            "description": "listing read failed",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingErrorResponse"}}}
+          }
+        }
+      }
+    },
+    "/api/listing/callback": {
+      "post": {
+        "parameters": [
+          {"in": "header", "name": "X-Lark-Request-Timestamp", "required": true, "schema": {"type": "string"}},
+          {"in": "header", "name": "X-Lark-Signature", "required": true, "schema": {"type": "string"}}
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingCallbackRequest"}}}
+        },
+        "responses": {
+          "200": {
+            "description": "listing decision callback recorded",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingCallbackResponse"}}}
+          },
+          "400": {
+            "description": "invalid callback payload",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingCallbackRejectedResponse"}}}
+          },
+          "401": {
+            "description": "missing or invalid callback signature",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingCallbackRejectedResponse"}}}
+          },
+          "403": {
+            "description": "timestamp outside accepted window or operator not allowed",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingCallbackRejectedResponse"}}}
+          },
+          "503": {
+            "description": "listing callback disabled or not configured",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingUnavailableResponse"}}}
+          },
+          "500": {
+            "description": "listing callback persistence or dispatch failed",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ListingErrorResponse"}}}
           }
         }
       }
@@ -2190,6 +2251,67 @@
         "properties": {
           "deliveries": {"type": "array", "items": {"$ref": "#/components/schemas/ListingDelivery"}},
           "count": {"type": "integer"}
+        }
+      },
+      "ListingCallbackRequest": {
+        "type": "object",
+        "required": ["action", "operator"],
+        "properties": {
+          "action": {
+            "type": "object",
+            "required": ["value"],
+            "properties": {
+              "value": {
+                "type": "object",
+                "required": ["candidate_id", "action"],
+                "properties": {
+                  "candidate_id": {"type": "integer"},
+                  "action": {"type": "string"},
+                  "reason": {"type": "string"}
+                },
+                "additionalProperties": true
+              }
+            },
+            "additionalProperties": true
+          },
+          "operator": {
+            "type": "object",
+            "required": ["open_id"],
+            "properties": {"open_id": {"type": "string"}},
+            "additionalProperties": true
+          },
+          "open_message_id": {"type": "string"},
+          "open_card_id": {"type": "string"}
+        },
+        "additionalProperties": true
+      },
+      "ListingCallbackResponse": {
+        "type": "object",
+        "required": ["status", "decision_id", "action", "candidate"],
+        "properties": {
+          "status": {"type": "string", "enum": ["recorded", "already_recorded"]},
+          "decision_id": {"type": "integer"},
+          "action": {"type": "string"},
+          "candidate": {"type": "integer"},
+          "dispatch_id": {"type": "integer"},
+          "watchlist_id": {"type": "integer"},
+          "outbox_rows": {"type": "integer"}
+        }
+      },
+      "ListingCallbackRejectedResponse": {
+        "type": "object",
+        "required": ["status", "reason"],
+        "properties": {
+          "status": {"type": "string", "enum": ["rejected"]},
+          "reason": {"type": "string"}
+        }
+      },
+      "ListingErrorResponse": {
+        "type": "object",
+        "required": ["status", "error"],
+        "properties": {
+          "status": {"type": "string", "enum": ["error"]},
+          "error": {"type": "string"}
         }
       },
       "ListingUnavailableResponse": {

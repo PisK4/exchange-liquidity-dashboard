@@ -8,8 +8,8 @@ between upstream product/design docs and code.
 
 | Module | Current implementation status | Primary contract docs |
 |---|---|---|
-| Liquidity Dashboard | Implemented as the default listed-market monitoring surface: collection, adapters, indicators, Top30/backfill, health/readiness APIs, and dashboard tabs. | `platform-liquidity-dashboard-api-coverage.md`, `dashboard-contract-hardening.md`, `adapter-four-tier-depth.md`, `edgex-perps-v2-liquidity-adapter.md`, `top30-share-history-backfill.md`, `liquidity-24h-share-cg-fallback.md`, `coingecko-rate-limit-governance.md`, `liquidity-watchlist.md`, `funding-rate.md` |
-| Listing Agent | Implemented as backend workers plus Lark delivery/callback contracts. No standalone `/listing` web console exists yet; current surfaces are `/api/listing/*`, Top30/divergence data, and Lark cards. | `listing-agent-symbol-identity-normalization.md`, `listing-agent-top30-hot-gap-push.md`, `listing-agent-divergence-push.md`, `listing-agent-liquidity-alert.md`, `listing-agent-decision-card-callback.md`, `listing-agent-dynamic-catalog-integration.md`, `listing-agent-signal-coverage.md`, `listing-agent-prd-implementation-review.md` |
+| Liquidity Dashboard | Implemented as the default listed-market monitoring surface: collection, adapters, indicators, Top30/backfill, health/readiness APIs, and dashboard tabs. | `dashboard-contract-hardening.md`, `adapter-four-tier-depth.md`, `edgex-perps-v2-liquidity-adapter.md`, `top30-share-history-backfill.md`, `liquidity-24h-share-cg-fallback.md`, `coingecko-rate-limit-governance.md`, `liquidity-watchlist.md`, `funding-rate.md` |
+| Listing Agent | Implemented as backend workers, `/api/listing/*`, standalone `/listing` candidate console, Top30/divergence data, and Lark delivery/callback contracts. | `listing-agent-symbol-identity-normalization.md`, `listing-agent-top30-hot-gap-push.md`, `listing-agent-divergence-push.md`, `listing-agent-liquidity-alert.md`, `listing-agent-decision-card-callback.md`, `listing-agent-dynamic-catalog-integration.md`, `listing-agent-signal-coverage.md` |
 | Activity Agent | Implemented in code as ingestion, parser, source health, review/decision, delivery outbox, redrive, and `/activity` frontend pages. Upstream Activity docs remain business intent and source evidence; the current runtime source matrix and delivery gates are repo-local. | `activity-agent-current-contract.md`; code: `backend/internal/activity`, `backend/internal/api/activity.go`, `web/app/activity`. Upstream: `architecture/方案设计/EdgeX运营/活动/运营活动-agent-通用数据模型与-source-health.md` |
 
 ## Status labels
@@ -20,6 +20,19 @@ between upstream product/design docs and code.
   runbook before implementing.
 - **Research evidence**: use as source API evidence only; it is not a product
   or implementation commitment by itself.
+
+## Historical or reference docs
+
+These files remain useful context, but they are not the first source of truth
+for new implementation work. Verify them against code, `backend/docs/runbook.md`,
+and the current contract docs above before making changes.
+
+| Doc | Status | Notes |
+|---|---|---|
+| `platform-liquidity-dashboard-api-coverage.md` | Historical coverage snapshot | Use for V1 API coverage history only; current API behavior is in code, OpenAPI, runbook, and the current Liquidity contracts. |
+| `html-design-alignment.md` | Historical UI alignment note | Use as design history only; current UI is under `web/app` and `web/components`. |
+| `demo-cloudflare-vercel.md` | Historical demo deployment note | Use `deploy/README.md` and `deploy/aws-dev-local-rehearsal.md` for current Docker Compose / AWS DEV deployment. |
+| `listing-agent-prd-implementation-review.md` | Historical implementation review | Use for PRD traceability only; current Listing runtime contracts are the dedicated `listing-agent-*` contract docs and code. |
 
 ## Current hard guarantees
 

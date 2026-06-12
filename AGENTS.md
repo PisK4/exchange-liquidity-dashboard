@@ -64,7 +64,7 @@ the indexed feature contracts, runbooks, upstream PRDs, or code.
 | Top30 / share / history | `backend/docs/top30-strategy.md` | `docs/feat/top30-share-history-backfill.md`, `docs/feat/liquidity-24h-share-cg-fallback.md` |
 | Listing Agent / Lark / callbacks | `docs/feat/listing-agent-*.md` | `../../architecture/方案设计/EdgeX运营/Listing/README.md` |
 | Listing Agent symbol identity / aliases / backfill | `docs/feat/listing-agent-symbol-identity-normalization.md` | `config/symbol_mapping.yaml`, `backend/internal/config/canonical_index.go`, `backend/docs/runbook.md` |
-| Activity Agent / campaign sources | `../../architecture/方案设计/EdgeX运营/活动/README.md` | `../../architecture/方案设计/EdgeX运营/活动/运营活动-agent-通用数据模型与-source-health.md`, `backend/internal/activity/*` |
+| Activity Agent / campaign sources | `docs/feat/activity-agent-current-contract.md` | `../../architecture/方案设计/EdgeX运营/活动/README.md`, `../../architecture/方案设计/EdgeX运营/活动/运营活动-agent-通用数据模型与-source-health.md`, `backend/internal/activity/*` |
 | AWS DEV / Docker Compose / Nacos / AWS SM / frontend deployment | `deploy/README.md`, `deploy/aws-dev-local-rehearsal.md` | `backend/docs/runbook.md`, `deploy/docker-compose.yaml`, `deploy/.env.production.template`, `deploy/nginx/ops-intelligence.conf`; use `docs/plan/*` only as historical context |
 | Production ops / release / migration | `backend/docs/runbook.md` | `backend/docs/coverage-matrix.md`, `backend/docs/ops-intelligence-db-migration.md`, `backend/docs/release-notes-v1.md` |
 
@@ -73,8 +73,8 @@ the indexed feature contracts, runbooks, upstream PRDs, or code.
 | Module | Backend | Frontend | Primary docs |
 |---|---|---|---|
 | Liquidity Dashboard | `backend/internal/collector`, `backend/internal/adapter`, `backend/internal/indicators`, `backend/internal/api` | default `/` dashboard plus legacy tab redirects | `docs/feat/README.md`, `backend/docs/runbook.md`, `backend/docs/top30-strategy.md` |
-| Listing Agent | `backend/internal/listing`, `backend/internal/api/listing*.go` | no standalone `/listing` console yet; current surfaces are API, Top30/divergence data, and Lark cards | `docs/feat/listing-agent-*.md` |
-| Activity Agent | `backend/internal/activity`, `backend/internal/api/activity.go` | `/activity`, `/activity/events/[id]`, `/activity/events/[id]/decision` | upstream Activity README/model docs, `backend/docs/runbook.md` |
+| Listing Agent | `backend/internal/listing`, `backend/internal/api/listing*.go` | `/listing` candidate console plus API, Top30/divergence data, and Lark cards | `docs/feat/listing-agent-*.md`, `web/app/listing` |
+| Activity Agent | `backend/internal/activity`, `backend/internal/api/activity.go` | `/activity`, `/activity/events/[id]`, `/activity/events/[id]/decision` | `docs/feat/activity-agent-current-contract.md`, upstream Activity README/model docs, `backend/docs/runbook.md` |
 
 ## 5. Common Commands
 

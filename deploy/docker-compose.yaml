@@ -132,7 +132,11 @@ services:
       backend:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000/healthz"]
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"const http=require('http');const host=require('os').hostname();const req=http.get({host,port:3000,path:'/healthz',timeout:3000},res=>{process.exit(res.statusCode===200?0:1)});req.on('timeout',()=>req.destroy(new Error('timeout')));req.on('error',()=>process.exit(1));\"",
+        ]
       interval: 30s
       timeout: 5s
       retries: 5
