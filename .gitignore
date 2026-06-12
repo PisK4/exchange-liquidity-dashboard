@@ -1,45 +1,98 @@
+# EdgeX Ops Intelligence GitLab import policy
+#
+# This repository is intended to be pushed to the internal GitLab for test
+# environment CI/CD. Keep source code, build definitions, deployment templates,
+# migrations, and non-secret examples in git. Keep local operator secrets,
+# generated artifacts, dependency caches, and local planning material out.
+
+# -----------------------------------------------------------------------------
+# OS / editor / local agent state
+# -----------------------------------------------------------------------------
+.DS_Store
+.idea/
+.vscode/
+.cursor/
+.claude/
+.factory/
+
+# -----------------------------------------------------------------------------
+# Secrets and machine-local environment files
+# -----------------------------------------------------------------------------
+.env
+.env.*
+*.env
+*.env.*
+deploy/.env
+deploy/.env.*
+web/.env
+web/.env.*
+config/*.local.*
+config/*secret*.json
+
+# Non-secret examples/templates are intentionally trackable after review.
+!.env.example
+!**/.env.example
+!*.env.example
+!**/*.env.example
+!deploy/.env.production.template
+!config/aws-secrets-manager.example.json
+
+# -----------------------------------------------------------------------------
+# Local-only repository context that should not be imported into GitLab
+# -----------------------------------------------------------------------------
+AGENTS.md
+CHANGELOG.md
+docs/
+
+# -----------------------------------------------------------------------------
+# Frontend dependencies, build outputs, and test artifacts
+# -----------------------------------------------------------------------------
 web/node_modules/
 web/.next/
+web/out/
+web/dist/
 web/test-results/
 web/playwright-report/
+web/coverage/
 web/tsconfig.tsbuildinfo
-backend/bin/
-coverage/
-*.log
+web/.tsbuildinfo
+web/.turbo/
+web/.vercel/
+web/npm-debug.log*
+web/yarn-debug.log*
+web/yarn-error.log*
 
-# Local generated binaries
+# -----------------------------------------------------------------------------
+# Backend build outputs, generated binaries, and local runtime data
+# -----------------------------------------------------------------------------
+backend/bin/
+backend/tmp/
+backend/data/
+backend/coverage/
+backend/*.test
 backend/build-catalog
+backend/dashboard
+backend/decision-card-preview
 backend/divergence-preview
 backend/lark-push-smoke
 backend/liquidity-alert-preview
 backend/top30-preview
-.factory
-docs
 
-# Track repo-local feature contracts while keeping other local docs ignored
-# by default. If a docs/feat/*.md file is referenced as an implementation
-# contract, it must be visible to git and reviewable in PRs.
-!docs/
-docs/*
-!docs/feat/
-docs/feat/*
-!docs/feat/*.md
-!docs/feat/**/
-!docs/feat/**/*.md
+# -----------------------------------------------------------------------------
+# Logs, coverage, dumps, backups, and temporary files
+# -----------------------------------------------------------------------------
+coverage/
+*.log
+*.pid
+*.tmp
+*.temp
+*.bak
+*.backup
+*.dump
+*.sql.gz
+*.tar.gz
+*.zip
 
-# Track only the plan status index. Historical plan bodies remain local notes
-# unless a current implementation contract explicitly promotes them.
-!docs/plan/
-docs/plan/*
-!docs/plan/README.md
-
-# Track raw instrument audit snapshots under backend/docs despite ignoring docs elsewhere.
-!backend/docs/
-!backend/docs/raw-instruments/
-!backend/docs/raw-instruments/**
-
-# Production .env (operator-supplied secrets); the .template companion
-# stays tracked so new deployments have a starting point.
-deploy/.env
+# Root-level generated binaries used by local smoke tools.
 dashboard
 decision-card-preview
