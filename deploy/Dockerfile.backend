@@ -34,7 +34,7 @@ COPY backend/docs/raw-instruments/ /app/docs/raw-instruments/
 # instead of crashing on a read-only filesystem.
 RUN mkdir -p /var/lib/edgex-ops-intelligence && chown -R nonroot:nonroot /var/lib/edgex-ops-intelligence
 USER nonroot
-EXPOSE 8080
+EXPOSE 8080 9464
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=5 \
     CMD wget -qO- http://127.0.0.1:8080/api/health || exit 1
-CMD ["/app/ops-intelligence", "--role=all", "--addr=:8080"]
+CMD ["/app/ops-intelligence", "--role=all", "--addr=:8080", "--metrics-addr=:9464"]

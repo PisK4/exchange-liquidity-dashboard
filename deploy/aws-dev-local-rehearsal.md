@@ -6,7 +6,7 @@ before publishing the service to a company AWS server.
 The rehearsal intentionally uses the same Compose stack that production-like
 deployments use:
 
-- one backend container running `/app/ops-intelligence --role=all --addr=:8080`
+- one backend container running `/app/ops-intelligence --role=all --addr=:8080 --metrics-addr=:9464`
 - one Next.js standalone web container
 - bundled MySQL in the default Compose stack for local rehearsal
 - Nacos as the production-like config source when available
@@ -32,8 +32,9 @@ same schema as another stack.
   Compose uses the bundled MySQL default DSN.
 - `NEXT_PUBLIC_API_BASE` is a **build-time** browser value. Rebuild the web
   image after changing it.
-- `/metrics` is a real Prometheus endpoint on the backend port. Restrict it to
-  internal or Prometheus networks at the reverse proxy.
+- `/metrics` is a real Prometheus endpoint on the dedicated metrics port
+  `9464`, aligned with bridge-server style services. Restrict it to internal
+  or Prometheus networks at the reverse proxy or security-group layer.
 
 ## Files involved
 
@@ -58,6 +59,7 @@ cd deploy
 make up
 make ps
 make smoke
+make smoke-metrics
 make smoke-web
 make smoke-readiness
 ```
@@ -78,7 +80,7 @@ Useful direct checks:
 
 ```bash
 curl -fsS http://127.0.0.1:8080/api/health
-curl -fsS http://127.0.0.1:8080/metrics
+curl -fsS http://127.0.0.1:9464/metrics
 curl -fsS http://127.0.0.1:3001/healthz
 docker compose --project-name edgex-ops-intelligence ps
 ```
@@ -186,6 +188,7 @@ or local AWS credential chain can read the target Secrets Manager secret.
    make up
    make ps
    make smoke
+   make smoke-metrics
    make smoke-web
    make smoke-readiness
    ```
@@ -200,7 +203,7 @@ Recommended routing:
 ```text
 https://ops.example.com/        -> 127.0.0.1:3001 (web)
 https://ops.example.com/api/*   -> 127.0.0.1:8080 (backend)
-https://ops.example.com/metrics -> 127.0.0.1:8080 (backend, restricted)
+https://ops.example.com/metrics -> 127.0.0.1:9464 (Prometheus, restricted)
 ```
 
 For this topology:
@@ -210,6 +213,7 @@ NEXT_PUBLIC_API_BASE=
 SERVER_API_BASE=http://backend:8080
 WEB_PUBLISH_HOST=127.0.0.1
 BACKEND_PUBLISH_HOST=127.0.0.1
+METRICS_PUBLISH_HOST=127.0.0.1
 ```
 
 Then rebuild web so the empty `NEXT_PUBLIC_API_BASE` is baked into the browser

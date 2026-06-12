@@ -19,7 +19,7 @@ plans under `docs/plan/`.
 ## Supported phase-1 topology
 
 - One backend replica only.
-- Backend command: `/app/ops-intelligence --role=all --addr=:8080`.
+- Backend command: `/app/ops-intelligence --role=all --addr=:8080 --metrics-addr=:9464`.
 - One Next.js standalone web container.
 - Bundled MySQL is part of the default Compose stack for local rehearsal.
 - Redis is not part of this deployment shape.
@@ -76,10 +76,11 @@ backend readiness.
 - Backend liveness: `/api/health`.
 - Backend traffic readiness: `/api/readiness`.
 - Web liveness: `/healthz`.
-- Prometheus scrape endpoint: `/metrics` on the backend port.
+- Prometheus scrape endpoint: `/metrics` on the dedicated metrics port `9464`, aligned with EdgeX bridge-style services. The backend API port may keep `/metrics` as a temporary compatibility path, but SRE/Prometheus should scrape `:9464/metrics`.
 
 Docker health checks target liveness endpoints, not readiness. Restrict
-`/metrics` to trusted monitoring networks at the reverse proxy.
+`9464` / `/metrics` to trusted monitoring networks at the reverse proxy or
+security-group layer.
 
 ## Fresh DB vs existing DB
 
@@ -99,6 +100,7 @@ cp .env.production.template .env  # for production-like private settings
 make up
 make ps
 make smoke
+make smoke-metrics
 make smoke-web
 make smoke-readiness
 ```

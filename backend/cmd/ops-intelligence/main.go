@@ -24,6 +24,8 @@ import (
 	"edgex-ops-intelligence/backend/internal/marketdata/coingecko"
 	"edgex-ops-intelligence/backend/internal/secrets"
 	"edgex-ops-intelligence/backend/internal/startup"
+
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // version is set at link time via -ldflags. Falls back to "dev" for
@@ -34,6 +36,7 @@ var version = "dev"
 
 func main() {
 	addr := flag.String("addr", ":8080", "HTTP listen address")
+	metricsAddr := flag.String("metrics-addr", envOr("OPS_INTELLIGENCE_METRICS_ADDR", ":9464"), "Prometheus metrics listen address; empty disables the standalone metrics server")
 	role := flag.String("role", "all", "role: api, collector, listing, activity, or all")
 	runOnce := flag.Bool("run-once", false, "run one collection cycle at startup")
 	mysqlDSN := flag.String("mysql-dsn", os.Getenv("OPS_INTELLIGENCE_MYSQL_DSN"), "optional MySQL DSN, for example root:root@tcp(127.0.0.1:3306)/edgex_ops_intelligence?parseTime=true")
@@ -50,6 +53,7 @@ func main() {
 	}
 	api.Version = version
 	startupState := startup.New(*role)
+	startMetricsServerAsync(*metricsAddr)
 
 	cfg, err := config.LoadRuntime(*configDir)
 	if err != nil {
@@ -331,6 +335,25 @@ func startAPIServerAsync(addr string, server *api.Server, startupState *startup.
 	go func() {
 		if err := http.Serve(listener, server.Routes()); err != nil {
 			log.Fatalf("api server stopped: %v", err)
+		}
+	}()
+}
+
+func startMetricsServerAsync(addr string) {
+	if strings.TrimSpace(addr) == "" {
+		log.Printf("Prometheus metrics server disabled")
+		return
+	}
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Fatalf("listen metrics %s: %v", addr, err)
+	}
+	mux := http.NewServeMux()
+	mux.Handle("/metrics", promhttp.Handler())
+	log.Printf("Prometheus metrics listening on %s", addr)
+	go func() {
+		if err := http.Serve(listener, mux); err != nil {
+			log.Fatalf("metrics server stopped: %v", err)
 		}
 	}()
 }

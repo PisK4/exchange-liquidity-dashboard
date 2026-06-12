@@ -17,6 +17,7 @@ The backend runs three active modules behind one binary:
 
 ```
 [browser] --> :3001 (Next.js web)  ---SSR-->  :8080 (backend api)
+[prometheus] -------------------------------->  :9464 (backend metrics)
                                                  |
                                                  |---> 10 exchange REST + WS adapters
                                                  |     (binance/okx/bybit/bitget/bingx/
@@ -36,9 +37,9 @@ For a full AWS DEV-like local rehearsal, follow
 Recommended production reverse-proxy routing:
 
 - Host-level Nginx on the Docker host: `/` -> `127.0.0.1:3001`, `/api/*` ->
-  `127.0.0.1:8080`, and `/metrics` -> `127.0.0.1:8080` with an allowlist.
+  `127.0.0.1:8080`, and `/metrics` -> `127.0.0.1:9464` with an allowlist.
 - Compose-internal reverse proxy: `/` -> `web:3000`, `/api/*` ->
-  `backend:8080`, and `/metrics` -> `backend:8080` with an allowlist.
+  `backend:8080`, and `/metrics` -> `backend:9464` with an allowlist.
 
 For this same-origin topology, build the web image with an explicitly empty
 `NEXT_PUBLIC_API_BASE` so browser requests use relative `/api/*` paths.
@@ -212,6 +213,7 @@ Smoke commands:
 ```
 make -C deploy smoke              # liveness only
 make -C deploy smoke-readiness    # the strict gate
+make -C deploy smoke-metrics      # Prometheus scrape endpoint on :9464
 make -C backend smoke-all-startup # role=all fast liveness + startup gate shape
 ```
 
@@ -222,11 +224,16 @@ database. To exercise warm-cache readiness against a real DB, pass
 
 ### 2.1 Metrics endpoint
 
-The backend exposes Prometheus metrics on the main API port:
+The backend exposes Prometheus metrics on a dedicated metrics port aligned with
+EdgeX bridge-style services:
 
 ```bash
-curl -fsS http://127.0.0.1:8080/metrics
+curl -fsS http://127.0.0.1:9464/metrics
 ```
+
+The main API port may keep `/metrics` as a temporary compatibility path for
+existing local scripts, but new SRE/Prometheus scrape configs should target
+`:9464/metrics`.
 
 The first metrics set is intentionally small and process-local:
 
@@ -238,9 +245,10 @@ The first metrics set is intentionally small and process-local:
 
 `/metrics` is a scrape endpoint, not a liveness or readiness probe. Keep Docker
 and load-balancer liveness pointed at `/api/health`, and keep traffic gating on
-`/api/readiness`. Restrict `/metrics` to Prometheus/internal networks at the
-reverse proxy; do not expose it as a public endpoint. The HTTP middleware skips
-`/metrics` itself to avoid scrape traffic polluting request latency metrics.
+`/api/readiness`. Restrict `9464` / `/metrics` to Prometheus/internal networks
+at the reverse proxy or security-group layer; do not expose it as a public
+endpoint. The API HTTP middleware skips `/metrics` itself to avoid scrape
+traffic polluting request latency metrics on the compatibility path.
 
 ## 3. Common Symptoms
 

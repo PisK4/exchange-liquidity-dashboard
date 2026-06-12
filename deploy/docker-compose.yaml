@@ -34,7 +34,7 @@ services:
       # in production.
       args:
         BUILD_VERSION: ${BUILD_VERSION:-dev}
-    command: ["/app/ops-intelligence", "--role=all", "--addr=:8080"]
+    command: ["/app/ops-intelligence", "--role=all", "--addr=:8080", "--metrics-addr=:9464"]
     environment:
       USE_LOCAL_CONFIG: ${USE_LOCAL_CONFIG:-true}
       OPS_INTELLIGENCE_CONFIG_SOURCE: ${OPS_INTELLIGENCE_CONFIG_SOURCE:-local}
@@ -84,6 +84,7 @@ services:
       ACTIVITY_DECISION_TOKEN_SECRET: ${ACTIVITY_DECISION_TOKEN_SECRET:-}
     ports:
       - "${BACKEND_PUBLISH_HOST:-127.0.0.1}:${BACKEND_PUBLISH_PORT:-8080}:8080"
+      - "${METRICS_PUBLISH_HOST:-127.0.0.1}:${METRICS_PUBLISH_PORT:-9464}:9464"
     depends_on:
       mysql:
         condition: service_healthy
